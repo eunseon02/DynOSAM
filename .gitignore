@@ -49,3 +49,35 @@ qtcreator-*
 
 # Catkin custom files
 CATKIN_IGNORE
+
+/dynosam_odom/build/
+/dynosam_odom/data-sets/
+/dynosam_odom/.settings/
+/dynosam_odom/matlab/result-*
+/dynosam_odom/scripts/**/*.txt
+/*/*.csv
+*.ipynb_checkpoints
+*.autosave
+
+% Ignore VS code settings
+*.vscode
+
+% Ignore logged mesh ply
+*.ply
+
+% Ignore Mac stuff
+*.DS_Store
+
+% Remove recovery files from matlab.
+*~
+% Ignore media files
+*.png
+*.mp4
+
+/dynosam_odom/scripts/*.yaml
+
+% Ignore large vocabulary files
+/dynosam_odom/vocabulary/*
+
+% Ignore python bytecode
+*.pyc
