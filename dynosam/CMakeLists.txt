@@ -22,6 +22,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 find_package(Boost REQUIRED)
 if(NOT TARGET Boost::boost)
@@ -37,6 +38,9 @@ include_directories(
   include
   ${rclcpp_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+
+
 )
 include_directories(include)
 
@@ -62,8 +66,11 @@ target_link_libraries(${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   glog
   gflags
+  gtsam
+  gtsam_unstable
   Boost::boost
   Eigen3::Eigen
+  ${OpenCV_LIBRARIES}
 )
 ament_export_libraries(${PROJECT_NAME}
   glog
@@ -120,7 +127,7 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
   ament_add_gmock(${PROJECT_NAME}_test
     test/test_main.cc
-    test/thread_safe_queue_tests.cc 
+    test/thread_safe_queue_tests.cc
     test/thread_safe_temporal_buffer_test.cc
 )
 

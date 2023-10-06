@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 
 #include <atomic>
 #include <functional>  // for function
@@ -12,7 +13,6 @@
 #include <chrono>  // std::chrono::
 
 #include <glog/logging.h>
-#include <boost/optional.hpp>
 
 #include <memory>
 #include <thread>
@@ -25,9 +25,8 @@ class AbstractPipelineModuleBase
 public:
   AbstractPipelineModuleBase(const std::string& module_name) : module_name_(module_name)
   {
-    stats_diagnostics_task_ = std::make_shared<FunctionalDiagnosticTask>(
-        module_name, std::bind(&AbstractPipelineModuleBase::updateDiagnostics, this, std::placeholders::_1));
   }
+
   virtual ~AbstractPipelineModuleBase() = default;
 
   virtual bool spin() = 0;
@@ -77,34 +76,6 @@ public:
     on_failure_callbacks.push_back(callback_);
   }
 
-  /**
-   * @brief Collects timing and misc. statistics using the utils::StatsCollector classes
-   *
-   * @return PipelineStats
-   */
-  PipelineStats getTimingStats() const;
-
-  inline DiagnosticTask::Ptr getPipelineStatsDiagnosticTask() const
-  {
-    return stats_diagnostics_task_;
-  }
-
-  /**
-   * @brief Default update diagnostics function for a pipeline. The attached DiagnosticTask can be retrieved by
-   * getPipelineStatsDiagnosticTask. This function can be overwritten and by default updates the status object with
-   * timing stats. By default the stats will also be set to OK
-   *
-   * @param status
-   */
-  virtual void updateDiagnostics(DiagnosticStatusWrapper& status)
-  {
-    LOG(INFO) << "Updating diagnostics for " << this->getModuleName();
-    const PipelineStats stats = this->getTimingStats();
-    status.add("freq (Hz) ", stats.frequency_);
-    status.add("samples (#) ", stats.num_samples_);
-    status.add("average spin time (s) ", stats.average_spin_time_);
-    status.summary(DiagnosticStatusWrapper::OK, "");
-  }
 
 protected:
   template <typename T = std::chrono::milliseconds>
@@ -123,8 +94,6 @@ protected:
 protected:
   const std::string module_name_;
 
-  DiagnosticTask::Ptr stats_diagnostics_task_;  //! diagnostics task that looks at the internal statistics of this
-                                                //! particular module
 
   bool parallel_run{ true };
   std::atomic_bool is_thread_working{ false };
@@ -146,7 +115,7 @@ public:
 
   using OnProcessCallback = std::function<void(const InputConstSharedPtr&, const OutputConstSharedPtr&)>;
 
-  AbstractPipelineModule(const std::string& module_name__) : AbstractPipelineModuleBase(module_name__)
+  AbstractPipelineModule(const std::string& module_name) : AbstractPipelineModuleBase(module_name)
   {
   }
 
@@ -182,8 +151,8 @@ public:
     }
     catch (const std::exception& e)
     {
-      context::shutdown("Exception raised in pipeline " + module_name_ +
-                        " on getInputPacket(): " + std::string(e.what()));
+      // context::shutdown("Exception raised in pipeline " + module_name_ +
+      //                   " on getInputPacket(): " + std::string(e.what()));
     }
     is_thread_working = true;
     this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
@@ -197,11 +166,11 @@ public:
       try
       {
         output = process(input);
-        this->logTiming("process", utils::Timer::toc(tic_process));
+        // this->logTiming("process", utils::Timer::toc(tic_process));
       }
       catch (const std::exception& e)
       {
-        context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
+        // context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
       }
 
       if (output)
@@ -232,8 +201,6 @@ public:
       is_thread_working = false;
       return_code = PipelineReturnCode::GET_PACKET_FAILURE;
     }
-
-    this->logTiming("spin", utils::Timer::toc<std::chrono::nanoseconds>(tic_spin));
 
     return return_code;
   }
@@ -275,7 +242,7 @@ public:
   //! shared pointer since the data may be shared between several modules.
   using OutputCallback = std::function<void(const typename APM::OutputConstSharedPtr& output)>;
 
-  MIMOPipelineModule(const std::string& module_name__) : AbstractPipelineModule<INPUT, OUTPUT>(module_name__)
+  MIMOPipelineModule(const std::string& module_name) : AbstractPipelineModule<INPUT, OUTPUT>(module_name)
   {
   }
 
@@ -326,8 +293,8 @@ public:
   using InputQueue = ThreadsafeQueue<typename Base::InputConstSharedPtr>;
   using OutputQueue = typename Base::OutputQueue;
 
-  SIMOPipelineModule(const std::string& module_name__, InputQueue* input_queue_)
-    : MIMOPipelineModule<INPUT, OUTPUT>(module_name__), input_queue(CHECK_NOTNULL(input_queue_))
+  SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_)
+    : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_))
   {
   }
 

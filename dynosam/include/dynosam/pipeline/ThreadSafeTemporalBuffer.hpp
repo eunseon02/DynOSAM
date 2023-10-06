@@ -9,7 +9,7 @@
 #include <queue>
 #include <utility>
 
-#include "dyno/common/Types.h"
+#include "dynosam/common/Types.hpp"
 
 namespace dyno
 {
@@ -129,4 +129,4 @@ protected:
 
 }  // namespace dyno
 
-#include "pipeline/ThreadSafeTemporalBuffer-inl.h"
+#include "dynosam/pipeline/ThreadSafeTemporalBuffer-inl.hpp"

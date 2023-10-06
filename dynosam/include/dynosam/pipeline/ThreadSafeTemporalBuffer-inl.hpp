@@ -9,7 +9,7 @@
 
 #include <glog/logging.h>
 
-#include "dynosam/common/Types.h"
+#include "dynosam/common/Types.hpp"
 
 namespace dyno
 {
