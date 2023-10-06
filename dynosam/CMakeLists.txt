@@ -120,6 +120,8 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
   ament_add_gmock(${PROJECT_NAME}_test
     test/test_main.cc
+    test/thread_safe_queue_tests.cc 
+    test/thread_safe_temporal_buffer_test.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})
