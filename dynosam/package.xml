@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>dynosam_ros</name>
+  <name>dynosam</name>
   <version>0.0.1</version>
-  <description>DynOSAM ROS Interface</description>
+  <description>DynOSAM Frontend/Odometry</description>
 
   <maintainer email="yiduo.wang@sydney.edu.au">Yiduo Wang</maintainer>
   <maintainer email="jesse.morris@sydney.edu.au">Jessie Morris</maintainer>
@@ -12,9 +12,9 @@
   <buildtool_depend>catkin_simple</buildtool_depend>
 
  <buildtool_depend>ament_cmake</buildtool_depend>
+ <depend>gtsam</depend>
 
   <depend>rclcpp</depend>
-  <depend>dynosam</depend>
   <depend>std_msgs</depend>
   <depend>sensor_msgs</depend>
   <depend>diagnostic_updater</depend>
@@ -27,5 +27,4 @@
   <export>
     <build_type>ament_cmake</build_type>
   </export>
-
 </package>

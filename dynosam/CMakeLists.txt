@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.8)
 
-project(dynosam_ros)
+project(dynosam)
 
 # set(CMAKE_C_FLAGS "-std=gnu11 -Wall -Wextra -O3 -march=sandybridge -flto")
 set(CMAKE_C_FLAGS "-Wall -Wextra")
@@ -13,7 +13,7 @@ set(CMAKE_CXX_STANDARD 17)
 
 
 # # Find Julia
-list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
+# list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -22,7 +22,14 @@ find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(dynosam REQUIRED)
+
+find_package(Boost REQUIRED)
+if(NOT TARGET Boost::boost)
+  add_library(Boost::boost INTERFACE IMPORTED)
+  set_target_properties(Boost::boost PROPERTIES
+  INTERFACE_LINK_LIBRARIES "${Boost_LIBRARIES}"
+  INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}")
+endif()
 
 
 # setup targets
@@ -47,7 +54,6 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   std_msgs
   sensor_msgs
-  dynosam
   eigen3_cmake_module
   Eigen3
   diagnostic_updater)
@@ -56,14 +62,16 @@ target_link_libraries(${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   glog
   gflags
+  Boost::boost
   Eigen3::Eigen
 )
 ament_export_libraries(${PROJECT_NAME}
   glog
   gflags
+  Boost::boost
 )
 
-ament_export_dependencies(rclcpp std_msgs sensor_msgs dynosam)
+ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
 
 
 target_include_directories(${PROJECT_NAME}
@@ -84,27 +92,19 @@ install(
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
-install(DIRECTORY
-  launch
-  DESTINATION share/${PROJECT_NAME}
-)
 
-# install(DIRECTORY
-#   config
-#   DESTINATION share/${PROJECT_NAME}
-# )
 
 #####exec test#########
-add_executable(dynosam_node src/dynosam_node.cc)
-target_link_libraries(dynosam_node
-  ${PROJECT_NAME}
-)
-ament_target_dependencies(dynosam_node "rclcpp" "std_msgs" "dynosam")
+# add_executable(cassie_controller nodes/cassie_controller.cc)
+# target_link_libraries(cassie_controller
+#   ${PROJECT_NAME}
+# )
+# ament_target_dependencies(cassie_controller "rclcpp" "std_msgs")
 
 
 
 install(TARGETS
-  dynosam_node
+# cassie_controller
   DESTINATION lib/${PROJECT_NAME})
 
 
