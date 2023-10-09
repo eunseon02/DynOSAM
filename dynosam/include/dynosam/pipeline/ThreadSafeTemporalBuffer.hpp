@@ -1,3 +1,7 @@
+/*
+ *   Copyright (c) 2023 Jesse Morris
+ *   All rights reserved.
+ */
 
 #pragma once
 

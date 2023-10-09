@@ -12,17 +12,15 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 
-# # Find Julia
-# list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
+list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake)
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
-find_package(eigen3_cmake_module REQUIRED)
-find_package(Eigen3 REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(GTSAM REQUIRED)
 
 find_package(Boost REQUIRED)
 if(NOT TARGET Boost::boost)
@@ -33,56 +31,75 @@ if(NOT TARGET Boost::boost)
 endif()
 
 
+include(VerifyGtsamConfig)
+option(DYNO_VERIFY_GTSAM_CONFIG "Check that GTSAM was compiled with the right options" ON)
+if (DYNO_VERIFY_GTSAM_CONFIG)
+    verify_gtsam_config()
+endif()
+
+
 # setup targets
 include_directories(
   include
   ${rclcpp_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
-
-
+  ${GTSAM_INCLUDE_DIR}
 )
-include_directories(include)
-
 
 # build library
 add_library(${PROJECT_NAME} SHARED
-  src/tmp.cc
+  src/dataprovider/DataProviderModule.cc
+  src/dataprovider/DataProvider.cc
+  src/dataprovider/DatasetProvider.cc
+
+  src/frontend/imu/ThreadSafeImuBuffer.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}
 #   PRIVATE "MINIMAL_COMPOSITION_DLL")
 
+# eigen3_cmake_module
+# Eigen3
 
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   std_msgs
   sensor_msgs
-  eigen3_cmake_module
-  Eigen3
   diagnostic_updater)
 
 target_link_libraries(${PROJECT_NAME}
+# PRIVATE
+  opengv
+# PUBLIC
   ${rclcpp_LIBRARIES}
   glog
   gflags
   gtsam
   gtsam_unstable
   Boost::boost
-  Eigen3::Eigen
+  # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
 )
+
+
 ament_export_libraries(${PROJECT_NAME}
   glog
   gflags
+  opengv
   Boost::boost
 )
 
-ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
+# ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
+ament_export_dependencies(rclcpp std_msgs sensor_msgs)
 
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC
+    ${OpenCV_INCLUDE_DIRS}
+    ${GFLAGS_INCLUDE_DIRS}
+    ${GLOG_INCLUDE_DIRS}
+    ${GTSAM_INCLUDE_DIR}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 
@@ -129,6 +146,7 @@ if(BUILD_TESTING)
     test/test_main.cc
     test/thread_safe_queue_tests.cc
     test/thread_safe_temporal_buffer_test.cc
+    test/test_threadsafe_imu_buffer.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

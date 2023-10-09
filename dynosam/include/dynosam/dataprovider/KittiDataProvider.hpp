@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,22 +23,15 @@
 
 #pragma once
 
-#pragma once
+// #include "dynosam/dataprovider/DataProvider.hpp"
 
-#include <memory>
+// namespace dyno {
 
-// These macros were inspired mainly on Maplab's macros
-// https://github.com/ethz-asl/maplab
+// class KittiDataProvider : public DataProvider {
 
-#define DYNO_POINTER_TYPEDEFS(TypeName)                 \
-  typedef std::shared_ptr<TypeName> Ptr;                  \
-  typedef std::shared_ptr<const TypeName> ConstPtr;       \
-  typedef std::unique_ptr<TypeName> UniquePtr;            \
-  typedef std::unique_ptr<const TypeName> ConstUniquePtr; \
-  typedef std::weak_ptr<TypeName> WeakPtr;                \
-  typedef std::weak_ptr<const TypeName> WeakConstPtr;
+// public:
+//     KittiDataProvider(const std::string& path_to_dataset)
 
+// }
 
-#define DYNO_DELETE_COPY_CONSTRUCTORS(TypeName) \
-  TypeName(const TypeName&) = delete;             \
-  void operator=(const TypeName&) = delete;
+// }

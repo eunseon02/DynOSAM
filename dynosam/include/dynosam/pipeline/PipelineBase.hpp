@@ -1,6 +1,12 @@
+/*
+ *   Copyright (c) 2023 Jesse Morris
+ *   All rights reserved.
+ */
 #pragma once
 
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
+#include "dynosam/pipeline/ThreadSafeQueue.hpp"
+#include "dynosam/utils/Timing.hpp"
 
 #include <atomic>
 #include <functional>  // for function
@@ -70,7 +76,7 @@ public:
     }
   }
 
-  virtual void registerOnFailureCallback(const OnFailureCallback& callback_)
+  virtual void registerOnFailureCallback(const OnPipelineFailureCallback& callback_)
   {
     CHECK(callback_);
     on_failure_callbacks.push_back(callback_);
@@ -78,18 +84,18 @@ public:
 
 
 protected:
-  template <typename T = std::chrono::milliseconds>
-  void logTiming(const std::string& name, const T& duration)
-  {
-    double duration_s = utils::Timer::toSeconds<T>(duration);
-    utils::StatsCollector stats(getLogHandle(name));
-    stats.AddSample(duration_s);
-  }
+  // template <typename T = std::chrono::milliseconds>
+  // void logTiming(const std::string& name, const T& duration)
+  // {
+  //   double duration_s = utils::Timer::toSeconds<T>(duration);
+  //   utils::StatsCollector stats(getLogHandle(name));
+  //   stats.AddSample(duration_s);
+  // }
 
-  inline std::string getLogHandle(const std::string& name) const
-  {
-    return "pipeline." + module_name_ + "." + name;
-  }
+  // inline std::string getLogHandle(const std::string& name) const
+  // {
+  //   return "pipeline." + module_name_ + "." + name;
+  // }
 
 protected:
   const std::string module_name_;
@@ -99,7 +105,7 @@ protected:
   std::atomic_bool is_thread_working{ false };
 
 private:
-  std::vector<OnFailureCallback> on_failure_callbacks;
+  std::vector<OnPipelineFailureCallback> on_failure_callbacks;
   //! Thread related members.
   std::atomic_bool is_shutdown{ false };
 };
@@ -155,7 +161,7 @@ public:
       //                   " on getInputPacket(): " + std::string(e.what()));
     }
     is_thread_working = true;
-    this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
+    // this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
 
     if (input)
     {
@@ -241,6 +247,7 @@ public:
   //! Callback used to send data to other pipeline modules, makes use of
   //! shared pointer since the data may be shared between several modules.
   using OutputCallback = std::function<void(const typename APM::OutputConstSharedPtr& output)>;
+
 
   MIMOPipelineModule(const std::string& module_name) : AbstractPipelineModule<INPUT, OUTPUT>(module_name)
   {

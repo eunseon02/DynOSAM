@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,22 +23,40 @@
 
 #pragma once
 
-#pragma once
+#include "dynosam/common/Types.hpp" //for timestamp
+#include "dynosam/frontend/imu/Imu-Definitions.hpp"
 
-#include <memory>
-
-// These macros were inspired mainly on Maplab's macros
-// https://github.com/ethz-asl/maplab
-
-#define DYNO_POINTER_TYPEDEFS(TypeName)                 \
-  typedef std::shared_ptr<TypeName> Ptr;                  \
-  typedef std::shared_ptr<const TypeName> ConstPtr;       \
-  typedef std::unique_ptr<TypeName> UniquePtr;            \
-  typedef std::unique_ptr<const TypeName> ConstUniquePtr; \
-  typedef std::weak_ptr<TypeName> WeakPtr;                \
-  typedef std::weak_ptr<const TypeName> WeakConstPtr;
+namespace dyno {
 
 
-#define DYNO_DELETE_COPY_CONSTRUCTORS(TypeName) \
-  TypeName(const TypeName&) = delete;             \
-  void operator=(const TypeName&) = delete;
+struct ImuMeasurement {
+  ImuMeasurement() = default;
+  ImuMeasurement(const Timestamp& timestamp, const ImuAccGyr& imu_data)
+      : timestamp_(timestamp), acc_gyr_(imu_data) {}
+  ImuMeasurement(Timestamp&& timestamp, ImuAccGyr&& imu_data)
+      : timestamp_(std::move(timestamp)), acc_gyr_(std::move(imu_data)) {}
+
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  Timestamp timestamp_;
+  ImuAccGyr acc_gyr_;
+};
+
+// Multiple Imu measurements, bundled in dynamic matrices.
+struct ImuMeasurements {
+ public:
+  ImuMeasurements() = default;
+  ImuMeasurements(const Timestamps& timestamps, const ImuAccGyrs& measurements)
+      : timestamps_(timestamps), acc_gyr_(measurements) {}
+  ImuMeasurements(Timestamps&& timestamps, ImuAccGyrs&& measurements)
+      : timestamps_(std::move(timestamps)), acc_gyr_(std::move(measurements)) {}
+
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  Timestamps timestamps_;
+  ImuAccGyrs acc_gyr_;
+};
+
+
+
+
+
+} //dyno
