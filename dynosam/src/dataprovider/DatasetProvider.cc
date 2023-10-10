@@ -22,3 +22,46 @@
  */
 
 #include "dynosam/dataprovider/DatasetProvider.hpp"
+
+namespace dyno {
+
+std::string RGBDataFolder::getFolderName() const {
+        return "image_0";
+    }
+
+cv::Mat RGBDataFolder::getItem(size_t idx) {
+    return cv::Mat();
+}
+
+
+std::string TimestampFile::getFolderName() const {
+    return "times.txt";
+}
+
+double TimestampFile::getItem(size_t idx) {
+    return times.at(idx);
+}
+
+void TimestampFile::onPathInit() {
+    std::ifstream times_stream((std::string)absolute_folder_path_, std::ios::in);
+
+    while (!times_stream.eof())
+  {
+    std::string s;
+    getline(times_stream, s);
+    if (!s.empty())
+    {
+      std::stringstream ss;
+      ss << s;
+      double t;
+      ss >> t;
+      times.push_back(t);
+    }
+  }
+  times_stream.close();
+
+
+}
+
+
+} //dyno

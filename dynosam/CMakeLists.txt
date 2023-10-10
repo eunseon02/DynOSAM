@@ -147,6 +147,9 @@ if(BUILD_TESTING)
     test/thread_safe_queue_tests.cc
     test/thread_safe_temporal_buffer_test.cc
     test/test_threadsafe_imu_buffer.cc
+    test/test_dataset_provider.cc
+
+    test/internal/tmp_file.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})
