@@ -52,8 +52,11 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProviderModule.cc
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetProvider.cc
+  src/dataprovider/DataProviderUtils.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
+
+  src/utils/OpenCVUtils.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}

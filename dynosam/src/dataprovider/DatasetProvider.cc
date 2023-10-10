@@ -22,17 +22,56 @@
  */
 
 #include "dynosam/dataprovider/DatasetProvider.hpp"
+#include "dynosam/dataprovider/DataProviderUtils.hpp"
 
 namespace dyno {
 
 std::string RGBDataFolder::getFolderName() const {
-        return "image_0";
-    }
-
-cv::Mat RGBDataFolder::getItem(size_t idx) {
-    return cv::Mat();
+    return "image_0";
 }
 
+cv::Mat RGBDataFolder::getItem(size_t idx) {
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(6) << idx;
+    const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".png";
+
+    cv::Mat rgb;
+    loadRGB(file_path, rgb);
+
+    CHECK(!rgb.empty());
+    return rgb;
+}
+
+
+std::string OpticalFlowDataFolder::getFolderName() const {
+    return "flow";
+}
+
+cv::Mat OpticalFlowDataFolder::getItem(size_t idx) {
+    std::stringstream ss;
+    ss << std::setfill('0') << std::setw(6) << idx;
+    const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".flo";
+
+    cv::Mat flow;
+    loadFlow(file_path, flow);
+
+    CHECK(!flow.empty());
+    return flow;
+}
+
+
+
+cv::Mat DepthDataFolder::getItem(size_t idx) {
+  std::stringstream ss;
+  ss << std::setfill('0') << std::setw(6) << idx;
+  const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".png";
+
+  cv::Mat depth;
+  loadDepth(file_path, depth);
+
+  CHECK(!depth.empty());
+  return depth;
+}
 
 std::string TimestampFile::getFolderName() const {
     return "times.txt";

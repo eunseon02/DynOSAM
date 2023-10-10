@@ -83,7 +83,7 @@ protected:
     virtual void onPathInit() {}
 
 protected:
-    fs::path absolute_folder_path_; //! Set when init is called since we need a default constructor
+    fs::path absolute_folder_path_; //! Set when init is called since we need a default constructor. This will not have the ending "/" on it
 };
 
 class RGBDataFolder : public dyno::DataFolder<cv::Mat> {
@@ -97,6 +97,35 @@ public:
      * @return std::string
      */
     std::string getFolderName() const override;
+    cv::Mat getItem(size_t idx) override;
+};
+
+class OpticalFlowDataFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    OpticalFlowDataFolder() {}
+
+    /**
+     * @brief "flow" as folder name
+     *
+     * @return std::string
+     */
+    std::string getFolderName() const override;
+    cv::Mat getItem(size_t idx) override;
+};
+
+
+class DepthDataFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    DepthDataFolder() {}
+
+    /**
+     * @brief "depth" as folder name
+     *
+     * @return std::string
+     */
+    inline std::string getFolderName() const override { return "depth"; }
     cv::Mat getItem(size_t idx) override;
 };
 
@@ -299,6 +328,13 @@ private:
 
 };
 
+template<typename... DynoDataTypes>
+struct _DynoDatasetConstructor {
+
+    using DynoDataTypesTuple = std::tuple<DynoDataTypes...>; //! All the dyno datypes in one definition (default at the start and then the optional ones)
+    virtual Frame::UniquePtr constructFrame(size_t frame_id, const DynoDataTypes... data) = 0;
+};
+
 
 /**
  * @brief Specalisation of the generic dataset for the expected dynosam dataset structure.
@@ -310,11 +346,17 @@ private:
  * @tparam DataTypes Types that should be used to construct a frame
  */
 template<typename... DataTypes>
-class DynoDataset {
+class DynoDataset : public _DynoDatasetConstructor<cv::Mat, Timestamp, DataTypes...> {
 
 public:
     using TypedGenericDataset = GenericDataset<DataTypes...>;
     using DefaultDataset = GenericDataset<cv::Mat, Timestamp>;
+
+    using Base = _DynoDatasetConstructor<cv::Mat, Timestamp, DataTypes...>;
+    using DynoDataTypesTuple = typename Base::DynoDataTypesTuple; //! All the dataypes declared in one tuple (cv::Mat, Timestamp, ....)
+
+    //TODO: check that the type created by the _DynoDatasetConstructor is the same as the concat of the
+    // DefaultDataset and TypedGenericDataset
 
     static constexpr size_t RGBFolderIdx = 0u; //! Index in Default Dataset
     static constexpr size_t TimestampFileIdx = RGBFolderIdx + 1u; //!
@@ -331,13 +373,13 @@ public:
     using This = DynoDataset<DataTypes...>;
 
     //! Fully defined tuple type containing all the dataset types in order starting with the default types
-    using ConcatDataTypes = decltype(std::tuple_cat(DefaultDataset::DataTypeTuple{}, typename TypedGenericDataset::DataTypeTuple{}));
+    // using ConcatDataTypes = decltype(std::tuple_cat(DefaultDataset::DataTypeTuple{}, typename TypedGenericDataset::DataTypeTuple{}));
 
 
     DynoDataset(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders)
     {
 
-        //This one will give us the number of files to expect
+        //This one will give us the number of files (frames) to expect
         auto timestamps = std::make_shared<TimestampFile>();
 
         default_dataset_ = std::make_unique<DefaultDataset>(
@@ -365,39 +407,48 @@ public:
             CHECK(dataset_->load(loading_idx));
 
             //get default data
-            ConcatDataTypes loaded_data;
-            constexpr size_t loadded_data_size = std::tuple_size<ConcatDataTypes>::value;
+            DynoDataTypesTuple loaded_data;
+            constexpr size_t default_data_size = std::tuple_size<DefaultDataset::DataTypeTuple>::value;
+            constexpr size_t extra_data_size = std::tuple_size<TypedGenericDataset::DataTypeTuple>::value;
 
             //iterate over default dataset portion of the ConcatDataTypes
-            for(size_t data_idx = 0; data_idx < loadded_data_size; data_idx++) {
-                internal::select_apply<loadded_data_size>(data_idx, [&](auto stream_index) {
-                    internal::select_apply<loadded_data_size>(stream_index, [&](auto I) {
+            for(size_t data_idx = 0; data_idx < default_data_size; data_idx++) {
+                internal::select_apply<default_data_size>(data_idx, [&](auto stream_index) {
+                    internal::select_apply<default_data_size>(stream_index, [&](auto I) {
                         //I should be data_idx -> access the data vector we just loaded
                         auto per_folder_data_vector = default_dataset_->getDataVector<I>();
 
-                        //the data idx should also correspond with the index in the ConcatDataTypes tuple
+                        //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
                         //update data
                         std::get<I>(loaded_data) = per_folder_data_vector.at(frame_id);
-
 
                     });
                 });
             }
 
 
-            // auto construct_input_func = [&](auto&&... args) { return this->constructFrame(frame_id, args...); };
-            // std::apply(construct_input_func, loaded_data);
-            this->constructFrame(frame_id, loaded_data);
+            // //iterate over extra dataset portion of the ConcatDataTypes
+            // for(size_t data_idx = 0; data_idx < extra_data_size; data_idx++) {
+            //     internal::select_apply<extra_data_size>(data_idx, [&](auto stream_index) {
+            //         internal::select_apply<extra_data_size>(stream_index, [&](auto I) {
+            //             //I should be data_idx -> access the data vector we just loaded
+            //             auto per_folder_data_vector = default_dataset_->getDataVector<I>();
 
+            //             //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
+            //             //update data
+            //             std::get<I>(loaded_data) = per_folder_data_vector.at(frame_id);
+
+            //         });
+            //     });
+            // }
+
+
+            auto construct_input_func = [&](auto&&... args) { return this->constructFrame(frame_id, args...); };
+            std::apply(construct_input_func, loaded_data);
         }
     }
 
 protected:
-    virtual Frame::UniquePtr constructFrame(size_t frame_id, const ConcatDataTypes& data) {
-        double timestamp = std::get<TimestampFileIdx>(data);
-        LOG(ERROR) << "timestamp " << timestamp;
-        return nullptr;
-    };
 
 private:
     /**
@@ -415,11 +466,28 @@ private:
 
 private:
     typename TypedGenericDataset::UniquePtr dataset_;
-
     typename DefaultDataset::UniquePtr default_dataset_;
 
     size_t dataset_size_{0};
 
+};
+
+
+class KittiDataLoader : public DynoDataset<cv::Mat> {
+
+public:
+    KittiDataLoader(const fs::path& dataset_path) : DynoDataset(
+        dataset_path,
+        std::make_shared<DepthDataFolder>()
+    ) {}
+
+
+    Frame::UniquePtr constructFrame(size_t frame_id, cv::Mat rgb, Timestamp timestamp, cv::Mat depth) override {
+        LOG(ERROR) << rgb.size();
+        LOG(ERROR) << depth.size();
+        LOG(ERROR) << frame_id << " " << timestamp;
+        return nullptr;
+    }
 };
 
 // /**

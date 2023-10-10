@@ -136,7 +136,7 @@ TEST_F(DatasetProviderFixture, testGenericDatasetMockLoading) {
 
 TEST(DynoDataset, testDummy) {
 
-    DynoDataset<> dd("/root/data/kitti/0000");
+    KittiDataLoader dd("/root/data/kitti/0000");
     dd.process();
 
 }
