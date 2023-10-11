@@ -48,7 +48,9 @@ DataProvider::~DataProvider() {
 void DataProvider::shutdown() {
     LOG(INFO) << "Shutting down data provider and associated module";
     shutdown_ = true;
-    shutdown_data_provider_module_callback_();
+
+    //TODO:(jesse0might not have if data module not provided in constructor!
+    if(shutdown_data_provider_module_callback_) shutdown_data_provider_module_callback_();
 }
 
 

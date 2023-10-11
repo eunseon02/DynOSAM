@@ -21,6 +21,9 @@ find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(GTSAM REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
+
 
 find_package(Boost REQUIRED)
 if(NOT TARGET Boost::boost)
@@ -51,12 +54,13 @@ include_directories(
 add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProviderModule.cc
   src/dataprovider/DataProvider.cc
-  src/dataprovider/DatasetProvider.cc
+  src/dataprovider/DatasetLoader.cc
   src/dataprovider/DataProviderUtils.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
 
   src/utils/OpenCVUtils.cc
+  src/utils/GtsamUtils.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}

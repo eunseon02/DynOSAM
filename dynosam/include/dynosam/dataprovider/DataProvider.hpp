@@ -32,6 +32,7 @@ public:
     using ImuSingleInputCallback = std::function<void(const ImuMeasurement&)>;
     using ImuMultiInputCallback = std::function<void(const ImuMeasurements&)>;
 
+    //this one will not guarnatee a binding of bind the data prover module
     DataProvider() = default;
     DataProvider(DataProviderModule* module);
     DataProvider(DataProviderModuleImu* module);

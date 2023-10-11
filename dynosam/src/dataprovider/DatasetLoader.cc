@@ -21,7 +21,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/DatasetProvider.hpp"
+#include "dynosam/dataprovider/DatasetLoader.hpp"
 #include "dynosam/dataprovider/DataProviderUtils.hpp"
 
 namespace dyno {

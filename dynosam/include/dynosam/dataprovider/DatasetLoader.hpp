@@ -1,0 +1,333 @@
+/*
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   All rights reserved.
+
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
+
+#pragma once
+
+#include "dynosam/utils/Macros.hpp"
+#include "dynosam/utils/Tuple.hpp"
+
+#include <opencv4/opencv2/opencv.hpp>
+
+#include <filesystem>
+#include <functional>
+
+#include <glog/logging.h>
+#include <iostream>
+#include <fstream>
+
+namespace dyno {
+
+namespace fs = std::filesystem;
+
+
+/**
+ * @brief Defines a set of datafiles within a folder to be laoded by a dataset (partially inspired by pytorch's dataset class).
+ * Each folder exists within a parent folder (defined by the dataset) and contains a number of files that need to be loaded by this class.
+ * As a number of different input image types (motion/instance segmenation, with and without depth etc.) exist the class is
+ * expected to handle the different types itself and return the loaded type
+ *
+ * @tparam T
+ */
+template<typename T = cv::Mat>
+class DataFolder {
+
+public:
+    DYNO_POINTER_TYPEDEFS(DataFolder)
+
+    using Type = T;
+    DataFolder() = default;
+
+    virtual ~DataFolder() {}
+
+    /**
+     * @brief Set the Absolute Folder Path object to be used when an item is loaded
+     * This needs to be a setter function since we do not know the absolute path at the time of construction.
+     *
+     * Once set, the virtual onPathInit function is called, which can act like a constructor to the derived classes
+     *
+     * In the context of a dataset laoder, this function is guaranteed to be called be
+     *
+     * @param absolute_folder_path
+     */
+    void setAbsoluteFolderPath(const fs::path& absolute_folder_path) {
+        absolute_folder_path_ = absolute_folder_path;
+        onPathInit();
+    }
+
+    virtual std::string getFolderName() const = 0;
+    // virtual size_t size() const = 0;
+    virtual T getItem(size_t idx) = 0;
+
+protected:
+    virtual void onPathInit() {}
+
+protected:
+    fs::path absolute_folder_path_; //! Set when init is called since we need a default constructor. This will not have the ending "/" on it
+};
+
+class RGBDataFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    RGBDataFolder() {}
+
+    /**
+     * @brief "image_0" as folder name
+     *
+     * @return std::string
+     */
+    std::string getFolderName() const override;
+    cv::Mat getItem(size_t idx) override;
+};
+
+class OpticalFlowDataFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    OpticalFlowDataFolder() {}
+
+    /**
+     * @brief "flow" as folder name
+     *
+     * @return std::string
+     */
+    std::string getFolderName() const override;
+    cv::Mat getItem(size_t idx) override;
+};
+
+
+class DepthDataFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    DepthDataFolder() {}
+
+    /**
+     * @brief "depth" as folder name
+     *
+     * @return std::string
+     */
+    inline std::string getFolderName() const override { return "depth"; }
+    cv::Mat getItem(size_t idx) override;
+};
+
+class TimestampFile : public dyno::DataFolder<double> {
+
+public:
+    TimestampFile() {}
+
+    /**
+     * @brief "times.txt" as file name
+     *
+     * @return std::string
+     */
+    std::string getFolderName() const override;
+    double getItem(size_t idx) override;
+
+    size_t size() const {
+        //only valid after loading
+        return times.size();
+    }
+
+private:
+    /**
+     * @brief Setup ifstream and read everything in the data vector
+     *
+     */
+    void onPathInit() override;
+
+private:
+    std::vector<double> times;
+};
+
+
+
+
+/**
+ * @brief Defines the structure, image and type of different datasets (partially inspired by pytorch's dataset class).
+ * Each dataset contains a number of datafolders which defines the data for a particular input. Each datafolder is responsible for loading the file
+ * and all must contain the same number of input files (or some equivalent "length") so the data can be packaged together.
+ *
+ * This class intends to just enable access to all the datafolders by defining all the templated tuples
+ */
+
+template<typename... DataTypes>
+class DataFolderStructure {
+
+public:
+    using This = DataFolderStructure<DataTypes...>;
+    using DataTypeTuple = std::tuple<DataTypes...>;
+    using TypedDataFolderTuple = std::tuple<typename DataFolder<DataTypes>::Ptr...>;
+
+    DYNO_POINTER_TYPEDEFS(This)
+    static constexpr size_t N = sizeof...(DataTypes);
+
+    template <size_t I>
+    using DataType = std::tuple_element_t<I, DataTypeTuple>;
+
+    template <size_t I>
+    using DataFolderType = std::tuple_element_t<I, TypedDataFolderTuple>;
+
+    DataFolderStructure(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders) : dataset_path_(dataset_path), data_folders_(data_folders...) {}
+
+    template<size_t I>
+    auto getDataFolder() const {
+        return std::get<I>(data_folders_);
+    }
+
+    template<size_t I>
+    fs::path getAbsoluteFolderPath() const {
+        const auto data_folder = getDataFolder<I>();
+        fs::path folder_path = dataset_path_;
+        //technically this can also be a file path
+        folder_path /= fs::path(data_folder->getFolderName());
+        return fs::absolute(folder_path);
+    }
+
+    /**
+     * @brief Get top level (parent) dataset path.
+     *
+     * All internal folders should be then found in dataset_path/folder
+     *
+     * @return const fs::path&
+     */
+    const fs::path& getDatasetPath() const { return dataset_path_; }
+
+
+protected:
+    const fs::path dataset_path_; //! Path to the dataset directory (ie. the parent folder)
+    TypedDataFolderTuple data_folders_;
+
+};
+
+
+/**
+ * @brief GenericDataset extends the DataFolderStructure to include functionality such as validation of
+ * each folder and implemets the runtime loading (per index) of each datafolder, updating the internal data structures
+ * containing the actual data
+ *
+ * @tparam DataTypes
+ */
+template<typename... DataTypes>
+class GenericDataset : public DataFolderStructure<DataTypes...> {
+
+public:
+    using This = GenericDataset<DataTypes...>;
+    using Base = DataFolderStructure<DataTypes...>;
+
+
+    //! Tuple of vectors containing each datatype
+    //! If DataTypes = [double, int], then this would be an alias
+    //! for std::tuple<std::vector<double>, std::vector<int>>;
+    using DataStorageTuple = std::tuple<std::vector<DataTypes>...>;
+
+    template<size_t I>
+    using DataStorageVector = std::vector<typename Base::DataType<I>>;
+
+    DYNO_POINTER_TYPEDEFS(This)
+
+
+    GenericDataset(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders)
+    : Base(dataset_path, data_folders...)
+    {
+        //this will also set the absolute folder/file path on each DataFolder
+        validateFoldersExist();
+    }
+
+    template<size_t I>
+    DataStorageVector<I>& getDataVector() {
+        return std::get<I>(data_);
+    }
+
+    virtual ~GenericDataset() {}
+
+    /**
+     * @brief Load the data at an index (which we index from 1 so that the same of the vector matches the max index querired)
+     * This means that access the DataStorageVector for a loaded index will be index-1
+     *
+     * @param idx
+     * @return true
+     * @return false
+     */
+    bool load(size_t idx) {
+        if(idx < 1u) {
+            throw std::runtime_error("Failure when loading data in GenericDataset - loading index's start at 1!");
+        }
+        for (size_t i = 0; i < Base::N; i++) {
+            internal::select_apply<Base::N>(i, [&](auto stream_index) {
+                internal::select_apply<Base::N>(stream_index, [&](auto I) {
+                    using Type = typename Base::DataType<I>;
+                    auto data_folder = this->template getDataFolder<I>();
+                    //loade at idx-1 since we expect all the indexing and loading to be appropiately zero idnexed
+                    Type loaded_data = data_folder->getItem(idx-1);
+
+                    auto& data_vector = this->template getDataVector<I>();
+
+                    // add loaded data to data vector. resize if necessary but we assume in most cases data will be loaded in order
+                    if(idx > data_vector.size()) {
+                        data_vector.resize(idx);
+                    }
+
+                    //index the data storage vector at I-1 to account for the zero indexing
+                    data_vector.at(idx-1) = loaded_data;
+                });
+            });
+        }
+
+        return true;//?
+    }
+
+
+
+private:
+    /**
+     * @brief For each datafolder, iterate through and check that the folders actually exist for each
+     * std::runtime_exception is thrown if a folder is not valid.
+     *
+     * This function also sets absolute file path for each data folder
+     *
+     */
+    void validateFoldersExist() {
+        for (size_t i = 0; i < Base::N; i++) {
+            internal::select_apply<Base::N>(i, [&](auto stream_index) {
+                internal::select_apply<Base::N>(stream_index, [&](auto I) {
+                    const fs::path absolute_file_path = this->template getAbsoluteFolderPath<I>();
+
+                    if(!fs::exists(absolute_file_path)) {
+                        throw std::runtime_error("Error loading datafolder - absolute file path " + std::string(absolute_file_path) + " does not exist");
+                    }
+
+                    LOG(INFO) << "Validated dataset folder: " << absolute_file_path;
+                    auto data_folder = this->template getDataFolder<I>();
+                    data_folder->setAbsoluteFolderPath(absolute_file_path);
+
+                });
+            });
+        }
+    }
+
+
+
+private:
+    DataStorageTuple data_;
+
+};
+
+} //dyno

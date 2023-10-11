@@ -26,6 +26,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 
 // These macros were inspired mainly on Maplab's macros
 // https://github.com/ethz-asl/maplab
@@ -36,7 +37,10 @@
   typedef std::unique_ptr<TypeName> UniquePtr;            \
   typedef std::unique_ptr<const TypeName> ConstUniquePtr; \
   typedef std::weak_ptr<TypeName> WeakPtr;                \
-  typedef std::weak_ptr<const TypeName> WeakConstPtr;
+  typedef std::weak_ptr<const TypeName> WeakConstPtr;     \
+  typedef std::optional<TypeName> Optional;               \
+  typedef std::optional<const TypeName&> ConstRefOptional;  \
+  typedef std::optional<TypeName&> RefOptional;
 
 
 #define DYNO_DELETE_COPY_CONSTRUCTORS(TypeName) \

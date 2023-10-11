@@ -23,41 +23,53 @@
 
 #pragma once
 
-#include "dynosam/utils/Macros.hpp"
-
-#include <gtsam/base/Matrix.h>
+#include <eigen3/Eigen/Core> //must be included before opencv
+#include <gtsam/geometry/Unit3.h>
+#include <gtsam/inference/Symbol.h>
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Point3.h>
+#include <gtsam/geometry/Rot3.h>
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/inference/Key.h>
+#include <gtsam/nonlinear/NonlinearFactor.h>
 
 #include <opencv4/opencv2/opencv.hpp>
 
 
 namespace dyno
 {
+namespace utils
+{
+gtsam::Pose3 cvMatToGtsamPose3(const cv::Mat& H);
+// Converts a rotation matrix and translation vector from opencv to gtsam
+// pose3
+gtsam::Pose3 cvMatsToGtsamPose3(const cv::Mat& R, const cv::Mat& T);
 
-using Timestamp = double;
-using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
+cv::Mat gtsamPose3ToCvMat(const gtsam::Pose3& pose);
 
-using ObjectId = int;
+/* ------------------------------------------------------------------------ */
+// Converts a 3x3 rotation matrix from opencv to gtsam Rot3
+gtsam::Rot3 cvMatToGtsamRot3(const cv::Mat& R);
 
+// Converts a 3x1 OpenCV matrix to gtsam Point3
+gtsam::Point3 cvMatToGtsamPoint3(const cv::Mat& cv_t);
+cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 
-struct ObjectPoseGT {
-    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
+template <class T>
+static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, T* estimate)
+{
+  if (state.exists(key))
+  {
+    *CHECK_NOTNULL(estimate) = state.at<T>(key);
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
 
-    size_t frame_id;
-    ObjectId object_id;
-    gtsam::Pose3 L_camera;
-    cv::Rect bounding_box; //box of detection on image plane
-};
+} //utils
 
-struct GroundTruthInputPacket {
-
-    gtsam::Pose3 X_world; //camera pose in world frame
-    std::vector<ObjectPoseGT> object_poses;
-    Timestamp timestamp;
-    size_t frame_id;
-};
-
-
-
-
-} // namespace dyno
+} //dyno

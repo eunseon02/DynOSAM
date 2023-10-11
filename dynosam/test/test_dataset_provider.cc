@@ -23,6 +23,7 @@
 
 
 #include "dynosam/dataprovider/DatasetProvider.hpp"
+#include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "internal/tmp_file.hpp"
 
 #include <glog/logging.h>
@@ -137,7 +138,7 @@ TEST_F(DatasetProviderFixture, testGenericDatasetMockLoading) {
 TEST(DynoDataset, testDummy) {
 
     KittiDataLoader dd("/root/data/kitti/0000");
-    dd.process();
+    dd.processRange();
 
 }
 

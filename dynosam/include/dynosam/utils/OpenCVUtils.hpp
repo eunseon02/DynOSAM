@@ -26,6 +26,21 @@
 namespace dyno {
 namespace utils {
 
+
+#define CHECK_MAT_TYPES(mat1, mat2)                                                                                    \
+  using namespace VDO_SLAM::utils;                                                                                     \
+  CHECK_EQ(mat1.type(), mat2.type()) << "Matricies should be of the same type ( " << cvTypeToString(mat1.type())       \
+                                     << " vs. " << cvTypeToString(mat2.type()) << ")."
+
+void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point, const cv::Scalar& colour, const double msize = 0.4);
+
+std::string cvTypeToString(int type);
+std::string cvTypeToString(const cv::Mat& mat);
+
+cv::Mat concatenateImagesHorizontally(const cv::Mat& left_img, const cv::Mat& right_img);
+
+cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& bottom_img);
+
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for the read/write optical flow functions in 4.x
  * I have taken this implementation from OpenCV 3.4 (https://github.com/opencv/opencv_contrib/blob/3.4/modules/optflow/src/optical_flow_io.cpp)
@@ -53,6 +68,7 @@ cv::Mat readOpticalFlow( const std::string& path );
  * @return false
  */
 bool writeOpticalFlow( const std::string& path, const cv::Mat& flow);
+
 
 }
 }
