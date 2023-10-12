@@ -7,14 +7,11 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/pipeline/PipelineBase.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/imu/ThreadSafeImuBuffer.hpp"
 
 namespace dyno {
 
-//TODO:(jesse) for now just leave as some undefined type. Since we have so many variation of inputs need
-//to figure out how to handle correctly - maybe use std::variant?
-struct FrontendInputPacketBase {};
 
 /**
  * @brief Takes data, synchronizes it and sends it to the output queue which should be connected to the frontend
@@ -34,8 +31,9 @@ public:
     DataProviderModule(const std::string& module_name);
     virtual ~DataProviderModule() = default;
 
-    virtual inline void fillFrameQueue(Frame::UniquePtr frame) {
-        frame_queue_.push(std::move(frame));
+    //expects input packet
+    virtual inline void fillInputPacketQueue(InputImagePacketBase::Ptr input_packet) {
+        packet_queue_.push(input_packet);
     }
 
 protected:
@@ -43,7 +41,7 @@ protected:
 
 
 private:
-    inline MIMO::OutputConstSharedPtr process(const MIMO::InputConstSharedPtr& input)  {
+    inline MIMO::OutputConstSharedPtr process(const MIMO::InputConstSharedPtr& input) override {
         return input;
     }
 
@@ -51,7 +49,7 @@ private:
     void shutdownQueues() override;
 
 protected:
-    ThreadsafeQueue<Frame::UniquePtr> frame_queue_;
+    ThreadsafeQueue<InputImagePacketBase::Ptr> packet_queue_;
 
 };
 

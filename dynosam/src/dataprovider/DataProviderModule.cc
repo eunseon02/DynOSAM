@@ -33,7 +33,7 @@ DataProviderModule::DataProviderModule(const std::string& module_name) : MIMO(mo
 
 
 void DataProviderModule::shutdownQueues() {
-    frame_queue_.shutdown();
+    packet_queue_.shutdown();
     //call the virtual shutdown method for the derived dataprovider module
     this->onShutdown();
 }

@@ -19,16 +19,17 @@ namespace dyno {
  * packets it into a Frame and IMU form and sends it the the DataProviderModule via callback functions where the data is
  * synchronized and sent to the frontend
  *
- * Also shutsdown the dataprovider module
  *
  */
 class DataProvider {
+
+//TODO: add gt callback - synchronize to timestamp? or frame?
 
 public:
     DYNO_POINTER_TYPEDEFS(DataProvider)
     DYNO_DELETE_COPY_CONSTRUCTORS(DataProvider)
 
-    using FrameInputCallback = std::function<void(Frame::UniquePtr)>;
+    using InputImagePacketInputCallback = std::function<void(InputImagePacketBase::Ptr)>;
     using ImuSingleInputCallback = std::function<void(const ImuMeasurement&)>;
     using ImuMultiInputCallback = std::function<void(const ImuMeasurements&)>;
 
@@ -49,8 +50,8 @@ public:
         imu_multi_input_callback_ = callback;
     }
 
-    inline void registerFrameCallback(const FrameInputCallback& callback) {
-        frame_input_callback_ = callback;
+    inline void registerInputImagesCallback(const InputImagePacketInputCallback& callback) {
+        image_input_callback_ = callback;
     }
 
     /**
@@ -65,12 +66,9 @@ public:
     virtual void shutdown();
 
 protected:
-    FrameInputCallback frame_input_callback_;
+    InputImagePacketInputCallback image_input_callback_;
     ImuSingleInputCallback imu_single_input_callback_;
     ImuMultiInputCallback imu_multi_input_callback_;
-
-    std::function<void()> shutdown_data_provider_module_callback_;
-
 
     // Shutdown switch to stop data provider.
     std::atomic_bool shutdown_ = {false};

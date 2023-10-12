@@ -28,6 +28,8 @@
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
+#include "dynosam/frontend/RGBDInstancePacket.hpp"
+
 namespace dyno {
 
 class KittiCameraPoseFolder : public dyno::DataFolder<gtsam::Pose3> {
@@ -288,20 +290,24 @@ public:
         cv::Mat rgb,
         cv::Mat optical_flow,
         cv::Mat depth,
-        cv::Mat semantic_mask,
+        cv::Mat instance_mask,
         gtsam::Pose3 camera_pose_gt,
         GroundTruthInputPacket gt_object_pose_gt) override
     {
-        LOG(ERROR) << rgb.size();
-        LOG(ERROR) << depth.size();
-        LOG(ERROR) << frame_id << " " << timestamp;
         CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world));
         CHECK(timestamp == gt_object_pose_gt.timestamp);
 
-        cv::Mat flow_rgb;
-        utils::flowToRgb(optical_flow, flow_rgb);
-        cv::imshow("depth", flow_rgb);
-        cv::waitKey(1);
+        auto input_packet = std::make_shared<RGBDInstancePacket>(
+            frame_id,
+            timestamp,
+            rgb,
+            optical_flow,
+            depth,
+            instance_mask
+        );
+
+
+        if(image_input_callback_) image_input_callback_(input_packet);
         return true;
     }
 

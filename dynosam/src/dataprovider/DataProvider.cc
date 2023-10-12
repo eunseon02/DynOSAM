@@ -32,12 +32,8 @@ namespace dyno {
 
 DataProvider::DataProvider(DataProviderModule* module) {
     CHECK_NOTNULL(module);
-    registerFrameCallback(std::bind(&DataProviderModule::fillFrameQueue, module, std::placeholders::_1));
-
-    shutdown_data_provider_module_callback_ = std::bind(&DataProviderModule::shutdown, module);
-
-    CHECK(frame_input_callback_);
-    CHECK(shutdown_data_provider_module_callback_);
+    registerInputImagesCallback(std::bind(&DataProviderModule::fillInputPacketQueue, module, std::placeholders::_1));
+    CHECK(image_input_callback_);
 
 }
 
@@ -48,9 +44,6 @@ DataProvider::~DataProvider() {
 void DataProvider::shutdown() {
     LOG(INFO) << "Shutting down data provider and associated module";
     shutdown_ = true;
-
-    //TODO:(jesse0might not have if data module not provided in constructor!
-    if(shutdown_data_provider_module_callback_) shutdown_data_provider_module_callback_();
 }
 
 

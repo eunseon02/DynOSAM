@@ -23,46 +23,38 @@
 
 #pragma once
 
-#include "dynosam/utils/Macros.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 
-#include <gtsam/base/Matrix.h>
-#include <gtsam/geometry/Pose3.h>
+#include <glog/logging.h>
 
-#include <opencv4/opencv2/opencv.hpp>
-#include <vector>
+namespace dyno {
 
+struct RGBDInstancePacket : public InputImagePacketBase {
 
-namespace dyno
-{
+    const cv::Mat depth_;
+    const cv::Mat instance_mask_;
 
-using Timestamp = double;
-using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
+    RGBDInstancePacket(
+        const FrameId frame_id,
+        const Timestamp timestamp,
+        const cv::Mat& rgb,
+        const cv::Mat& optical_flow,
+        const cv::Mat& depth,
+        const cv::Mat& instance_mask
+    )
+    :   InputImagePacketBase(
+            frame_id,
+            timestamp,
+            rgb,
+            optical_flow),
+        depth_(depth),
+        instance_mask_(instance_mask)
+    {
+        CHECK(depth_.type() == CV_64F) << "The provided depth image does not have datatype CV_64F";
+        CHECK(!depth_.empty());
+        CHECK(!instance_mask_.empty());
+    }
 
-using ObjectId = int;
-using ObjectIds = std::vector<ObjectId>;
-
-using FrameId = size_t;
-
-
-struct ObjectPoseGT {
-    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
-
-    size_t frame_id;
-    ObjectId object_id;
-    gtsam::Pose3 L_camera; //object pose in camera frame
-    cv::Rect bounding_box; //box of detection on image plane
 };
 
-struct GroundTruthInputPacket {
-    DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
-
-    gtsam::Pose3 X_world; //camera pose in world frame
-    std::vector<ObjectPoseGT> object_poses;
-    Timestamp timestamp;
-    size_t frame_id;
-};
-
-
-
-
-} // namespace dyno
+}

@@ -23,46 +23,45 @@
 
 #pragma once
 
-#include "dynosam/utils/Macros.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/pipeline/PipelineBase.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 
-#include <gtsam/base/Matrix.h>
-#include <gtsam/geometry/Pose3.h>
+struct FrontendOutputPacketBase {
+    DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
 
-#include <opencv4/opencv2/opencv.hpp>
-#include <vector>
-
-
-namespace dyno
-{
-
-using Timestamp = double;
-using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
-
-using ObjectId = int;
-using ObjectIds = std::vector<ObjectId>;
-
-using FrameId = size_t;
-
-
-struct ObjectPoseGT {
-    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
-
-    size_t frame_id;
-    ObjectId object_id;
-    gtsam::Pose3 L_camera; //object pose in camera frame
-    cv::Rect bounding_box; //box of detection on image plane
 };
 
-struct GroundTruthInputPacket {
-    DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
+class FrontendModule {
 
-    gtsam::Pose3 X_world; //camera pose in world frame
-    std::vector<ObjectPoseGT> object_poses;
-    Timestamp timestamp;
-    size_t frame_id;
+public:
+    DYNO_POINTER_TYPEDEFS(FrontendModule)
+}
+
+namespace dyno {
+
+template<typename Input, typename Output>
+class FrontendModule {
+
+public:
+    using This = FrontendModule<Input, Output>;
+    using InputType = Input;
+    using OutputType = Output;
+
+    DYNO_POINTER_TYPEDEFS(FrontendModule)
+
+
+    //careful! ducktyping here!!
+    Output::ConstPtr process(const Input::ConstPtr& input) override {
+        return nullptr;
+    }
+
+protected:
+    virtual Output::ConstPtr boostrapSpin(const Input::ConstPtr input) = 0;
+    virtual Output::ConstPtr nominalSpin(const Input::ConstPtr input) = 0;
+
+
 };
 
 
-
-
-} // namespace dyno
+} //dyno
