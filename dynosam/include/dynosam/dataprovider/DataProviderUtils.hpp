@@ -37,5 +37,8 @@ void loadFlow(const std::string& image_path, cv::Mat& img);
 //CV_64F (double)
 void loadDepth(const std::string& image_path, cv::Mat& img);
 
+//CV_32SC1
+void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::Mat& mask);
+
 
 } //dyno

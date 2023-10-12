@@ -27,8 +27,8 @@ RUN apt-get update \
     && pip3 install black pre-commit \
     && rm -rf /var/lib/apt/lists/*
 
-# install CSparse
-RUN DEBIAN_FRONTEND=noninteractive apt install -y libsuitesparse-dev
+# ROS installs
+RUN apt install ros-humble-diagnostic-updater*
 
 
 WORKDIR /root/
@@ -68,7 +68,9 @@ RUN cd gtsam && \
     git checkout tags/4.2.0 && \
     mkdir build && \
     cd build && \
-    cmake -DCMAKE_INSTALL_PREFIX=/usr/local -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF .. && \
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
+    -DGTSAM_USE_SYSTEM_EIGEN=ON \
+    -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF .. && \
     make -j$(nproc) install
 
 
@@ -79,9 +81,9 @@ RUN cd opengv && \
 RUN cd opengv/build && \
       cmake -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr/local \
-      -DEIGEN_INCLUDE_DIRS=/root/gtsam/gtsam/3rdparty/Eigen \
-      -DEIGEN_INCLUDE_DIR=/root/gtsam/gtsam/3rdparty/Eigen .. && \
-      make -j$(nproc) install
+      # -DEIGEN_INCLUDE_DIRS=/root/gtsam/gtsam/3rdparty/Eigen \
+      # -DEIGEN_INCLUDE_DIR=/root/gtsam/gtsam/3rdparty/Eigen .. && \
+      .. && make -j$(nproc) install
 
 # Install glog, gflags
 RUN apt-get update && apt-get install -y libgflags2.2 libgflags-dev libgoogle-glog0v5 libgoogle-glog-dev
@@ -91,9 +93,13 @@ RUN apt-get update && apt-get install -y xvfb python3-dev python3-setuptools
 
 RUN pip3 install setuptools pre-commit scipy matplotlib argcomplete
 
+# install CSparse
+RUN DEBIAN_FRONTEND=noninteractive apt install -y libsuitesparse-dev
+
 
 RUN mkdir -p /home/user/dev_ws/src/DynOSAM
 RUN mkdir -p /home/user/upstream_ws/src
 
+RUN source /opt/ros/humble/setup.bash
 
 WORKDIR /home/user/dev_ws

@@ -25,13 +25,61 @@
 
 #include "dynosam/dataprovider/DatasetProvider.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
 
 namespace dyno {
+
+class KittiCameraPoseFolder : public dyno::DataFolder<gtsam::Pose3> {
+
+public:
+    DYNO_POINTER_TYPEDEFS(KittiCameraPoseFolder)
+
+    std::string getFolderName() const override { return "pose_gt.txt"; }
+    gtsam::Pose3 getItem(size_t idx) override {
+        return gt_camera_poses_.at(idx);
+    }
+
+private:
+    void onPathInit() override {
+        std::ifstream object_pose_stream((std::string)getAbsolutePath(), std::ios::in);
+
+        while (!object_pose_stream.eof())
+        {
+            std::string s;
+            getline(object_pose_stream, s);
+            if (!s.empty())
+            {
+                std::stringstream ss;
+                ss << s;
+                int t;
+                ss >> t;
+                cv::Mat cv_pose = cv::Mat::eye(4, 4, CV_64F);
+
+                ss >> cv_pose.at<double>(0, 0) >> cv_pose.at<double>(0, 1) >> cv_pose.at<double>(0, 2) >>
+                    cv_pose.at<double>(0, 3) >> cv_pose.at<double>(1, 0) >> cv_pose.at<double>(1, 1) >>
+                    cv_pose.at<double>(1, 2) >> cv_pose.at<double>(1, 3) >> cv_pose.at<double>(2, 0) >>
+                    cv_pose.at<double>(2, 1) >> cv_pose.at<double>(2, 2) >> cv_pose.at<double>(2, 3) >>
+                    cv_pose.at<double>(3, 0) >> cv_pose.at<double>(3, 1) >> cv_pose.at<double>(3, 2) >>
+                    cv_pose.at<double>(3, 3);
+
+                gtsam::Pose3 pose = utils::cvMatToGtsamPose3(cv_pose);
+                gt_camera_poses_.push_back(pose);
+            }
+        }
+        object_pose_stream.close();
+    }
+
+    std::vector<gtsam::Pose3> gt_camera_poses_;
+
+};
 
 class KittiObjectPoseFolder : public dyno::DataFolder<GroundTruthInputPacket> {
 
 public:
-    KittiObjectPoseFolder() {}
+    DYNO_POINTER_TYPEDEFS(KittiObjectPoseFolder)
+    KittiObjectPoseFolder(TimestampFile::Ptr timestamp_loader, KittiCameraPoseFolder::Ptr camera_pose_loader)
+    : timestamp_loader_(timestamp_loader), camera_pose_loader_(camera_pose_loader) {}
 
     /**
      * @brief "object_pose.txt" as file name
@@ -40,7 +88,28 @@ public:
      */
     std::string getFolderName() const override { return "object_pose.txt"; }
     GroundTruthInputPacket getItem(size_t idx) override {
-        return gt_packets.at(idx);
+        //no guarantee (by ordering) that camera_pose_loader has been inited correctly before the get item so we add the data here and not in the onPathInit
+        CHECK(camera_pose_loader_);
+        CHECK(camera_pose_loader_->isAbsolutePathSet());
+
+        const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
+        const Timestamp timestamp = timestamp_loader_->getItem(idx);
+
+        //  frame_id < nTimes - 1??
+        GroundTruthInputPacket gt_packet;
+        gt_packet.timestamp = timestamp;
+        gt_packet.frame_id = idx;
+        // add ground truths for this fid
+        for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
+        {
+            gt_packet.object_poses.push_back(object_poses_[object_ids_vector_[idx][i]]);
+        // sanity check
+        CHECK_EQ(gt_packet.object_poses[i].frame_id, idx);
+        }
+        gt_packet.X_world = camera_pose;
+
+        //TODO: recalcualte every time?
+        return gt_packet;
     }
 
 
@@ -50,9 +119,7 @@ private:
      *
      */
     void onPathInit() override {
-        std::ifstream object_pose_stream((std::string)absolute_folder_path_, std::ios::in);
-
-        std::vector<ObjectPoseGT> object_poses;
+        std::ifstream object_pose_stream((std::string)getAbsolutePath(), std::ios::in);
 
         //hmm we dont know the number of expected frames here...
         while (!object_pose_stream.eof())
@@ -69,10 +136,27 @@ private:
                     object_pose_vec[6] >> object_pose_vec[7] >> object_pose_vec[8] >> object_pose_vec[9];
 
                 ObjectPoseGT object_pose = constructObjectPoseGT(object_pose_vec);
-                object_poses.push_back(object_pose);
+                object_poses_.push_back(object_pose);
             }
         }
         object_pose_stream.close();
+
+        //no guarantee that the timestamp loader onPathInit() has been called first (although in reality it will becuase) it is part of the default
+        //folder structure
+        //check that it has been initalised and then use the timestamps already loaded there to construct the gt packets
+        CHECK(timestamp_loader_->isAbsolutePathSet()) << "Timestamp laoder should be already initalised so we can get the timestamps from it since they are preloaded!!";
+        const size_t n_times = timestamp_loader_->size();
+        CHECK(n_times > 0u);
+        object_ids_vector_.resize(n_times); //only load up to the number of timestamps given
+        for(size_t i = 0; i < object_poses_.size(); i++) {
+            const ObjectPoseGT& obect_pose_gt = object_poses_[i];
+            size_t frame_id = obect_pose_gt.frame_id;
+            if(frame_id >= object_ids_vector_.size()) {
+                break;
+            }
+
+            object_ids_vector_[frame_id].push_back(i);
+        }
     }
 
     ObjectPoseGT constructObjectPoseGT(const std::vector<double>& obj_pose_gt) const {
@@ -154,30 +238,75 @@ private:
         Pose.at<double>(2, 2) = R.at<double>(2, 2);
         Pose.at<double>(2, 3) = t.at<double>(2);
 
-        // object_pose.pose = utils::cvMatToGtsamPose3(Pose);
+        object_pose.L_camera = utils::cvMatToGtsamPose3(Pose);
         return object_pose;
     }
 
 private:
-    std::vector<GroundTruthInputPacket> gt_packets;
-
+    TimestampFile::Ptr timestamp_loader_;
+    KittiCameraPoseFolder::Ptr camera_pose_loader_;
+    std::vector<ObjectIds> object_ids_vector_;
+    std::vector<ObjectPoseGT> object_poses_;
+    std::vector<GroundTruthInputPacket> gt_packets_; //unused?
 };
 
-class KittiDataLoader : public DynoDatasetProvider<cv::Mat> {
+
+//additional loaders are depth, semantic mask, camera pose gt and gt input packet
+class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
-    KittiDataLoader(const fs::path& dataset_path) : DynoDatasetProvider<cv::Mat>(
-        dataset_path,
-        std::make_shared<DepthDataFolder>()
-    ) {}
+    KittiDataLoader(const fs::path& dataset_path) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+        dataset_path)
+    {
+        TimestampFile::Ptr timestamp_file =  std::dynamic_pointer_cast<TimestampFile>(this->getLoader<TimestampFileIdx>());
+        RGBDataFolder::Ptr rgb_folder = std::dynamic_pointer_cast<RGBDataFolder>(this->getLoader<RGBFolderIdx>());
+
+        CHECK(timestamp_file);
+        CHECK(rgb_folder);
+
+        InstantanceSegMaskFolder::Ptr mask_folder = std::make_shared<InstantanceSegMaskFolder>(rgb_folder);
+
+        KittiCameraPoseFolder::Ptr camera_pose_folder = std::make_shared<KittiCameraPoseFolder>();
+        KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
+            timestamp_file, camera_pose_folder
+        );
 
 
-    bool constructFrame(size_t frame_id, cv::Mat rgb, Timestamp timestamp, cv::Mat depth) override {
+
+        this->setLoaders(
+            std::make_shared<DepthDataFolder>(),
+            mask_folder,
+            camera_pose_folder,
+            object_pose_gt_folder
+        );
+    }
+
+
+    bool dataInputCallback(
+        size_t frame_id,
+        Timestamp timestamp,
+        cv::Mat rgb,
+        cv::Mat optical_flow,
+        cv::Mat depth,
+        cv::Mat semantic_mask,
+        gtsam::Pose3 camera_pose_gt,
+        GroundTruthInputPacket gt_object_pose_gt) override
+    {
         LOG(ERROR) << rgb.size();
         LOG(ERROR) << depth.size();
         LOG(ERROR) << frame_id << " " << timestamp;
+        CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world));
+        CHECK(timestamp == gt_object_pose_gt.timestamp);
+
+        cv::Mat flow_rgb;
+        utils::flowToRgb(optical_flow, flow_rgb);
+        cv::imshow("depth", flow_rgb);
+        cv::waitKey(1);
         return true;
     }
+
+
+
 };
 
 } //dyno

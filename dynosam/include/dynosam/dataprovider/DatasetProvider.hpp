@@ -43,35 +43,41 @@ struct _DynoDatasetConstructor {
 
     using DynoDataTypesTuple = std::tuple<DynoDataTypes...>; //! All the dyno datypes in one definition (default at the start and then the optional ones)
 
+    using DataInputCallback = std::function<bool(size_t, const DynoDataTypes...)>;
+
     virtual ~_DynoDatasetConstructor() {}
-    virtual bool constructFrame(size_t frame_id, const DynoDataTypes... data) = 0;
+    virtual bool dataInputCallback(size_t frame_id, const DynoDataTypes... data) = 0;
 };
 
 
 /**
  * @brief Specalisation of the generic dataset for the expected dynosam dataset structure.
  *
- * Includes some default Datafolders which reflect the minimum requirements for the system (optical flow, rgb, camera and object poses, timestamps etc)
+ * Includes some default Datafolders which reflect the minimum requirements for the system (timestamp, rgb, optical flow)
  * which are protected within the dataset class. Additional datafolders must be added on top of this and the class is templated on the extra data folders
  * which also inidicates the total number of datastreams to load for this dataset
  *
  * @tparam DataTypes Types that should be used to construct a frame
  */
 template<typename... DataTypes>
-class DynoDataset : public _DynoDatasetConstructor<cv::Mat, Timestamp, DataTypes...> {
+class DynoDataset : public _DynoDatasetConstructor<Timestamp, cv::Mat, cv::Mat, DataTypes...> {
 
+    //TODO: (jesse) print folder structure functions and checks!!
+    //TODO: (jesse) mix use of the term folder and loader (should revert everything to loader!!)
 public:
     using TypedGenericDataset = GenericDataset<DataTypes...>;
-    using DefaultDataset = GenericDataset<cv::Mat, Timestamp>;
+    using DefaultDataset = GenericDataset<Timestamp, cv::Mat, cv::Mat>;
 
-    using Base = _DynoDatasetConstructor<cv::Mat, Timestamp, DataTypes...>;
-    using DynoDataTypesTuple = typename Base::DynoDataTypesTuple; //! All the dataypes declared in one tuple (cv::Mat, Timestamp, ....)
+    using Base = _DynoDatasetConstructor<Timestamp, cv::Mat, cv::Mat, DataTypes...>;
+    using DynoDataTypesTuple = typename Base::DynoDataTypesTuple; //! All the dataypes declared in one tuple (cv::Mat, cv::Mat, Timestamp, ....)
 
     //TODO: check that the type created by the _DynoDatasetConstructor is the same as the concat of the
     // DefaultDataset and TypedGenericDataset
 
-    static constexpr size_t RGBFolderIdx = 0u; //! Index in Default Dataset
-    static constexpr size_t TimestampFileIdx = RGBFolderIdx + 1u; //!
+    static constexpr size_t TimestampFileIdx = 0u; //!
+    static constexpr size_t RGBFolderIdx = TimestampFileIdx + 1u; //! Index in Default Dataset
+    static constexpr size_t OpticalFlowFolderIdx = RGBFolderIdx + 1u; //! Index in Default Dataset
+
 
 
     //! The type stored at the tuple idnex of the GenericDataset
@@ -88,21 +94,20 @@ public:
     // using ConcatDataTypes = decltype(std::tuple_cat(DefaultDataset::DataTypeTuple{}, typename TypedGenericDataset::DataTypeTuple{}));
 
     //uses timestamp file to set the size
-    DynoDataset(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders)
+    DynoDataset(const fs::path& dataset_path)
+        : dataset_path_(dataset_path), timestamp_file_(std::make_shared<TimestampFile>())
     {
 
-        //This one will give us the number of files (frames) to expect
-        auto timestamps = std::make_shared<TimestampFile>();
+        //timestamp_file_ one will give us the number of files (frames) to expect
 
         default_dataset_ = std::make_unique<DefaultDataset>(
             dataset_path,
+            timestamp_file_,
             std::make_shared<RGBDataFolder>(),
-            timestamps
+            std::make_shared<OpticalFlowDataFolder>()
         );
 
-        dataset_ = std::make_unique<TypedGenericDataset>(dataset_path, data_folders...);
-
-        dataset_size_ = timestamps->size();
+        dataset_size_ = timestamp_file_->size();
 
         CHECK(dataset_size_ > 0);
         //TODO: error for now
@@ -113,9 +118,18 @@ public:
 
     virtual ~DynoDataset() {}
 
+    void setLoaders( typename DataFolder<DataTypes>::Ptr... data_folders) {
+        dataset_ = std::make_unique<TypedGenericDataset>(dataset_path_, data_folders...);
+    }
+
+    //only valid after load
     size_t getDatasetSize() const { return dataset_size_; }
 
     bool processSingle(size_t frame_id) {
+        if(!dataset_) {
+            LOG(ERROR) << "Dataset not loaded with setLoaders()! Skipping processing";
+            return false;
+        }
         if(frame_id >= dataset_size_) {
             throw std::runtime_error("Failure when processing a single frame_id!");
         }
@@ -166,10 +180,8 @@ public:
         //get default data
         DynoDataTypesTuple loaded_data = std::tuple_cat(default_data, extra_data);
 
-
-        auto construct_input_func = [&](auto&&... args) { return this->constructFrame(frame_id, args...); };
+        auto construct_input_func = [&](auto&&... args) { return this->dataInputCallback(frame_id, args...); };
         return std::apply(construct_input_func, loaded_data);
-        return true;
     }
 
     //TODO: set start and end idx?
@@ -179,14 +191,27 @@ public:
         }
     }
 
+    //TODO: atm only default - could enable if on size so the same function could be used to get from default and extra dataset
+    //as we have to zero index them both (or use consexpr? to select and re index)
+    template<size_t I>
+    auto getLoader() {
+        //TODO: test
+        return default_dataset_->template getDataFolder<I>();
+    }
+
+
 private:
+    const fs::path dataset_path_;
     typename TypedGenericDataset::UniquePtr dataset_;
     typename DefaultDataset::UniquePtr default_dataset_;
 
-    size_t dataset_size_{0};
+    TimestampFile::Ptr timestamp_file_;
+
+    size_t dataset_size_{0}; //only valid after load
 
 };
 
+//should not be inherited but instead is functional!!
 template<typename... DataTypes>
 class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvider  {
 
@@ -194,8 +219,9 @@ public:
     using BaseDynoDataset = DynoDataset<DataTypes...>;
 
     //does not accept DataProviderModule* for dataprovider
-    DynoDatasetProvider(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders)
-        : BaseDynoDataset(dataset_path, data_folders...), DataProvider() {}
+    DynoDatasetProvider(
+        const fs::path& dataset_path)
+        : BaseDynoDataset(dataset_path), DataProvider() {}
 
     virtual ~DynoDatasetProvider() {}
 
@@ -209,6 +235,8 @@ public:
         return true;
 
     }
+
+
 };
 
 

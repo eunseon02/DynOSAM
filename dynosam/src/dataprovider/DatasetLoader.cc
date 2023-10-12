@@ -33,7 +33,7 @@ std::string RGBDataFolder::getFolderName() const {
 cv::Mat RGBDataFolder::getItem(size_t idx) {
     std::stringstream ss;
     ss << std::setfill('0') << std::setw(6) << idx;
-    const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".png";
+    const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".png";
 
     cv::Mat rgb;
     loadRGB(file_path, rgb);
@@ -50,7 +50,7 @@ std::string OpticalFlowDataFolder::getFolderName() const {
 cv::Mat OpticalFlowDataFolder::getItem(size_t idx) {
     std::stringstream ss;
     ss << std::setfill('0') << std::setw(6) << idx;
-    const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".flo";
+    const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".flo";
 
     cv::Mat flow;
     loadFlow(file_path, flow);
@@ -64,7 +64,7 @@ cv::Mat OpticalFlowDataFolder::getItem(size_t idx) {
 cv::Mat DepthDataFolder::getItem(size_t idx) {
   std::stringstream ss;
   ss << std::setfill('0') << std::setw(6) << idx;
-  const std::string file_path = (std::string)absolute_folder_path_  + "/" + ss.str() + ".png";
+  const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".png";
 
   cv::Mat depth;
   loadDepth(file_path, depth);
@@ -72,6 +72,23 @@ cv::Mat DepthDataFolder::getItem(size_t idx) {
   CHECK(!depth.empty());
   return depth;
 }
+
+
+cv::Mat InstantanceSegMaskFolder::getItem(size_t idx) {
+  std::stringstream ss;
+  ss << std::setfill('0') << std::setw(6) << idx;
+  const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".txt";
+
+  const cv::Size expected_mask_size = rgb_data_folder_->getItem(idx).size();
+  LOG(ERROR) << expected_mask_size;
+
+  cv::Mat mask;
+  loadSemanticMask(file_path, expected_mask_size, mask);
+
+  CHECK(!mask.empty());
+  return mask;
+}
+
 
 std::string TimestampFile::getFolderName() const {
     return "times.txt";
@@ -82,7 +99,7 @@ double TimestampFile::getItem(size_t idx) {
 }
 
 void TimestampFile::onPathInit() {
-    std::ifstream times_stream((std::string)absolute_folder_path_, std::ios::in);
+    std::ifstream times_stream((std::string)getAbsolutePath(), std::ios::in);
 
     while (!times_stream.eof())
   {

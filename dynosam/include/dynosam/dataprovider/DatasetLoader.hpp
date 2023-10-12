@@ -30,6 +30,7 @@
 
 #include <filesystem>
 #include <functional>
+#include <optional>
 
 #include <glog/logging.h>
 #include <iostream>
@@ -53,7 +54,7 @@ class DataFolder {
 
 public:
     DYNO_POINTER_TYPEDEFS(DataFolder)
-
+    using This = DataFolder<T>;
     using Type = T;
     DataFolder() = default;
 
@@ -69,25 +70,73 @@ public:
      *
      * @param absolute_folder_path
      */
-    void setAbsoluteFolderPath(const fs::path& absolute_folder_path) {
+    void initAbsolutePath(const fs::path& absolute_folder_path) {
         absolute_folder_path_ = absolute_folder_path;
         onPathInit();
     }
 
+    /**
+     * @brief Indicates that the absolute folder path has been set correctly with initAbsolutePath
+     * Same behaviour as is isAbsolutePathSet but can operate as a boolean operator
+     *
+     * @return true
+     * @return false
+     */
+    explicit operator bool() const {
+        return isAbsolutePathSet();
+    }
+
+    /**
+     * @brief Checks if the absolute path has been set and the data folder is ready to get items
+     *
+     * @return true
+     * @return false
+     */
+    inline bool isAbsolutePathSet() const {
+        return (bool)absolute_folder_path_;
+    }
+
+    fs::path getAbsolutePath() const {
+        if(!absolute_folder_path_) {
+            throw std::runtime_error("Error accessing absolute folder path for DataFolder (" + getFolderName() + "). Has the path been set with initAbsolutePath()?");
+        }
+        return absolute_folder_path_.value();
+    }
+
     virtual std::string getFolderName() const = 0;
     // virtual size_t size() const = 0;
+
+    /**
+     * @brief Get the Item at an index in the dataset.
+     *
+     * The idx should essentually correspond to the frame_id (starting at 0) for this datastream in the dataset.
+     *
+     * @param idx
+     * @return T
+     */
     virtual T getItem(size_t idx) = 0;
 
 protected:
+    /**
+     * @brief Virtual function that is called once the absolute path to this folder is known
+     * This happens after construction as the dataset folder (the parent folder) is known by the DataFolderStructure
+     * which will set the path on its construction.
+     *
+     * The absolute folder path can be accessed This::getAbsolutePath
+     *
+     */
     virtual void onPathInit() {}
 
-protected:
-    fs::path absolute_folder_path_; //! Set when init is called since we need a default constructor. This will not have the ending "/" on it
+private:
+    //! Set when init is called since we need a default constructor. This will not have the ending "/" on it
+    //! Initially set to nullopt so we can check that the folder has been properly initalised via initAbsoluteFolderPath
+    std::optional<fs::path> absolute_folder_path_{std::nullopt};
 };
 
 class RGBDataFolder : public dyno::DataFolder<cv::Mat> {
 
 public:
+    DYNO_POINTER_TYPEDEFS(RGBDataFolder)
     RGBDataFolder() {}
 
     /**
@@ -128,9 +177,32 @@ public:
     cv::Mat getItem(size_t idx) override;
 };
 
+
+class InstantanceSegMaskFolder : public dyno::DataFolder<cv::Mat> {
+
+public:
+    InstantanceSegMaskFolder(RGBDataFolder::Ptr rgb_data_folder) : rgb_data_folder_(rgb_data_folder) {
+        CHECK(rgb_data_folder_);
+    }
+
+    /**
+     * @brief "semantic" as folder name
+     *
+     * @return std::string
+     */
+    inline std::string getFolderName() const override { return "semantic"; }
+    cv::Mat getItem(size_t idx) override;
+
+private:
+    RGBDataFolder::Ptr rgb_data_folder_;
+};
+
+
+//TODO: (jesse) add comments - this is the really important one as we base the size of the dataset on this data!!!
 class TimestampFile : public dyno::DataFolder<double> {
 
 public:
+    DYNO_POINTER_TYPEDEFS(TimestampFile)
     TimestampFile() {}
 
     /**
@@ -141,9 +213,11 @@ public:
     std::string getFolderName() const override;
     double getItem(size_t idx) override;
 
+    //TODO: coment!!
     size_t size() const {
         //only valid after loading
-        return times.size();
+        //we go up to -1 becuase the optical flow has ONE LESS image
+        return times.size()-1u;
     }
 
 private:
@@ -187,6 +261,7 @@ public:
 
     DataFolderStructure(const fs::path& dataset_path, typename DataFolder<DataTypes>::Ptr... data_folders) : dataset_path_(dataset_path), data_folders_(data_folders...) {}
 
+    //will be of type DataFolder<T>::Ptr where T is the type returned by the data folder as index at DataTypeTuple<I>
     template<size_t I>
     auto getDataFolder() const {
         return std::get<I>(data_folders_);
@@ -316,7 +391,7 @@ private:
 
                     LOG(INFO) << "Validated dataset folder: " << absolute_file_path;
                     auto data_folder = this->template getDataFolder<I>();
-                    data_folder->setAbsoluteFolderPath(absolute_file_path);
+                    data_folder->initAbsolutePath(absolute_file_path);
 
                 });
             });

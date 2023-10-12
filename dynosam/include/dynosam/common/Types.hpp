@@ -29,6 +29,7 @@
 #include <gtsam/geometry/Pose3.h>
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <vector>
 
 
 namespace dyno
@@ -38,6 +39,7 @@ using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
 
 using ObjectId = int;
+using ObjectIds = std::vector<ObjectId>;
 
 
 struct ObjectPoseGT {
@@ -45,7 +47,7 @@ struct ObjectPoseGT {
 
     size_t frame_id;
     ObjectId object_id;
-    gtsam::Pose3 L_camera;
+    gtsam::Pose3 L_camera; //object pose in camera frame
     cv::Rect bounding_box; //box of detection on image plane
 };
 

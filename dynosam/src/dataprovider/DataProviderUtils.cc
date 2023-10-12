@@ -26,6 +26,9 @@
 
 #include <filesystem>
 #include <exception>
+#include <fstream>
+
+#include <glog/logging.h>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -53,6 +56,47 @@ void loadDepth(const std::string& image_path, cv::Mat& img) {
     throwExceptionIfPathInvalid(image_path);
     img = cv::imread(image_path, cv::IMREAD_UNCHANGED);
     img.convertTo(img, CV_64F);
+}
+
+
+void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::Mat& mask) {
+    throwExceptionIfPathInvalid(image_path);
+    CHECK(!size.empty());
+
+    mask = cv::Mat(size, CV_32SC1);
+
+    std::ifstream file_mask;
+    file_mask.open(image_path.c_str());
+
+    int count = 0;
+    while (!file_mask.eof())
+    {
+        std::string s;
+        getline(file_mask, s);
+        if (!s.empty())
+        {
+            std::stringstream ss;
+            ss << s;
+            int tmp;
+            for (int i = 0; i < mask.cols; ++i)
+            {
+                ss >> tmp;
+                if (tmp != 0)
+                {
+                mask.at<int>(count, i) = tmp;
+                }
+                else
+                {
+                mask.at<int>(count, i) = 0;
+                }
+            }
+            count++;
+        }
+    }
+
+  file_mask.close();
+
+
 }
 
 
