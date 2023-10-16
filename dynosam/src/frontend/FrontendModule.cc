@@ -21,36 +21,34 @@
  *   SOFTWARE.
  */
 
-#pragma once
-
-#include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
 
+#include <glog/logging.h>
 
 namespace dyno {
 
-class FrontendPipeline : public SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase> {
+FrontendModule::FrontendModule(const FrontendModuleParams& params)
+    :   base_params_(params), frontend_state_(State::Boostrap) {}
 
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendPipeline)
+FrontendOutputPacketBase::ConstPtr FrontendModule::spinOnce(FrontendInputPacketBase::ConstPtr input) {
+    CHECK(input);
+    SpinReturn spin_return{State::Boostrap, nullptr};
+    switch (frontend_state_)
+        {
+        case State::Boostrap: {
+            spin_return = boostrapSpin(input);
+        } break;
+        case State::Nominal: {
+            spin_return = nominalSpin(input);
+        } break;
+        default: {
+            LOG(FATAL) << "Unrecognized Frontend state.";
+            break;
+        }
+    }
 
-    using SIMO =
-      SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase>;
-    using InputQueue = typename SIMO::InputQueue;
-    using OutputQueue = typename SIMO::OutputQueue;
-
-    FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module);
-
-    FrontendOutputPacketBase::ConstPtr process(const FrontendInputPacketBase::ConstPtr& input) override;
-
-private:
-    FrontendModule::Ptr frontend_module_;
-
-};
-
-
+    frontend_state_ = spin_return.first;
+    return spin_return.second;
+}
 
 } //dyno

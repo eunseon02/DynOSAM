@@ -80,7 +80,6 @@ cv::Mat InstantanceSegMaskFolder::getItem(size_t idx) {
   const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".txt";
 
   const cv::Size expected_mask_size = rgb_data_folder_->getItem(idx).size();
-  LOG(ERROR) << expected_mask_size;
 
   cv::Mat mask;
   loadSemanticMask(file_path, expected_mask_size, mask);

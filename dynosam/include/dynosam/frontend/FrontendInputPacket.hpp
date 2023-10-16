@@ -24,9 +24,12 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
+
+#include <type_traits>
 
 namespace dyno {
 
@@ -47,7 +50,8 @@ struct InputImagePacketBase {
         CHECK(rgb_.type() == CV_8UC1 || rgb_.type() == CV_8UC3) << "The provided rgb image is not grayscale or rgb";
         CHECK(!rgb.empty()) << "The provided rgb image is empty!";
 
-        CHECK(optical_flow_.type() == CV_32F) << "The provided optical flow image is not of datatype CV_32F";
+        CHECK(optical_flow_.type() == CV_32FC2) << "The provided optical flow image is not of datatype CV_32FC2 ("
+            << "was " << utils::cvTypeToString(optical_flow_.type()) << ")";
         CHECK(!optical_flow_.empty()) << "The provided optical flow image is empty!";
     }
 
@@ -56,8 +60,12 @@ struct InputImagePacketBase {
 
 
 //inherit to add more sensor data (eg imu)
+//can be of any InputImagePacketBase with this as the default. We use this so we can
+//create a FrontendInputPacketBase type with the InputPacketType as the actual derived type
+//and not the base class so different modules do not have to do their own casting to get image data
 struct FrontendInputPacketBase {
     DYNO_POINTER_TYPEDEFS(FrontendInputPacketBase)
+
 
     InputImagePacketBase::Ptr image_packet_;
     GroundTruthInputPacket::Optional optional_gt_;
@@ -69,12 +77,16 @@ struct FrontendInputPacketBase {
     {
         if(optional_gt) {
             CHECK_EQ(optional_gt_->timestamp, image_packet_->timestamp_);
+            CHECK_EQ(optional_gt_->frame_id, image_packet_->frame_id_);
         }
     }
 
 
     virtual ~FrontendInputPacketBase() = default;
 };
+
+
+
 
 
 

@@ -39,6 +39,32 @@ void DataProviderModule::shutdownQueues() {
 }
 
 
+FrontendInputPacketBase::ConstPtr DataProviderModule::getInputPacket() {
+  if(isShutdown()) {
+    return nullptr;
+  }
+
+  InputImagePacketBase::Ptr packet = nullptr;
+  //TODO: shoudl not pop blocking if threaded!!
+  bool queue_state = packet_queue_.popBlocking(packet);
+
+  //TODO: gt?
+
+  if(!queue_state) {
+     LOG(WARNING)
+        << "Module: " << MIMO::module_name_ << " - queue is down";
+        return nullptr;
+  }
+
+  CHECK(packet);
+  return std::make_shared<FrontendInputPacketBase>(packet);
+}
+
+bool DataProviderModule::hasWork() const {
+  return !packet_queue_.empty() && !packet_queue_.isShutdown();
+}
+
+
 
 bool DataProviderModuleImu::getTimeSyncedImuMeasurements(
     const Timestamp& timestamp,

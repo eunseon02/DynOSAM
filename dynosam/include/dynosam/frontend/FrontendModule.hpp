@@ -26,42 +26,70 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/pipeline/PipelineBase.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/frontend/FrontendOutputPacket.hpp"
 
-struct FrontendOutputPacketBase {
-    DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
-
-};
-
-class FrontendModule {
-
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendModule)
-}
+#include <type_traits>
 
 namespace dyno {
 
-template<typename Input, typename Output>
-class FrontendModule {
-
-public:
-    using This = FrontendModule<Input, Output>;
-    using InputType = Input;
-    using OutputType = Output;
-
-    DYNO_POINTER_TYPEDEFS(FrontendModule)
-
-
-    //careful! ducktyping here!!
-    Output::ConstPtr process(const Input::ConstPtr& input) override {
-        return nullptr;
-    }
-
-protected:
-    virtual Output::ConstPtr boostrapSpin(const Input::ConstPtr input) = 0;
-    virtual Output::ConstPtr nominalSpin(const Input::ConstPtr input) = 0;
+struct FrontendModuleParams {
 
 
 };
+
+/**
+ * @brief Base class to actually do processing. Data passed to this module from the frontend
+ *
+ */
+class FrontendModule {
+
+public:
+    DYNO_POINTER_TYPEDEFS(FrontendModule)
+
+    enum class State {
+        Boostrap = 0u, //! Initalize Frontend
+        Nominal = 1u //! Run Frontend
+    };
+
+    using SpinReturn = std::pair<State, FrontendOutputPacketBase::ConstPtr>;
+
+    FrontendModule(const FrontendModuleParams& params);
+    ~FrontendModule() = default;
+
+    FrontendOutputPacketBase::ConstPtr spinOnce(FrontendInputPacketBase::ConstPtr input);
+
+protected:
+    virtual SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) = 0;
+    virtual SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) = 0;
+
+protected:
+    const FrontendModuleParams base_params_;
+
+private:
+    std::atomic<State> frontend_state_;
+
+};
+
+
+// class FrontendModuleTyped
+
+// template<typename ExpectedFrontendInputPacket, typename ExpectedInputImagePacket>
+// struct FrontendModuleTypeChekcer {
+
+//     static_assert(std::is_base_of_v<FrontendInputPacketBase,ExpectedFrontendInputPacket> == true);
+//     static_assert(std::is_base_of_v<InputImagePacketBase,ExpectedInputImagePacket> == true);
+
+//     //! To match the const types from the pipeline which use constptr
+//     using ExpectedFrontendInputPacketConstPtr = std::shared_ptr<const ExpectedFrontendInputPacket>;
+//     using ExpectedInputImagePacketConstPtr = std::shared_ptr<const ExpectedInputImagePacket>;
+
+
+
+// };
+
+
+
+
 
 
 } //dyno

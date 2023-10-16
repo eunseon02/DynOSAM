@@ -124,6 +124,7 @@ public:
 
     //only valid after load
     size_t getDatasetSize() const { return dataset_size_; }
+    const std::string getDatasetPath() const { return dataset_path_; }
 
     bool processSingle(size_t frame_id) {
         if(!dataset_) {
@@ -227,6 +228,7 @@ public:
 
     bool spin() override {
         const size_t dataset_size = BaseDynoDataset::getDatasetSize();
+        LOG(INFO) << "Spinning dataset at path " << BaseDynoDataset::getDatasetPath() << " with size " << dataset_size;
 
         for (size_t frame_id = 0; frame_id < dataset_size; frame_id++) {
             if(!BaseDynoDataset::processSingle(frame_id)) return false;

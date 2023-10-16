@@ -52,15 +52,22 @@ include_directories(
 
 # build library
 add_library(${PROJECT_NAME} SHARED
+
+  src/common/Types.cc
+
   src/dataprovider/DataProviderModule.cc
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetLoader.cc
   src/dataprovider/DataProviderUtils.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
+  src/frontend/FrontendPipeline.cc
+  src/frontend/FrontendModule.cc
+  src/frontend/RGBDInstanceFrontendModule.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
+  src/utils/Spinner.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}
@@ -126,16 +133,16 @@ install(
 
 
 #####exec test#########
-# add_executable(cassie_controller nodes/cassie_controller.cc)
-# target_link_libraries(cassie_controller
-#   ${PROJECT_NAME}
-# )
-# ament_target_dependencies(cassie_controller "rclcpp" "std_msgs")
+add_executable(dyno_sam example/dyno_sam.cc)
+target_link_libraries(dyno_sam
+  ${PROJECT_NAME}
+)
+ament_target_dependencies(dyno_sam "rclcpp" "std_msgs")
 
 
 
 install(TARGETS
-# cassie_controller
+  dyno_sam
   DESTINATION lib/${PROJECT_NAME})
 
 
@@ -155,7 +162,7 @@ if(BUILD_TESTING)
     test/thread_safe_temporal_buffer_test.cc
     test/test_threadsafe_imu_buffer.cc
     test/test_dataset_provider.cc
-
+    test/test_types.cc
     test/internal/tmp_file.cc
 )
 

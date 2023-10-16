@@ -306,7 +306,7 @@ public:
             instance_mask
         );
 
-
+        CHECK(image_input_callback_);
         if(image_input_callback_) image_input_callback_(input_packet);
         return true;
     }

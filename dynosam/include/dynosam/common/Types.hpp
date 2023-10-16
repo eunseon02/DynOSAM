@@ -44,6 +44,7 @@ using ObjectIds = std::vector<ObjectId>;
 using FrameId = size_t;
 
 
+//TODO: (jesse) should these be here?
 struct ObjectPoseGT {
     DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
 
@@ -61,6 +62,42 @@ struct GroundTruthInputPacket {
     Timestamp timestamp;
     size_t frame_id;
 };
+
+
+/**
+ * @brief Get demangled class name
+ *
+ * @param name
+ * @return std::string
+ */
+std::string demangle(const char* name);
+
+
+/**
+ * @brief Get demangled class name of type T from an instance
+ * @tparam T
+ * @param t
+ * @return std::string
+ */
+template <class T>
+std::string type_name(const T& t)
+{
+  return demangle(typeid(t).name());
+}
+
+
+/**
+ * @brief Get a demangled class name of type T from a templated type
+ *
+ * @tparam T
+ * @return std::string
+ */
+template <class T>
+std::string type_name()
+{
+  return demangle(typeid(T).name());
+}
+
 
 
 

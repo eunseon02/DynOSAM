@@ -23,34 +23,23 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
-
 
 namespace dyno {
 
-class FrontendPipeline : public SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase> {
+class RGBDInstanceFrontendModule : public FrontendModule {
 
 public:
-    DYNO_POINTER_TYPEDEFS(FrontendPipeline)
+    RGBDInstanceFrontendModule();
 
-    using SIMO =
-      SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase>;
-    using InputQueue = typename SIMO::InputQueue;
-    using OutputQueue = typename SIMO::OutputQueue;
-
-    FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module);
-
-    FrontendOutputPacketBase::ConstPtr process(const FrontendInputPacketBase::ConstPtr& input) override;
+    using SpinReturn = FrontendModule::SpinReturn;
 
 private:
-    FrontendModule::Ptr frontend_module_;
+//TODO: ignore casting for now...
+    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
+    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 
 };
-
 
 
 } //dyno

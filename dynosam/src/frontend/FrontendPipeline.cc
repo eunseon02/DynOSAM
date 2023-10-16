@@ -21,36 +21,20 @@
  *   SOFTWARE.
  */
 
-#pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
+#include "dynosam/frontend/FrontendPipeline.hpp"
 
+#include <glog/logging.h>
 
 namespace dyno {
 
-class FrontendPipeline : public SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase> {
-
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendPipeline)
-
-    using SIMO =
-      SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase>;
-    using InputQueue = typename SIMO::InputQueue;
-    using OutputQueue = typename SIMO::OutputQueue;
-
-    FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module);
-
-    FrontendOutputPacketBase::ConstPtr process(const FrontendInputPacketBase::ConstPtr& input) override;
-
-private:
-    FrontendModule::Ptr frontend_module_;
-
-};
+FrontendPipeline::FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module)
+    :   SIMO(module_name, CHECK_NOTNULL(input_queue)), frontend_module_(CHECK_NOTNULL(frontend_module)) {}
 
 
+FrontendOutputPacketBase::ConstPtr FrontendPipeline::process(const FrontendInputPacketBase::ConstPtr& input) {
+    CHECK(input);
+    return frontend_module_->spinOnce(input);
+}
 
 } //dyno

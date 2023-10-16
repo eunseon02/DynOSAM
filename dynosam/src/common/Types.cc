@@ -23,34 +23,26 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-
+#include <string>
+#include <cxxabi.h>
 
 namespace dyno {
 
-class FrontendPipeline : public SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase> {
+std::string demangle(const char* name)
+{
+  // by default set to the original mangled name
+  std::string demangled_name = std::string(name);
 
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendPipeline)
+  // g++ version of demangle
+  char* demangled = nullptr;
+  int status = -1;  // some arbitrary value to eliminate the compiler warning
+  demangled = abi::__cxa_demangle(name, nullptr, nullptr, &status);
 
-    using SIMO =
-      SIMOPipelineModule<FrontendInputPacketBase, FrontendOutputPacketBase>;
-    using InputQueue = typename SIMO::InputQueue;
-    using OutputQueue = typename SIMO::OutputQueue;
+  demangled_name = (status == 0) ? std::string(demangled) : std::string(name);
+  std::free(demangled);
 
-    FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module);
-
-    FrontendOutputPacketBase::ConstPtr process(const FrontendInputPacketBase::ConstPtr& input) override;
-
-private:
-    FrontendModule::Ptr frontend_module_;
-
-};
-
+  return demangled_name;
+}
 
 
 } //dyno

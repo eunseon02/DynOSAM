@@ -12,7 +12,7 @@
 
 namespace dyno {
 
-
+//TODO: gt
 /**
  * @brief Takes data, synchronizes it and sends it to the output queue which should be connected to the frontend
  * User needs to implement
@@ -31,6 +31,9 @@ public:
     DataProviderModule(const std::string& module_name);
     virtual ~DataProviderModule() = default;
 
+    //TODO: later should be vision only module
+    virtual FrontendInputPacketBase::ConstPtr getInputPacket() override;
+
     //expects input packet
     virtual inline void fillInputPacketQueue(InputImagePacketBase::Ptr input_packet) {
         packet_queue_.push(input_packet);
@@ -44,6 +47,8 @@ private:
     inline MIMO::OutputConstSharedPtr process(const MIMO::InputConstSharedPtr& input) override {
         return input;
     }
+
+    virtual bool hasWork() const override;
 
     //! Called when general shutdown of PipelineModule is triggered.
     void shutdownQueues() override;

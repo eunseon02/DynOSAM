@@ -20,17 +20,19 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+#pragma once
+
 
 #include <opencv4/opencv2/opencv.hpp>
 
-namespace dyno {
-namespace utils {
-
-
 #define CHECK_MAT_TYPES(mat1, mat2)                                                                                    \
-  using namespace VDO_SLAM::utils;                                                                                     \
+  using namespace dyno::utils;                                                                                     \
   CHECK_EQ(mat1.type(), mat2.type()) << "Matricies should be of the same type ( " << cvTypeToString(mat1.type())       \
                                      << " vs. " << cvTypeToString(mat2.type()) << ")."
+
+
+namespace dyno {
+namespace utils {
 
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point, const cv::Scalar& colour, const double msize = 0.4);
 
