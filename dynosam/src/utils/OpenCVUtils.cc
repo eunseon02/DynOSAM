@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/utils/OpenCVUtils.hpp"
+#include "dynosam/visualizer/ColourMap.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
@@ -165,6 +166,33 @@ void flowToRgb(const cv::Mat& flow, cv::Mat& rgb) {
   // Display the results
   cv::cvtColor(hsv8, rgb, cv::COLOR_HSV2BGR);
 }
+
+
+
+void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz) {
+  CHECK_EQ(rgb.size, mask.size) << "Input rgb and mask image must have the same size";
+  rgb.copyTo(mask_viz);
+  CHECK(mask.channels() == 1) << "Expecting mask input to have channels 1";
+  CHECK(mask.depth() == CV_32SC1);
+
+  for (int i = 0; i < mask.rows; i++)
+  {
+    for (int j = 0; j < mask.cols; j++)
+    {
+      // background is zero
+      if (mask.at<int>(i, j) != 0)
+      {
+        cv::Scalar color = ColourMap::getObjectColour(mask.at<int>(i, j));
+        // rgb or bgr?
+        mask_viz.at<cv::Vec3b>(i, j)[0] = color[0];
+        mask_viz.at<cv::Vec3b>(i, j)[1] = color[1];
+        mask_viz.at<cv::Vec3b>(i, j)[2] = color[2];
+      }
+    }
+  }
+}
+
+
 
 
 const float FLOW_TAG_FLOAT = 202021.25f;

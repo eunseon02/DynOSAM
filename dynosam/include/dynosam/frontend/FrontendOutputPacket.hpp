@@ -24,11 +24,14 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 
 namespace dyno {
 
 struct FrontendOutputPacketBase {
     DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
+
+    FrontendInputPacketBase::ConstPtr input; //for reference and possible display
 
 };
 

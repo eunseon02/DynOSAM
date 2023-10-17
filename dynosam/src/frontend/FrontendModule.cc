@@ -27,7 +27,7 @@
 
 namespace dyno {
 
-FrontendModule::FrontendModule(const FrontendModuleParams& params)
+FrontendModule::FrontendModule(const FrontendParams& params)
     :   base_params_(params), frontend_state_(State::Boostrap) {}
 
 FrontendOutputPacketBase::ConstPtr FrontendModule::spinOnce(FrontendInputPacketBase::ConstPtr input) {

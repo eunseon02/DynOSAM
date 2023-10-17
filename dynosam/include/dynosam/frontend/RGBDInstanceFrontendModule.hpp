@@ -30,7 +30,7 @@ namespace dyno {
 class RGBDInstanceFrontendModule : public FrontendModule {
 
 public:
-    RGBDInstanceFrontendModule();
+    RGBDInstanceFrontendModule(const FrontendParams& frontend_params);
 
     using SpinReturn = FrontendModule::SpinReturn;
 

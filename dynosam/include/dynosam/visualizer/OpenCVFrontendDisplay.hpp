@@ -21,28 +21,16 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#pragma once
 
-#include <glog/logging.h>
+#include "dynosam/visualizer/FrontendDisplay.hpp"
 
-int main(int argc, char* argv[]) {
+namespace dyno {
 
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+class OpenCVFrontendDisplay : public FrontendDisplay {
 
+    void spinOnce(const FrontendOutputPacketBase& frontend_output) override;
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
-
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
-
-
+};
 
 }

@@ -21,28 +21,17 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#include "dynosam/visualizer/VisualizerPipelines.hpp"
 
-#include <glog/logging.h>
+namespace dyno {
 
-int main(int argc, char* argv[]) {
+FrontendVizPipeline::FrontendVizPipeline(InputQueue* input_queue, FrontendDisplay::Ptr frontend_display)
+    :   SIMO("frontend-viz", input_queue), frontend_display_(frontend_display) {}
 
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
-
-
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
-
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
-
-
+NullPipelinePayload::ConstPtr FrontendVizPipeline::process(const FrontendOutputPacketBase::ConstPtr& input) {
+    frontend_display_->spinOnce(*input);
+    static auto null_payload = std::make_shared<NullPipelinePayload>();
+    return null_payload;
+}
 
 }

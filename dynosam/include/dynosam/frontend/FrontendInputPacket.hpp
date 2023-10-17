@@ -56,6 +56,11 @@ struct InputImagePacketBase {
     }
 
     virtual ~InputImagePacketBase() = default;
+
+    //should be overwritten in derived class to make the visualzier work properly
+    virtual void draw(cv::Mat& img) const {
+
+    }
 };
 
 
@@ -73,8 +78,10 @@ struct FrontendInputPacketBase {
     FrontendInputPacketBase() : image_packet_(nullptr), optional_gt_(std::nullopt) {}
 
     FrontendInputPacketBase(InputImagePacketBase::Ptr image_packet, GroundTruthInputPacket::Optional optional_gt = std::nullopt)
-    : image_packet_(CHECK_NOTNULL(image_packet)), optional_gt_(optional_gt)
+    : image_packet_(image_packet), optional_gt_(optional_gt)
     {
+        CHECK(image_packet);
+
         if(optional_gt) {
             CHECK_EQ(optional_gt_->timestamp, image_packet_->timestamp_);
             CHECK_EQ(optional_gt_->frame_id, image_packet_->frame_id_);

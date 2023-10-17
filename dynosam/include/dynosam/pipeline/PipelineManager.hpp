@@ -21,28 +21,47 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#pragma once
 
-#include <glog/logging.h>
+#include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/dataprovider/DataProvider.hpp"
+#include "dynosam/frontend/FrontendPipeline.hpp"
+#include "dynosam/visualizer/VisualizerPipelines.hpp"
+#include "dynosam/utils/Spinner.hpp"
+#include "dynosam/common/Types.hpp"
 
-int main(int argc, char* argv[]) {
+namespace dyno {
 
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+class DynoPipelineManager {
+
+public:
+    DYNO_POINTER_TYPEDEFS(DynoPipelineManager)
+
+    //why are some unique and some shared?? silly silly
+    DynoPipelineManager(DataProvider::UniquePtr data_loader, FrontendModule::Ptr frontend_module, FrontendDisplay::Ptr frontend_display);
+    ~DynoPipelineManager();
+
+    void spin(bool parallel_run = true);
+
+private:
+    FrontendPipeline::UniquePtr frontend_pipeline_;
+    FrontendPipeline::InputQueue frontend_input_queue_;
+    FrontendPipeline::OutputQueue frontend_output_queue_;
+
+    //Display and Viz
+    FrontendVizPipeline::UniquePtr frontend_viz_pipeline_;
+
+    //Data-provider pointers
+    DataProviderModule::UniquePtr data_provider_module_;
+    DataProvider::UniquePtr data_loader_;
+
+    //Threaded spinners
+    Spinner::UniquePtr data_provider_spinner_;
+    Spinner::UniquePtr frontend_pipeline_spinner_;
+    Spinner::UniquePtr frontend_viz_pipeline_spinner_;
 
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
-
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
+};
 
 
-
-}
+} //dyno

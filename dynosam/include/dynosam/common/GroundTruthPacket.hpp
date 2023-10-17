@@ -21,28 +21,40 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
-
-#include <glog/logging.h>
-
-int main(int argc, char* argv[]) {
-
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+#pragma once
 
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
+#include "dynosam/pipeline/PipelinePayload.hpp"
 
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
+#include <opencv4/opencv2/opencv.hpp> //for cv::Rect
+#include <gtsam/geometry/Pose3.h> //for Pose3
+
+namespace dyno {
+
+
+struct ObjectPoseGT {
+    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
+
+    FrameId frame_id;
+    ObjectId object_id;
+    gtsam::Pose3 L_camera; //object pose in camera frame
+    cv::Rect bounding_box; //box of detection on image plane
+};
+
+struct GroundTruthInputPacket : public PipelinePayload {
+    DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
+
+    //must have a default constructor for dataset loading and IO
+    GroundTruthInputPacket() {}
+
+    GroundTruthInputPacket(Timestamp timestamp, FrameId id, const gtsam::Pose3 X, const std::vector<ObjectPoseGT>& poses)
+        : PipelinePayload(timestamp), frame_id(id), X_world(X), object_poses(poses) {}
+
+    FrameId frame_id;
+    gtsam::Pose3 X_world; //camera pose in world frame
+    std::vector<ObjectPoseGT> object_poses;
+};
 
 
 
-}
+} //dyno

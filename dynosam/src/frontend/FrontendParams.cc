@@ -21,28 +21,37 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/utils/YamlParser.hpp"
 
-#include <glog/logging.h>
+#include <string>
 
-int main(int argc, char* argv[]) {
+namespace dyno {
 
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
+    YamlParser yaml_parser(file_path);
 
+    FrontendParams params;
+    yaml_parser.getYamlParam("MaxTrackPointBG", &params.max_tracking_points_bg);
+    yaml_parser.getYamlParam("MaxTrackPointOBJ", &params.max_tracking_points_obj);
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
+    yaml_parser.getYamlParam("SFMgThres", &params.scene_flow_magnitude);
+    yaml_parser.getYamlParam("SFDsThres", &params.scene_flow_percentage);
 
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
+    yaml_parser.getYamlParam("ThDepthBG", &params.depth_background_thresh);
+    yaml_parser.getYamlParam("ThDepthOBJ", &params.depth_obj_thresh);
 
+    yaml_parser.getYamlParam("DepthMapFactor", &params.depth_scale_factor);
 
+    yaml_parser.getYamlParam("ORBextractor.nFeatures", &params.n_features);
+    yaml_parser.getYamlParam("ORBextractor.scaleFactor", &params.scale_factor);
+    yaml_parser.getYamlParam("ORBextractor.nLevels", &params.n_levels);
+    yaml_parser.getYamlParam("ORBextractor.iniThFAST", &params.init_threshold_fast);
+    yaml_parser.getYamlParam("ORBextractor.minThFAST", &params.min_threshold_fast);
+
+    return params;
 
 }
+
+
+} //dyno

@@ -25,17 +25,13 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/pipeline/PipelineBase.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 
 #include <type_traits>
 
 namespace dyno {
-
-struct FrontendModuleParams {
-
-
-};
 
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
@@ -53,7 +49,7 @@ public:
 
     using SpinReturn = std::pair<State, FrontendOutputPacketBase::ConstPtr>;
 
-    FrontendModule(const FrontendModuleParams& params);
+    FrontendModule(const FrontendParams& params);
     ~FrontendModule() = default;
 
     FrontendOutputPacketBase::ConstPtr spinOnce(FrontendInputPacketBase::ConstPtr input);
@@ -63,7 +59,7 @@ protected:
     virtual SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) = 0;
 
 protected:
-    const FrontendModuleParams base_params_;
+    const FrontendParams base_params_;
 
 private:
     std::atomic<State> frontend_state_;

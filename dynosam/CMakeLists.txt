@@ -63,11 +63,17 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
+  src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
+
+  src/pipeline/PipelineManager.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
   src/utils/Spinner.cc
+
+  src/visualizer/VisualizerPipelines.cc
+  src/visualizer/OpenCVFrontendDisplay.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}

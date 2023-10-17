@@ -21,28 +21,36 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/KittiDataProvider.hpp"
-#include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#pragma once
 
-#include <glog/logging.h>
+#include "dynosam/common/Types.hpp"
 
-int main(int argc, char* argv[]) {
-
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+namespace dyno {
 
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
+struct PipelinePayload {
+  DYNO_POINTER_TYPEDEFS(PipelinePayload)
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  explicit PipelinePayload(const Timestamp& timestamp) : timestamp_(timestamp) {}
+  PipelinePayload() {}
+  virtual ~PipelinePayload() = default;
 
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
-    pipeline.spin();
+
+  // Untouchable timestamp of the payload.
+  Timestamp timestamp_;
+};
+
+/**
+ * @brief The NullPipelinePayload is an empty payload, used for those modules
+ * that do not return a payload, such as the display module, which only
+ * displays images and returns nothing.
+ */
+struct NullPipelinePayload : public PipelinePayload {
+  DYNO_POINTER_TYPEDEFS(NullPipelinePayload)
+  DYNO_DELETE_COPY_CONSTRUCTORS(NullPipelinePayload)
+  explicit NullPipelinePayload() : PipelinePayload(Timestamp()) {}
+  virtual ~NullPipelinePayload() = default;
+};
 
 
-
-}
+} //dyno

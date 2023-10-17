@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "dynosam/utils/Macros.hpp"
+
 #include <functional>
 #include <atomic>
 
@@ -47,7 +49,7 @@ namespace dyno {
 class Spinner
 {
 public:
-  using shared_ptr = std::shared_ptr<Spinner>;
+  DYNO_POINTER_TYPEDEFS(Spinner)
   using Evoke = std::function<void()>;
 
   /**

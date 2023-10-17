@@ -45,6 +45,8 @@ cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& botto
 
 void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
 
+void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz);
+
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for the read/write optical flow functions in 4.x
  * I have taken this implementation from OpenCV 3.4 (https://github.com/opencv/opencv_contrib/blob/3.4/modules/optflow/src/optical_flow_io.cpp)

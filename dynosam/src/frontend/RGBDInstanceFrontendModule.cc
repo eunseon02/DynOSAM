@@ -22,20 +22,41 @@
  */
 
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
+#include "dynosam/frontend/RGBDInstancePacket.hpp"
+#include "dynosam/utils/SafeCast.hpp"
+
+#include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
 
 namespace dyno {
 
 
-RGBDInstanceFrontendModule::RGBDInstanceFrontendModule() : FrontendModule(FrontendModuleParams()) {}
+RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params) : FrontendModule(frontend_params) {}
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
+    FrontendInputPacketBase input_v = *input;
+    RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
+    CHECK(image_packet);
+
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     return {State::Nominal, nullptr};
 }
+
+
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
+    FrontendInputPacketBase input_v = *input;
+    RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
+    CHECK(image_packet);
+
+
     LOG(INFO) << "In RGBD instance module frontend nominal";
-    return {State::Nominal, nullptr};
+
+    // cv::imshow("RGB", image_packet->rgb_);
+    // cv::waitKey(1);
+    auto output = std::make_shared<FrontendOutputPacketBase>() ;
+    output->input = input;
+
+    return {State::Nominal, output};
 }
 
 } //dyno

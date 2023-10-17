@@ -43,8 +43,8 @@ using OnPipelineFailureCallback = std::function<void(PipelineReturnCode)>;
 struct PipelinePayload {
   DYNO_POINTER_TYPEDEFS(PipelinePayload)
   DYNO_DELETE_COPY_CONSTRUCTORS(PipelinePayload)
-//   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  explicit PipelinePayload(const Timestamp& timestamp);
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+  explicit PipelinePayload(const Timestamp& timestamp) : timestamp_(timestamp) {}
   virtual ~PipelinePayload() = default;
 
   // Untouchable timestamp of the payload.

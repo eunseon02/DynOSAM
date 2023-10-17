@@ -22,7 +22,9 @@
  */
 
 #include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/Numerical.hpp"
+
 
 #include <glog/logging.h>
 
