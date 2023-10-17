@@ -42,7 +42,13 @@ using ObjectId = int;
 using ObjectIds = std::vector<ObjectId>;
 
 using FrameId = size_t;
+using Depth = double;
 
+using TrackletId = size_t;
+using TrackletIds = std::vector<TrackletId>;
+
+using KeypointCV = cv::KeyPoint;
+using KeypointsCV = std::vector<KeypointCV>;
 
 //TODO: (jesse) should these be here?
 struct ObjectPoseGT {

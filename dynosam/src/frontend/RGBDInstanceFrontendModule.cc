@@ -31,12 +31,21 @@
 namespace dyno {
 
 
-RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params) : FrontendModule(frontend_params) {}
+RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params) : FrontendModule(frontend_params)
+{
+
+    tracker_ = std::make_unique<FeatureTracker>(frontend_params);
+}
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
     FrontendInputPacketBase input_v = *input;
     RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
     CHECK(image_packet);
+
+    size_t n_optical_flow, n_new_tracks;
+
+    InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
+    tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     return {State::Nominal, nullptr};
@@ -50,6 +59,11 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
 
     LOG(INFO) << "In RGBD instance module frontend nominal";
+
+    size_t n_optical_flow, n_new_tracks;
+    InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
+    tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
+
 
     // cv::imshow("RGB", image_packet->rgb_);
     // cv::waitKey(1);

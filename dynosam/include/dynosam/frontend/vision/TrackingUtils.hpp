@@ -23,26 +23,7 @@
 
 #pragma once
 
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-
 namespace dyno {
 
-class RGBDInstanceFrontendModule : public FrontendModule {
 
-public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params);
-
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-//TODO: ignore casting for now...
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    FeatureTracker::UniquePtr tracker_;
-
-};
-
-
-} //dyno
+}

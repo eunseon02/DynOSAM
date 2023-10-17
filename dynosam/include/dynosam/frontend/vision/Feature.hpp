@@ -20,29 +20,37 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
 #pragma once
 
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
+#include "dynosam/common/Types.hpp"
+
+#include <vector>
 
 namespace dyno {
 
-class RGBDInstanceFrontendModule : public FrontendModule {
-
-public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params);
-
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-//TODO: ignore casting for now...
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    FeatureTracker::UniquePtr tracker_;
-
+enum KeyPointType {
+    STATIC,
+    DYNAMIC
 };
 
+//! Expected label for the background in a semantic or motion mask
+constexpr static ObjectId background_label = 0u;
 
-} //dyno
+
+struct Feature {
+
+    DYNO_POINTER_TYPEDEFS(Feature)
+
+    KeypointCV keypoint_;
+    KeypointCV predicted_keypoint_; //from optical flow
+    size_t age_;
+    KeyPointType type_;
+    TrackletId tracklet_id_;
+    FrameId frame_id_;
+    bool inlier_{false};
+    ObjectId label_; //should be background_label if static
+};
+
+using FeaturePtrs = std::vector<Feature::Ptr>;
+
+}

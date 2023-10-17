@@ -66,6 +66,9 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
 
+  src/frontend/vision/ORBextractor.cc
+  src/frontend/vision/FeatureTracker.cc
+
   src/pipeline/PipelineManager.cc
 
   src/utils/OpenCVUtils.cc

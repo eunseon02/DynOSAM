@@ -30,25 +30,25 @@ namespace dyno {
 struct FrontendParams {
 
 // tracking points params
-  int max_tracking_points_bg;
-  int max_tracking_points_obj;
+  int max_tracking_points_bg = 800;
+  int max_tracking_points_obj = 800;
 
   // scene flow thresholds
-  double scene_flow_magnitude;
-  double scene_flow_percentage;
+  double scene_flow_magnitude = 0.12;
+  double scene_flow_percentage = 0.3;
 
   // depth thresholds
-  double depth_background_thresh;
-  double depth_obj_thresh;
+  double depth_background_thresh = 40.0;
+  double depth_obj_thresh = 25.0;
 
-  double depth_scale_factor;
+  double depth_scale_factor = 256.0;
 
   // ORB detector params
-  int n_features;
-  double scale_factor;
-  int n_levels;
-  int init_threshold_fast;
-  int min_threshold_fast;
+  int n_features = 1200;
+  double scale_factor = 1.2;
+  int n_levels = 8;
+  int init_threshold_fast = 20;
+  int min_threshold_fast = 7;
 
   static FrontendParams fromYaml(const std::string& file_path);
 
