@@ -40,27 +40,4 @@ enum class PipelineReturnCode {
 using OnPipelineFailureCallback = std::function<void(PipelineReturnCode)>;
 
 
-struct PipelinePayload {
-  DYNO_POINTER_TYPEDEFS(PipelinePayload)
-  DYNO_DELETE_COPY_CONSTRUCTORS(PipelinePayload)
-  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
-  explicit PipelinePayload(const Timestamp& timestamp) : timestamp_(timestamp) {}
-  virtual ~PipelinePayload() = default;
-
-  // Untouchable timestamp of the payload.
-  const Timestamp timestamp_;
-};
-
-/**
- * @brief The NullPipelinePayload is an empty payload, used for those modules
- * that do not return a payload, such as the display module, which only
- * displays images and returns nothing.
- */
-struct NullPipelinePayload : public PipelinePayload {
-  DYNO_POINTER_TYPEDEFS(NullPipelinePayload)
-  DYNO_DELETE_COPY_CONSTRUCTORS(NullPipelinePayload)
-  explicit NullPipelinePayload() : PipelinePayload(Timestamp()) {}
-  virtual ~NullPipelinePayload() = default;
-};
-
 }

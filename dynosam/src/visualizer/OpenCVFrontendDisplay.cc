@@ -31,13 +31,13 @@ namespace dyno {
 void OpenCVFrontendDisplay::spinOnce(const FrontendOutputPacketBase& frontend_output) {
     LOG(INFO) << "In frontend opencv display";
 
-    cv::Mat input_frames;
-    if(frontend_output.input) {
-        frontend_output.input->image_packet_->draw(input_frames);
-    }
+    // cv::Mat input_frames;
+    // if(frontend_output.input) {
+    //     frontend_output.input->image_packet_->draw(input_frames);
+    // }
 
-    cv::imshow("Input Frames", input_frames);
-    cv::waitKey(1);
+    // cv::imshow("Input Frames", input_frames);
+    // cv::waitKey(1);
 }
 
 

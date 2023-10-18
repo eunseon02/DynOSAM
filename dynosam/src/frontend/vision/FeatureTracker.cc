@@ -121,6 +121,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const InputImages& input_pack
       const size_t age = previous_feature->age_;
       KeypointCV kp = previous_feature->predicted_keypoint_;
       //TODO: is contained
+
       // if (camera_.isKeypointContained(kp, previous_feature->depth) && previous_feature->inlier)
       // {
       //   size_t new_age = age + 1;

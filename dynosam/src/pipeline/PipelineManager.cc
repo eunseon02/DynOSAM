@@ -36,7 +36,7 @@ DynoPipelineManager::DynoPipelineManager(DataProvider::UniquePtr data_loader,  F
 
     //TODO: factories for different loaders etc later
     data_provider_module_ = std::make_unique<DataProviderModule>("data-provider");
-    data_loader_->registerInputImagesCallback(std::bind(&dyno::DataProviderModule::fillInputPacketQueue, data_provider_module_.get(), std::placeholders::_1));
+    data_loader_->registerImageContainerCallback(std::bind(&dyno::DataProviderModule::fillImageContainerQueue, data_provider_module_.get(), std::placeholders::_1));
     data_provider_module_->registerOutputQueue(&frontend_input_queue_);
 
 

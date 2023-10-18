@@ -21,40 +21,22 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include <glog/logging.h>
+#include <gtest/gtest.h>
+#include <exception>
 
+#include <optional>
 
-#include "dynosam/pipeline/PipelinePayload.hpp"
+TEST(CodeConcepts, testModifyOptionalString) {
 
-#include <opencv4/opencv2/opencv.hpp> //for cv::Rect
-#include <gtsam/geometry/Pose3.h> //for Pose3
+    auto modify = [](std::optional<std::reference_wrapper<std::string>> string) {
+        if(string) {
+           string->get() = "udpated";
+        }
+    };
 
-namespace dyno {
+    std::string input = "before";
+    modify(input);
 
-
-struct ObjectPoseGT {
-    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
-
-    FrameId frame_id_;
-    ObjectId object_id_;
-    gtsam::Pose3 L_camera_; //!object pose in camera frame
-    cv::Rect bounding_box_; //!box of detection on image plane
-};
-
-struct GroundTruthInputPacket : public PipelinePayload {
-    DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
-
-    //must have a default constructor for dataset loading and IO
-    GroundTruthInputPacket() {}
-
-    GroundTruthInputPacket(Timestamp timestamp, FrameId id, const gtsam::Pose3 X, const std::vector<ObjectPoseGT>& poses)
-        : PipelinePayload(timestamp), frame_id_(id), X_world_(X), object_poses_(poses) {}
-
-    FrameId frame_id_;
-    gtsam::Pose3 X_world_; //camera pose in world frame
-    std::vector<ObjectPoseGT> object_poses_;
-};
-
-
-
-} //dyno
+    EXPECT_EQ(input, "udpated");
+}

@@ -99,16 +99,16 @@ public:
 
         //  frame_id < nTimes - 1??
         GroundTruthInputPacket gt_packet;
-        gt_packet.timestamp = timestamp;
-        gt_packet.frame_id = idx;
+        gt_packet.timestamp_ = timestamp;
+        gt_packet.frame_id_ = idx;
         // add ground truths for this fid
         for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
         {
-            gt_packet.object_poses.push_back(object_poses_[object_ids_vector_[idx][i]]);
+            gt_packet.object_poses_.push_back(object_poses_[object_ids_vector_[idx][i]]);
         // sanity check
-        CHECK_EQ(gt_packet.object_poses[i].frame_id, idx);
+        CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
         }
-        gt_packet.X_world = camera_pose;
+        gt_packet.X_world_ = camera_pose;
 
         //TODO: recalcualte every time?
         return gt_packet;
@@ -152,7 +152,7 @@ private:
         object_ids_vector_.resize(n_times); //only load up to the number of timestamps given
         for(size_t i = 0; i < object_poses_.size(); i++) {
             const ObjectPoseGT& obect_pose_gt = object_poses_[i];
-            size_t frame_id = obect_pose_gt.frame_id;
+            size_t frame_id = obect_pose_gt.frame_id_;
             if(frame_id >= object_ids_vector_.size()) {
                 break;
             }
@@ -168,8 +168,8 @@ private:
         // B1-4 is 2D bounding box of object in the image, used for visualization.
         CHECK(obj_pose_gt.size() == 10);
         ObjectPoseGT object_pose;
-        object_pose.frame_id = obj_pose_gt[0];
-        object_pose.object_id = obj_pose_gt[1];
+        object_pose.frame_id_ = obj_pose_gt[0];
+        object_pose.object_id_ = obj_pose_gt[1];
 
 
         double b1 = obj_pose_gt[2];
@@ -180,7 +180,7 @@ private:
         //convert to cv::Rect where image starts top right
         cv::Point tl(b1, b2);
         cv::Point br(b3, b4);
-        object_pose.bounding_box = cv::Rect(tl, br);
+        object_pose.bounding_box_ = cv::Rect(tl, br);
 
         cv::Mat t(3, 1, CV_64FC1);
         t.at<double>(0) = obj_pose_gt[6];
@@ -240,7 +240,7 @@ private:
         Pose.at<double>(2, 2) = R.at<double>(2, 2);
         Pose.at<double>(2, 3) = t.at<double>(2);
 
-        object_pose.L_camera = utils::cvMatToGtsamPose3(Pose);
+        object_pose.L_camera_ = utils::cvMatToGtsamPose3(Pose);
         return object_pose;
     }
 
@@ -294,20 +294,20 @@ public:
         gtsam::Pose3 camera_pose_gt,
         GroundTruthInputPacket gt_object_pose_gt) override
     {
-        CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world));
-        CHECK(timestamp == gt_object_pose_gt.timestamp);
+        CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world_));
+        CHECK(timestamp == gt_object_pose_gt.timestamp_);
 
-        auto input_packet = std::make_shared<RGBDInstancePacket>(
-            frame_id,
-            timestamp,
-            rgb,
-            optical_flow,
-            depth,
-            instance_mask
-        );
+        // auto input_packet = std::make_shared<RGBDInstancePacket>(
+        //     frame_id,
+        //     timestamp,
+        //     rgb,
+        //     optical_flow,
+        //     depth,
+        //     instance_mask
+        // );
 
-        CHECK(image_input_callback_);
-        if(image_input_callback_) image_input_callback_(input_packet);
+        // CHECK(image_input_callback_);
+        // if(image_input_callback_) image_input_callback_(input_packet);
         return true;
     }
 

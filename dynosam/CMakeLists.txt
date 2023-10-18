@@ -64,6 +64,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
+  src/frontend/FrontendInputPacket.cc
   src/frontend/RGBDInstanceFrontendModule.cc
 
   src/frontend/vision/ORBextractor.cc
@@ -172,6 +173,7 @@ if(BUILD_TESTING)
     test/test_threadsafe_imu_buffer.cc
     test/test_dataset_provider.cc
     test/test_types.cc
+    test/test_code_concepts.cc
     test/internal/tmp_file.cc
 )
 

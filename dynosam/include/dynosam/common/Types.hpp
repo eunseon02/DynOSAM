@@ -30,6 +30,7 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <vector>
+#include <optional>
 
 
 namespace dyno
@@ -50,25 +51,11 @@ using TrackletIds = std::vector<TrackletId>;
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 
-//TODO: (jesse) should these be here?
-struct ObjectPoseGT {
-    DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
-
-    size_t frame_id;
-    ObjectId object_id;
-    gtsam::Pose3 L_camera; //object pose in camera frame
-    cv::Rect bounding_box; //box of detection on image plane
-};
-
-struct GroundTruthInputPacket {
-    DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
-
-    gtsam::Pose3 X_world; //camera pose in world frame
-    std::vector<ObjectPoseGT> object_poses;
-    Timestamp timestamp;
-    size_t frame_id;
-};
-
+//Optional string that can be modified directly (similar to old-stype boost::optional)
+//to access the mutable reference the internal string must be accessed with get()
+// e.g. optional->get() = "updated string value";
+//This is to overcome the fact that the stdlib does not support std::optional<T&> directly
+using OptionalString = std::optional<std::reference_wrapper<std::string>>;
 
 /**
  * @brief Get demangled class name

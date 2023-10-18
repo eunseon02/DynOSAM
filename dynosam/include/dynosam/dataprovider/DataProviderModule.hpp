@@ -35,8 +35,8 @@ public:
     virtual FrontendInputPacketBase::ConstPtr getInputPacket() override;
 
     //expects input packet
-    virtual inline void fillInputPacketQueue(InputImagePacketBase::Ptr input_packet) {
-        packet_queue_.push(input_packet);
+    virtual inline void fillImageContainerQueue(ImageContainer::Ptr image_container) {
+        packet_queue_.push(image_container);
     }
 
 protected:
@@ -54,7 +54,7 @@ private:
     void shutdownQueues() override;
 
 protected:
-    ThreadsafeQueue<InputImagePacketBase::Ptr> packet_queue_;
+    ThreadsafeQueue<ImageContainer::Ptr> packet_queue_;
 
 };
 

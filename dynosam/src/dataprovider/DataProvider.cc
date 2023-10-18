@@ -32,8 +32,8 @@ namespace dyno {
 
 DataProvider::DataProvider(DataProviderModule* module) {
     CHECK_NOTNULL(module);
-    registerInputImagesCallback(std::bind(&DataProviderModule::fillInputPacketQueue, module, std::placeholders::_1));
-    CHECK(image_input_callback_);
+    registerImageContainerCallback(std::bind(&DataProviderModule::fillImageContainerQueue, module, std::placeholders::_1));
+    CHECK(image_container_callback_);
 
 }
 

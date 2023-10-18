@@ -46,7 +46,7 @@ FrontendInputPacketBase::ConstPtr DataProviderModule::getInputPacket() {
     return nullptr;
   }
 
-  InputImagePacketBase::Ptr packet = nullptr;
+  ImageContainer::Ptr packet = nullptr;
   //TODO: shoudl not pop blocking if threaded!!
   bool queue_state = packet_queue_.popBlocking(packet);
 

@@ -38,14 +38,14 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
 }
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
-    FrontendInputPacketBase input_v = *input;
-    RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
-    CHECK(image_packet);
+    // FrontendInputPacketBase input_v = *input;
+    // RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
+    // CHECK(image_packet);
 
-    size_t n_optical_flow, n_new_tracks;
+    // size_t n_optical_flow, n_new_tracks;
 
-    InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
-    tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
+    // InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
+    // tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     return {State::Nominal, nullptr};
@@ -53,24 +53,24 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
 
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
-    FrontendInputPacketBase input_v = *input;
-    RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
-    CHECK(image_packet);
+    // FrontendInputPacketBase input_v = *input;
+    // RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
+    // CHECK(image_packet);
 
 
-    LOG(INFO) << "In RGBD instance module frontend nominal";
+    // LOG(INFO) << "In RGBD instance module frontend nominal";
 
-    size_t n_optical_flow, n_new_tracks;
-    InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
-    tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
+    // size_t n_optical_flow, n_new_tracks;
+    // InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
+    // tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
 
 
-    // cv::imshow("RGB", image_packet->rgb_);
-    // cv::waitKey(1);
-    auto output = std::make_shared<FrontendOutputPacketBase>() ;
-    output->input = input;
+    // // cv::imshow("RGB", image_packet->rgb_);
+    // // cv::waitKey(1);
+    // auto output = std::make_shared<FrontendOutputPacketBase>() ;
+    // output->input = input;
 
-    return {State::Nominal, output};
+    return {State::Nominal, nullptr};
 }
 
 } //dyno

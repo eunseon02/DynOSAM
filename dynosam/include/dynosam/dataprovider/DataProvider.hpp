@@ -29,7 +29,7 @@ public:
     DYNO_POINTER_TYPEDEFS(DataProvider)
     DYNO_DELETE_COPY_CONSTRUCTORS(DataProvider)
 
-    using InputImagePacketInputCallback = std::function<void(InputImagePacketBase::Ptr)>;
+    using ImageContainerCallback = std::function<void(ImageContainer::Ptr)>;
     using ImuSingleInputCallback = std::function<void(const ImuMeasurement&)>;
     using ImuMultiInputCallback = std::function<void(const ImuMeasurements&)>;
 
@@ -50,8 +50,8 @@ public:
         imu_multi_input_callback_ = callback;
     }
 
-    inline void registerInputImagesCallback(const InputImagePacketInputCallback& callback) {
-        image_input_callback_ = callback;
+    inline void registerImageContainerCallback(const ImageContainerCallback& callback) {
+        image_container_callback_ = callback;
     }
 
     /**
@@ -66,7 +66,7 @@ public:
     virtual void shutdown();
 
 protected:
-    InputImagePacketInputCallback image_input_callback_;
+    ImageContainerCallback image_container_callback_;
     ImuSingleInputCallback imu_single_input_callback_;
     ImuMultiInputCallback imu_multi_input_callback_;
 
