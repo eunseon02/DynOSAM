@@ -120,6 +120,9 @@ ImageContainer::Ptr ImageContainer::Create(
 
 
 void ImageContainer::validateSetup() const {
+    //check image sizes are the same
+    Base::validateSetup();
+
     //TODO: shoudl eventually change to exception
     CHECK(!getImage().empty()) << "RGBMono image must not be empty!";
     CHECK(!getOpticalFlow().empty()) << "OPticalFlow image must not be empty!";

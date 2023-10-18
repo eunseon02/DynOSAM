@@ -100,7 +100,7 @@ TEST(ImageContainerSubset, testBasicSubsetContainer) {
     cv::Mat depth(cv::Size(25, 25), CV_64F);
     uchar* depth_ptr = depth.data;
 
-    cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
+    cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
     uchar* optical_flow_ptr = optical_flow.data;
     ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow> ics{
         ImageWrapper<ImageType::Depth>(depth),
@@ -118,15 +118,36 @@ TEST(ImageContainerSubset, testBasicSubsetContainer) {
 
 }
 
-TEST(ImageContainerSubset, testBasicMakeSubset) {
+
+TEST(ImageContainerSubset, testSubsetContainerExists) {
 
     cv::Mat depth(cv::Size(25, 25), CV_64F);
+    cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+    ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow, ImageType::RGBMono> ics{
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+        ImageWrapper<ImageType::RGBMono>()
+    };
+
+    EXPECT_TRUE(ics.exists<ImageType::Depth>());
+    EXPECT_TRUE(ics.exists<ImageType::OpticalFlow>());
+
+    EXPECT_FALSE(ics.exists<ImageType::RGBMono>());
+
+}
+
+
+TEST(ImageContainerSubset, testBasicMakeSubset) {
+
+    cv::Mat depth(cv::Size(50, 50), CV_64F);
     cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
     uchar* optical_flow_ptr = optical_flow.data;
     ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow> ics{
         ImageWrapper<ImageType::Depth>(depth),
         ImageWrapper<ImageType::OpticalFlow>(optical_flow)
     };
+
+    EXPECT_EQ(ics.index<ImageType::OpticalFlow>(), 1u);
 
     ImageContainerSubset<ImageType::OpticalFlow> subset = ics.makeSubset<ImageType::OpticalFlow>();
     EXPECT_EQ(subset.index<ImageType::OpticalFlow>(), 0u);
@@ -137,6 +158,55 @@ TEST(ImageContainerSubset, testBasicMakeSubset) {
     EXPECT_EQ(retrieved_of.data, optical_flow_ptr);
     EXPECT_EQ(subset_retrieved_of.data, optical_flow_ptr);
 
+}
+
+
+TEST(ImageContainerSubset, testSafeGet) {
+
+    cv::Mat depth(cv::Size(25, 25), CV_64F);
+    cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+    ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow, ImageType::RGBMono> ics{
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+        ImageWrapper<ImageType::RGBMono>()
+    };
+
+    cv::Mat tmp;
+    EXPECT_FALSE(ics.safeGet<ImageType::RGBMono>(tmp));
+
+    //tmp shoudl now be the same as the depth ptr
+    EXPECT_TRUE(ics.safeGet<ImageType::Depth>(tmp));
+    EXPECT_EQ(depth.data, tmp.data);
+    EXPECT_EQ(depth.size(), tmp.size());
+
+    //tmp shoudl now be the same as the optical flow ptr
+    EXPECT_TRUE(ics.safeGet<ImageType::OpticalFlow>(tmp));
+    EXPECT_EQ(optical_flow.data, tmp.data);
+    EXPECT_EQ(optical_flow.size(), tmp.size());
+}
+
+
+TEST(ImageContainerSubset, testSafeClone) {
+
+    cv::Mat depth(cv::Size(50, 50), CV_64F);
+    cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
+    ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow, ImageType::RGBMono> ics{
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+        ImageWrapper<ImageType::RGBMono>()
+    };
+
+    cv::Mat tmp;
+    EXPECT_FALSE(ics.cloneImage<ImageType::RGBMono>(tmp));
+    EXPECT_TRUE(tmp.empty());
+
+    EXPECT_TRUE(ics.cloneImage<ImageType::Depth>(tmp));
+    EXPECT_NE(depth.data, tmp.data); //no longer the same data
+    EXPECT_EQ(depth.size(), tmp.size());
+
+    EXPECT_TRUE(ics.cloneImage<ImageType::OpticalFlow>(tmp));
+    EXPECT_NE(optical_flow.data, tmp.data); //no longer the same data
+    EXPECT_EQ(optical_flow.size(), tmp.size());
 }
 
 TEST(ImageContainer, testImageContainerIndexing) {
@@ -169,5 +239,22 @@ TEST(ImageContainer, CreateRGBDSemantic) {
     EXPECT_FALSE(rgbd_semantic->hasMotionMask());
     EXPECT_FALSE(rgbd_semantic->isMonocular());
 
+
+}
+
+TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
+
+    cv::Mat rgb(cv::Size(25, 25), CV_8UC1);
+    cv::Mat depth(cv::Size(50, 50), CV_64F);
+    cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
+    cv::Mat semantic_mask(cv::Size(50, 50), CV_32SC1);
+    EXPECT_THROW({ImageContainer::Create(
+        0u,
+        0u,
+        ImageWrapper<ImageType::RGBMono>(rgb),
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+        ImageWrapper<ImageType::SemanticMask>(semantic_mask)
+    );}, InvalidImageContainerException);
 
 }

@@ -25,18 +25,13 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 
 
 namespace dyno {
 
-struct InputImages {
-    const cv::Mat img_;
-    const cv::Mat optical_flow_;
-    const cv::Mat motion_mask_;
-
-    InputImages(const cv::Mat& img, const cv::Mat& optical_flow, const cv::Mat& motion_mask)
-        :   img_(img), optical_flow_(optical_flow), motion_mask_(motion_mask) {}
-};
+//should this be here?
+using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
 
 class Frame {
 
@@ -47,12 +42,12 @@ public:
     std::vector<Feature::Ptr> static_features_;
     std::vector<Feature::Ptr> dynamic_features_;
 
-    Frame(FrameId frame_id, Timestamp timestamp, const InputImages& input_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), images_(input_images) {}
+    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
+        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
 
     const FrameId frame_id_;
     const Timestamp timestamp_;
-    const InputImages images_;
+    const TrackingInputImages tracking_images_;
 };
 
 

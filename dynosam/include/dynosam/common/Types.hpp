@@ -65,6 +65,9 @@ using OptionalString = std::optional<std::reference_wrapper<std::string>>;
  */
 std::string demangle(const char* name);
 
+template<typename T>
+std::string to_string(const T& t);
+
 
 /**
  * @brief Get demangled class name of type T from an instance

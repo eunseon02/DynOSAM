@@ -21,6 +21,7 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/common/Types.hpp" //for template to_string
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
 
@@ -31,6 +32,14 @@
 #include<fstream>
 
 namespace dyno {
+
+
+template<>
+std::string to_string<cv::Size>(const cv::Size& t) {
+  return "[h=" + std::to_string(t.height) + " w=" + std::to_string(t.width) + "]";
+}
+
+
 namespace utils {
 
 

@@ -36,12 +36,12 @@ FeatureTracker::FeatureTracker(const FrontendParams& params)
       params_.init_threshold_fast, params_.min_threshold_fast);
 }
 
-Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const InputImages& input_images, size_t& n_optical_flow, size_t& n_new_tracks) {
+Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks) {
 
     if(initial_computation_) {
         //intitial computation
         CHECK(!previous_frame_);
-        img_size_ = input_images.img_.size();
+        // img_size_ = input_images.img_.size();
         computeImageBounds(img_size_, min_x_, max_x_, min_y_, max_y_);
 
         grid_elements_width_inv_ = static_cast<double>(FRAME_GRID_COLS) / static_cast<double>(max_x_ - min_x_);
@@ -57,11 +57,11 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const In
     }
 
     FeaturePtrs static_features;
-    trackStatic(frame_id, input_images, static_features, n_optical_flow, n_new_tracks);
+    trackStatic(frame_id, tracking_images, static_features, n_optical_flow, n_new_tracks);
 
     // FeaturePtrs dynamic_features;
     // return nullptr;
-    auto new_frame = std::make_shared<Frame>(frame_id, timestamp, input_images);
+    auto new_frame = std::make_shared<Frame>(frame_id, timestamp, tracking_images);
     new_frame->static_features_ = static_features;
 
     previous_frame_ = new_frame;
@@ -71,11 +71,11 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const In
 }
 
 
-void FeatureTracker::trackStatic(FrameId frame_id, const InputImages& input_packet, FeaturePtrs& static_features, size_t& n_optical_flow,
+void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& static_features, size_t& n_optical_flow,
                                  size_t& n_new_tracks)
 {
-  const cv::Mat& rgb = input_packet.img_;
-  const cv::Mat& motion_mask = input_packet.motion_mask_;
+  const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
+  const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
   cv::Mat mono;
   CHECK(!rgb.empty());
@@ -192,7 +192,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const InputImages& input_pack
         {
           const size_t age = 0;
           size_t tracklet_id = tracklet_count;
-          Feature::Ptr feature = constructStaticFeature(input_packet, kp, age, tracklet_id, frame_id);
+          Feature::Ptr feature = constructStaticFeature(tracking_images, kp, age, tracklet_id, frame_id);
           if (feature)
           {
 
@@ -225,7 +225,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const InputImages& input_pack
 
 
 bool FeatureTracker::posInGrid(const cv::KeyPoint& kp, int& pos_x, int& pos_y) const {
-    pos_x = round((kp.pt.x - min_x_) * grid_elements_width_inv_);
+  pos_x = round((kp.pt.x - min_x_) * grid_elements_width_inv_);
   pos_y = round((kp.pt.y - min_y_) * grid_elements_height_inv_);
 
   // Keypoint's coordinates are undistorted, which could cause to go out of the image
@@ -247,19 +247,24 @@ void FeatureTracker::computeImageBounds(const cv::Size& size, int& min_x, int& m
 }
 
 
-Feature::Ptr FeatureTracker::constructStaticFeature(const InputImages& input_packet, const cv::KeyPoint& kp, size_t age, TrackletId tracklet_id, FrameId frame_id) const {
+Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& tracking_images, const cv::KeyPoint& kp, size_t age, TrackletId tracklet_id, FrameId frame_id) const {
   const int& x = kp.pt.x;
   const int& y = kp.pt.y;
-  const int& rows = input_packet.img_.rows;
-  const int& cols = input_packet.img_.cols;
-  if (input_packet.motion_mask_.at<int>(y, x) != background_label)
+
+  const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
+  const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
+  const cv::Mat& optical_flow = tracking_images.get<ImageType::OpticalFlow>();
+
+  const int& rows = rgb.rows;
+  const int& cols = rgb.cols;
+  if (motion_mask.at<int>(y, x) != background_label)
   {
     return nullptr;
   }
 
   // check flow
-  double flow_xe = static_cast<double>(input_packet.optical_flow_.at<cv::Vec2f>(y, x)[0]);
-  double flow_ye = static_cast<double>(input_packet.optical_flow_.at<cv::Vec2f>(y, x)[1]);
+  double flow_xe = static_cast<double>(optical_flow.at<cv::Vec2f>(y, x)[0]);
+  double flow_ye = static_cast<double>(optical_flow.at<cv::Vec2f>(y, x)[1]);
 
   if (!(flow_xe != 0 && flow_ye != 0))
   {

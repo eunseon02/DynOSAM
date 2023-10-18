@@ -46,6 +46,11 @@ public:
 
 };
 
+class InvalidImageContainerException : public std::runtime_error {
+public:
+    InvalidImageContainerException(const std::string& what) : std::runtime_error(what) {}
+};
+
 
 struct ImageType {
 
@@ -73,7 +78,6 @@ struct ImageType {
 };
 
 
-
 template<typename T>
 struct ImageWrapper {
     using Type = T;
@@ -93,7 +97,17 @@ struct ImageWrapper {
         Type::validate(img);
     }
 
+
     ImageWrapper() : image() {}
+
+    /**
+     * @brief Returns an ImageWrapper with the underlying image data cloned
+     *
+     * @return ImageWrapper<Type>
+     */
+    ImageWrapper<Type> clone() {
+        return ImageWrapper<Type>(image.clone());
+    }
 
     inline bool exists() const {
         return !image.empty();
@@ -109,6 +123,12 @@ public:
     using ImageTypesTuple = std::tuple<ImageTypes...>;
     using WrappedImageTypesTuple = std::tuple<ImageWrapper<ImageTypes>...>;
 
+    /**
+     * @brief Alias for an ImageType (eg. RGBMono, Depth etc) which is the Ith element type
+     * of the parameter pack ImageTypes...
+     *
+     * @tparam I
+     */
     template <size_t I>
     using ImageTypeStruct = std::tuple_element_t<I, ImageTypesTuple>;
 
@@ -121,24 +141,56 @@ public:
     template <size_t I>
     using WrappedImageTypeStruct = std::tuple_element_t<I, WrappedImageTypesTuple>;
 
+    /**
+     * @brief Number of image types contained in this subset
+     *
+     */
     static constexpr size_t N = sizeof...(ImageTypes);
 
+
+    explicit ImageContainerSubset(const ImageWrapper<ImageTypes>&... input_image_wrappers) : image_storage_(input_image_wrappers...)
+    {
+         //this is (not-pure) virtual function could be overloaded. This means that we're calling an overloaded function
+         //in the base constructor which leads to undefined behaviour...?
+        validateSetup();
+    }
+    virtual ~ImageContainerSubset() = default;
+
+
+    /**
+     * @brief Compile time index of the requested ImageType in the container.
+     *
+     * eg. If ImageTypes... unpacks to Container = ImageContainerSubset<RGBMono, Depth, OpticalFlow>
+     *
+     * If the requested ImageType is not in the class parameter pack, the code will fail to compile.
+     *
+     * Container::Index<RGBMono>() == 0u
+     * Container::Index<Depth>() == 1u
+     * Container::Index<OpticalFlow>() == 2u
+     *
+     * @tparam ImageType
+     * @return constexpr size_t
+     */
     template<typename ImageType>
     constexpr static size_t Index() {
         return internal::tuple_element_index_v<ImageType, ImageTypesTuple>;
     }
 
+    /**
+     * @brief Compile time index of the requested ImageType in the container instance.
+     *
+     * See Index()
+     *
+     * @tparam ImageType
+     * @return constexpr size_t
+     */
     template<typename ImageType>
     constexpr size_t index() const {
         return This::Index<ImageType>();
     }
 
-    explicit ImageContainerSubset(const ImageWrapper<ImageTypes>&... input_image_wrappers) : image_storage_(input_image_wrappers...) {}
-
-    virtual ~ImageContainerSubset() = default;
-
     template<typename... SubsetImageTypes>
-    ImageContainerSubset<SubsetImageTypes...> makeSubset() {
+    ImageContainerSubset<SubsetImageTypes...> makeSubset(const bool clone = false) {
         //the tuple of image wrappers to construct for the subset class
         using Subset = ImageContainerSubset<SubsetImageTypes...>;
         using WrappedImageTypesTupleSubset = typename Subset::WrappedImageTypesTuple;
@@ -151,37 +203,156 @@ public:
             internal::select_apply<SubN>(i, [&](auto stream_index) {
                 internal::select_apply<SubN>(stream_index, [&](auto I) {
                     using SubType = typename Subset::ImageTypeStruct<I>;
-                    //find this type in the current container as the idnex may be different
+                    //find this image type in the current container as the idnex may be different
                     constexpr size_t current_index = This::Index<SubType>();
                     //with the index i of the subset wrapper (corresponding with type SubType)
                     //get the image wrapper in this container using the request (sub) type
                     //TODO:do we want cv::Mat data to be const (refer counter) or at some point clone? See ImageType where the cv::mat is stored?
+                    auto current_wrapped_image = std::get<current_index>(image_storage_);
 
-                    //TODO: check if the image at the current storage is valid (ie, not empty)
-                    //if invalid but request, throw runtime error becuase whats the point of requesting an invalud iamge
-                    std::get<I>(subset_wrappers) = std::get<current_index>(image_storage_);
+                    //if invalid but request, throw runtime error becuase whats the point of requesting an invalid image
+                    if(!current_wrapped_image.exists()) {
+                        throw std::runtime_error(
+                            "Error constructing ImageContainerSubset - requested image type " + type_name<SubType>() + " is empty in parent container");
+                    }
 
+                    if(clone) {
+                        std::get<I>(subset_wrappers) = current_wrapped_image.clone();
+                    }
+                    else {
+                        std::get<I>(subset_wrappers) = current_wrapped_image;
+                    }
 
                 });
             });
         }
 
         //this is going to do a bunch of copies?
-        //
         auto construct_subset = [&](auto&&... args) { return Subset(args...); };
         return std::apply(construct_subset, subset_wrappers);
     }
 
-    //should be const ref or cv::Mat??
+    /**
+     * @brief Returns true if the corresponding image corresponding to the requested ImageType exists (i.e is not empty)
+     *
+     * @tparam ImageType
+     * @return true
+     * @return false
+     */
     template<typename ImageType>
-    const cv::Mat& get() const {
+    bool exists() const {
+        return This::getImageWrapper<ImageType>().exists();
+    }
+
+    /**
+     * @brief Gets the corresponding image (cv::Mat) corresponding to the requested ImageType.
+     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
+     *
+     * No safety checks are done and so the returned image may be empty
+     *
+     * @tparam ImageType
+     * @return cv::Mat
+     */
+    template<typename ImageType>
+    cv::Mat get() const {
         return std::get<Index<ImageType>()>(image_storage_).image;
     }
 
-     template<typename ImageType>
-    void cloneImage(cv::Mat& dst) const {
-        auto mat = get<ImageType>();
-        mat.copyTo(dst);
+    /**
+     * @brief Safely Gets the corresponding image (cv::Mat) corresponding to the requested ImageType.
+     * If the requested image does not exist (empty), false will be returned.
+     *
+     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
+     *
+     * @tparam ImageType
+     * @param src
+     * @return true
+     * @return false
+     */
+    template<typename ImageType>
+    bool safeGet(cv::Mat& src) const {
+        if(!This::exists<ImageType>()) return false;
+
+        src = This::get<ImageType>();
+        return true;
+    }
+
+    /**
+     * @brief Safely clones the corresponding image (cv::Mat) corresponding to the requested ImageType.
+     * If the requested image does not exist (empty), false will be returned.
+     *
+     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
+     *
+     * @tparam ImageType
+     * @param dst
+     * @return true
+     * @return false
+     */
+    template<typename ImageType>
+    bool cloneImage(cv::Mat& dst) const {
+        cv::Mat tmp;
+        if(!This::safeGet<ImageType>(tmp)) {
+            return false;
+        }
+
+        tmp.copyTo(dst);
+        return true;
+    }
+
+protected:
+
+    /**
+     * @brief Gets the corresponding ImageWrapper corresponding to the ImageType.
+     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
+     *
+     * @tparam ImageType
+     * @return const ImageWrapper<ImageType>&
+     */
+    template<typename ImageType>
+    const ImageWrapper<ImageType>& getImageWrapper() const {
+        constexpr size_t idx =  This::Index<ImageType>();
+        return std::get<idx>(image_storage_);
+    }
+
+    /**
+     * @brief Validates that the input images (if not empty) are the same size.
+     * Throws InvalidImageContainerException if invalid.
+     *
+     * Compares all non-empty images against the first image size
+     *
+     * Can be overwritten.
+     *
+     */
+    virtual void validateSetup() const {
+        cv::Size required_size;
+
+        for (size_t i = 0; i < N; i++) {
+            //get the type at the new subset
+            internal::select_apply<N>(i, [&](auto stream_index) {
+                using ImageTypeStruct = typename This::ImageTypeStruct<stream_index>;
+                //only check if exists?
+                if(This::exists<ImageTypeStruct>()) {
+                    //if required size is empty, then first check
+                    //set required size to be the image size and then compare against
+                    //this size on future iterations
+                    const bool is_first = required_size.empty();
+                    if(is_first) {
+                        required_size = This::get<ImageTypeStruct>().size();
+                    }
+                    else {
+                        //compare against required size
+                        const cv::Size incoming_size = This::get<ImageTypeStruct>().size();
+                        if(incoming_size != required_size) {
+                            throw InvalidImageContainerException(
+                                "Non-empty images were not all the same size. First image (type: " +
+                                type_name<This::ImageTypeStruct<0u>>() + ") was of size " + to_string(required_size) +
+                                " and other image (type: " + type_name<ImageTypeStruct>() + ") was of size " + to_string(incoming_size)
+                            );
+                        }
+                    }
+                }
+            });
+        }
     }
 
 protected:
@@ -211,17 +382,17 @@ public:
     /**
      * @brief Returns image. Could be RGB or greyscale
      *
-     * @return const cv::Mat&
+     * @return cv::Mat
      */
-    const cv::Mat& getImage() const { return Base::get<ImageType::RGBMono>(); }
+    cv::Mat getImage() const { return Base::get<ImageType::RGBMono>(); }
 
-    const cv::Mat& getDepth() const { return Base::get<ImageType::Depth>(); }
+    cv::Mat getDepth() const { return Base::get<ImageType::Depth>(); }
 
-    const cv::Mat& getOpticalFlow() const { return Base::get<ImageType::OpticalFlow>(); }
+    cv::Mat getOpticalFlow() const { return Base::get<ImageType::OpticalFlow>(); }
 
-    const cv::Mat& getSemanticMask() const { return Base::get<ImageType::SemanticMask>(); }
+    cv::Mat getSemanticMask() const { return Base::get<ImageType::SemanticMask>(); }
 
-    const cv::Mat& getMotionMask() const { return Base::get<ImageType::MotionMask>(); }
+    cv::Mat getMotionMask() const { return Base::get<ImageType::MotionMask>(); }
 
     /**
      * @brief Returns true if the set of input images does not contain depth and
@@ -279,7 +450,7 @@ protected:
         const ImageWrapper<ImageType::MotionMask>& motion_mask);
 
 private:
-    void validateSetup() const;
+    void validateSetup() const override;
 
 private:
     const Timestamp timestamp_;
