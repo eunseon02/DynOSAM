@@ -25,6 +25,7 @@
 
 #include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/Tuple.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
@@ -49,28 +50,23 @@ public:
 struct ImageType {
 
     struct RGBMono {
-        constexpr static size_t index = 0u;
         static void validate(const cv::Mat& input);
         static std::string name() { return "RGBMono"; }
     };
 
     struct Depth {
-        constexpr static size_t index = RGBMono::index + 1u;
         static void validate(const cv::Mat& input);
         static std::string name() { return "Depth"; }
     };
     struct OpticalFlow {
-        constexpr static size_t index = Depth::index + 1u;
         static void validate(const cv::Mat& input);
         static std::string name() { return "OpticalFlow"; }
     };
     struct SemanticMask {
-        constexpr static size_t index = OpticalFlow::index + 1u;
         static void validate(const cv::Mat& input);
         static std::string name() { return "SemanticMask"; }
     };
     struct MotionMask {
-        constexpr static size_t index = SemanticMask::index + 1u;
         static void validate(const cv::Mat& input);
         static std::string name() { return "MotionMask"; }
     };
@@ -82,7 +78,9 @@ template<typename T>
 struct ImageWrapper {
     using Type = T;
 
-    const cv::Mat image;
+    //TODO: for now remove const (which is dangerous i guess, but need assignment operator)?
+    //what about copying image data instead of just reference? Right now, everything is ref
+    cv::Mat image;
 
     ImageWrapper(const cv::Mat& img) : image(img) {
 
@@ -103,11 +101,127 @@ struct ImageWrapper {
 };
 
 
-class ImageContainer {
+
+template<typename... ImageTypes>
+class ImageContainerSubset {
+public:
+    using This = ImageContainerSubset<ImageTypes...>;
+    using ImageTypesTuple = std::tuple<ImageTypes...>;
+    using WrappedImageTypesTuple = std::tuple<ImageWrapper<ImageTypes>...>;
+
+    template <size_t I>
+    using ImageTypeStruct = std::tuple_element_t<I, ImageTypesTuple>;
+
+    /**
+     * @brief Corresponds to an alias for a type ImageWrapper<T> where T is the ImageTypeStruct,
+     * eg. RGBMono, Depth... at index I (or simply ImageTypeStruct<I>)
+     *
+     * @tparam I
+     */
+    template <size_t I>
+    using WrappedImageTypeStruct = std::tuple_element_t<I, WrappedImageTypesTuple>;
+
+    static constexpr size_t N = sizeof...(ImageTypes);
+
+    template<typename ImageType>
+    constexpr static size_t Index() {
+        return internal::tuple_element_index_v<ImageType, ImageTypesTuple>;
+    }
+
+    template<typename ImageType>
+    constexpr size_t index() const {
+        return This::Index<ImageType>();
+    }
+
+    explicit ImageContainerSubset(const ImageWrapper<ImageTypes>&... input_image_wrappers) : image_storage_(input_image_wrappers...) {}
+
+    virtual ~ImageContainerSubset() = default;
+
+    template<typename... SubsetImageTypes>
+    ImageContainerSubset<SubsetImageTypes...> makeSubset() {
+        //the tuple of image wrappers to construct for the subset class
+        using Subset = ImageContainerSubset<SubsetImageTypes...>;
+        using WrappedImageTypesTupleSubset = typename Subset::WrappedImageTypesTuple;
+        static constexpr size_t SubN = Subset::N;
+
+        //wrappers to populate from the current set? what about copying etc
+        WrappedImageTypesTupleSubset subset_wrappers;
+        for (size_t i = 0; i < SubN; i++) {
+            //get the type at the new subset
+            internal::select_apply<SubN>(i, [&](auto stream_index) {
+                internal::select_apply<SubN>(stream_index, [&](auto I) {
+                    using SubType = typename Subset::ImageTypeStruct<I>;
+                    //find this type in the current container as the idnex may be different
+                    constexpr size_t current_index = This::Index<SubType>();
+                    //with the index i of the subset wrapper (corresponding with type SubType)
+                    //get the image wrapper in this container using the request (sub) type
+                    //TODO:do we want cv::Mat data to be const (refer counter) or at some point clone? See ImageType where the cv::mat is stored?
+
+                    //TODO: check if the image at the current storage is valid (ie, not empty)
+                    //if invalid but request, throw runtime error becuase whats the point of requesting an invalud iamge
+                    std::get<I>(subset_wrappers) = std::get<current_index>(image_storage_);
+
+
+                });
+            });
+        }
+
+        //this is going to do a bunch of copies?
+        //
+        auto construct_subset = [&](auto&&... args) { return Subset(args...); };
+        return std::apply(construct_subset, subset_wrappers);
+    }
+
+    //should be const ref or cv::Mat??
+    template<typename ImageType>
+    const cv::Mat& get() const {
+        return std::get<Index<ImageType>()>(image_storage_).image;
+    }
+
+     template<typename ImageType>
+    void cloneImage(cv::Mat& dst) const {
+        auto mat = get<ImageType>();
+        mat.copyTo(dst);
+    }
+
+protected:
+    const WrappedImageTypesTuple image_storage_;
+
+};
+
+
+class ImageContainer : public ImageContainerSubset<
+    ImageType::RGBMono,
+    ImageType::Depth,
+    ImageType::OpticalFlow,
+    ImageType::SemanticMask,
+    ImageType::MotionMask> {
 
 public:
     DYNO_POINTER_TYPEDEFS(ImageContainer)
-    virtual ~ImageContainer() = default;
+
+    using Base = ImageContainerSubset<
+        ImageType::RGBMono,
+        ImageType::Depth,
+        ImageType::OpticalFlow,
+        ImageType::SemanticMask,
+        ImageType::MotionMask>;
+
+
+    /**
+     * @brief Returns image. Could be RGB or greyscale
+     *
+     * @return const cv::Mat&
+     */
+    const cv::Mat& getImage() const { return Base::get<ImageType::RGBMono>(); }
+
+    const cv::Mat& getDepth() const { return Base::get<ImageType::Depth>(); }
+
+    const cv::Mat& getOpticalFlow() const { return Base::get<ImageType::OpticalFlow>(); }
+
+    const cv::Mat& getSemanticMask() const { return Base::get<ImageType::SemanticMask>(); }
+
+    const cv::Mat& getMotionMask() const { return Base::get<ImageType::MotionMask>(); }
 
     /**
      * @brief Returns true if the set of input images does not contain depth and
@@ -117,27 +231,25 @@ public:
      * @return false
      */
     inline bool isMonocular() const { return !hasDepth(); }
-    inline bool hasDepth() const { return !depth_.empty(); }
-    inline bool hasSemanticMask() const { return !semantic_mask_.empty(); }
-    inline bool hasMotionMask() const { return !motion_mask_.empty(); }
+    inline bool hasDepth() const { return !getDepth().empty(); }
+    inline bool hasSemanticMask() const { return !getSemanticMask().empty(); }
+    inline bool hasMotionMask() const { return !getMotionMask().empty(); }
+
+    /**
+     * @brief True if the image has 3 channels and is therefore expected to be RGB.
+     * The alternative is greyscale
+     *
+     * @return true
+     * @return false
+     */
+    inline bool isImageRGB() const { return getImage().channels() == 3; }
 
     inline Timestamp getTimestamp() const { return timestamp_; }
     inline FrameId getFrameId() const { return frame_id_; }
 
-    /**
-     * @brief Returns image. Could be RGB or greyscale
-     *
-     * @return const cv::Mat&
-     */
-    const cv::Mat& getImage() const { return img_; }
 
-    const cv::Mat& getDepth() const { return depth_; }
 
-    const cv::Mat& getOpticalFlow() const { return optical_flow_; }
-
-    const cv::Mat& getSemanticMask() const { return semantic_mask_; }
-
-    const cv::Mat& getMotionMask() const { return motion_mask_; }
+    std::string toString() const;
 
     /**
      * @brief Construct an image container equivalent to RGBD + Semantic Mask input
@@ -172,11 +284,6 @@ private:
 private:
     const Timestamp timestamp_;
     const FrameId frame_id_;
-    const cv::Mat img_;
-    const cv::Mat depth_;
-    const cv::Mat optical_flow_;
-    const cv::Mat semantic_mask_;
-    const cv::Mat motion_mask_;
 };
 
 

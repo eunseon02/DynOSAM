@@ -37,6 +37,10 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     tracker_ = std::make_unique<FeatureTracker>(frontend_params);
 }
 
+bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+    return image_container->hasDepth() && image_container->hasSemanticMask();
+}
+
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
     // FrontendInputPacketBase input_v = *input;
     // RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);

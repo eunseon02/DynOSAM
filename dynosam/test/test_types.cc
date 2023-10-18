@@ -94,12 +94,60 @@ TEST(ImageType, testMotionMaskValidation) {
     //TODO:
 }
 
-TEST(ImageContainer, testImageTypeIndexs) {
 
-    EXPECT_EQ(ImageType::RGBMono::index, 0u);
-    EXPECT_EQ(ImageType::MotionMask::index, 4u);
+TEST(ImageContainerSubset, testBasicSubsetContainer) {
+
+    cv::Mat depth(cv::Size(25, 25), CV_64F);
+    uchar* depth_ptr = depth.data;
+
+    cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
+    uchar* optical_flow_ptr = optical_flow.data;
+    ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow> ics{
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow)
+    };
+
+    cv::Mat retrieved_depth = ics.get<ImageType::Depth>();
+    cv::Mat retrieved_of = ics.get<ImageType::OpticalFlow>();
+
+    EXPECT_EQ(retrieved_depth.data, depth_ptr);
+    EXPECT_EQ(retrieved_of.data, optical_flow_ptr);
+
+    EXPECT_EQ(depth.size(), retrieved_depth.size());
+    EXPECT_EQ(optical_flow.size(), retrieved_of.size());
 
 }
+
+TEST(ImageContainerSubset, testBasicMakeSubset) {
+
+    cv::Mat depth(cv::Size(25, 25), CV_64F);
+    cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
+    uchar* optical_flow_ptr = optical_flow.data;
+    ImageContainerSubset<ImageType::Depth, ImageType::OpticalFlow> ics{
+        ImageWrapper<ImageType::Depth>(depth),
+        ImageWrapper<ImageType::OpticalFlow>(optical_flow)
+    };
+
+    ImageContainerSubset<ImageType::OpticalFlow> subset = ics.makeSubset<ImageType::OpticalFlow>();
+    EXPECT_EQ(subset.index<ImageType::OpticalFlow>(), 0u);
+
+    cv::Mat retrieved_of = ics.get<ImageType::OpticalFlow>();
+    cv::Mat subset_retrieved_of = subset.get<ImageType::OpticalFlow>();
+
+    EXPECT_EQ(retrieved_of.data, optical_flow_ptr);
+    EXPECT_EQ(subset_retrieved_of.data, optical_flow_ptr);
+
+}
+
+TEST(ImageContainer, testImageContainerIndexing) {
+
+    EXPECT_EQ(ImageContainer::Index<ImageType::RGBMono>(), 0u);
+    EXPECT_EQ(ImageContainer::Index<ImageType::Depth>(), 1u);
+    EXPECT_EQ(ImageContainer::Index<ImageType::OpticalFlow>(), 2u);
+    EXPECT_EQ(ImageContainer::Index<ImageType::SemanticMask>(), 3u);
+    EXPECT_EQ(ImageContainer::Index<ImageType::MotionMask>(), 4u);
+}
+
 
 TEST(ImageContainer, CreateRGBDSemantic) {
 

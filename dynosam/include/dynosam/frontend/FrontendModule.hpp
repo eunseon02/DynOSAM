@@ -55,6 +55,8 @@ public:
     FrontendOutputPacketBase::ConstPtr spinOnce(FrontendInputPacketBase::ConstPtr input);
 
 protected:
+    virtual bool validateImageContainer(const ImageContainer::Ptr& image_container) const = 0;
+
     virtual SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) = 0;
     virtual SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) = 0;
 

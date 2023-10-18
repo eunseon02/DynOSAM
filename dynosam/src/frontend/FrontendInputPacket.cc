@@ -86,15 +86,24 @@ ImageContainer::ImageContainer(
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
         const ImageWrapper<ImageType::MotionMask>& motion_mask)
-    :  timestamp_(timestamp),
-       frame_id_(frame_id),
-       img_(img.image),
-       depth_(depth.image),
-       optical_flow_(optical_flow.image),
-       semantic_mask_(semantic_mask.image),
-       motion_mask_(motion_mask.image)
+    :  Base(img, depth, optical_flow, semantic_mask, motion_mask),
+       timestamp_(timestamp),
+       frame_id_(frame_id)
     { validateSetup(); }
 
+
+std::string ImageContainer::toString() const {
+    std::stringstream ss;
+    ss << "Timestamp: " << timestamp_ << "\n";
+    ss << "Frame Id:" << frame_id_ << "\n";
+
+    const std::string image_config = isImageRGB() ? "RGB" : "Grey";
+    ss << "Configuration: " << image_config
+        << " Depth (" << hasDepth() << ") Semantic Mask (" << hasSemanticMask()
+        << ") Motion Mask (" << hasMotionMask() << ")" << "\n";
+
+    return ss.str();
+}
 
 
 ImageContainer::Ptr ImageContainer::Create(
@@ -112,11 +121,11 @@ ImageContainer::Ptr ImageContainer::Create(
 
 void ImageContainer::validateSetup() const {
     //TODO: shoudl eventually change to exception
-    CHECK(!img_.empty()) << "RGBMono image must not be empty!";
-    CHECK(!optical_flow_.empty()) << "OPticalFlow image must not be empty!";
+    CHECK(!getImage().empty()) << "RGBMono image must not be empty!";
+    CHECK(!getOpticalFlow().empty()) << "OPticalFlow image must not be empty!";
 
     //must have at least one of semantic mask or motion mask
-    CHECK(!semantic_mask_.empty() || !motion_mask_.empty()) << "At least one of the masks (semantic or motion) must be valid. Both are empty";
+    CHECK(!getSemanticMask().empty() || !getMotionMask().empty()) << "At least one of the masks (semantic or motion) must be valid. Both are empty";
 
     //should only provide one mask (for clarity - which one to use if both given?)
     if(hasSemanticMask()) {

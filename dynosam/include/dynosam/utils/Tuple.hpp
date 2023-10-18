@@ -158,5 +158,61 @@ constexpr bool contains(std::tuple<T...>) {
 template<typename U, typename Tuple>
 constexpr inline bool tuple_contains_type = contains<U>(std::declval<Tuple>());
 
+
+//Finding a type in a tuple - given a tuple, find the index of a specific type
+//https://devblogs.microsoft.com/oldnewthing/20200629-00/?p=103910
+
+template<typename T, typename Tuple>
+struct tuple_element_index_helper;
+
+template<typename T>
+struct tuple_element_index_helper<T, std::tuple<>>
+{
+  static constexpr std::size_t value = 0;
+};
+
+
+template<typename T, typename... Rest>
+struct tuple_element_index_helper<T, std::tuple<T, Rest...>>
+{
+  static constexpr std::size_t value = 0;
+  using RestTuple = std::tuple<Rest...>;
+  static_assert(
+    tuple_element_index_helper<T, RestTuple>::value ==
+    std::tuple_size_v<RestTuple>,
+    "type appears more than once in tuple");
+};
+
+template<typename T, typename First, typename... Rest>
+struct tuple_element_index_helper<T, std::tuple<First, Rest...>>
+{
+  using RestTuple = std::tuple<Rest...>;
+  static constexpr std::size_t value = 1 +
+       tuple_element_index_helper<T, RestTuple>::value;
+};
+
+template<typename T, typename Tuple>
+struct tuple_element_index
+{
+  static constexpr std::size_t value =
+    tuple_element_index_helper<T, Tuple>::value;
+  static_assert(value < std::tuple_size_v<Tuple>,
+                "type does not appear in tuple");
+};
+
+
+/**
+ * @brief Actual templated class to determine the index of a type in a tuple
+ * It asks the helper to do the work and validates that the resulting value is less than the size of the tuple, meaning that the type was found.
+ * If not, then we complain with a compile-time assertion.
+ *
+ * @tparam T
+ * @tparam Tuple
+ */
+template<typename T, typename Tuple>
+inline constexpr std::size_t tuple_element_index_v = tuple_element_index<T, Tuple>::value;
+
+
+
 }  // namespace internal
 }  // namespace dyno

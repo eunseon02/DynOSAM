@@ -36,7 +36,8 @@ public:
     using SpinReturn = FrontendModule::SpinReturn;
 
 private:
-//TODO: ignore casting for now...
+
+    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 

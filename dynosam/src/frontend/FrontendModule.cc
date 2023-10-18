@@ -32,7 +32,14 @@ FrontendModule::FrontendModule(const FrontendParams& params)
 
 FrontendOutputPacketBase::ConstPtr FrontendModule::spinOnce(FrontendInputPacketBase::ConstPtr input) {
     CHECK(input);
+    CHECK(input->image_container_);
+
+    if(!validateImageContainer(input->image_container_)) {
+        LOG(FATAL) << "Invalid image container configuration: " << input->image_container_->toString();
+    }
+
     SpinReturn spin_return{State::Boostrap, nullptr};
+
     switch (frontend_state_)
         {
         case State::Boostrap: {

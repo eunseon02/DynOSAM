@@ -28,7 +28,7 @@
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
-#include "dynosam/frontend/RGBDInstancePacket.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
 
 namespace dyno {
 
@@ -297,17 +297,17 @@ public:
         CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world_));
         CHECK(timestamp == gt_object_pose_gt.timestamp_);
 
-        // auto input_packet = std::make_shared<RGBDInstancePacket>(
-        //     frame_id,
-        //     timestamp,
-        //     rgb,
-        //     optical_flow,
-        //     depth,
-        //     instance_mask
-        // );
+        auto image_container = ImageContainer::Create(
+            timestamp,
+            frame_id,
+            ImageWrapper<ImageType::RGBMono>(rgb),
+            ImageWrapper<ImageType::Depth>(depth),
+            ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+            ImageWrapper<ImageType::SemanticMask>(instance_mask)
+        );
 
-        // CHECK(image_input_callback_);
-        // if(image_input_callback_) image_input_callback_(input_packet);
+        CHECK(image_container_callback_);
+        if(image_container_callback_) image_container_callback_(image_container);
         return true;
     }
 
