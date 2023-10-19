@@ -202,6 +202,23 @@ void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_vi
 }
 
 
+bool compareCvMatsUpToTol(const cv::Mat& mat1, const cv::Mat& mat2, const double& tol)
+{
+  CHECK_EQ(mat1.size(), mat2.size());
+  CHECK_EQ(mat1.type(), mat2.type());
+
+  // treat two empty mat as identical as well
+  if (mat1.empty() && mat2.empty())
+  {
+    LOG(WARNING) << "CvMatCmp: asked comparison of 2 empty matrices.";
+    return true;
+  }
+
+  // Compare the two matrices!
+  cv::Mat diff = mat1 - mat2;
+  return cv::checkRange(diff, true, nullptr, -tol, tol);
+}
+
 
 
 const float FLOW_TAG_FLOAT = 202021.25f;

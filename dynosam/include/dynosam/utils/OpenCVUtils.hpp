@@ -39,6 +39,9 @@ void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point, const cv::Scalar&
 std::string cvTypeToString(int type);
 std::string cvTypeToString(const cv::Mat& mat);
 
+// Compares two opencv matrices up to a certain tolerance error.
+bool compareCvMatsUpToTol(const cv::Mat& mat1, const cv::Mat& mat2, const double& tol = 1e-7);
+
 cv::Mat concatenateImagesHorizontally(const cv::Mat& left_img, const cv::Mat& right_img);
 
 cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& bottom_img);
@@ -46,6 +49,8 @@ cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& botto
 void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
 
 void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz);
+
+
 
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for the read/write optical flow functions in 4.x

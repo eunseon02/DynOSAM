@@ -56,6 +56,14 @@ gtsam::Rot3 cvMatToGtsamRot3(const cv::Mat& R);
 gtsam::Point3 cvMatToGtsamPoint3(const cv::Mat& cv_t);
 cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 
+
+template <typename T>
+gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point);
+
+template <typename T>
+std::vector<gtsam::Point2> cvPointsToGtsam(const std::vector<cv::Point_<T>>& points);
+
+
 template <class T>
 static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, T* estimate)
 {
@@ -71,5 +79,7 @@ static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, 
 }
 
 } //utils
-
 } //dyno
+
+#include "dynosam/utils/GtsamUtils-inl.hpp"
+
