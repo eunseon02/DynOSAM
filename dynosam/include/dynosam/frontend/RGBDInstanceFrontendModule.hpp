@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 
@@ -31,17 +32,19 @@ namespace dyno {
 class RGBDInstanceFrontendModule : public FrontendModule {
 
 public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params);
+    RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera);
 
     using SpinReturn = FrontendModule::SpinReturn;
 
 private:
+    Camera::Ptr camera_;
+    FeatureTracker::UniquePtr tracker_;
+
+
 
     bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    FeatureTracker::UniquePtr tracker_;
 
 };
 

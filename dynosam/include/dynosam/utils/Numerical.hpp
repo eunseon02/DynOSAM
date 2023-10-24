@@ -36,4 +36,19 @@ inline bool is_zero(double a) {
     return fpEqual(a, 0.0);
 }
 
+//Jesse: make iterator T so we can work on any iterable type? I think this will also make Eigen compatable
+template<typename T>
+inline bool equals_with_abs_tol(const std::vector<T>& vec1, const std::vector<T>& vec2, double tol = 1e-9) {
+    if(vec1.size() != vec2.size()) return false;
+
+    const size_t m = vec1.size();
+    for(size_t i = 0; i < m; i++) {
+        if(!fpEqual(vec1[i], vec2[i], tol)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 } //dyno

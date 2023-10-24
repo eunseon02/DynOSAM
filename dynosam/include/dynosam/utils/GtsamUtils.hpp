@@ -56,12 +56,22 @@ gtsam::Rot3 cvMatToGtsamRot3(const cv::Mat& R);
 gtsam::Point3 cvMatToGtsamPoint3(const cv::Mat& cv_t);
 cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 
+/**
+ * @brief Converts a vector of 16 elements listing the elements of a 4x4 3D pose
+*  matrix by rows into a pose3 in gtsam
+ *
+ */
+gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
+
 
 template <typename T>
 gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point);
 
 template <typename T>
-std::vector<gtsam::Point2> cvPointsToGtsam(const std::vector<cv::Point_<T>>& points);
+gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points);
+
+
+
 
 
 template <class T>
@@ -82,4 +92,3 @@ static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, 
 } //dyno
 
 #include "dynosam/utils/GtsamUtils-inl.hpp"
-

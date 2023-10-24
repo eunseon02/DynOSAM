@@ -15,6 +15,7 @@ set(CMAKE_CXX_STANDARD 17)
 list(INSERT CMAKE_MODULE_PATH 0 ${CMAKE_SOURCE_DIR}/cmake)
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -54,6 +55,8 @@ include_directories(
 add_library(${PROJECT_NAME} SHARED
 
   src/common/Types.cc
+  src/common/CameraParams.cc
+  src/common/Camera.cc
 
   src/dataprovider/DataProviderModule.cc
   src/dataprovider/DataProvider.cc
@@ -174,6 +177,8 @@ if(BUILD_TESTING)
     test/test_dataset_provider.cc
     test/test_types.cc
     test/test_code_concepts.cc
+    test/test_camera_params.cc
+    test/test_camera.cc
     test/internal/tmp_file.cc
 )
 
@@ -182,6 +187,12 @@ if(BUILD_TESTING)
   install(TARGETS
   ${PROJECT_NAME}_test
       DESTINATION test/)
+
+  #install data so it can be found on the share package path
+  install(
+    DIRECTORY test/data/
+    DESTINATION test/data/
+  )
 
 endif()
 

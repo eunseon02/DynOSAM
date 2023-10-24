@@ -44,9 +44,19 @@ using ObjectIds = std::vector<ObjectId>;
 
 using FrameId = size_t;
 using Depth = double;
+using Depths = std::vector<double>;
 
-using TrackletId = size_t;
+using TrackletId = long int;  // -1 for invalid landmarks. // int would be too
+                            // small if it is 16 bits!
 using TrackletIds = std::vector<TrackletId>;
+
+
+
+using Landmark = gtsam::Point3;
+using Landmarks = gtsam::Point3Vector; //! Vector of Landmarks using gtsam's definition for allocation
+
+using Keypoint = gtsam::Point2;
+using Keypoints = gtsam::Point2Vector; //! Vector of 2D keypoints using gtsam's definition for allocation
 
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;

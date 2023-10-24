@@ -20,62 +20,51 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
 #pragma once
 
 #include "dynosam/common/Types.hpp"
 
-#include <vector>
+#include <gtest/gtest.h>
+#include <ament_index_cpp/get_package_prefix.hpp>
 
-namespace dyno {
 
-enum KeyPointType {
-    STATIC,
-    DYNAMIC
-};
+/**
+ * @brief gets the full path to the installation directory of the test data which is expected to be at dynosam/test/data
+ *
+ * The full path will be the ROS install directory of this data after building
+ *
+ * @return std::string
+ */
+inline std::string getTestDataPath() {
+  return ament_index_cpp::get_package_prefix("dynosam") + "/test/data";
+}
 
-//! Expected label for the background in a semantic or motion mask
-constexpr static ObjectId background_label = 0u;
+namespace dyno_testing {
 
-struct functional_keypoint {
+using namespace dyno;
 
-    template<typename T = int>
-    static inline T u(const Keypoint& kp) {
-        return static_cast<T>(kp(0));
+inline void compareLandmarks(const Landmarks& lmks_1,
+                        const Landmarks& lmks_2,
+                        const float& tol = 1e-9) {
+    ASSERT_EQ(lmks_1.size(), lmks_2.size());
+    for (size_t i = 0u; i < lmks_1.size(); i++) {
+      const auto& lmk_1 = lmks_1[i];
+      const auto& lmk_2 = lmks_2[i];
+      EXPECT_TRUE(gtsam::assert_equal(lmk_1, lmk_2, tol));
     }
+  }
 
-    template<typename T = int>
-    static inline int v(const Keypoint& kp) {
-        return static_cast<T>(kp(1));
+inline void compareKeypoints(const Keypoints& lmks_1,
+                        const Keypoints& lmks_2,
+                        const float& tol =  1e-9) {
+    ASSERT_EQ(lmks_1.size(), lmks_2.size());
+    for (size_t i = 0u; i < lmks_1.size(); i++) {
+      const auto& lmk_1 = lmks_1[i];
+      const auto& lmk_2 = lmks_2[i];
+      EXPECT_TRUE(gtsam::assert_equal(lmk_1, lmk_2, tol));
     }
-};
+  }
 
-
-struct Feature {
-
-    DYNO_POINTER_TYPEDEFS(Feature)
-
-    Keypoint keypoint_;
-    Keypoint predicted_keypoint_; //from optical flow
-    size_t age_;
-    KeyPointType type_;
-    TrackletId tracklet_id_{-1}; //starts invalid
-    FrameId frame_id_;
-    bool inlier_{false};
-    ObjectId label_; //should be background_label if static
-
-    /**
-     * @brief If the feature is valid - a combination of inlier and if the tracklet Id != -1
-     *
-     * To make a feature invalid, set tracklet_id == -1
-     *
-     * @return true
-     * @return false
-     */
-    inline bool usable() const {
-        return inlier_ && tracklet_id_ != -1;
-    }
-};
-
-using FeaturePtrs = std::vector<Feature::Ptr>;
 
 }

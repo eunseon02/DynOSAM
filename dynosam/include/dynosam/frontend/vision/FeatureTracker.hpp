@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/ORBextractor.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
@@ -35,12 +36,12 @@ namespace dyno {
 class FeatureTracker
 {
 public:
-    DYNO_POINTER_TYPEDEFS(FeatureTracker);
+    DYNO_POINTER_TYPEDEFS(FeatureTracker)
 
     //and camera?
     //does no processing with any depth
     //if depth is a problem should be handled aftererds and separately
-    FeatureTracker(const FrontendParams& params);
+    FeatureTracker(const FrontendParams& params, Camera::Ptr camera);
     virtual ~FeatureTracker() {}
 
     //note MOTION MASK!!
@@ -56,13 +57,14 @@ protected:
 
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
-    bool posInGrid(const cv::KeyPoint& kp, int& pos_x, int& pos_y) const;
+    bool posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const;
 
-    Feature::Ptr constructStaticFeature(const TrackingInputImages& tracking_images, const cv::KeyPoint& kp, size_t age, TrackletId tracklet_id,
+    Feature::Ptr constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,
                                       FrameId frame_id) const;
 
 protected:
     const FrontendParams params_;
+    Camera::Ptr camera_;
 
 private:
     Frame::Ptr previous_frame_{ nullptr };

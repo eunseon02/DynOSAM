@@ -20,62 +20,17 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
 #pragma once
-
-#include "dynosam/common/Types.hpp"
-
-#include <vector>
 
 namespace dyno {
 
-enum KeyPointType {
-    STATIC,
-    DYNAMIC
-};
 
-//! Expected label for the background in a semantic or motion mask
-constexpr static ObjectId background_label = 0u;
+struct VisionTools {
 
-struct functional_keypoint {
+    static void
 
-    template<typename T = int>
-    static inline T u(const Keypoint& kp) {
-        return static_cast<T>(kp(0));
-    }
+}
 
-    template<typename T = int>
-    static inline int v(const Keypoint& kp) {
-        return static_cast<T>(kp(1));
-    }
-};
-
-
-struct Feature {
-
-    DYNO_POINTER_TYPEDEFS(Feature)
-
-    Keypoint keypoint_;
-    Keypoint predicted_keypoint_; //from optical flow
-    size_t age_;
-    KeyPointType type_;
-    TrackletId tracklet_id_{-1}; //starts invalid
-    FrameId frame_id_;
-    bool inlier_{false};
-    ObjectId label_; //should be background_label if static
-
-    /**
-     * @brief If the feature is valid - a combination of inlier and if the tracklet Id != -1
-     *
-     * To make a feature invalid, set tracklet_id == -1
-     *
-     * @return true
-     * @return false
-     */
-    inline bool usable() const {
-        return inlier_ && tracklet_id_ != -1;
-    }
-};
-
-using FeaturePtrs = std::vector<Feature::Ptr>;
 
 }

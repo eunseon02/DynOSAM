@@ -21,10 +21,15 @@
  *   SOFTWARE.
  */
 
+#include "internal/helpers.hpp"
+
 #include <gtest/gtest.h>
 #include <glog/logging.h>
 
 #include "rclcpp/rclcpp.hpp"
+
+
+DEFINE_string(test_data_path, getTestDataPath(), "Path to data for unit tests.");
 
 int main(int argc, char** argv)
 {

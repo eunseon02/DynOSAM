@@ -26,6 +26,8 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
 
+#include "dynosam/common/Camera.hpp"
+
 #include <glog/logging.h>
 
 int main(int argc, char* argv[]) {
@@ -35,9 +37,12 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
+    dyno::CameraParams camera_params = dyno::CameraParams::fromYamlFile("some_file.yaml");
+    dyno::Camera::Ptr camera = std::make_shared<dyno::Camera>(camera_params);
+
 
     auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams());
+    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams(), camera);
     auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
     dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);

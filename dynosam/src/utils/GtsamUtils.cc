@@ -96,5 +96,15 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point)
   return T.clone();
 }
 
+
+gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose) {
+  CHECK_EQ(vector_pose.size(), 16u);
+  CHECK_EQ(vector_pose[12], 0.0);
+  CHECK_EQ(vector_pose[13], 0.0);
+  CHECK_EQ(vector_pose[14], 0.0);
+  CHECK_EQ(vector_pose[15], 1.0);
+  return gtsam::Pose3(Eigen::Matrix4d(vector_pose.data()).transpose());
+}
+
 } //utils
 } //dyno

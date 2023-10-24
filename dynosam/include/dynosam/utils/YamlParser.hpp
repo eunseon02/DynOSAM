@@ -39,7 +39,7 @@ namespace dyno {
 
 class YamlParser {
  public:
-  DYNO_POINTER_TYPEDEFS(YamlParser);
+  DYNO_POINTER_TYPEDEFS(YamlParser)
 
   YamlParser(const std::string& filepath) : fs_(), filepath_(filepath) {
     openFile(filepath, &fs_);

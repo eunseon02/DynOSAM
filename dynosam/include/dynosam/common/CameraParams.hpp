@@ -1,16 +1,60 @@
+/*
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   All rights reserved.
+
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
+
 #pragma once
 
-
+#include "dynosam/common/Types.hpp"
+#include "dynosam/utils/YamlParser.hpp"
 
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Cal3_S2.h>
 #include <gtsam/geometry/Cal3DS2.h>
 #include <gtsam/geometry/Cal3Fisheye.h>
+#include <eigen3/Eigen/Core>
+#include <exception>
 
 namespace dyno
 {
-class CameraParam
+
+class InvalidCameraCalibration : public std::runtime_error {
+public:
+  InvalidCameraCalibration(const std::string& what) : std::runtime_error(what) {}
+};
+
+
+enum class DistortionModel {
+  NONE,
+  RADTAN,
+  EQUIDISTANT,
+  FISH_EYE
+};
+
+
+
+class CameraParams
 {
 public:
+  DYNO_POINTER_TYPEDEFS(CameraParams)
 
   using DistortionCoeffs = std::vector<double>;
   // fu, fv, cu, cv
@@ -24,22 +68,23 @@ public:
    * Distortion model expects a string as either "none", "plumb_bob", "radial-tangential", "radtan", "equidistant" or
    * "kanna_brandt". The corresponding DistortionModel (enum) will then be assigned.
    *
-   * @param intrinsics_ const IntrinsicsCoeffs& Coefficients for the intrinsics matrix. Should be in the form [fu fv cu
+   * @param intrinsics const IntrinsicsCoeffs& Coefficients for the intrinsics matrix. Should be in the form [fu fv cu
    * cv]
-   * @param distortion_ const DistortionCoeffs& Coefficients for the camera distortion.
-   * @param image_size_ const cv::Size& Image width and height
+   * @param distortion const DistortionCoeffs& Coefficients for the camera distortion.
+   * @param image_size const cv::Size& Image width and height
    * @param distortion_model_ const std::string& Expected distortion model to be used for this camera.
-   * @param hardware_id_ const HardwareId& Associated hardware ID of this camera. Should be unique and is used
-   *  to associate these parameters with a physical camera
-   * @param T_R_C_ const gtsam::Pose3& The camera extrinsics describing the pose of the camera realative to the robot
-   * body frame (eg. body frame to camera frame)
-   * @param frame_ const std::string& frame_ The frame of this camera (usually extracted from the ROS tf tree).
-   * @param name_ const std::string& name_ Human readaible name for this camera. Defaults to empty.
+   * @param T_robot_camera const gtsam::Pose3& The camera extrinsics describing the transformation of the camera in the robot frame
    */
-  CameraParam(const IntrinsicsCoeffs& intrinsics, const DistortionCoeffs& distortion, const cv::Size& image_size,
-              const std::string& distortion_model, const gtsam::Pose3& T_R_C);
+  CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionCoeffs& distortion, const cv::Size& image_size,
+              const std::string& distortion_model, const gtsam::Pose3& T_robot_camera = gtsam::Pose3::Identity());
 
-  virtual ~CameraParam() = default;
+  CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionCoeffs& distortion, const cv::Size& image_size,
+              const DistortionModel& distortion_model, const gtsam::Pose3& T_robot_camera = gtsam::Pose3::Identity());
+
+  virtual ~CameraParams() = default;
+
+
+  static CameraParams fromYamlFile(const std::string& file_path);
 
   inline double fx() const
   {
@@ -66,6 +111,10 @@ public:
     return image_size_.height;
   }
 
+  inline const cv::Size& imageSize() const {
+    return image_size_;
+  }
+
   inline cv::Mat getCameraMatrix() const
   {
     return K_;
@@ -78,31 +127,10 @@ public:
 
   inline gtsam::Pose3 getExtrinsics() const
   {
-    return T_R_C_;
+    return T_robot_camera_;
   }
 
-  inline std::string getCameraName() const
-  {
-    return name_;
-  }
 
-  inline std::string getOpticsType() const
-  {
-    return optics_;
-  }
-
-  inline void rescaleIntrinsics(double width, double height)
-  {
-    double x_scale = static_cast<double>(width) / static_cast<double>(image_size_.width);
-    double y_scale = static_cast<double>(height) / static_cast<double>(image_size_.height);
-    intrinsics_.at(0) *= x_scale;
-    intrinsics_.at(1) *= y_scale;
-    intrinsics_.at(2) *= x_scale;
-    intrinsics_.at(3) *= y_scale;
-    convertIntrinsicsVectorToMatrix(intrinsics_, &K_);
-    image_size_.width = width;
-    image_size_.height = height;
-  }
 
   static void convertDistortionVectorToMatrix(const DistortionCoeffs& distortion_coeffs,
                                               cv::Mat* distortion_coeffs_mat);
@@ -117,25 +145,40 @@ public:
    */
   static DistortionModel stringToDistortion(const std::string& distortion_model, const std::string& camera_model);
 
-  bool equals(const CameraParam& other, double tol = 1e-9) const;
+  bool equals(const CameraParams& other, double tol = 1e-9) const;
 
   const std::string toString() const;
 
-public:
+  //specalisations for gtsam::Cal3Fisheye and gtsam::Cal3DS2 are provided
+  template<typename CALIBRATION>
+  CALIBRATION constructGtsamCalibration() const;
+
+private:
+
+  static void parseDistortionModel(const YamlParser& yaml_parser, DistortionModel* model);
+  static void parseImgSize(const YamlParser& yaml_parser, cv::Size* image_size);
+  static void parseBodyPoseCam(const YamlParser& yaml_parser,
+                               gtsam::Pose3* body_Pose_cam);
+  static void parseCameraIntrinsics(const YamlParser& yaml_parser,
+                                    IntrinsicsCoeffs* intrinsics);
+  static void parseCameraDistortion(const YamlParser& yaml_parser,
+                                    DistortionCoeffs* distortion);
+
+
+private:
   // updates cv Mat P
   // for now only works if FISH_EYE
   //   void estimateNewMatrixForDistortion();
 
   //! fu, fv, cu, cv
-  IntrinsicsCoeffs intrinsics_;
+  const IntrinsicsCoeffs intrinsics_;
   const DistortionCoeffs distortion_coeff_;
   cv::Size image_size_;
 
   //! Distortion parameters
   const DistortionModel distortion_model_;
 
-  const gtsam::Pose3 T_R_C_;  // transform of the camera from the robot frame (base_link) -> the camera wrt the base
-                              // link
+  const gtsam::Pose3 T_robot_camera_;  //! Transform of the camera frame to the robot frame
 
   //! OpenCV structures: needed to compute the undistortion map.
   //! 3x3 camera matrix K (last row is {0,0,1})
@@ -149,7 +192,8 @@ public:
   cv::Mat D_;
 };
 
-using CameraParams = std::vector<CameraParam>;
+
+
+
 
 }  // namespace dyno
-

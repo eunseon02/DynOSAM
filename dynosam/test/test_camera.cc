@@ -1,6 +1,34 @@
+/*
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   All rights reserved.
+
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
+
+#include "internal/helpers.hpp"
+
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+
+#include "dynosam/common/Camera.hpp"
+#include "dynosam/utils/Numerical.hpp"
 
 using namespace dyno;
 
@@ -13,8 +41,8 @@ TEST(Camera, project)
   lmks.push_back(Landmark(0.0, 10.0, 20.0));
   lmks.push_back(Landmark(1.0, 0.0, 2.0));
 
-  CameraParam::IntrinsicsCoeffs intrinsics(4);
-  CameraParam::DistortionCoeffs distortion(4);
+  CameraParams::IntrinsicsCoeffs intrinsics(4);
+  CameraParams::DistortionCoeffs distortion(4);
 
   intrinsics.at(0) = 1.0;  // fx
   intrinsics.at(1) = 1.0;  // fy
@@ -27,28 +55,26 @@ TEST(Camera, project)
   expected_kpts.push_back(Keypoint(3.0, 1.0 / 2.0 + 2.0));
   expected_kpts.push_back(Keypoint(1.0 / 2.0 + 3.0, 2.0));
 
-  CameraParam camera_params(intrinsics, distortion, cv::Size(640, 480), "none", 1, gtsam::Pose3::identity(),
-                            "base_link");
+  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
 
   Camera camera(camera_params);
 
   Keypoints actual_kpts;
   EXPECT_NO_THROW(camera.project(lmks, &actual_kpts));
-  testing::compareKeypoints(expected_kpts, actual_kpts, 0.0001f);
+  dyno_testing::compareKeypoints(actual_kpts, expected_kpts);
 }
 
 TEST(Camera, backProjectSingleSimple)
 {
   // Easy test first, back-project keypoint at the center of the image with
   // a given depth.
-  CameraParam::IntrinsicsCoeffs intrinsics(4);
-  CameraParam::DistortionCoeffs distortion(4);
+  CameraParams::IntrinsicsCoeffs intrinsics(4);
+  CameraParams::DistortionCoeffs distortion(4);
   intrinsics.at(0) = 721.5377;  // fx
   intrinsics.at(1) = 721.5377;  // fy
   intrinsics.at(2) = 609.5593;  // u0
   intrinsics.at(3) = 172.8540;  // v0
-  CameraParam camera_params(intrinsics, distortion, cv::Size(640, 480), "none", 1, gtsam::Pose3::identity(),
-                            "base_link");
+  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
 
   Camera camera(camera_params);
 
@@ -67,14 +93,13 @@ TEST(Camera, backProjectMultipleSimple)
 {
   // Easy test first, back-project keypoints at the center of the image with
   // different depths.
-  CameraParam::IntrinsicsCoeffs intrinsics(4);
-  CameraParam::DistortionCoeffs distortion(4);
+  CameraParams::IntrinsicsCoeffs intrinsics(4);
+  CameraParams::DistortionCoeffs distortion(4);
   intrinsics.at(0) = 721.5377;  // fx
   intrinsics.at(1) = 721.5377;  // fy
   intrinsics.at(2) = 609.5593;  // u0
   intrinsics.at(3) = 172.8540;  // v0
-  CameraParam camera_params(intrinsics, distortion, cv::Size(640, 480), "none", 1, gtsam::Pose3::identity(),
-                            "base_link");
+  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
 
   Camera camera(camera_params);
 
@@ -91,14 +116,14 @@ TEST(Camera, backProjectMultipleSimple)
     expected_lmks.push_back(Landmark(0.0, 0.0, depth));
   }
 
-  testing::compareLandmarks(actual_lmks, expected_lmks, 0.0001);
+  dyno_testing::compareLandmarks(actual_lmks, expected_lmks);
 }
 
 TEST(Camera, backProjectSingleTopLeft)
 {
   // Back-project keypoint at the center of the image with a given depth.
-  CameraParam::IntrinsicsCoeffs intrinsics(4);
-  CameraParam::DistortionCoeffs distortion(4);
+  CameraParams::IntrinsicsCoeffs intrinsics(4);
+  CameraParams::DistortionCoeffs distortion(4);
 
   double fx = 30.9 / 2.2;
   double fy = 12.0 / 23.0;
@@ -109,8 +134,7 @@ TEST(Camera, backProjectSingleTopLeft)
   intrinsics.at(1) = fy;  // fy
   intrinsics.at(2) = cu;  // u0
   intrinsics.at(3) = cv;  // v0
-  CameraParam camera_params(intrinsics, distortion, cv::Size(640, 480), "none", 1, gtsam::Pose3::identity(),
-                            "base_link");
+  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
 
   Camera camera(camera_params);
 

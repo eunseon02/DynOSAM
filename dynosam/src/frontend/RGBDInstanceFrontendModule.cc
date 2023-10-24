@@ -31,10 +31,11 @@
 namespace dyno {
 
 
-RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params) : FrontendModule(frontend_params)
+RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera)
+    : FrontendModule(frontend_params), camera_(camera)
 {
-
-    tracker_ = std::make_unique<FeatureTracker>(frontend_params);
+    CHECK_NOTNULL(camera_);
+    tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_);
 }
 
 bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
