@@ -228,16 +228,31 @@ public:
 
     bool spin() override {
         const size_t dataset_size = BaseDynoDataset::getDatasetSize();
-        LOG(INFO) << "Spinning dataset at path " << BaseDynoDataset::getDatasetPath() << " with size " << dataset_size;
-
-        for (size_t frame_id = 0; frame_id < dataset_size; frame_id++) {
-            if(!BaseDynoDataset::processSingle(frame_id)) return false;
+        if(active_frame_id >= dataset_size) {
+            LOG_FIRST_N(INFO, 1) << "Finished dataset";
+            return false;
         }
 
+        if(!BaseDynoDataset::processSingle(active_frame_id)) {
+            LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id;
+            return false;
+        }
+
+        active_frame_id++;
         return true;
+
+        // LOG(INFO) << "Spinning dataset at path " << BaseDynoDataset::getDatasetPath() << " with size " << dataset_size;
+
+        // for (size_t frame_id = 0; frame_id < dataset_size; frame_id++) {
+        //     if(!BaseDynoDataset::processSingle(frame_id)) return false;
+        // }
+
+        // return true;
 
     }
 
+private:
+    size_t active_frame_id = 0u;
 
 };
 

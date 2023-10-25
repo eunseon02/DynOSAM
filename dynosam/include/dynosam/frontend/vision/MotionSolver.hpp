@@ -20,36 +20,33 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
 #pragma once
 
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
+
+
+#include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
+#include <opengv/sac/Ransac.hpp>
+
+using AbsolutePoseProblem = opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem;
+using AbsolutePoseSacProblem = opengv::sac::Ransac<AbsolutePoseProblem>;
 
 namespace dyno {
 
-class RGBDInstanceFrontendModule : public FrontendModule {
+
+
+class MotionSolver {
 
 public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    MotionSolver(const FrontendParams& params);
 
-    using SpinReturn = FrontendModule::SpinReturn;
+    //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
+    gtsam::Pose3 solveCameraPose(const Keypoints& current_keypoints, const Landmarks& previous_points);
 
-private:
-    Camera::Ptr camera_;
-    RGBDProcessor rgbd_processor_;
-    FeatureTracker::UniquePtr tracker_;
-
-    Frame::Ptr previous_frame_;
-
-
-    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
+protected:
+    const FrontendParams params_;
 
 };
-
 
 } //dyno

@@ -20,36 +20,3 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
-#pragma once
-
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
-
-namespace dyno {
-
-class RGBDInstanceFrontendModule : public FrontendModule {
-
-public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
-
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-    Camera::Ptr camera_;
-    RGBDProcessor rgbd_processor_;
-    FeatureTracker::UniquePtr tracker_;
-
-    Frame::Ptr previous_frame_;
-
-
-    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-};
-
-
-} //dyno

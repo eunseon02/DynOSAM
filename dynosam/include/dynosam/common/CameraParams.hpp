@@ -63,6 +63,12 @@ public:
   using CameraModel = std::string;
 
   /**
+   * @brief Needed for IO construction
+   *
+   */
+  CameraParams() {}
+
+  /**
    * @brief Constructs the parameters for a specific camera.
    *
    * Distortion model expects a string as either "none", "plumb_bob", "radial-tangential", "radtan", "equidistant" or
@@ -171,14 +177,13 @@ private:
   //   void estimateNewMatrixForDistortion();
 
   //! fu, fv, cu, cv
-  const IntrinsicsCoeffs intrinsics_;
-  const DistortionCoeffs distortion_coeff_;
+  IntrinsicsCoeffs intrinsics_;
+  DistortionCoeffs distortion_coeff_;
   cv::Size image_size_;
 
   //! Distortion parameters
-  const DistortionModel distortion_model_;
-
-  const gtsam::Pose3 T_robot_camera_;  //! Transform of the camera frame to the robot frame
+  DistortionModel distortion_model_;
+  gtsam::Pose3 T_robot_camera_;  //! Transform of the camera frame to the robot frame
 
   //! OpenCV structures: needed to compute the undistortion map.
   //! 3x3 camera matrix K (last row is {0,0,1})

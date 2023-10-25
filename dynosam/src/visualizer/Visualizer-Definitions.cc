@@ -21,35 +21,30 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
 
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
+#include <glog/logging.h>
+#include <opencv4/opencv2/opencv.hpp>
 
 namespace dyno {
 
-class RGBDInstanceFrontendModule : public FrontendModule {
-
-public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
-
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-    Camera::Ptr camera_;
-    RGBDProcessor rgbd_processor_;
-    FeatureTracker::UniquePtr tracker_;
-
-    Frame::Ptr previous_frame_;
+OpenCVImageDisplayQueue::OpenCVImageDisplayQueue(ImageDisplayQueue* display_queue, bool parallel_run) : display_queue_(CHECK_NOTNULL(display_queue)), parallel_run_(parallel_run) {}
 
 
-    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
+void OpenCVImageDisplayQueue::process() {
+    ImageToDisplay image_to_display;
+    bool queue_state = false;
+    if (parallel_run_) {
+        queue_state = display_queue_->popBlocking(image_to_display);
+    } else {
+        queue_state = display_queue_->pop(image_to_display);
+    }
 
-};
-
+    if(queue_state) {
+        cv::namedWindow(image_to_display.name_);
+        cv::imshow(image_to_display.name_, image_to_display.image_);
+        cv::waitKey(1);  // Not needed because we are using startWindowThread()
+    }
+}
 
 } //dyno

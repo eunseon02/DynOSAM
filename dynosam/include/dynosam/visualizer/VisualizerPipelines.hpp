@@ -51,24 +51,4 @@ private:
 
 
 
-// class FrontendVizPipeline : public SIMOPipelineModule<FrontendOutputPacketBase, NullPipelinePayload> {
-
-// public:
-//     DYNO_POINTER_TYPEDEFS(FrontendPipeline)
-
-//     using SIMO =
-//       SIMOPipelineModule<FrontendOutputPacketBase, NullPipelinePayload>;
-//     using InputQueue = typename SIMO::InputQueue;
-//     using OutputQueue = typename SIMO::OutputQueue;
-
-//     FrontendVizPipeline(const std::string& module_name, InputQueue* input_queue, FrontendDisplay::Ptr frontend_display);
-
-//     NullPipelinePayload::ConstPtr process(const FrontendInputPacketBase::ConstPtr& input) override;
-
-// private:
-//     FrontendDisplay::Ptr frontend_display_;
-
-// };
-
-
 } //dyno

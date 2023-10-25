@@ -106,5 +106,17 @@ gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose) {
   return gtsam::Pose3(Eigen::Matrix4d(vector_pose.data()).transpose());
 }
 
+
+cv::Point2d gtsamPointToCV(const gtsam::Point2& point) {
+  return cv::Point2d(point(0), point(1));
+}
+
+
+gtsam::Pose3 openGvTfToGtsamPose3(const opengv::transformation_t& RT) {
+  gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
+  poseMat.block<3, 4>(0, 0) = RT;
+  return gtsam::Pose3(poseMat);
+}
+
 } //utils
 } //dyno

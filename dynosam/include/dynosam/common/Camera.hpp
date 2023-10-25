@@ -116,6 +116,10 @@ public:
    */
   bool isLandmarkContained(const Landmark& lmk, Keypoint* keypoint = nullptr) const;
 
+  const CameraParams& getParams() const {
+    return camera_params_;
+  }
+
 
 private:
     const CameraParams camera_params_;

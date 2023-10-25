@@ -50,18 +50,60 @@ struct functional_keypoint {
 };
 
 
-struct Feature {
+// /**
+//  * @brief A 3D point on the surface of a scene
+//  *
+//  */
+// class Point {
+// public:
+//     DYNO_POINTER_TYPEDEFS(Point)
 
+//     TrackletId tracklet_id_; //should match observing features
+//     std::vector<FrameId> observing_frames_; //! which frames saw this keypoint (should also loosly mean age)
+//     Landmark landmark_; //! 3d position of the point in the world frame
+// }
+
+
+
+
+/**
+ * @brief 2D tracking and id information for a feature observation at a single frame
+ *
+ */
+class Feature {
+
+public:
     DYNO_POINTER_TYPEDEFS(Feature)
 
-    Keypoint keypoint_;
+    constexpr static TrackletId invalid_id = -1; //!can refer to and invalid id label (of type int)
+                                          //! including tracklet id, instance and tracking label
+
+    constexpr static auto invalid_depth = NaN; //! nan is used to indicate the absense of a depth value (since we have double)
+
+    Keypoint keypoint_; //! u,v keypoint at this frame (frame_id)
     Keypoint predicted_keypoint_; //from optical flow
     size_t age_;
-    KeyPointType type_;
-    TrackletId tracklet_id_{-1}; //starts invalid
+    KeyPointType type_; //! starts STATIC
+    TrackletId tracklet_id_; //starts invalid
     FrameId frame_id_;
-    bool inlier_{false};
-    ObjectId label_; //should be background_label if static
+    bool inlier_; //! Starts as inlier
+    ObjectId instance_label_; //! instance label as provided by the input mask
+    ObjectId tracking_label_; //! object tracking label that should indicate the same tracked object between frames
+
+    Depth depth_; //! Depth as provided by a depth image (not Z). Initalised as invalud_depth (NaN)
+
+    Feature() :
+        keypoint_(),
+        predicted_keypoint_(),
+        age_(0u),
+        type_(KeyPointType::STATIC),
+        tracklet_id_(invalid_id),
+        frame_id_(0u),
+        inlier_(true),
+        instance_label_(invalid_id),
+        tracking_label_(invalid_id),
+        depth_(invalid_depth) {}
+
 
     /**
      * @brief If the feature is valid - a combination of inlier and if the tracklet Id != -1
@@ -72,10 +114,43 @@ struct Feature {
      * @return false
      */
     inline bool usable() const {
-        return inlier_ && tracklet_id_ != -1;
+        return inlier_ && tracklet_id_ != invalid_id;
+    }
+
+    inline bool isStatic() const {
+        return type_ == KeyPointType::STATIC;
+    }
+
+    inline void markInvalid() {
+        tracklet_id_ = invalid_id;
+    }
+
+    inline bool hasDepth() const {
+        return !std::isnan(depth_);
     }
 };
 
 using FeaturePtrs = std::vector<Feature::Ptr>;
+
+//v inefficient to store in vectors
+struct FindFeatureByTrackletId
+{
+  TrackletId tracklet_id_;
+  FindFeatureByTrackletId(TrackletId tracklet_id) : tracklet_id_(tracklet_id)
+  {
+  }
+  FindFeatureByTrackletId(const Feature::Ptr& feature) : FindFeatureByTrackletId(feature->tracklet_id_)
+  {
+  }
+  bool operator()(const Feature& f) const
+  {
+    return f.tracklet_id_ == tracklet_id_;
+  }
+
+  bool operator()(const Feature::Ptr& f) const
+  {
+    return f->tracklet_id_ == tracklet_id_;
+  }
+};
 
 }

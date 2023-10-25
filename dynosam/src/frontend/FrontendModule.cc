@@ -27,8 +27,8 @@
 
 namespace dyno {
 
-FrontendModule::FrontendModule(const FrontendParams& params)
-    :   base_params_(params), frontend_state_(State::Boostrap) {}
+FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue)
+    :   base_params_(params), display_queue_(display_queue), frontend_state_(State::Boostrap) {}
 
 FrontendOutputPacketBase::ConstPtr FrontendModule::spinOnce(FrontendInputPacketBase::ConstPtr input) {
     CHECK(input);

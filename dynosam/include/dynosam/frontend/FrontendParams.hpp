@@ -43,6 +43,8 @@ struct FrontendParams {
 
   double depth_scale_factor = 256.0;
 
+  double base_line = 387.5744; //for now?
+
   // ORB detector params
   int n_features = 1200;
   double scale_factor = 1.2;

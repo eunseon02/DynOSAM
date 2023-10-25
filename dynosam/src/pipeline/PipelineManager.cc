@@ -22,15 +22,21 @@
  */
 
 #include "dynosam/pipeline/PipelineManager.hpp"
+#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include <glog/logging.h>
+
+//for now
+DEFINE_int32(frontend_type, 0, "Type of parser to use:\n "
+                              "0: RGBDInstance");
 
 namespace dyno {
 
-DynoPipelineManager::DynoPipelineManager(DataProvider::UniquePtr data_loader,  FrontendModule::Ptr frontend_module, FrontendDisplay::Ptr frontend_display)
-    :   data_loader_(std::move(data_loader))
+DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display)
+    :   params_(params),
+        data_loader_(std::move(data_loader)),
+        displayer_(&display_queue_, false)
 
 {
-    CHECK(frontend_module);
     CHECK(data_loader_);
     CHECK(frontend_display);
 
@@ -39,8 +45,25 @@ DynoPipelineManager::DynoPipelineManager(DataProvider::UniquePtr data_loader,  F
     data_loader_->registerImageContainerCallback(std::bind(&dyno::DataProviderModule::fillImageContainerQueue, data_provider_module_.get(), std::placeholders::_1));
     data_provider_module_->registerOutputQueue(&frontend_input_queue_);
 
+    FrontendModule::Ptr frontend = nullptr;
 
-    frontend_pipeline_ = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend_module);
+    const CameraParams& camera_params = params_.camera_params_;
+    //eventually from actual params
+    switch (FLAGS_frontend_type)
+    {
+        case 0: {
+            LOG(INFO) << "Making RGBDInstance frontend";
+            Camera::Ptr camera = std::make_shared<Camera>(camera_params);
+            frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
+        }   break;
+
+        default: {
+            LOG(FATAL) << "Not implemented!";
+        }  break;
+    }
+
+
+    frontend_pipeline_ = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend);
     frontend_pipeline_->registerOutputQueue(&frontend_output_queue_);
 
     frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>(&frontend_output_queue_, frontend_display);
@@ -50,18 +73,27 @@ DynoPipelineManager::DynoPipelineManager(DataProvider::UniquePtr data_loader,  F
 DynoPipelineManager::~DynoPipelineManager() {}
 
 void DynoPipelineManager::spin(bool parallel_run) {
+
+
     if(parallel_run) {
         LOG(INFO) << "Running PipelineManager with parallel_run=true";
+
 
         frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
         data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataProviderModule::spin, data_provider_module_.get()), "data-provider-spinner");
         frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
+
     }
     else {
         LOG(FATAL) << "Not implemented";
     }
 
-    data_loader_->spin();
+    while(data_loader_->spin() || frontend_pipeline_->isWorking()) {
+        displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
+        //a later problem!
+    }
+
+    display_queue_.shutdown(); //is this goign to help stop the seg fault?
 }
 
 

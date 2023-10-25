@@ -31,11 +31,11 @@
 namespace dyno {
 
 
-RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera)
-    : FrontendModule(frontend_params), camera_(camera)
+RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+    : FrontendModule(frontend_params, display_queue), camera_(camera), rgbd_processor_(frontend_params, camera)
 {
     CHECK_NOTNULL(camera_);
-    tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_);
+    tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 }
 
 bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
@@ -43,38 +43,75 @@ bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Pt
 }
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
-    // FrontendInputPacketBase input_v = *input;
-    // RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
-    // CHECK(image_packet);
+    ImageContainer::Ptr image_container = input->image_container_;
 
-    // size_t n_optical_flow, n_new_tracks;
+    //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
+    //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
+    //and then subsequently elimate non-moving objects later on
+    TrackingInputImages tracking_images;
+    if(image_container->hasSemanticMask()) {
+        CHECK(!image_container->hasMotionMask());
 
-    // InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
-    // tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
+        auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
+        tracking_images = TrackingInputImages(
+            intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
+            intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
+            ImageWrapper<ImageType::MotionMask>(
+                intermediate_tracking_images.get<ImageType::SemanticMask>()
+            )
+        );
+    }
+    else {
+        tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
+    }
+
+
+    size_t n_optical_flow, n_new_tracks;
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+
+    rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
+    previous_frame_ = frame;
+
     return {State::Nominal, nullptr};
 }
 
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
-    // FrontendInputPacketBase input_v = *input;
-    // RGBDInstancePacket::Ptr image_packet = safeCast<InputImagePacketBase, RGBDInstancePacket>(input_v.image_packet_);
-    // CHECK(image_packet);
+    ImageContainer::Ptr image_container = input->image_container_;
+    LOG(INFO) << "hi";
+
+    //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
+    //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
+    //and then subsequently elimate non-moving objects later on
+    TrackingInputImages tracking_images;
+    if(image_container->hasSemanticMask()) {
+        CHECK(!image_container->hasMotionMask());
+
+        auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
+        tracking_images = TrackingInputImages(
+            intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
+            intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
+            ImageWrapper<ImageType::MotionMask>(
+                intermediate_tracking_images.get<ImageType::SemanticMask>()
+            )
+        );
+    }
+    else {
+        tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
+    }
 
 
-    // LOG(INFO) << "In RGBD instance module frontend nominal";
+    size_t n_optical_flow, n_new_tracks;
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+    rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
 
-    // size_t n_optical_flow, n_new_tracks;
-    // InputImages tracking_images(image_packet->rgb_, image_packet->optical_flow_, image_packet->instance_mask_);
-    // tracker_->track(image_packet->frame_id_, image_packet->timestamp_, tracking_images, n_optical_flow, n_new_tracks);
+    cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
+    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
-
-    // // cv::imshow("RGB", image_packet->rgb_);
-    // // cv::waitKey(1);
-    // auto output = std::make_shared<FrontendOutputPacketBase>() ;
-    // output->input = input;
-
+    LOG(INFO) << "In RGBD instance module frontend nominal";
+    previous_frame_ = frame;
     return {State::Nominal, nullptr};
 }
 

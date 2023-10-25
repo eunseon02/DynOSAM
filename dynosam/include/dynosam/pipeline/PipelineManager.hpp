@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/dataprovider/DataProviderModule.hpp"
 #include "dynosam/dataprovider/DataProvider.hpp"
 #include "dynosam/frontend/FrontendPipeline.hpp"
@@ -38,18 +39,21 @@ public:
     DYNO_POINTER_TYPEDEFS(DynoPipelineManager)
 
     //why are some unique and some shared?? silly silly
-    DynoPipelineManager(DataProvider::UniquePtr data_loader, FrontendModule::Ptr frontend_module, FrontendDisplay::Ptr frontend_display);
+    DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display);
     ~DynoPipelineManager();
 
     void spin(bool parallel_run = true);
 
 private:
+    const DynoParams params_;
     FrontendPipeline::UniquePtr frontend_pipeline_;
     FrontendPipeline::InputQueue frontend_input_queue_;
     FrontendPipeline::OutputQueue frontend_output_queue_;
 
     //Display and Viz
     FrontendVizPipeline::UniquePtr frontend_viz_pipeline_;
+    ImageDisplayQueue display_queue_;
+    OpenCVImageDisplayQueue displayer_;
 
     //Data-provider pointers
     DataProviderModule::UniquePtr data_provider_module_;

@@ -32,7 +32,9 @@ struct FrontendOutputPacketBase {
     DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
 
     FrontendInputPacketBase::ConstPtr input; //for reference and possible display
-
+    // Frame::Ptr frame_;
+    //should this be here?
+    // std::vector<ImageToDisplay> debug_images;
 };
 
 

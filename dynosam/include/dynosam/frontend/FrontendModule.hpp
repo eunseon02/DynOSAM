@@ -29,6 +29,8 @@
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
+
 #include <type_traits>
 
 namespace dyno {
@@ -49,7 +51,7 @@ public:
 
     using SpinReturn = std::pair<State, FrontendOutputPacketBase::ConstPtr>;
 
-    FrontendModule(const FrontendParams& params);
+    FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
     ~FrontendModule() = default;
 
     FrontendOutputPacketBase::ConstPtr spinOnce(FrontendInputPacketBase::ConstPtr input);
@@ -62,6 +64,7 @@ protected:
 
 protected:
     const FrontendParams base_params_;
+    ImageDisplayQueue* display_queue_;
 
 private:
     std::atomic<State> frontend_state_;

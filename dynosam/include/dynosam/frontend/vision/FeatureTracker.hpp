@@ -28,6 +28,7 @@
 #include "dynosam/frontend/vision/ORBextractor.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -41,11 +42,13 @@ public:
     //and camera?
     //does no processing with any depth
     //if depth is a problem should be handled aftererds and separately
-    FeatureTracker(const FrontendParams& params, Camera::Ptr camera);
+    FeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue = nullptr);
     virtual ~FeatureTracker() {}
 
     //note MOTION MASK!!
     Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks);
+
+    cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const;
 
 
 protected:
@@ -65,6 +68,7 @@ private:
 protected:
     const FrontendParams params_;
     Camera::Ptr camera_;
+    ImageDisplayQueue* display_queue_;
 
 private:
     Frame::Ptr previous_frame_{ nullptr };

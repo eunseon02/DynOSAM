@@ -23,14 +23,39 @@
 
 #pragma once
 
+#include "dynosam/common/Types.hpp"
+#include "dynosam/common/Camera.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
+
+#include <opencv4/opencv2/opencv.hpp>
+#include <glog/logging.h>
+
 namespace dyno {
 
 
-struct VisionTools {
 
-    static void
+class RGBDProcessor {
 
-}
+public:
+    RGBDProcessor(const FrontendParams& params, Camera::Ptr camera);
+
+    //this is really disparty not depth
+    void updateDepth(Frame::Ptr frame, ImageWrapper<ImageType::Depth> disparity);
+
+private:
+    void disparityToDepth(const cv::Mat& disparity, cv::Mat& depth);
+    void setDepths(FeaturePtrs features, const cv::Mat& depth, double max_threshold);
 
 
-}
+protected:
+    const FrontendParams params_;
+    Camera::Ptr camera_;
+
+};
+
+
+} //dyno

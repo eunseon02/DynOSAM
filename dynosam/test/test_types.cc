@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/frontend/vision/Feature.hpp"
 
 using namespace dyno;
 
@@ -256,5 +257,36 @@ TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
         ImageWrapper<ImageType::OpticalFlow>(optical_flow),
         ImageWrapper<ImageType::SemanticMask>(semantic_mask)
     );}, InvalidImageContainerException);
+
+}
+
+
+TEST(Feature, checkInvalidState) {
+
+    Feature f;
+    EXPECT_TRUE(f.inlier_);
+    EXPECT_FALSE(f.usable()); //inlier initally but invalid tracking label
+
+    f.tracklet_id_ = 10;
+    EXPECT_TRUE(f.usable());
+
+    f.markInvalid();
+    EXPECT_FALSE(f.usable());
+
+    f.tracklet_id_ = 10u;
+    EXPECT_TRUE(f.usable());
+
+    f.inlier_ = false;
+    EXPECT_FALSE(f.usable());
+
+}
+
+TEST(Feature, checkDepth) {
+
+    Feature f;
+    EXPECT_FALSE(f.hasDepth());
+
+    f.depth_ = 12.0;
+    EXPECT_TRUE(f.hasDepth());
 
 }

@@ -148,6 +148,7 @@ public:
     static constexpr size_t N = sizeof...(ImageTypes);
 
 
+    ImageContainerSubset() {}
     explicit ImageContainerSubset(const ImageWrapper<ImageTypes>&... input_image_wrappers) : image_storage_(input_image_wrappers...)
     {
          //this is (not-pure) virtual function could be overloaded. This means that we're calling an overloaded function
@@ -155,6 +156,10 @@ public:
         validateSetup();
     }
     virtual ~ImageContainerSubset() = default;
+
+    //TODO: need to do test for default assignment
+    //eg ImageContainerSubset sub;
+    //sub = ImageContainerSubset(...types...)
 
 
     /**
@@ -189,8 +194,9 @@ public:
         return This::Index<ImageType>();
     }
 
+    //would also be nice to template on an ImageContainerSubset
     template<typename... SubsetImageTypes>
-    ImageContainerSubset<SubsetImageTypes...> makeSubset(const bool clone = false) {
+    ImageContainerSubset<SubsetImageTypes...> makeSubset(const bool clone = false) const {
         //the tuple of image wrappers to construct for the subset class
         using Subset = ImageContainerSubset<SubsetImageTypes...>;
         using WrappedImageTypesTupleSubset = typename Subset::WrappedImageTypesTuple;
@@ -259,6 +265,19 @@ public:
     }
 
     /**
+     * @brief Gets the corresponding ImageWrapper corresponding to the ImageType.
+     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
+     *
+     * @tparam ImageType
+     * @return const ImageWrapper<ImageType>&
+     */
+    template<typename ImageType>
+    const ImageWrapper<ImageType>& getImageWrapper() const {
+        constexpr size_t idx =  This::Index<ImageType>();
+        return std::get<idx>(image_storage_);
+    }
+
+    /**
      * @brief Safely Gets the corresponding image (cv::Mat) corresponding to the requested ImageType.
      * If the requested image does not exist (empty), false will be returned.
      *
@@ -301,18 +320,6 @@ public:
 
 protected:
 
-    /**
-     * @brief Gets the corresponding ImageWrapper corresponding to the ImageType.
-     * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.
-     *
-     * @tparam ImageType
-     * @return const ImageWrapper<ImageType>&
-     */
-    template<typename ImageType>
-    const ImageWrapper<ImageType>& getImageWrapper() const {
-        constexpr size_t idx =  This::Index<ImageType>();
-        return std::get<idx>(image_storage_);
-    }
 
     /**
      * @brief Validates that the input images (if not empty) are the same size.
@@ -356,7 +363,7 @@ protected:
     }
 
 protected:
-    const WrappedImageTypesTuple image_storage_;
+    WrappedImageTypesTuple image_storage_; //cannot be const so we can do default construction
 
 };
 
@@ -508,6 +515,14 @@ struct FrontendInputPacketBase {
         if(optional_gt) {
             CHECK_EQ(optional_gt_->frame_id_, image_container_->getFrameId());
         }
+    }
+
+    inline FrameId getFrameId() const {
+        return CHECK_NOTNULL(image_container_)->getFrameId();
+    }
+
+    inline FrameId getTimestamp() const {
+        return CHECK_NOTNULL(image_container_)->getTimestamp();
     }
 
 

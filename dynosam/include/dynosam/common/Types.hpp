@@ -36,6 +36,8 @@
 namespace dyno
 {
 
+static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
+
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
 
@@ -50,7 +52,8 @@ using TrackletId = long int;  // -1 for invalid landmarks. // int would be too
                             // small if it is 16 bits!
 using TrackletIds = std::vector<TrackletId>;
 
-
+using BearingVectors =
+    std::vector<gtsam::Vector3, Eigen::aligned_allocator<gtsam::Vector3>>;
 
 using Landmark = gtsam::Point3;
 using Landmarks = gtsam::Point3Vector; //! Vector of Landmarks using gtsam's definition for allocation

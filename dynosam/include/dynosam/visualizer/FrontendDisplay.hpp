@@ -27,8 +27,11 @@
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 
 
+#include "dynosam/visualizer/Visualizer-Definitions.hpp" //for image queue
+
 
 namespace dyno {
+
 
 class FrontendDisplay {
 public:
@@ -38,6 +41,7 @@ public:
     virtual ~FrontendDisplay() {}
 
     virtual void spinOnce(const FrontendOutputPacketBase& frontend_output) = 0;
+
 
 };
 

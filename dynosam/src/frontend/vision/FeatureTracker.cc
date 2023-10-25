@@ -23,6 +23,7 @@
 
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
@@ -33,20 +34,25 @@ DEFINE_int32(semantic_mask_step_size, 3, "The step sized used across the semanti
 
 namespace dyno {
 
-FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera)
+FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : params_(params),
-      camera_(camera) {
+      camera_(camera),
+      display_queue_(display_queue) {
     feature_detector_ = std::make_unique<ORBextractor>(
       params_.n_features, static_cast<float>(params_.scale_factor), params_.n_levels,
       params_.init_threshold_fast, params_.min_threshold_fast);
+
+    img_size_ = camera_->getParams().imageSize();
+    CHECK(!img_size_.empty());
 }
 
 Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks) {
 
     if(initial_computation_) {
         //intitial computation
+        const cv::Size& other_size = tracking_images.get<ImageType::RGBMono>().size();
         CHECK(!previous_frame_);
-        // img_size_ = input_images.img_.size();
+        CHECK(img_size_.width == other_size.width && img_size_.height == other_size.height);
         computeImageBounds(img_size_, min_x_, max_x_, min_y_, max_y_);
 
         grid_elements_width_inv_ = static_cast<double>(FRAME_GRID_COLS) / static_cast<double>(max_x_ - min_x_);
@@ -64,14 +70,95 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     FeaturePtrs static_features;
     trackStatic(frame_id, tracking_images, static_features, n_optical_flow, n_new_tracks);
 
-    // FeaturePtrs dynamic_features;
+    FeaturePtrs dynamic_features;
+    trackDynamic(frame_id, tracking_images, dynamic_features);
+
     // return nullptr;
     auto new_frame = std::make_shared<Frame>(frame_id, timestamp, tracking_images);
     new_frame->static_features_ = static_features;
+    new_frame->dynamic_features_ = dynamic_features;
+
 
     previous_frame_ = new_frame;
     return new_frame;
-    // trackDynamic(input_images, dynamic_features);
+
+}
+
+
+cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const {
+  cv::Mat img_rgb;
+
+  const cv::Mat& rgb = current_frame.tracking_images_.get<ImageType::RGBMono>();
+  rgb.copyTo(img_rgb);
+
+
+  static const cv::Scalar gray(0, 255, 255);
+  static const cv::Scalar red(0, 0, 255);
+  static const cv::Scalar green(0, 255, 0);
+  static const cv::Scalar blue(255, 0, 0);
+
+  // // Add extra corners if desired.
+  // for (const auto& px : extra_corners_gray) {
+  //   cv::circle(img_rgb, px, 4, gray, 2);
+  // }
+  // for (const auto& px : extra_corners_blue) {
+  //   cv::circle(img_rgb, px, 4, blue, 2);
+  // }
+
+  // Add all keypoints in cur_frame with the tracks.
+  for (size_t i = 0; i < current_frame.static_features_.size(); ++i) {
+    const Feature::Ptr& feature = current_frame.static_features_.at(i);
+    const Keypoint& px_cur = feature->keypoint_;
+    if (!feature->usable()) {  // Untracked landmarks are red.
+      cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 4, red, 2);
+    } else {
+
+
+      const auto& it = std::find_if(previous_frame.static_features_.begin(),
+                                 previous_frame.static_features_.end(),
+                                 FindFeatureByTrackletId(feature));
+      if (it != previous_frame.static_features_.end()) {
+        // If feature was in previous frame, display tracked feature with
+        // green circle/line:
+        cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
+
+        const Feature::Ptr& prev_feature = *it;
+        const Keypoint& px_prev = prev_feature->keypoint_;
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
+      } else {  // New feature tracks are blue.
+        cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 6, blue, 1);
+      }
+    }
+  }
+
+
+  // for (size_t i = 0; i < current_frame.dynamic_features_.size(); ++i) {
+  //   const Feature::Ptr& feature = current_frame.dynamic_features_.at(i);
+  //   const Keypoint& px_cur = feature->keypoint_;
+  //   if (!feature->usable()) {  // Untracked landmarks are red.
+  //     cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
+  //   } else {
+
+
+  //     const auto& it = std::find_if(previous_frame.dynamic_features_.begin(),
+  //                                previous_frame.dynamic_features_.end(),
+  //                                FindFeatureByTrackletId(feature));
+  //     if (it != previous_frame.dynamic_features_.end()) {
+  //       // If feature was in previous frame, display tracked feature with
+  //       // green circle/line:
+  //       // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
+
+  //       const Feature::Ptr& prev_feature = *it;
+  //       const Keypoint& px_prev = prev_feature->keypoint_;
+  //       cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
+  //     } else {  // New feature tracks are blue.
+  //       cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 1, blue, 1);
+  //     }
+  //   }
+  // }
+
+
+  return img_rgb;
 
 }
 
@@ -133,8 +220,13 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
         Feature::Ptr feature = constructStaticFeature(tracking_images, kp, new_age, tracklet_id, frame_id);
         if (feature)
         {
-          // cv::arrowedLine(viz, previous_feature->keypoint.pt, kp.pt, cv::Scalar(255, 0, 0));
-          // utils::DrawCircleInPlace(viz, kp.pt, cv::Scalar(0, 0, 255));
+
+          // cv::arrowedLine(viz,
+          //   utils::gtsamPointToCV(previous_feature->keypoint_),
+          //   utils::gtsamPointToCV(kp),
+          //   cv::Scalar(255, 0, 0));
+
+          // utils::drawCircleInPlace(viz, utils::gtsamPointToCV(kp), cv::Scalar(0, 0, 255));
           features_tracked.push_back(feature);
         }
       }
@@ -207,7 +299,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
             features_assigned.push_back(feature);
             new_features.push_back(feature);
             // draw an untracked kp
-            // utils::drawCircleInPlace(viz, feature->keypoint_.pt, cv::Scalar(0, 255, 0));
+            utils::drawCircleInPlace(viz, utils::gtsamPointToCV(feature->keypoint_), cv::Scalar(0, 255, 0));
           }
         }
       }
@@ -222,9 +314,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   static_features.clear();
   static_features = features_assigned;
 
-  cv::imshow("Optical flow", viz);
-  cv::waitKey(1);
-
+  // if(display_queue_) display_queue_->push(ImageToDisplay("static tracks", viz));
 
 
 }
@@ -236,12 +326,12 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
   const cv::Mat& flow = tracking_images.get<ImageType::OpticalFlow>();
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
+  FeaturePtrs sampled_features, tracked_features;
+  ObjectIds instance_labels;
+
 
   // cv::Mat viz;
   // rgb.copyTo(viz);
-
-  FeaturePtrs sampled_features, tracked_features;
-  ObjectIds instance_labels;
 
   // a mask to show which feature have been with optical flow from the previous frame
   // zeros mean have not been tracked
@@ -271,7 +361,10 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         // // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
         // feature->instance_label = images.semantic_mask.at<InstanceLabel>(y, x);
-        feature->label_ = predicted_label;
+
+        //this should be up to date after we update the mask with the propogate mask
+        feature->instance_label_ = predicted_label;
+        feature->tracking_label_ = predicted_label;
         feature->frame_id_ = frame_id;
         feature->type_ = KeyPointType::DYNAMIC;
         feature->age_ = new_age;
@@ -279,13 +372,13 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->keypoint_ = kp;
         feature->predicted_keypoint_ = Keypoint(kp(0) + flow_xe, kp(1) + flow_ye);
 
-        // propogate dynamic object label
-        feature->label_ = previous_dynamic_feature->label_;
+        // propogate dynamic object label??
+        // feature->label_ = previous_dynamic_feature->label_;
 
         // TODO: change to tracked
         sampled_features.push_back(feature);
         tracked_feature_mask.at<uchar>(y, x) = 1;
-        instance_labels.push_back(feature->label_);
+        instance_labels.push_back(feature->instance_label_);
         // calculate scene flow
         // Landmark lmk_current, lmk_previous;
         // camera_.backProject(feature->keypoint, feature->depth, &lmk_current);
@@ -293,6 +386,13 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
         // //put both into the world frame
         // lmk_previous = previous_frame_->pose_.transformFrom(lmk_previous);
+
+        //  cv::arrowedLine(viz,
+        //     utils::gtsamPointToCV(previous_feature->keypoint_),
+        //     utils::gtsamPointToCV(kp),
+        //     cv::Scalar(255, 0, 0));
+
+        //   utils::drawCircleInPlace(viz, utils::gtsamPointToCV(kp), cv::Scalar(0, 0, 255));
 
         // cv::arrowedLine(viz, previous_dynamic_feature->keypoint.pt, feature->keypoint.pt,
         //                 Display::getObjectColour(feature->instance_label));
@@ -340,7 +440,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         //   continue;
         // }
 
-        feature->label_ = motion_mask.at<ObjectId>(i, j);
+        feature->instance_label_ = motion_mask.at<ObjectId>(i, j);
+        feature->tracking_label_ = motion_mask.at<ObjectId>(i, j);
         feature->frame_id_ = frame_id;
         feature->type_ = KeyPointType::DYNAMIC;
         feature->age_ = 0;
@@ -352,8 +453,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->keypoint_ = Keypoint(j, i);
 
         sampled_features.push_back(feature);
-        instance_labels.push_back(feature->label_);
-        // utils::DrawCircleInPlace(viz, feature->keypoint.pt, cv::Scalar(0, 255, 0));
+        instance_labels.push_back(feature->instance_label_);
       }
     }
   }
@@ -432,9 +532,8 @@ Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& t
   feature->frame_id_ = frame_id;
   feature->type_ = KeyPointType::STATIC;
   feature->inlier_ = true;
-  feature->label_ = background_label;
-
-  // the flow is not actually what
+  feature->instance_label_ = background_label;
+  feature->tracking_label_ = background_label;
   feature->predicted_keypoint_ = predicted_kp;
   return feature;
 }

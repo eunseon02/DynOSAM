@@ -35,6 +35,7 @@
 #include <gtsam/nonlinear/NonlinearFactor.h>
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <opengv/types.hpp>
 
 
 namespace dyno
@@ -64,14 +65,18 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
 
+
+
+
 template <typename T>
 gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point);
+cv::Point2d gtsamPointToCV(const gtsam::Point2& point);
 
 template <typename T>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points);
 
-
-
+//  converts an opengv transformation (3x4 [R t] matrix) to a gtsam::Pose3
+gtsam::Pose3 openGvTfToGtsamPose3(const opengv::transformation_t& RT);
 
 
 template <class T>

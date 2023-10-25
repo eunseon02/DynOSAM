@@ -42,12 +42,16 @@ public:
     std::vector<Feature::Ptr> static_features_;
     std::vector<Feature::Ptr> dynamic_features_;
 
+    //also static points that are not used?
+
     Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
         :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
 
     const FrameId frame_id_;
     const Timestamp timestamp_;
     const TrackingInputImages tracking_images_;
+
+    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
 };
 
 

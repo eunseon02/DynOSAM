@@ -23,29 +23,31 @@
 
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/pipeline/PipelineManager.hpp"
-#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
-
-#include "dynosam/common/Camera.hpp"
+#include "dynosam/pipeline/PipelineParams.hpp"
 
 #include <glog/logging.h>
+#include <gflags/gflags.h>
+
+
+DEFINE_string(path_to_kitti, "/root/data/kitti", "Path to KITTI dataset");
+//TODO: (jesse) many better ways to do this with ros - just for now
+DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containing the yaml files with the VIO parameters.");
 
 int main(int argc, char* argv[]) {
 
+    google::ParseCommandLineFlags(&argc, &argv, true);
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = 1;
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    dyno::CameraParams camera_params = dyno::CameraParams::fromYamlFile("some_file.yaml");
-    dyno::Camera::Ptr camera = std::make_shared<dyno::Camera>(camera_params);
+    dyno::DynoParams params(FLAGS_params_folder_path);
 
-
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>("/root/data/kitti/0000");
-    auto frontend_module = std::make_shared<dyno::RGBDInstanceFrontendModule>(dyno::FrontendParams(), camera);
+    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti);
     auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
-    dyno::DynoPipelineManager pipeline(std::move(data_loader), frontend_module, frontend_display);
+    dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
     pipeline.spin();
 
 

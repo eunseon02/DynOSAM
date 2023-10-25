@@ -21,6 +21,7 @@ find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(opengv REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -64,6 +65,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProviderUtils.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
+  src/frontend/vision/Feature.cc
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
@@ -72,8 +74,11 @@ add_library(${PROJECT_NAME} SHARED
 
   src/frontend/vision/ORBextractor.cc
   src/frontend/vision/FeatureTracker.cc
+  src/frontend/vision/VisionTools.cc
+  src/frontend/vision/MotionSolver.cc
 
   src/pipeline/PipelineManager.cc
+  src/pipeline/PIpelineParams.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
@@ -81,6 +86,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc
+  src/visualizer/Visualizer-Definitions.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}

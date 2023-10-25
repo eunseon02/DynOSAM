@@ -5,7 +5,7 @@ CONTAINER_IMAGE_NAME=acfr-rpg/dyno_sam
 
 ### EDIT THIS TO WHEREVER YOU'RE STORING YOU DATA ###
 # folder should exist before you mount it
-LOCAL_DATA_FOLDER=~/datasets/VDO-SAM/
+LOCAL_DATA_FOLDER=/media/jmor6670/T7/datasets
 LOCAL_RESULTS_FOLDER=~/results/
 LOCAL_DYNO_SAM_FOLDER=~/Code/src/DynOSAM/
 

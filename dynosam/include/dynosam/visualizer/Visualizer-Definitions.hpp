@@ -25,21 +25,36 @@
 
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
+#include "dynosam/pipeline/ThreadSafeQueue.hpp"
+
+#include <glog/logging.h>
+#include <opencv4/opencv2/opencv.hpp>
 
 namespace dyno {
 
-// //TODO: for now
-// struct BackendOutputPacket {
-// DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
-// };
 
-// struct VisualizerInput : PipelinePayload {
-//     DYNO_POINTER_TYPEDEFS(VisualizerInput)
+struct ImageToDisplay {
+  ImageToDisplay() = default;
+  ImageToDisplay(const std::string& name, const cv::Mat& image)
+    //clone necessary?
+      : name_(name), image_(image.clone()) {}
 
-//     const FrontendOutputPacketBase::ConstPtr frontend_output_;
-//     const BackendOutputPacket::ConstPtr frontend_viz_output_;
-// };
+  std::string name_;
+  cv::Mat image_;
+};
 
+using ImageDisplayQueue = ThreadsafeQueue<ImageToDisplay>;
 
+class OpenCVImageDisplayQueue {
+
+public:
+    OpenCVImageDisplayQueue(ImageDisplayQueue* display_queue, bool parallel_run);
+
+    void process();
+
+private:
+    ImageDisplayQueue* display_queue_;
+    bool parallel_run_;
+};
 
 } //dyno

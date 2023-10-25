@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/utils/Macros.hpp"
+#include "dynosam/dataprovider/DataProviderUtils.hpp" //for throwExceptionIfPathInvalid
 
 #include <stdlib.h>
 #include <fstream>
@@ -42,6 +43,7 @@ class YamlParser {
   DYNO_POINTER_TYPEDEFS(YamlParser)
 
   YamlParser(const std::string& filepath) : fs_(), filepath_(filepath) {
+    throwExceptionIfPathInvalid(filepath_);
     openFile(filepath, &fs_);
   }
   ~YamlParser() { closeFile(&fs_); }
