@@ -32,7 +32,7 @@ namespace dyno {
 
 
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
-    : FrontendModule(frontend_params, display_queue), camera_(camera), rgbd_processor_(frontend_params, camera)
+    : FrontendModule(frontend_params, display_queue), camera_(camera), rgbd_processor_(frontend_params, camera), motion_solver_(frontend_params)
 {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -80,7 +80,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
     ImageContainer::Ptr image_container = input->image_container_;
-    LOG(INFO) << "hi";
 
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
@@ -107,12 +106,48 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
     rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
 
+
+    AbsolutePoseCorrespondences correspondences;
+    rgbd_processor_.getCorrespondences(correspondences, *previous_frame_, *frame, KeyPointType::STATIC);
+
+    LOG(INFO) << "Gotten correspondances, solving camera pose";
+
+    // //also update the inliers outliers?
+    TrackletIds inliers, outliers;
+    frame->T_world_camera_ = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+    LOG(INFO) << "Solved camera pose";
+
+    TrackletIds tracklets = frame->static_features_.collectTracklets();
+    CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
+
+    frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
+
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
+    LandmarkMap landmark_map; //map of current features in world frame
+    for(const Feature::Ptr& feature : frame->static_features_) {
+        if(feature->usable()) {
+            CHECK(feature->hasDepth());
+
+            Landmark lmk_world;
+            camera_->backProject(
+                feature->keypoint_, feature->depth_, &lmk_world, frame->T_world_camera_
+            );
+
+            landmark_map.insert({feature->tracklet_id_, lmk_world});
+        }
+    }
+
     LOG(INFO) << "In RGBD instance module frontend nominal";
     previous_frame_ = frame;
-    return {State::Nominal, nullptr};
+
+
+    auto output = std::make_shared<FrontendOutputPacketBase>();
+    output->input_ = input;
+    output->frame_ = frame;
+    output->tracked_landmarks = landmark_map;
+    return {State::Nominal, output};
 }
 
 } //dyno

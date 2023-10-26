@@ -75,8 +75,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
 
     // return nullptr;
     auto new_frame = std::make_shared<Frame>(frame_id, timestamp, tracking_images);
-    new_frame->static_features_ = static_features;
-    new_frame->dynamic_features_ = dynamic_features;
+    new_frame->static_features_ = FeatureContainer(static_features);
+    new_frame->dynamic_features_ = FeatureContainer(dynamic_features);
 
 
     previous_frame_ = new_frame;
@@ -113,16 +113,11 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
       cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 4, red, 2);
     } else {
 
-
-      const auto& it = std::find_if(previous_frame.static_features_.begin(),
-                                 previous_frame.static_features_.end(),
-                                 FindFeatureByTrackletId(feature));
-      if (it != previous_frame.static_features_.end()) {
+      const Feature::Ptr& prev_feature = previous_frame.static_features_.getByTrackletId(feature->tracklet_id_);
+      if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
         cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
-
-        const Feature::Ptr& prev_feature = *it;
         const Keypoint& px_prev = prev_feature->keypoint_;
         cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
       } else {  // New feature tracks are blue.
@@ -136,19 +131,15 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   //   const Feature::Ptr& feature = current_frame.dynamic_features_.at(i);
   //   const Keypoint& px_cur = feature->keypoint_;
   //   if (!feature->usable()) {  // Untracked landmarks are red.
-  //     cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
+  //     // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
   //   } else {
 
 
-  //     const auto& it = std::find_if(previous_frame.dynamic_features_.begin(),
-  //                                previous_frame.dynamic_features_.end(),
-  //                                FindFeatureByTrackletId(feature));
-  //     if (it != previous_frame.dynamic_features_.end()) {
+  //     const Feature::Ptr& prev_feature = previous_frame.dynamic_features_.getByTrackletId(feature->tracklet_id_);
+  //     if (prev_feature) {
   //       // If feature was in previous frame, display tracked feature with
   //       // green circle/line:
   //       // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
-
-  //       const Feature::Ptr& prev_feature = *it;
   //       const Keypoint& px_prev = prev_feature->keypoint_;
   //       cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
   //     } else {  // New feature tracks are blue.
@@ -212,9 +203,12 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
       const size_t tracklet_id = previous_feature->tracklet_id_;
       const size_t age = previous_feature->age_;
       Keypoint kp = previous_feature->predicted_keypoint_;
-      //TODO: is contained
+      const int x = functional_keypoint::u(kp);
+      const int y = functional_keypoint::v(kp);
 
-      if (camera_->isKeypointContained(kp) && previous_feature->usable())
+      ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
+
+      if (camera_->isKeypointContained(kp) && previous_feature->usable() && instance_label == background_label)
       {
         size_t new_age = age + 1;
         Feature::Ptr feature = constructStaticFeature(tracking_images, kp, new_age, tracklet_id, frame_id);

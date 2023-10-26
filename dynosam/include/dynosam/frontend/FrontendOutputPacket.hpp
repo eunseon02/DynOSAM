@@ -25,14 +25,16 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 
 namespace dyno {
 
 struct FrontendOutputPacketBase {
     DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
 
-    FrontendInputPacketBase::ConstPtr input; //for reference and possible display
-    // Frame::Ptr frame_;
+    FrontendInputPacketBase::ConstPtr input_; //for reference and possible display
+    Frame::Ptr frame_;
+    LandmarkMap tracked_landmarks;
     //should this be here?
     // std::vector<ImageToDisplay> debug_images;
 };

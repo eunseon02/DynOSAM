@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,41 +21,30 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam_ros/PipelineRos.hpp"
+#include "dynosam_ros/FrontendDisplayRos.hpp"
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
+#include <dynosam/dataprovider/KittiDataProvider.hpp>
+#include <dynosam/pipeline/PipelineParams.hpp>
 
+#include <glog/logging.h>
+#include <gflags/gflags.h>
+
+DEFINE_string(path_to_kitti, "/root/data/kitti", "Path to KITTI dataset");
+//TODO: (jesse) many better ways to do this with ros - just for now
+DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containing the yaml files with the VIO parameters.");
 
 namespace dyno {
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
+DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : rclcpp::Node("dynosam", options)
+{
 
-class Frame {
+    dyno::DynoParams params(FLAGS_params_folder_path);
 
-public:
-    DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
+    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti);
+    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
 
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
+   pipeline_ = std::make_unique<DynoPipelineManager>(params, std::move(data_loader), frontend_display);
+}
 
-    //also static points that are not used?
-
-    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
-
-    const FrameId frame_id_;
-    const Timestamp timestamp_;
-    const TrackingInputImages tracking_images_;
-
-    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
-};
-
-
-
-
-
-} //dyno
+}

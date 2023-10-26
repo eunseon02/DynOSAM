@@ -24,6 +24,7 @@
 
 #include "dynosam/common/Types.hpp"
 
+#include <map>
 #include <vector>
 
 namespace dyno {
@@ -131,26 +132,43 @@ public:
 };
 
 using FeaturePtrs = std::vector<Feature::Ptr>;
+using FeaturePair = std::pair<Feature::Ptr, Feature::Ptr>; //! Pair of feature (shared) pointers
+using FeaturePairs = std::vector<FeaturePair>; //! Vector of feature pairs
 
-//v inefficient to store in vectors
-struct FindFeatureByTrackletId
-{
-  TrackletId tracklet_id_;
-  FindFeatureByTrackletId(TrackletId tracklet_id) : tracklet_id_(tracklet_id)
-  {
-  }
-  FindFeatureByTrackletId(const Feature::Ptr& feature) : FindFeatureByTrackletId(feature->tracklet_id_)
-  {
-  }
-  bool operator()(const Feature& f) const
-  {
-    return f.tracklet_id_ == tracklet_id_;
-  }
+//contains a set of features (usually per frame) that can be quickly accessed by tracklet id or iteterated over
+class FeatureContainer {
+public:
+    using TrackletToFeatureMap = std::unordered_map<TrackletId, Feature::Ptr>;
 
-  bool operator()(const Feature::Ptr& f) const
-  {
-    return f->tracklet_id_ == tracklet_id_;
-  }
+    FeatureContainer();
+    FeatureContainer(const FeaturePtrs feature_vector);
+
+    void add(Feature::Ptr feature);
+    TrackletIds collectTracklets(bool only_usable = true) const;
+
+    void markOutliers(const TrackletIds outliers);
+
+    size_t size() const;
+
+    Feature::Ptr getByTrackletId(TrackletId tracklet_id) const;
+    Feature::Ptr at(size_t i) const;
+
+    bool exists(TrackletId tracklet_id) const;
+
+    //vector begin
+    inline FeaturePtrs::iterator begin() { return feature_vector_.begin(); }
+    inline FeaturePtrs::const_iterator begin() const { return feature_vector_.cbegin(); }
+
+    //vector end
+    inline FeaturePtrs::iterator end() { return feature_vector_.end(); }
+    inline FeaturePtrs::const_iterator end() const { return feature_vector_.cend(); }
+
+
+private:
+    TrackletToFeatureMap feature_map_;
+    FeaturePtrs feature_vector_;
 };
+
+
 
 }

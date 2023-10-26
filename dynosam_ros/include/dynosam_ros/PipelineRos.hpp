@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,39 +23,25 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
+#include <dynosam/pipeline/PipelineManager.hpp>
 
+#include "rclcpp/node.hpp"
+#include "rclcpp/node_options.hpp"
 
 namespace dyno {
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
-
-class Frame {
+class DynoPipelineManagerRos  : public rclcpp::Node {
 
 public:
-    DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
+    explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
+    bool spinOnce() {
+        return CHECK_NOTNULL(pipeline_)->spin();
+    }
 
-    //also static points that are not used?
+private:
+    DynoPipelineManager::UniquePtr pipeline_;
 
-    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
-
-    const FrameId frame_id_;
-    const Timestamp timestamp_;
-    const TrackingInputImages tracking_images_;
-
-    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
 };
 
-
-
-
-
-} //dyno
+}

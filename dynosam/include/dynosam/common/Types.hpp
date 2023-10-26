@@ -57,6 +57,7 @@ using BearingVectors =
 
 using Landmark = gtsam::Point3;
 using Landmarks = gtsam::Point3Vector; //! Vector of Landmarks using gtsam's definition for allocation
+using LandmarkMap = std::unordered_map<TrackletId, Landmark>;
 
 using Keypoint = gtsam::Point2;
 using Keypoints = gtsam::Point2Vector; //! Vector of 2D keypoints using gtsam's definition for allocation

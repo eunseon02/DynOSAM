@@ -79,6 +79,14 @@ void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk) 
     *lmk = camera_impl_->backproject(kp, depth);
 }
 
+//TODO: no tests
+void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, const gtsam::Pose3& X_world) const {
+  CHECK(lmk);
+  Landmark lmk_c;
+  backProject(kp, depth, &lmk_c);
+  *lmk = X_world * lmk_c;
+}
+
 bool Camera::isLandmarkContained(const Landmark& lmk, Keypoint* keypoint) const {
     Keypoint kp;
     project(lmk, &kp);

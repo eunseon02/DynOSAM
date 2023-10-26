@@ -27,6 +27,7 @@
 #include "dynosam/frontend/FrontendModule.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
+#include "dynosam/frontend/vision/MotionSolver.hpp"
 
 namespace dyno {
 
@@ -40,6 +41,7 @@ public:
 private:
     Camera::Ptr camera_;
     RGBDProcessor rgbd_processor_;
+    MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
 
     Frame::Ptr previous_frame_;

@@ -23,11 +23,84 @@
 
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
+#include <algorithm>  // std::set_difference, std::sort
+#include <vector>     // std::vector
+
+
+
 namespace dyno {
+
+FrameProcessor::FrameProcessor(const FrontendParams& params, Camera::Ptr camera) : params_(params), camera_(CHECK_NOTNULL(camera)) {}
+
+void FrameProcessor::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const {
+  correspondences.clear();
+  FeaturePairs feature_correspondences;
+  getCorrespondences(feature_correspondences, previous_frame, current_frame, kp_type);
+
+  LOG(INFO) << "Found correspondences " << feature_correspondences.size();
+
+  //this will also take a point in the camera frame and put into world frame
+  for(const auto& pair : feature_correspondences) {
+    const Feature::Ptr& prev_feature = pair.first;
+    const Feature::Ptr& curr_feature = pair.second;
+
+    CHECK(prev_feature);
+    CHECK(curr_feature);
+
+    CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
+
+
+    //this will not work for monocular or some other system that never has depth but will eventually have a point?
+    if(!prev_feature->hasDepth()) {
+      throw std::runtime_error("Error in FrameProcessor::getCorrespondences for AbsolutePoseCorrespondences - previous feature does not have depth!");
+    }
+
+    //eventuall map?
+    Landmark lmk_w;
+    camera_->backProject(prev_feature->keypoint_, prev_feature->depth_, &lmk_w, previous_frame.T_world_camera_);
+    correspondences.push_back(TrackletCorrespondance(prev_feature->tracklet_id_, lmk_w, curr_feature->keypoint_));
+  }
+}
+
+void FrameProcessor::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const {
+  if(kp_type == KeyPointType::STATIC) {
+    getStaticCorrespondences(correspondences, previous_frame, current_frame);
+  }
+  else {
+    getDynamicCorrespondences(correspondences, previous_frame, current_frame);
+  }
+}
+
+
+void FrameProcessor::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const {
+  getCorrespondencesFromContainer(correspondences, previous_frame.static_features_, current_frame.static_features_);
+}
+
+void FrameProcessor::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const {
+  getCorrespondencesFromContainer(correspondences, previous_frame.dynamic_features_, current_frame.dynamic_features_);
+}
+
+void FrameProcessor::getCorrespondencesFromContainer(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features) const {
+  correspondences.clear();
+
+  for(const auto& curr_feature : current_features) {
+    //check if previous feature and is valid
+    if(previous_features.exists(curr_feature->tracklet_id_)) {
+      const auto prev_feature = previous_features.getByTrackletId(curr_feature->tracklet_id_);
+      CHECK(prev_feature);
+
+      //only if valid
+      if(prev_feature->usable()) {
+        correspondences.push_back({prev_feature, curr_feature});
+      }
+    }
+  }
+}
+
 
 
 RGBDProcessor::RGBDProcessor(const FrontendParams& params, Camera::Ptr camera)
-    : params_(params), camera_(camera) {}
+    : FrameProcessor(params, camera) {}
 
 
 void RGBDProcessor::updateDepth(Frame::Ptr frame, ImageWrapper<ImageType::Depth> disparity) {
@@ -56,7 +129,7 @@ void RGBDProcessor::disparityToDepth(const cv::Mat& disparity, cv::Mat& depth) {
   }
 }
 
-void RGBDProcessor::setDepths(FeaturePtrs features, const cv::Mat& depth, double max_threshold) {
+void RGBDProcessor::setDepths(FeatureContainer features, const cv::Mat& depth, double max_threshold) {
     for(Feature::Ptr feature : features) {
 
         if(!feature) continue;
@@ -78,6 +151,25 @@ void RGBDProcessor::setDepths(FeaturePtrs features, const cv::Mat& depth, double
             feature->depth_ = d;
         }
     }
+}
+
+
+void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklets, TrackletIds& outliers)
+{
+  VLOG_IF(1, inliers.size() > tracklets.size())
+      << "Usage warning: inlier size (" << inliers.size() << ") > tracklets size (" << tracklets.size()
+      << "). Are you parsing inliers as tracklets incorrectly?";
+  outliers.clear();
+  TrackletIds inliers_sorted(inliers.size()), tracklets_sorted(tracklets.size());
+  std::copy(inliers.begin(), inliers.end(), inliers_sorted.begin());
+  std::copy(tracklets.begin(), tracklets.end(), tracklets_sorted.begin());
+
+  std::sort(inliers_sorted.begin(), inliers_sorted.end());
+  std::sort(tracklets_sorted.begin(), tracklets_sorted.end());
+
+  // full set A (tracklets) must be first and inliers MUST be a subset of A for the set_difference function to work
+  std::set_difference(tracklets_sorted.begin(), tracklets_sorted.end(), inliers_sorted.begin(), inliers_sorted.end(),
+                      std::inserter(outliers, outliers.begin()));
 }
 
 

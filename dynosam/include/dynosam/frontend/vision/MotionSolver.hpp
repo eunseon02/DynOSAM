@@ -24,6 +24,8 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
+#include "dynosam/frontend/vision/Vision-Definitions.hpp"
 
 
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
@@ -42,7 +44,7 @@ public:
     MotionSolver(const FrontendParams& params);
 
     //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
-    gtsam::Pose3 solveCameraPose(const Keypoints& current_keypoints, const Landmarks& previous_points);
+    gtsam::Pose3 solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
 
 protected:
     const FrontendParams params_;

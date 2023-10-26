@@ -121,10 +121,11 @@ ament_export_libraries(${PROJECT_NAME}
   gflags
   opengv
   Boost::boost
+  ${OpenCV_LIBRARIES}
 )
 
 # ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
-ament_export_dependencies(rclcpp std_msgs sensor_msgs)
+ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV)
 
 
 target_include_directories(${PROJECT_NAME}
@@ -133,6 +134,7 @@ target_include_directories(${PROJECT_NAME}
     ${GFLAGS_INCLUDE_DIRS}
     ${GLOG_INCLUDE_DIRS}
     ${GTSAM_INCLUDE_DIR}
+    ${OPENGV_INCLUDE_DIR}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 
@@ -186,6 +188,7 @@ if(BUILD_TESTING)
     test/test_camera_params.cc
     test/test_camera.cc
     test/internal/tmp_file.cc
+    test/test_tools.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

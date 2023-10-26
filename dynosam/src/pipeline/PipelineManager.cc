@@ -68,32 +68,29 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
     frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>(&frontend_output_queue_, frontend_display);
 
+    launchSpinners();
+
 }
 
 DynoPipelineManager::~DynoPipelineManager() {}
 
-void DynoPipelineManager::spin(bool parallel_run) {
+bool DynoPipelineManager::spin() {
 
-
-    if(parallel_run) {
-        LOG(INFO) << "Running PipelineManager with parallel_run=true";
-
-
-        frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
-        data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataProviderModule::spin, data_provider_module_.get()), "data-provider-spinner");
-        frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
-
-    }
-    else {
-        LOG(FATAL) << "Not implemented";
-    }
-
-    while(data_loader_->spin() || frontend_pipeline_->isWorking()) {
+    if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
         displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
         //a later problem!
+        return true;
     }
+    return false;
 
-    display_queue_.shutdown(); //is this goign to help stop the seg fault?
+}
+
+
+void DynoPipelineManager::launchSpinners() {
+    LOG(INFO) << "Running PipelineManager with parallel_run=true";
+    frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
+    data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataProviderModule::spin, data_provider_module_.get()), "data-provider-spinner");
+    frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
 }
 
 

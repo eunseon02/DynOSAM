@@ -20,6 +20,8 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
+find_package(image_transport REQUIRED)
+find_package(cv_bridge REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(dynosam REQUIRED)
@@ -36,7 +38,8 @@ include_directories(include)
 
 # build library
 add_library(${PROJECT_NAME} SHARED
-  src/tmp.cc
+  src/PipelineRos.cc
+  src/FrontendDisplayRos.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}
@@ -48,6 +51,8 @@ ament_target_dependencies(${PROJECT_NAME}
   std_msgs
   sensor_msgs
   dynosam
+  image_transport
+  cv_bridge
   eigen3_cmake_module
   Eigen3
   diagnostic_updater)
@@ -68,6 +73,7 @@ ament_export_dependencies(rclcpp std_msgs sensor_msgs dynosam)
 
 target_include_directories(${PROJECT_NAME}
   PUBLIC
+  ${rclcpp_INCLUDE_DIRS}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 

@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,42 +20,42 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
-#pragma once
-
+#include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
+
+#include <gtest/gtest.h>
+
+using namespace dyno;
 
 
-namespace dyno {
+TEST(VisionTools, determineOutlierIdsBasic)
+{
+  TrackletIds tracklets = { 1, 2, 3, 4, 5 };
+  TrackletIds inliers = { 1, 2 };
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
+  TrackletIds expected_outliers = { 3, 4, 5 };
+  TrackletIds outliers;
+  determineOutlierIds(inliers, tracklets, outliers);
+  EXPECT_EQ(expected_outliers, outliers);
+}
 
-class Frame {
+TEST(VisionTools, determineOutlierIdsUnorderd)
+{
+  TrackletIds tracklets = { 12, 45, 1, 85, 3, 100 };
+  TrackletIds inliers = { 3, 1, 100 };
 
-public:
-    DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
+  TrackletIds expected_outliers = { 12, 45, 85 };
+  TrackletIds outliers;
+  determineOutlierIds(inliers, tracklets, outliers);
+  EXPECT_EQ(expected_outliers, outliers);
+}
 
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
+TEST(VisionTools, determineOutlierIdsNoSubset)
+{
+  TrackletIds tracklets = { 12, 45, 1, 85, 3, 100 };
+  TrackletIds inliers = { 12, 45, 1, 85, 3, 100 };
 
-    //also static points that are not used?
-
-    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
-
-    const FrameId frame_id_;
-    const Timestamp timestamp_;
-    const TrackingInputImages tracking_images_;
-
-    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
-};
-
-
-
-
-
-} //dyno
+  TrackletIds outliers = { 4, 5, 6 };  // also add a test that outliers is cleared
+  determineOutlierIds(inliers, tracklets, outliers);
+  EXPECT_TRUE(outliers.empty());
+}

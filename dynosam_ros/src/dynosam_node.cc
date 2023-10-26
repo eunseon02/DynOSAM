@@ -23,8 +23,33 @@
 
 
 
-// #include "dynosam_ros/tmp_ros.h"
+// #inclu
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp/executor.hpp"
+
+#include "dynosam_ros/PipelineRos.hpp"
 
 int main(int argc, char* argv[]) {
+
+    auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = 1;
+    FLAGS_colorlogtostderr = 1;
+    FLAGS_log_prefix = 1;
+
+    rclcpp::NodeOptions options;
+    options.arguments(args);
+
+    rclcpp::executors::SingleThreadedExecutor exec;
+    auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>(options);
+
+    exec.add_node(ros_pipeline);
+    while(rclcpp::ok()) {
+        if(!ros_pipeline->spinOnce()) {
+            break;
+        }
+
+        exec.spin_some();
+    }
 
 }

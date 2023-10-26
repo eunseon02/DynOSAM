@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,41 +21,22 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam_ros/FrontendDisplayRos.hpp"
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-
+#include <glog/logging.h>
+#include "rclcpp/qos.hpp"
 
 namespace dyno {
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
+FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHECK_NOTNULL(node)) {
 
-class Frame {
+    // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
+    tracking_image_pub_ = image_transport::create_publisher(node.get(), "~/tracking_image");
+    tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/tracked_points", rclcpp::SensorDataQoS());
+}
 
-public:
-    DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
+void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase& frontend_output) {
 
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
+}
 
-    //also static points that are not used?
-
-    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
-
-    const FrameId frame_id_;
-    const Timestamp timestamp_;
-    const TrackingInputImages tracking_images_;
-
-    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
-};
-
-
-
-
-
-} //dyno
+}

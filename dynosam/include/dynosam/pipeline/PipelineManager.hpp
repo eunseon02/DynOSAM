@@ -42,7 +42,12 @@ public:
     DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display);
     ~DynoPipelineManager();
 
-    void spin(bool parallel_run = true);
+    //need on shutdown etc for ros
+    //spin once
+    bool spin();
+
+private:
+    void launchSpinners();
 
 private:
     const DynoParams params_;

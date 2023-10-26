@@ -35,7 +35,11 @@
 #include <gtsam/nonlinear/NonlinearFactor.h>
 
 #include <opencv4/opencv2/opencv.hpp>
-#include <opengv/types.hpp>
+
+
+namespace opengv {
+typedef Eigen::Matrix<double, 3, 4> transformation_t;
+}
 
 
 namespace dyno

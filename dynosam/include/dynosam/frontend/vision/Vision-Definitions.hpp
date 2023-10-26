@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -25,37 +25,23 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-
 
 namespace dyno {
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
+template<typename U, typename V>
+struct TrackletCorrespondance {
+    TrackletId tracklet_id_;
+    U ref_;
+    V cur_;
 
-class Frame {
-
-public:
-    DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
-
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
-
-    //also static points that are not used?
-
-    Frame(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images)
-        :   frame_id_(frame_id), timestamp_(timestamp), tracking_images_(tracking_images) {}
-
-    const FrameId frame_id_;
-    const Timestamp timestamp_;
-    const TrackingInputImages tracking_images_;
-
-    gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
+    TrackletCorrespondance() {}
+    TrackletCorrespondance(TrackletId tracklet_id, U ref, V cur)
+    :   tracklet_id_(tracklet_id), ref_(ref), cur_(cur) {}
 };
 
+//! Correspondes format for a 3D->2D PnP solver. In the form of 3D Landmark in the world frame,
+//! and 2D observation in the current camera frame
+using AbsolutePoseCorrespondence =  TrackletCorrespondance<Landmark, Keypoint>;
+using AbsolutePoseCorrespondences = std::vector<AbsolutePoseCorrespondence>;
 
-
-
-
-} //dyno
+}

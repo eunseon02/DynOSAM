@@ -20,3 +20,68 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
+#include "dynosam/frontend/vision/Feature.hpp"
+
+#include <glog/logging.h>
+
+namespace dyno {
+
+FeatureContainer::FeatureContainer() : feature_map_(), feature_vector_() {}
+
+FeatureContainer::FeatureContainer(const FeaturePtrs feature_vector) {
+    for(size_t i = 0; i < feature_vector.size(); i++) {
+        add(feature_vector.at(i));
+    }
+}
+
+void FeatureContainer::add(Feature::Ptr feature) {
+    CHECK(!exists(feature->tracklet_id_));
+
+    feature_map_[feature->tracklet_id_] = feature;
+    feature_vector_.push_back(feature);
+}
+
+TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
+    TrackletIds tracklets;
+    for(const auto& feature : *this) {
+        if(only_usable && feature->usable()) {
+            tracklets.push_back(feature->tracklet_id_);
+        }
+        else {
+            tracklets.push_back(feature->tracklet_id_);
+        }
+    }
+
+    return tracklets;
+}
+
+ void FeatureContainer::markOutliers(const TrackletIds outliers) {
+    for(TrackletId tracklet_id : outliers) {
+        CHECK(exists(tracklet_id));
+
+        getByTrackletId(tracklet_id)->inlier_ = false;
+    }
+ }
+
+size_t FeatureContainer::size() const {
+    CHECK(feature_map_.size() == feature_vector_.size());
+    return feature_vector_.size();
+}
+
+Feature::Ptr FeatureContainer::getByTrackletId(TrackletId tracklet_id) const {
+    if(!exists(tracklet_id)) {
+        return nullptr;
+    }
+    return feature_map_.at(tracklet_id);
+}
+
+Feature::Ptr FeatureContainer::at(size_t i) const {
+    return feature_vector_.at(i);
+}
+
+bool FeatureContainer::exists(TrackletId tracklet_id) const {
+    return feature_map_.find(tracklet_id) != feature_map_.end();
+}
+
+} //dyno

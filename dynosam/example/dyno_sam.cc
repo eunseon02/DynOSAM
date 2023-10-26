@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
     auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
     dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
-    pipeline.spin();
+    while(pipeline.spin()) {}
 
 
 
