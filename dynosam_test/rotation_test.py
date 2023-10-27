@@ -22,8 +22,13 @@ def gen_random_pose(xyz_mean, rpy_mean, xyz_range, rpy_range):
 
   return pose
 
-def gen_random_points(number, centre, range):
+def gen_random_points(number, centre, point_range):
   points = np.tile(centre[np.newaxis].T, (1, number))
+
+  for i in range(number):
+    noise = np.array([random.uniform(-point_range[0], point_range[0]), random.uniform(-point_range[1], point_range[1]), random.uniform(-point_range[2], point_range[2])])
+    print(noise)
+    points[0:3, i:i+1] = points[0:3, i:i+1] + noise[np.newaxis].T
 
   return points
 
@@ -31,10 +36,10 @@ def gen_random_points(number, centre, range):
 def main():
   cam_pose_origin = np.identity(4)
 
-  cam_mot_xyz_mean = np.array([10, 11, 12]) # in meter
-  cam_mot_rpy_mean = np.array([30, 45, 60]) # in degree 
-  cam_mot_xyz_range = np.array([2, 2, 2]) # in meter
-  cam_mot_rpy_range = np.array([5, 5, 5]) # in degree 
+  cam_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
+  cam_mot_rpy_mean = np.array([30., 45., 60.]) # in degree 
+  cam_mot_xyz_range = np.array([2., 2., 2.]) # in meter
+  cam_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
   cam_pose_target = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
 
 
@@ -49,8 +54,8 @@ def main():
   # print(det)
   # print(orth)
 
-  points_origin_centre = np.array([5, 6, 7])
-  points_origin_range = np.array([1, 1, 1])
+  points_origin_centre = np.array([5., 6., 7.])
+  points_origin_range = np.array([1., 1., 1.])
   points_origin = gen_random_points(5, points_origin_centre, points_origin_range)
 
   print(points_origin)
