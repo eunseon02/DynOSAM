@@ -67,6 +67,48 @@ def project_points(points, intrinsic):
   points_image[1, :] = np.divide(points_image[1, :], depths)
   return depths, points_image
 
+def decompose_essential(essential):
+  U, S, Vh = np.linalg.svd(essential, full_matrices=True)
+  t = U[:, 2]
+  t = t/np.linalg.norm(t)
+
+  W = np.zeros((3, 3))
+  W[0, 1] = -1.
+  W[1, 0] = 1.
+  W[2, 2] = 1.
+
+  R1 = U @ (W @ Vh)
+  if np.linalg.det(R1) < 0:
+    R1 = -R1
+
+  R2 = U @ (W.T @ Vh)
+  if np.linalg.det(R2) < 0:
+    R2 = -R2
+
+  return R1, R2, t
+
+def compute_essential(cam_pose_target, points_motion):
+  cam_rot = cam_pose_target[0:3, 0:3]
+  cam_rot_inv = cam_rot.T
+  cam_t = cam_pose_target[0:3, 3][np.newaxis].T
+
+  mot_rot = points_motion[0:3, 0:3]
+  mot_t = points_motion[0:3, 3][np.newaxis].T
+
+  translation = np.matmul(cam_rot_inv, (mot_t - cam_t))
+  translation_cross = np.zeros((3, 3))
+  translation_cross[0, 1] = -translation[2]
+  translation_cross[1, 0] = translation[2]
+  translation_cross[0, 2] = translation[1]
+  translation_cross[2, 0] = -translation[1]
+  translation_cross[1, 2] = -translation[0]
+  translation_cross[2, 1] = translation[0]
+
+  rotation = np.matmul(cam_rot_inv, mot_rot)
+  essential = np.matmul(translation_cross, rotation)
+
+  return essential
+
 def main():
   cam_pose_origin = np.identity(4)
 
@@ -131,7 +173,37 @@ def main():
 
   essential, mask = cv2.findEssentialMat(points_origin_image.T, points_target_image.T)
 
+  print("Essential matrix:")
   print(essential)
+
+  R1, R2, t = decompose_essential(essential)
+
+  print("Rotation 1:")
+  print(R1)
+  print("Rotation 2:")
+  print(R2)
+  print("Translation:")
+  print(t)
+
+  test1 = np.matmul(np.linalg.inv(cam_pose_target[0:3, 0:3]), points_motion[0:3, 0:3])
+
+  print("Test expected rotational component:")
+  print(test1)
+
+  test2 = compute_essential(cam_pose_target, points_motion)
+
+  print("Test expected essential matrix")
+  print(test2)
+
+
+  # # check target pose rotation
+  # rot = cam_pose_target[0:3, 0:3]
+  # print(rot)
+  # det = np.linalg.det(rot)
+  # orth = np.matmul(rot.T, rot)
+  # print(det)
+  # print(orth)
+
 
 
 if __name__ == "__main__":
