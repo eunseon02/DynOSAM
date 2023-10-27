@@ -27,7 +27,6 @@ def gen_random_points(number, centre, point_range):
 
   for i in range(number):
     noise = np.array([random.uniform(-point_range[0], point_range[0]), random.uniform(-point_range[1], point_range[1]), random.uniform(-point_range[2], point_range[2])])
-    print(noise)
     points[0:3, i:i+1] = points[0:3, i:i+1] + noise[np.newaxis].T
 
   return points
@@ -140,7 +139,8 @@ def main():
   points_mot_rpy_mean = np.array([30., 45., 60.]) # in degree 
   points_mot_xyz_range = np.array([2., 2., 2.]) # in meter
   points_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
-  points_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
+  # points_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
+  points_motion = np.identity(4)
 
   points_target = transform_points(points_origin, points_motion)
 
@@ -150,10 +150,10 @@ def main():
   print(points_target)
 
   intrinsic = np.identity(3);
-  intrinsic[0, 0] = 320
-  intrinsic[1, 1] = 320
-  intrinsic[0, 2] = 320
-  intrinsic[1, 2] = 240
+  # intrinsic[0, 0] = 320
+  # intrinsic[1, 1] = 320
+  # intrinsic[0, 2] = 320
+  # intrinsic[1, 2] = 240
 
   points_origin_local = transform_points(points_origin, np.linalg.inv(cam_pose_origin))
   points_target_local = transform_points(points_target, np.linalg.inv(cam_pose_target))
@@ -176,7 +176,7 @@ def main():
   print("Essential matrix:")
   print(essential)
 
-  R1, R2, t = decompose_essential(essential)
+  R1, R2, t = cv2.decomposeEssentialMat(essential)
 
   print("Rotation 1:")
   print(R1)
@@ -194,17 +194,6 @@ def main():
 
   print("Test expected essential matrix")
   print(test2)
-
-
-  # # check target pose rotation
-  # rot = cam_pose_target[0:3, 0:3]
-  # print(rot)
-  # det = np.linalg.det(rot)
-  # orth = np.matmul(rot.T, rot)
-  # print(det)
-  # print(orth)
-
-
 
 if __name__ == "__main__":
   main()
