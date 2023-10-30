@@ -45,14 +45,14 @@ public:
     FeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue = nullptr);
     virtual ~FeatureTracker() {}
 
-    //note MOTION MASK!!
+    //note: MOTION MASK!!
     Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks);
 
     cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const;
 
 
 protected:
-
+    void constructDynamicObjectObservations(Frame::Ptr frame) const;
 
     void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);

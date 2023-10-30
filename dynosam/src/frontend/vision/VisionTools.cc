@@ -175,23 +175,72 @@ void RGBDProcessor::setDepths(FeatureContainer features, const cv::Mat& depth, d
     }
 }
 
-ImageWrapper<ImageType::MotionMask> RGBDProcessor::calculateMotionMask(const Frame& previous_frame, const Frame& current_frame) {
+void RGBDProcessor::updateMovingObjects(const Frame& previous_frame, Frame::Ptr current_frame,  cv::Mat& debug) const {
+  const cv::Mat& rgb = current_frame->tracking_images_.get<ImageType::RGBMono>();
+
+  rgb.copyTo(debug);
+
   const gtsam::Pose3& previous_pose = previous_frame.T_world_camera_;
-  const gtsam::Pose3& current_pose = current_frame.T_world_camera_;
+  const gtsam::Pose3& current_pose = current_frame->T_world_camera_;
 
-  //we have to calculate this a lot - why not calc once and parse down?
-  FeaturePairs dynamic_correspondences;
-  getCorrespondences(dynamic_correspondences, previous_frame, current_frame, KeyPointType::DYNAMIC);
+  const auto previous_dynamic_feature_container = previous_frame.dynamic_features_;
+  const auto current_dynamic_feature_container = current_frame->dynamic_features_;
 
-  for(const auto& [previous_feature, current_feature] : dynamic_correspondences) {
-      CHECK(previous_feature->hasDepth());
-      CHECK(current_feature->hasDepth());
+  //iterate over each object seen in the previous frame and collect features in current and previous frames to determine scene flow
+  for(auto& [object_id, current_object_observation] : current_frame->object_observations_) {
 
-      Landmark lmk_previous, lmk_current;
-      camera_->backProject(previous_feature->keypoint_, previous_feature->depth_, &lmk_previous, previous_frame.T_world_camera_);
-      camera_->backProject(current_feature->keypoint_, current_feature->depth_, &lmk_current, current_frame.T_world_camera_);
+    int object_track_count = 0; //number of tracked points on the object
+    int sf_count = 0; //number of points on the object with a sufficient scene flow thresh
 
-      Landmark flow_world = lmk_previous - lmk_current;
+    const TrackletIds& object_features = current_object_observation.object_features_;
+    for(const auto tracklet_id : object_features) {
+      if(previous_dynamic_feature_container.exists(tracklet_id)) {
+        CHECK(current_dynamic_feature_container.exists(tracklet_id));
+
+        Feature::Ptr current_feature = current_dynamic_feature_container.getByTrackletId(tracklet_id);
+        Feature::Ptr previous_feature = previous_dynamic_feature_container.getByTrackletId(tracklet_id);
+
+        if(!previous_feature->usable()) {
+          current_feature->markInvalid();
+          continue;
+        }
+
+        Landmark lmk_previous, lmk_current;
+        camera_->backProject(previous_feature->keypoint_, previous_feature->depth_, &lmk_previous, previous_pose);
+        camera_->backProject(current_feature->keypoint_, current_feature->depth_, &lmk_current, current_pose);
+
+        Landmark flow_world = lmk_previous - lmk_current;
+        double sf_norm = flow_world.norm();
+
+        if(sf_norm > params_.scene_flow_magnitude) {
+          sf_count++;
+        }
+
+        object_track_count++;
+      }
+    }
+
+    if(sf_count < 50) {
+      continue;
+    }
+    double average_flow_count = (double)sf_count / (double)object_track_count;
+
+    LOG(INFO) << "Num points that are dynamic " << average_flow_count << "/" << params_.scene_flow_percentage << " for object " << object_id;
+    if(average_flow_count > params_.scene_flow_percentage) {
+      current_object_observation.marked_as_moving_ = true;
+
+      static const cv::Scalar blue(255, 0, 0);
+
+      for(TrackletId track : object_features) {
+        Feature::Ptr current_feature = current_dynamic_feature_container.getByTrackletId(track);
+        const Keypoint& px = current_feature->keypoint_;
+        cv::circle(debug, utils::gtsamPointToCV(px), 6, blue, 1);
+      }
+
+
+      //only debug stuff
+
+    }
 
   }
 

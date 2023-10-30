@@ -35,7 +35,7 @@ struct FrontendParams {
 
   // scene flow thresholds
   double scene_flow_magnitude = 0.12;
-  double scene_flow_percentage = 0.3;
+  double scene_flow_percentage = 0.5;
 
   // depth thresholds
   double depth_background_thresh = 40.0;

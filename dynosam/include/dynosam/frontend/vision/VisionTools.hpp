@@ -80,7 +80,7 @@ public:
     void disparityToDepth(const cv::Mat& disparity, cv::Mat& depth);
 
     //expects frame pose to be hpdated for both frames
-    ImageWrapper<ImageType::MotionMask> calculateMotionMask(const Frame& previous_frame, const Frame& current_frame);
+    void updateMovingObjects(const Frame& previous_frame, Frame::Ptr current_frame, cv::Mat& debug) const;
 
 
 private:

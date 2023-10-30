@@ -78,7 +78,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     auto new_frame = std::make_shared<Frame>(frame_id, timestamp, tracking_images);
     new_frame->static_features_ = FeatureContainer(static_features);
     new_frame->dynamic_features_ = FeatureContainer(dynamic_features);
-    new_frame->initial_object_labels_ = FrameProcessor::getObjectLabels(tracking_images.get<ImageType::MotionMask>());
+    constructDynamicObjectObservations(new_frame);
+    // new_frame->initial_object_labels_ = FrameProcessor::getObjectLabels(tracking_images.get<ImageType::MotionMask>());
 
     previous_frame_ = new_frame;
     return new_frame;
@@ -152,6 +153,28 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
   return img_rgb;
 
+}
+
+void FeatureTracker::constructDynamicObjectObservations(Frame::Ptr frame) const {
+  CHECK_GT(frame->dynamic_features_.size(), 0u);
+
+  const ObjectIds object_labels = FrameProcessor::getObjectLabels(frame->tracking_images_.getImageWrapper<ImageType::MotionMask>());
+
+
+  for(const Feature::Ptr& dynamic_feature : frame->dynamic_features_) {
+    CHECK(!dynamic_feature->isStatic());
+
+    const ObjectId label = dynamic_feature->instance_label_;
+    CHECK(std::find(object_labels.begin(), object_labels.end(), label) != object_labels.end());
+
+    if(frame->object_observations_.find(label) == frame->object_observations_.end()) {
+      DynamicObjectObservation observation;
+      observation.object_id_ = label;
+      frame->object_observations_[label] = observation;
+    }
+
+    frame->object_observations_[label].object_features_.push_back(dynamic_feature->tracklet_id_);
+  }
 }
 
 

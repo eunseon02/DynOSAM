@@ -135,6 +135,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
 
+    cv::Mat moving_object_mat;
+    rgbd_processor_.updateMovingObjects(*previous_frame_, frame, moving_object_mat);
+
+    if(display_queue_) display_queue_->push(ImageToDisplay("moving objects", moving_object_mat));
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
@@ -152,6 +156,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
             landmark_map.insert({feature->tracklet_id_, lmk_world});
         }
     }
+
+
 
     LOG(INFO) << "In RGBD instance module frontend nominal";
     previous_frame_ = frame;

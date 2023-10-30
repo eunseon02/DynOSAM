@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/ImageContainer.hpp"
+#include "dynosam/common/DynamicObjects.hpp"
 
 
 namespace dyno {
@@ -39,10 +40,11 @@ public:
     DYNO_POINTER_TYPEDEFS(Frame)
     DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
 
-   FeatureContainer static_features_;
-   FeatureContainer dynamic_features_;
+    FeatureContainer static_features_;
+    FeatureContainer dynamic_features_;
+    std::map<ObjectId, DynamicObjectObservation> object_observations_;
 
-   ObjectIds initial_object_labels_; //!Initial object semantic labels as provided by the input semantic/motion mask (does not include background label)
+//    ObjectIds initial_object_labels_; //!Initial object semantic labels as provided by the input semantic/motion mask (does not include background label)
 
     //also static points that are not used?
 
