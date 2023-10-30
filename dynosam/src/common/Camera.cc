@@ -87,6 +87,12 @@ void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, 
   *lmk = X_world * lmk_c;
 }
 
+
+Landmark Camera::cameraToWorldConvention(const Landmark& lmk) {
+  //expecting camera convention to be z forward, x, right and y down
+  return Landmark(lmk(2), lmk(0), -lmk(2));
+}
+
 bool Camera::isLandmarkContained(const Landmark& lmk, Keypoint* keypoint) const {
     Keypoint kp;
     project(lmk, &kp);

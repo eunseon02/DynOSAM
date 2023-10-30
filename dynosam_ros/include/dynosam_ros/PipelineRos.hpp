@@ -30,7 +30,7 @@
 
 namespace dyno {
 
-class DynoPipelineManagerRos  : public rclcpp::Node {
+class DynoPipelineManagerRos : public rclcpp::Node {
 
 public:
     explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
@@ -38,6 +38,20 @@ public:
     bool spinOnce() {
         return CHECK_NOTNULL(pipeline_)->spin();
     }
+
+private:
+    std::string getParamsPath();
+    std::string getDatasetPath();
+
+    /**
+     * @brief Retrieves a std::string param (under param_name) which is expected to be a file path
+     *
+     * @param param_name
+     * @param default_path
+     * @param description
+     * @return std::string
+     */
+    std::string searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description = "");
 
 private:
     DynoPipelineManager::UniquePtr pipeline_;

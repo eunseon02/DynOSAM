@@ -7,7 +7,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 
-#include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 
 #include <functional>
 
@@ -16,7 +16,7 @@ namespace dyno {
 
 /**
  * @brief A data provider is a module that actually gets the inididual image and/or IMU data from some source and
- * packets it into a Frame and IMU form and sends it the the DataProviderModule via callback functions where the data is
+ * packets it into a Frame and IMU form and sends it the the DataInterfacePipeline via callback functions where the data is
  * synchronized and sent to the frontend
  *
  *
@@ -35,8 +35,8 @@ public:
 
     //this one will not guarnatee a binding of bind the data prover module
     DataProvider() = default;
-    DataProvider(DataProviderModule* module);
-    DataProvider(DataProviderModuleImu* module);
+    DataProvider(DataInterfacePipeline* module);
+    DataProvider(DataInterfacePipelineImu* module);
 
     virtual ~DataProvider();
 

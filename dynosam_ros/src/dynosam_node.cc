@@ -22,12 +22,13 @@
  */
 
 
-
-// #inclu
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executor.hpp"
 
 #include "dynosam_ros/PipelineRos.hpp"
+#include <glog/logging.h>
+
+
 
 int main(int argc, char* argv[]) {
 
@@ -41,15 +42,17 @@ int main(int argc, char* argv[]) {
     options.arguments(args);
 
     rclcpp::executors::SingleThreadedExecutor exec;
-    auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>(options);
+    auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
 
     exec.add_node(ros_pipeline);
     while(rclcpp::ok()) {
         if(!ros_pipeline->spinOnce()) {
             break;
         }
-
         exec.spin_some();
     }
+
+    ros_pipeline.reset();
+
 
 }

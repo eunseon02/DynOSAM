@@ -23,34 +23,33 @@
 
 #pragma once
 
-#include <dynosam/visualizer/FrontendDisplay.hpp>
-#include "image_transport/image_transport.hpp"
+#include <dynosam/common/Types.hpp>
 
-
-#include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/msg/point_cloud2.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-
+#include "rclcpp/time.hpp"
+#include "rclcpp/node.hpp"
+#include "rclcpp/parameter.hpp"
+#include "rcl_interfaces/msg/parameter.hpp"
 
 namespace dyno {
+namespace utils {
 
-class FrontendDisplayRos : public FrontendDisplay {
-public:
-    FrontendDisplayRos(rclcpp::Node::SharedPtr node);
 
-    void spinOnce(const FrontendOutputPacketBase& frontend_output) override;
+/**
+ * @brief Convert ROS time to timestamp
+ *
+ * @param time
+ * @return Timestamp time in seconds
+ */
+Timestamp fromRosTime(const rclcpp::Time& time);
 
-private:
-    void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
-    void publishOdometry(const FrontendOutputPacketBase& frontend_output);
+/**
+ * @brief Converts Timestamp (in seconds) to ROS time
+ *
+ * @param timestamp
+ * @return rclcpp::Time
+ */
+rclcpp::Time toRosTime(Timestamp timestamp);
 
-private:
-    rclcpp::Node::SharedPtr node_;
 
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr tracked_points_pub_;
-    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
-    image_transport::Publisher tracking_image_pub_;
-
-};
-
-}
+} //utils
+} //dyno

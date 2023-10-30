@@ -22,7 +22,7 @@
  */
 
 #include "dynosam/dataprovider/DataProvider.hpp"
-#include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 
 #include <functional>
 
@@ -30,9 +30,9 @@
 
 namespace dyno {
 
-DataProvider::DataProvider(DataProviderModule* module) {
+DataProvider::DataProvider(DataInterfacePipeline* module) {
     CHECK_NOTNULL(module);
-    registerImageContainerCallback(std::bind(&DataProviderModule::fillImageContainerQueue, module, std::placeholders::_1));
+    registerImageContainerCallback(std::bind(&DataInterfacePipeline::fillImageContainerQueue, module, std::placeholders::_1));
     CHECK(image_container_callback_);
 
 }
@@ -47,14 +47,14 @@ void DataProvider::shutdown() {
 }
 
 
-DataProvider::DataProvider(DataProviderModuleImu* module) : DataProvider(dynamic_cast<DataProviderModule*>(module)) {
+DataProvider::DataProvider(DataInterfacePipelineImu* module) : DataProvider(dynamic_cast<DataInterfacePipeline*>(module)) {
     CHECK_NOTNULL(module);
     registerImuMultiCallback(std::bind(
-        static_cast<void(DataProviderModuleImu::*)(const ImuMeasurements&)>(&DataProviderModuleImu::fillImuQueue),
+        static_cast<void(DataInterfacePipelineImu::*)(const ImuMeasurements&)>(&DataInterfacePipelineImu::fillImuQueue),
         module,
         std::placeholders::_1));
     registerImuSingleCallback(std::bind(
-        static_cast<void(DataProviderModuleImu::*)(const ImuMeasurement&)>(&DataProviderModuleImu::fillImuQueue),
+        static_cast<void(DataInterfacePipelineImu::*)(const ImuMeasurement&)>(&DataInterfacePipelineImu::fillImuQueue),
         module,
         std::placeholders::_1));
 

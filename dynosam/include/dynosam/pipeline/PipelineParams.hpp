@@ -41,10 +41,18 @@ class DynoParams {
 
 public:
     DynoParams(const std::string& params_folder_path);
+    /**
+     * @brief For I/O construction
+     *
+     */
+    DynoParams() {}
 
 public:
     FrontendParams frontend_params_;
     CameraParams camera_params_;
+
+    //! Pipeline level params
+    bool parallel_run_{true};
 
 };
 

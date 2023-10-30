@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/pipeline/PipelineParams.hpp"
+#include "dynosam/utils/YamlParser.hpp"
 
 namespace dyno {
 
@@ -29,6 +30,9 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
 
     //currently just camera params
     camera_params_ = CameraParams::fromYamlFile(params_folder_path + "CameraParams.yaml");
+
+    YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
+    pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
 }
 
 

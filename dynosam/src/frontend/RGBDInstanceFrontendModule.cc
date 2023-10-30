@@ -32,7 +32,10 @@ namespace dyno {
 
 
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
-    : FrontendModule(frontend_params, display_queue), camera_(camera), rgbd_processor_(frontend_params, camera), motion_solver_(frontend_params)
+    : FrontendModule(frontend_params, display_queue),
+      camera_(camera),
+      rgbd_processor_(frontend_params, camera),
+      motion_solver_(frontend_params, camera->getParams())
 {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -101,6 +104,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
+    if(display_queue_) {
+        cv::Mat depth_disp;
+        const cv::Mat& depth = image_container->getDepth();
+        rgbd_processor_.disparityToDepth(depth, depth_disp);
+
+        depth_disp.convertTo(depth_disp, CV_8UC1);
+        display_queue_->push(ImageToDisplay("depth", depth_disp)); //eh something here no work
+    }
 
     size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
@@ -108,6 +119,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
 
     AbsolutePoseCorrespondences correspondences;
+    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
+    //bearing vectors are also not undistorted atm!!
     rgbd_processor_.getCorrespondences(correspondences, *previous_frame_, *frame, KeyPointType::STATIC);
 
     LOG(INFO) << "Gotten correspondances, solving camera pose";
@@ -115,12 +128,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     // //also update the inliers outliers?
     TrackletIds inliers, outliers;
     frame->T_world_camera_ = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
-    LOG(INFO) << "Solved camera pose";
+    // LOG(INFO) << "Solved camera pose";
 
     TrackletIds tracklets = frame->static_features_.collectTracklets();
     CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
     frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
+
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));

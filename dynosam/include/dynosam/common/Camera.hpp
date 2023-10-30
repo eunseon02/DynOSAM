@@ -103,6 +103,8 @@ public:
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk) const;
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, const gtsam::Pose3& X_world) const;
 
+  static Landmark cameraToWorldConvention(const Landmark& lmk);
+
 
   /**
    * @brief Checks if a landmark can be seen in the image frustrum. The 3D point

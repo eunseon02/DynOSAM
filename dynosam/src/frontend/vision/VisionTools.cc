@@ -72,6 +72,15 @@ void FrameProcessor::getCorrespondences(FeaturePairs& correspondences, const Fra
 }
 
 
+ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image) {
+  return getObjectLabels(image.image);
+}
+
+ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image) {
+  return getObjectLabels(image.image);
+}
+
+
 void FrameProcessor::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const {
   getCorrespondencesFromContainer(correspondences, previous_frame.static_features_, current_frame.static_features_);
 }
@@ -97,7 +106,20 @@ void FrameProcessor::getCorrespondencesFromContainer(FeaturePairs& correspondenc
   }
 }
 
+ObjectIds FrameProcessor::getObjectLabels(const cv::Mat& image) {
+  std::set<ObjectId> unique_labels;
+  for (int i = 0; i < image.rows; i++) {
+    for (int j = 0; j < image.cols; j++) {
+      const ObjectId label = image.at<ObjectId>(i, j);
 
+      if(label != background_label) {
+        unique_labels.insert(label);
+      }
+    }
+  }
+
+  return ObjectIds(unique_labels.begin(), unique_labels.end());
+}
 
 RGBDProcessor::RGBDProcessor(const FrontendParams& params, Camera::Ptr camera)
     : FrameProcessor(params, camera) {}
@@ -152,6 +174,31 @@ void RGBDProcessor::setDepths(FeatureContainer features, const cv::Mat& depth, d
         }
     }
 }
+
+ImageWrapper<ImageType::MotionMask> RGBDProcessor::calculateMotionMask(const Frame& previous_frame, const Frame& current_frame) {
+  const gtsam::Pose3& previous_pose = previous_frame.T_world_camera_;
+  const gtsam::Pose3& current_pose = current_frame.T_world_camera_;
+
+  //we have to calculate this a lot - why not calc once and parse down?
+  FeaturePairs dynamic_correspondences;
+  getCorrespondences(dynamic_correspondences, previous_frame, current_frame, KeyPointType::DYNAMIC);
+
+  for(const auto& [previous_feature, current_feature] : dynamic_correspondences) {
+      CHECK(previous_feature->hasDepth());
+      CHECK(current_feature->hasDepth());
+
+      Landmark lmk_previous, lmk_current;
+      camera_->backProject(previous_feature->keypoint_, previous_feature->depth_, &lmk_previous, previous_frame.T_world_camera_);
+      camera_->backProject(current_feature->keypoint_, current_feature->depth_, &lmk_current, current_frame.T_world_camera_);
+
+      Landmark flow_world = lmk_previous - lmk_current;
+
+  }
+
+}
+
+
+
 
 
 void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklets, TrackletIds& outliers)

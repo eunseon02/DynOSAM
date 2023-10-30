@@ -41,13 +41,14 @@ namespace dyno {
 class MotionSolver {
 
 public:
-    MotionSolver(const FrontendParams& params);
+    MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
 
     //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
     gtsam::Pose3 solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
 
 protected:
     const FrontendParams params_;
+    const CameraParams camera_params_;
 
 };
 

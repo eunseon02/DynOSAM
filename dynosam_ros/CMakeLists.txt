@@ -19,19 +19,22 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
 find_package(diagnostic_updater REQUIRED)
 find_package(image_transport REQUIRED)
+find_package(pcl_conversions REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(dynosam REQUIRED)
-
+find_package(PCL REQUIRED)
 
 # setup targets
 include_directories(
   include
   ${rclcpp_INCLUDE_DIRS}
   ${EIGEN3_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 include_directories(include)
 
@@ -40,35 +43,34 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED
   src/PipelineRos.cc
   src/FrontendDisplayRos.cc
+  src/RosUtils.cc
 )
-
-# target_compile_definitions(${PROJECT_NAME}
-#   PRIVATE "MINIMAL_COMPOSITION_DLL")
-
 
 ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   std_msgs
   sensor_msgs
+  nav_msgs
   dynosam
   image_transport
   cv_bridge
-  eigen3_cmake_module
-  Eigen3
-  diagnostic_updater)
+  diagnostic_updater
+  pcl_conversions
+)
 
 target_link_libraries(${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   glog
   gflags
-  Eigen3::Eigen
 )
 ament_export_libraries(${PROJECT_NAME}
   glog
   gflags
 )
 
-ament_export_dependencies(rclcpp std_msgs sensor_msgs dynosam)
+ament_export_dependencies(rclcpp std_msgs sensor_msgs
+dynosam
+)
 
 
 target_include_directories(${PROJECT_NAME}
@@ -90,6 +92,7 @@ install(
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
+
 install(DIRECTORY
   launch
   DESTINATION share/${PROJECT_NAME}
@@ -104,8 +107,11 @@ install(DIRECTORY
 add_executable(dynosam_node src/dynosam_node.cc)
 target_link_libraries(dynosam_node
   ${PROJECT_NAME}
+
 )
-ament_target_dependencies(dynosam_node "rclcpp" "std_msgs" "dynosam")
+ament_target_dependencies(dynosam_node "rclcpp" "std_msgs"
+"dynosam"
+)
 
 
 

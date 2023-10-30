@@ -50,12 +50,18 @@ public:
     void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
     void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
 
+    static ObjectIds getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image);
+    static ObjectIds getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image);
+
 
 protected:
     void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const;
     void getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const;
 
     void getCorrespondencesFromContainer(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features) const;
+
+private:
+    static ObjectIds getObjectLabels(const cv::Mat& image);
 
 protected:
     const FrontendParams params_;
@@ -71,9 +77,13 @@ public:
 
     //this is really disparty not depth
     void updateDepth(Frame::Ptr frame, ImageWrapper<ImageType::Depth> disparity);
+    void disparityToDepth(const cv::Mat& disparity, cv::Mat& depth);
+
+    //expects frame pose to be hpdated for both frames
+    ImageWrapper<ImageType::MotionMask> calculateMotionMask(const Frame& previous_frame, const Frame& current_frame);
+
 
 private:
-    void disparityToDepth(const cv::Mat& disparity, cv::Mat& depth);
 
     //copy but everything is a ptr anyway??
     void setDepths(FeatureContainer features, const cv::Mat& depth, double max_threshold);
@@ -83,6 +93,7 @@ private:
 
 
 void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklets, TrackletIds& outliers);
+
 
 
 } //dyno

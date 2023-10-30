@@ -25,7 +25,7 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include <glog/logging.h>
 
-//for now
+//TODO: for now should be in params
 DEFINE_int32(frontend_type, 0, "Type of parser to use:\n "
                               "0: RGBDInstance");
 
@@ -37,13 +37,15 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         displayer_(&display_queue_, false)
 
 {
+    LOG(INFO) << "Starting DynoPipelineManager";
+
     CHECK(data_loader_);
     CHECK(frontend_display);
 
     //TODO: factories for different loaders etc later
-    data_provider_module_ = std::make_unique<DataProviderModule>("data-provider");
-    data_loader_->registerImageContainerCallback(std::bind(&dyno::DataProviderModule::fillImageContainerQueue, data_provider_module_.get(), std::placeholders::_1));
-    data_provider_module_->registerOutputQueue(&frontend_input_queue_);
+    data_interface_ = std::make_unique<DataInterfacePipeline>(params.parallel_run_);
+    data_loader_->registerImageContainerCallback(std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue, data_interface_.get(), std::placeholders::_1));
+    data_interface_->registerOutputQueue(&frontend_input_queue_);
 
     FrontendModule::Ptr frontend = nullptr;
 
@@ -72,11 +74,31 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
 }
 
-DynoPipelineManager::~DynoPipelineManager() {}
+DynoPipelineManager::~DynoPipelineManager() {
+    shutdownPipelines();
+    shutdownSpinners();
+}
+
+
+void DynoPipelineManager::shutdownSpinners() {
+    if(frontend_pipeline_spinner_) frontend_pipeline_spinner_->shutdown();
+
+    if(data_provider_spinner_) data_provider_spinner_->shutdown();
+
+    if(frontend_viz_pipeline_spinner_) frontend_viz_pipeline_spinner_->shutdown();
+}
+
+void DynoPipelineManager::shutdownPipelines() {
+    display_queue_.shutdown();
+    frontend_pipeline_->shutdown();
+    data_interface_->shutdown();
+    frontend_viz_pipeline_->shutdown();
+}
 
 bool DynoPipelineManager::spin() {
 
     if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
+        // frontend_pipeline_->spinOnce();
         displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
         //a later problem!
         return true;
@@ -89,7 +111,7 @@ bool DynoPipelineManager::spin() {
 void DynoPipelineManager::launchSpinners() {
     LOG(INFO) << "Running PipelineManager with parallel_run=true";
     frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
-    data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataProviderModule::spin, data_provider_module_.get()), "data-provider-spinner");
+    data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataInterfacePipeline::spin, data_interface_.get()), "data-interface-spinner");
     frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
 }
 

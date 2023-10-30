@@ -58,8 +58,9 @@ add_library(${PROJECT_NAME} SHARED
   src/common/Types.cc
   src/common/CameraParams.cc
   src/common/Camera.cc
+  src/common/ImageContainer.cc
 
-  src/dataprovider/DataProviderModule.cc
+  src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetLoader.cc
   src/dataprovider/DataProviderUtils.cc
@@ -69,7 +70,6 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
-  src/frontend/FrontendInputPacket.cc
   src/frontend/RGBDInstanceFrontendModule.cc
 
   src/frontend/vision/ORBextractor.cc
@@ -99,7 +99,10 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   std_msgs
   sensor_msgs
-  diagnostic_updater)
+  diagnostic_updater
+  opengv
+  GTSAM
+  OpenCV)
 
 target_link_libraries(${PROJECT_NAME}
 # PRIVATE
@@ -121,11 +124,12 @@ ament_export_libraries(${PROJECT_NAME}
   gflags
   opengv
   Boost::boost
+  gtsam
   ${OpenCV_LIBRARIES}
 )
 
 # ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
-ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV)
+ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV opengv GTSAM eigen3_cmake_module Eigen3 )
 
 
 target_include_directories(${PROJECT_NAME}
@@ -138,7 +142,7 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:include>)
 
-ament_export_include_directories(include)
+ament_export_include_directories(include  ${GTSAM_INCLUDE_DIR} ${OPENGV_INCLUDE_DIR})
 ament_export_libraries(${PROJECT_NAME})
 
 install(

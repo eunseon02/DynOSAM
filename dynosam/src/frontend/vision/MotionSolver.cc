@@ -21,6 +21,9 @@
  *   SOFTWARE.
  */
 
+#include <eigen3/Eigen/Dense>
+#include <opencv4/opencv2/core/eigen.hpp>
+
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/common/Types.hpp"
@@ -33,21 +36,26 @@
 
 namespace dyno {
 
-MotionSolver::MotionSolver(const FrontendParams& params) : params_(params) {}
+MotionSolver::MotionSolver(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
 
 
 gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& correspondences,  TrackletIds& inliers, TrackletIds& outliers) {
     const size_t& n_matches = correspondences.size();
 
+    gtsam::Matrix K = gtsam::Matrix::Identity(3, 3);
+    cv::cv2eigen(camera_params_.getCameraMatrix(), K);
+
+    K = K.inverse();
 
     TrackletIds tracklets_;
+    //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
     BearingVectors bearing_vectors;
     Landmarks points;
     for(size_t i = 0u; i < n_matches; i ++) {
         const AbsolutePoseCorrespondence& corres = correspondences.at(i);
         const Keypoint& kp = corres.cur_;
         //make Bearing vector
-        gtsam::Vector3 versor(kp(0), kp(1), 1.0);
+        gtsam::Vector3 versor = (K * gtsam::Vector3(kp(0), kp(1), 1.0));
         versor = versor.normalized();
         bearing_vectors.push_back(versor);
 
@@ -71,15 +79,13 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     // run ransac
     ransac.sac_model_ = absposeproblem_ptr;
     //https://github.com/laurentkneip/opengv/issues/121
-    ransac.threshold_ = 2*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-    // ransac.threshold_ = threshold;
-    // ransac.max_iterations_ = maxIterations;
+    ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
+    ransac.max_iterations_ = 100;
     if(!ransac.computeModel(0)) {
         LOG(WARNING) << "Could not compute ransac mode";
         return gtsam::Pose3::Identity();
     }
 
-    LOG(INFO) << "Solving ransac";
     // // get the result
     opengv::transformation_t best_transformation =
         ransac.model_coefficients_;
@@ -89,7 +95,7 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     poseMat.block<3, 4>(0, 0) = best_transformation;
 
     gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse
-    gtsam::Pose3 T_world(opengv_transform.rotation().inverse(), opengv_transform.translation());
+    gtsam::Pose3 T_world(opengv_transform.rotation(), opengv_transform.translation());
 
     inliers.clear();
     outliers.clear();
@@ -103,8 +109,12 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     CHECK_EQ((inliers.size() + outliers.size()), tracklets_.size());
     CHECK_EQ(inliers.size(), ransac.inliers_.size());
 
+    if(VLOG_IS_ON(10)) {
+        LOG(INFO) << "PnP RANSAC success with\n"
+            << " - inliers/outliers: " << inliers.size() << "/" << outliers.size();
+    }
+
     return T_world;
-    // return gtsam::Pose3::Identity();
 }
 
 } //dyno

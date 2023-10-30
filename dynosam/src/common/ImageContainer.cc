@@ -21,7 +21,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/common/ImageContainer.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
 

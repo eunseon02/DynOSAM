@@ -41,7 +41,7 @@ void OpenCVImageDisplayQueue::process() {
     }
 
     if(queue_state) {
-        cv::namedWindow(image_to_display.name_);
+        // cv::namedWindow(image_to_display.name_);
         cv::imshow(image_to_display.name_, image_to_display.image_);
         cv::waitKey(1);  // Not needed because we are using startWindowThread()
     }

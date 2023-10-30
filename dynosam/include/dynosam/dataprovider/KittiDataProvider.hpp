@@ -306,6 +306,7 @@ public:
             ImageWrapper<ImageType::SemanticMask>(instance_mask)
         );
 
+
         CHECK(image_container_callback_);
         if(image_container_callback_) image_container_callback_(image_container);
         return true;

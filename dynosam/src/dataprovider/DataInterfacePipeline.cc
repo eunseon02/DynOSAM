@@ -21,7 +21,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/Numerical.hpp"
 
@@ -31,30 +31,37 @@
 
 namespace dyno {
 
-DataProviderModule::DataProviderModule(const std::string& module_name) : MIMO(module_name) {}
+DataInterfacePipeline::DataInterfacePipeline(bool parallel_run) : MIMO("data-interface"), parallel_run_(parallel_run) {}
 
 
-void DataProviderModule::shutdownQueues() {
+void DataInterfacePipeline::shutdownQueues() {
     packet_queue_.shutdown();
     //call the virtual shutdown method for the derived dataprovider module
     this->onShutdown();
 }
 
 
-FrontendInputPacketBase::ConstPtr DataProviderModule::getInputPacket() {
+FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
   if(isShutdown()) {
     return nullptr;
   }
 
+  bool queue_state;
   ImageContainer::Ptr packet = nullptr;
-  //TODO: shoudl not pop blocking if threaded!!
-  bool queue_state = packet_queue_.popBlocking(packet);
+
+  if(parallel_run_) {
+    queue_state = packet_queue_.pop(packet);
+  }
+  else {
+    queue_state = packet_queue_.popBlocking(packet);
+  }
+
 
   //TODO: gt?
 
   if(!queue_state) {
-     LOG(WARNING)
-        << "Module: " << MIMO::module_name_ << " - queue is down";
+    //  LOG(WARNING)
+    //     << "Module: " << MIMO::module_name_ << " - queue is down";
         return nullptr;
   }
 
@@ -62,13 +69,13 @@ FrontendInputPacketBase::ConstPtr DataProviderModule::getInputPacket() {
   return std::make_shared<FrontendInputPacketBase>(packet);
 }
 
-bool DataProviderModule::hasWork() const {
+bool DataInterfacePipeline::hasWork() const {
   return !packet_queue_.empty() && !packet_queue_.isShutdown();
 }
 
 
 
-bool DataProviderModuleImu::getTimeSyncedImuMeasurements(
+bool DataInterfacePipelineImu::getTimeSyncedImuMeasurements(
     const Timestamp& timestamp,
     ImuMeasurements* imu_meas) {
   CHECK_NOTNULL(imu_meas);
@@ -115,7 +122,7 @@ bool DataProviderModuleImu::getTimeSyncedImuMeasurements(
       }
       case ThreadsafeImuBuffer::QueryResult::kQueueShutdown: {
         LOG(WARNING)
-            << "IMU buffer was shutdown. Shutting down DataProviderModule.";
+            << "IMU buffer was shutdown. Shutting down DataInterfacePipeline.";
         MIMO::shutdown();
         return false;
       }

@@ -19,17 +19,17 @@ namespace dyno {
  * InputConstSharedPtr getInputPacket() = 0;
  * that takes data from the internal queues and processes them
  */
-class DataProviderModule : public MIMOPipelineModule<FrontendInputPacketBase, FrontendInputPacketBase> {
+class DataInterfacePipeline : public MIMOPipelineModule<FrontendInputPacketBase, FrontendInputPacketBase> {
 
 public:
-    DYNO_POINTER_TYPEDEFS(DataProviderModule)
+    DYNO_POINTER_TYPEDEFS(DataInterfacePipeline)
 
     using MIMO =
       MIMOPipelineModule<FrontendInputPacketBase, FrontendInputPacketBase>;
     using OutputQueue = typename MIMO::OutputQueue;
 
-    DataProviderModule(const std::string& module_name);
-    virtual ~DataProviderModule() = default;
+    DataInterfacePipeline(bool parallel_run = false);
+    virtual ~DataInterfacePipeline() = default;
 
     //TODO: later should be vision only module
     virtual FrontendInputPacketBase::ConstPtr getInputPacket() override;
@@ -55,14 +55,15 @@ private:
 
 protected:
     ThreadsafeQueue<ImageContainer::Ptr> packet_queue_;
+    std::atomic_bool parallel_run_;
 
 };
 
 
-class DataProviderModuleImu : public DataProviderModule {
+class DataInterfacePipelineImu : public DataInterfacePipeline {
 
 public:
-    DataProviderModuleImu(const std::string& module_name);
+    DataInterfacePipelineImu(const std::string& module_name);
 
     virtual inline void fillImuQueue(const ImuMeasurements& imu_measurements) {
         imu_buffer_.addMeasurements(imu_measurements.timestamps_,

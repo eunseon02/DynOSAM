@@ -25,26 +25,65 @@
 #include "dynosam_ros/FrontendDisplayRos.hpp"
 
 #include <dynosam/dataprovider/KittiDataProvider.hpp>
+#include <dynosam/dataprovider/DataProviderUtils.hpp>
 #include <dynosam/pipeline/PipelineParams.hpp>
+#include <dynosam/visualizer/OpenCVFrontendDisplay.hpp>
 
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-DEFINE_string(path_to_kitti, "/root/data/kitti", "Path to KITTI dataset");
-//TODO: (jesse) many better ways to do this with ros - just for now
-DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containing the yaml files with the VIO parameters.");
+#include "rclcpp/parameter.hpp"
+#include "rcl_interfaces/msg/parameter.hpp"
+
 
 namespace dyno {
 
-DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : rclcpp::Node("dynosam", options)
+DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : Node("dynosam", options)
 {
+    RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoPipelineManagerRos");
 
-    dyno::DynoParams params(FLAGS_params_folder_path);
+    const std::string params_path = getParamsPath();
+    const std::string dataset_path = getDatasetPath();
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Loading Dyno VIO params from: " << params_path);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Loading dataset from: " << dataset_path);
+
+    dyno::DynoParams params(params_path);
+
+    // TODO: and which dataset!!
+    auto data_loader = std::make_unique<dyno::KittiDataLoader>(dataset_path);
     auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
 
+
    pipeline_ = std::make_unique<DynoPipelineManager>(params, std::move(data_loader), frontend_display);
+}
+
+
+std::string DynoPipelineManagerRos::getParamsPath() {
+     return searchForPathWithParams("params_folder_path", "dynosam/params",
+        "Path to the folder containing the yaml files with the DynoVIO parameters.");
+}
+
+std::string DynoPipelineManagerRos::getDatasetPath() {
+    return searchForPathWithParams("dataset_path", "dataset", "Path to the dataset.");
+}
+
+std::string DynoPipelineManagerRos::searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description) {
+    auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+    param_desc.description = description;
+
+    this->declare_parameter(param_name, default_path, param_desc);
+
+    std::string path;
+    if(this->get_parameter(param_name, path)) {
+        return path;
+    }
+    else {
+        throw std::runtime_error("ROS param `" + param_name + "` expected but not found");
+    }
+
+    throwExceptionIfPathInvalid(path);
+    return path;
 }
 
 }

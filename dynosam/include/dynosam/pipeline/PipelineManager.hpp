@@ -24,7 +24,7 @@
 #pragma once
 
 #include "dynosam/pipeline/PipelineParams.hpp"
-#include "dynosam/dataprovider/DataProviderModule.hpp"
+#include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 #include "dynosam/dataprovider/DataProvider.hpp"
 #include "dynosam/frontend/FrontendPipeline.hpp"
 #include "dynosam/visualizer/VisualizerPipelines.hpp"
@@ -48,6 +48,8 @@ public:
 
 private:
     void launchSpinners();
+    void shutdownSpinners();
+    void shutdownPipelines();
 
 private:
     const DynoParams params_;
@@ -55,14 +57,15 @@ private:
     FrontendPipeline::InputQueue frontend_input_queue_;
     FrontendPipeline::OutputQueue frontend_output_queue_;
 
+    //Data-provider pointers
+    DataInterfacePipeline::UniquePtr data_interface_;
+    DataProvider::UniquePtr data_loader_;
+
     //Display and Viz
     FrontendVizPipeline::UniquePtr frontend_viz_pipeline_;
     ImageDisplayQueue display_queue_;
     OpenCVImageDisplayQueue displayer_;
 
-    //Data-provider pointers
-    DataProviderModule::UniquePtr data_provider_module_;
-    DataProvider::UniquePtr data_loader_;
 
     //Threaded spinners
     Spinner::UniquePtr data_provider_spinner_;

@@ -82,6 +82,9 @@ std::string demangle(const char* name);
 template<typename T>
 std::string to_string(const T& t);
 
+template<typename Input, typename Output>
+bool convert(const Input&, Output&);
+
 
 /**
  * @brief Get demangled class name of type T from an instance

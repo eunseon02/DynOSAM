@@ -25,7 +25,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/common/ImageContainer.hpp"
 
 
 namespace dyno {
@@ -41,6 +41,8 @@ public:
 
    FeatureContainer static_features_;
    FeatureContainer dynamic_features_;
+
+   ObjectIds initial_object_labels_; //!Initial object semantic labels as provided by the input semantic/motion mask (does not include background label)
 
     //also static points that are not used?
 
