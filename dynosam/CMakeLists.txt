@@ -67,6 +67,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc
+  src/frontend/vision/Frame.cc
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
@@ -193,6 +194,7 @@ if(BUILD_TESTING)
     test/test_camera.cc
     test/internal/tmp_file.cc
     test/test_tools.cc
+    test/test_structured_containers.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

@@ -72,7 +72,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
 
-    rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
+    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
+    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
+    frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+    // rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     previous_frame_ = frame;
@@ -115,7 +118,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
-    rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
+
+    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
+    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
+    frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 
     AbsolutePoseCorrespondences correspondences;

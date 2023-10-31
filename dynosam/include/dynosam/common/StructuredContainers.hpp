@@ -28,10 +28,72 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <functional>
 
 #include <glog/logging.h>
 
 namespace dyno {
+namespace internal {
+
+template<typename Container>
+struct filter_iterator_detail {
+    //or use iterator traits?  std::iterator_traits<Iter>::reference
+    using iterator = typename Container::iterator;
+    using value_type = typename iterator::value_type;
+    using reference_type = typename iterator::reference;
+};
+
+template<typename Container, typename FilterFunction = std::function<bool(const typename filter_iterator_detail<Container>::reference_type)>>
+struct filter_iterator {
+public:
+    using Iterator = typename filter_iterator_detail<Container>::iterator;
+    using ValueType = typename filter_iterator_detail<Container>::value_type;
+    using ReferenceType = typename filter_iterator_detail<Container>::reference_type;
+
+    filter_iterator(Container& container, const FilterFunction& filter_func) : container_(container), filter_func_(filter_func), it_(container.begin())
+    {
+        find_first_valid();
+    }
+
+    ReferenceType operator*() { return *it_; }
+    ReferenceType operator->() { return *it_; }
+
+    bool operator==(const filter_iterator& other) const {
+        return it_ == other.it_;
+    }
+    bool operator!=(const filter_iterator& other) const { return it_ != other.it_; }
+
+    bool operator==(const Iterator& other) const {
+        return it_ == other;
+    }
+    bool operator!=(const Iterator& other) const { return it_ != other; }
+
+    filter_iterator& operator++() {
+        do {
+            ++it_;
+        }
+        while(is_invalid());
+        return *this;
+    }
+
+private:
+    bool is_invalid() {
+        return it_ != container_.end() && !filter_func_(*it_);
+    }
+
+    void find_first_valid() {
+        while(is_invalid()) {
+            this->operator++();
+        }
+    }
+
+protected:
+    Container& container_; //! reference to container
+    FilterFunction filter_func_;
+    Iterator it_;
+
+};
+
 
 // template<typename T>
 // class TrackletContainer {
@@ -102,5 +164,8 @@ namespace dyno {
 //     ValuePtrVector value_vector_;
 
 // };
+
+
+} //internal
 
 } //dyno

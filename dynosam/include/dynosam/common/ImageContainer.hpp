@@ -58,6 +58,7 @@ struct ImageType {
         static std::string name() { return "RGBMono"; }
     };
 
+    //really should be disparity?
     struct Depth {
         static void validate(const cv::Mat& input);
         static std::string name() { return "Depth"; }
@@ -96,6 +97,8 @@ struct ImageWrapper {
         Type::validate(img);
     }
 
+    operator cv::Mat&() { return image; }
+    operator const cv::Mat&() const { return image; }
 
     ImageWrapper() : image() {}
 

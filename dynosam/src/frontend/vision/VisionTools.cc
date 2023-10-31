@@ -30,6 +30,34 @@
 
 namespace dyno {
 
+
+namespace vision_tools {
+
+
+void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv::Mat& depth) {
+  disparity.copyTo(depth);
+  const auto& base_line = params.base_line;
+  const auto& depth_scale_factor = params.depth_scale_factor;
+
+  for (int i = 0; i < disparity.rows; i++)
+  {
+    for (int j = 0; j < disparity.cols; j++)
+    {
+      if (disparity.at<double>(i, j) < 0)
+      {
+        depth.at<double>(i, j) = 0;
+      }
+      else
+      {
+        depth.at<double>(i, j) = base_line / (disparity.at<double>(i, j) / depth_scale_factor);
+      }
+    }
+  }
+}
+
+} //vision_tools
+
+
 FrameProcessor::FrameProcessor(const FrontendParams& params, Camera::Ptr camera) : params_(params), camera_(CHECK_NOTNULL(camera)) {}
 
 void FrameProcessor::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const {

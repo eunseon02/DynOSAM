@@ -75,9 +75,14 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     FeaturePtrs dynamic_features;
     trackDynamic(frame_id, tracking_images, dynamic_features);
 
-    auto new_frame = std::make_shared<Frame>(frame_id, timestamp, tracking_images);
-    new_frame->static_features_ = FeatureContainer(static_features);
-    new_frame->dynamic_features_ = FeatureContainer(dynamic_features);
+
+    auto new_frame = std::make_shared<Frame>(
+      frame_id,
+      timestamp,
+      camera_,
+      tracking_images,
+      FeatureContainer(static_features),
+      FeatureContainer(dynamic_features));
     constructDynamicObjectObservations(new_frame);
     // new_frame->initial_object_labels_ = FrameProcessor::getObjectLabels(tracking_images.get<ImageType::MotionMask>());
 

@@ -1,0 +1,91 @@
+/*
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   All rights reserved.
+
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
+
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+
+namespace dyno {
+
+
+Frame::Frame(
+        FrameId frame_id,
+        Timestamp timestamp,
+        Camera::Ptr camera,
+        const TrackingInputImages& tracking_images,
+        const FeatureContainer& static_features,
+        const FeatureContainer& dynamic_features)
+        :   frame_id_(frame_id),
+            timestamp_(timestamp),
+            camera_(camera),
+            tracking_images_(tracking_images),
+            static_features_(static_features),
+            dynamic_features_(dynamic_features) {}
+
+void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth) {
+    updateDepthsFeatureContainer(static_features_, depth, max_static_depth);
+    updateDepthsFeatureContainer(dynamic_features_, depth, max_dynamic_depth);
+}
+
+void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
+    const cv::Mat& depth_mat = depth;
+    FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
+
+    for(; iter != container.end(); ++iter) {
+
+        const Feature::Ptr& feature = *iter;
+        const int x = functional_keypoint::u(feature->keypoint_);
+        const int y = functional_keypoint::v(feature->keypoint_);
+        const Depth d = depth_mat.at<Depth>(y, x);
+
+        if(d > max_depth || d <= 0) {
+            feature->markInvalid();
+        }
+
+         //if now invalid or happens to be invalid from a previous frame, make depth invalid too
+        if(!feature->usable()) {
+            feature->depth_ = Feature::invalid_depth;
+        }
+        else {
+            feature->depth_ = d;
+        }
+    }
+
+}
+
+Frame::FeatureFilterIterator Frame::staticUsableBegin() {
+    return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
+        {
+            return f->usable();
+        }
+    );
+}
+
+Frame::FeatureFilterIterator Frame::dynamicUsableBegin() {
+    return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool
+        {
+            return f->usable();
+        }
+    );
+}
+
+} //dyno

@@ -140,6 +140,11 @@ using FeaturePairs = std::vector<FeaturePair>; //! Vector of feature pairs
 class FeatureContainer {
 public:
     using TrackletToFeatureMap = std::unordered_map<TrackletId, Feature::Ptr>;
+    //! need to define iterator, value_type and reference to satisfy iterator traits
+    using iterator = FeaturePtrs::iterator;
+    using value_type = Feature::Ptr;
+    using reference = Feature::Ptr&;
+    using const_iterator = FeaturePtrs::const_iterator;
 
     FeatureContainer();
     FeatureContainer(const FeaturePtrs feature_vector);
@@ -157,12 +162,12 @@ public:
     bool exists(TrackletId tracklet_id) const;
 
     //vector begin
-    inline FeaturePtrs::iterator begin() { return feature_vector_.begin(); }
-    inline FeaturePtrs::const_iterator begin() const { return feature_vector_.cbegin(); }
+    inline iterator begin() { return feature_vector_.begin(); }
+    inline const_iterator begin() const { return feature_vector_.cbegin(); }
 
     //vector end
-    inline FeaturePtrs::iterator end() { return feature_vector_.end(); }
-    inline FeaturePtrs::const_iterator end() const { return feature_vector_.cend(); }
+    inline iterator end() { return feature_vector_.end(); }
+    inline const_iterator end() const { return feature_vector_.cend(); }
 
 
 private:
