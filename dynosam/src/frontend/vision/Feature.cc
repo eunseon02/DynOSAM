@@ -56,6 +56,10 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     return tracklets;
 }
 
+FeatureContainer::FilterIterator FeatureContainer::usableIterator() {
+    return FilterIterator(feature_vector_, [](const Feature::Ptr& f) -> bool { return f->usable(); });
+}
+
  void FeatureContainer::markOutliers(const TrackletIds outliers) {
     for(TrackletId tracklet_id : outliers) {
         CHECK(exists(tracklet_id));

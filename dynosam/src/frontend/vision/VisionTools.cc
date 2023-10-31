@@ -55,6 +55,43 @@ void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv
   }
 }
 
+
+void getCorrespondences(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features,  bool only_usable) {
+  correspondences.clear();
+
+  for(const auto& curr_feature : current_features) {
+    //check if previous feature and is valid
+    if(previous_features.exists(curr_feature->tracklet_id_)) {
+      const auto prev_feature = previous_features.getByTrackletId(curr_feature->tracklet_id_);
+      CHECK(prev_feature);
+
+      //only if valid
+      if(only_usable && prev_feature->usable()) {
+        correspondences.push_back({prev_feature, curr_feature});
+      }
+      else {
+        correspondences.push_back({prev_feature, curr_feature});
+      }
+    }
+  }
+}
+
+
+ObjectIds getObjectLabels(const cv::Mat& image) {
+  std::set<ObjectId> unique_labels;
+  for (int i = 0; i < image.rows; i++) {
+    for (int j = 0; j < image.cols; j++) {
+      const ObjectId label = image.at<ObjectId>(i, j);
+
+      if(label != background_label) {
+        unique_labels.insert(label);
+      }
+    }
+  }
+
+  return ObjectIds(unique_labels.begin(), unique_labels.end());
+}
+
 } //vision_tools
 
 
@@ -100,13 +137,13 @@ void FrameProcessor::getCorrespondences(FeaturePairs& correspondences, const Fra
 }
 
 
-ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image) {
-  return getObjectLabels(image.image);
-}
+// ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image) {
+//   return getObjectLabels(image.image);
+// }
 
-ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image) {
-  return getObjectLabels(image.image);
-}
+// ObjectIds FrameProcessor::getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image) {
+//   return getObjectLabels(image.image);
+// }
 
 
 void FrameProcessor::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const {
@@ -134,20 +171,6 @@ void FrameProcessor::getCorrespondencesFromContainer(FeaturePairs& correspondenc
   }
 }
 
-ObjectIds FrameProcessor::getObjectLabels(const cv::Mat& image) {
-  std::set<ObjectId> unique_labels;
-  for (int i = 0; i < image.rows; i++) {
-    for (int j = 0; j < image.cols; j++) {
-      const ObjectId label = image.at<ObjectId>(i, j);
-
-      if(label != background_label) {
-        unique_labels.insert(label);
-      }
-    }
-  }
-
-  return ObjectIds(unique_labels.begin(), unique_labels.end());
-}
 
 RGBDProcessor::RGBDProcessor(const FrontendParams& params, Camera::Ptr camera)
     : FrameProcessor(params, camera) {}

@@ -52,7 +52,6 @@ public:
 
 
 protected:
-    void constructDynamicObjectObservations(Frame::Ptr frame) const;
 
     void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);

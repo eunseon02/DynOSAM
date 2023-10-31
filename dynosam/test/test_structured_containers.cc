@@ -64,6 +64,33 @@ TEST(FilterIterator, testConditionalIteratorWithValidStartingIndex) {
     EXPECT_EQ(v_iter, v.end());
 }
 
+TEST(FilterIterator, testConditionalIteratorAsLoop) {
+
+    //start with valid element at v(0)
+    std::vector<int> v = {2, 3, 4, 5};
+    //true on even numbers
+    internal::filter_iterator<std::vector<int>> v_iter(v, [](const int& v) -> bool { return v % 2 == 0; });
+
+    int index = 0;
+    for(const int& i : v_iter) {
+        if(index == 0) {
+            EXPECT_EQ(i, 2);
+        }
+        else if(index == 1) {
+            EXPECT_EQ(i, 4);
+        }
+        else {
+            FAIL() << "Should not get here";
+        }
+
+        index++;
+
+    }
+
+    EXPECT_EQ(index, 2); //2 iterations only!!!
+}
+
+
 TEST(FilterIterator, testConditionalIteratorWithInvalidStartingIndex) {
 
     //start with valid element at v(0)

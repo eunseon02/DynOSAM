@@ -29,6 +29,7 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/DynamicObjects.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
+#include "dynosam/frontend/vision/Vision-Definitions.hpp"
 
 #include <functional>
 
@@ -47,6 +48,44 @@ public:
 
     using FeatureFilterIterator = internal::filter_iterator<FeatureContainer>;
 
+    // struct all_feature_container {
+    //     using iterator = FeatureContainer::iterator;
+    //     using value_type = FeatureContainer::value_type;
+    //     using reference = FeatureContainer::reference;
+
+    //     FeatureContainer& static_features_; //! ref
+    //     FeatureContainer& dynamic_features_; //! ref
+    //     iterator it_;
+
+    //     all_feature_container(const FeatureContainer& static_features, const FeatureContainer& dynamic_features)
+    //         :   static_features_(static_features), dynamic_features_(dynamic_features), it_(static_features.begin()) {}
+
+    //     reference operator*() { return *it_; }
+    //     reference operator->() { return *it_; }
+
+    //     bool operator==(const all_feature_container& other) const {
+    //         return it_ == other.it_;
+    //     }
+    //     bool operator!=(const all_feature_container& other) const { return it_ != other.it_; }
+
+    //     bool operator==(const iterator& other) const {
+    //         return it_ == other;
+    //     }
+    //     bool operator!=(const iterator& other) const { return it_ != other; }
+
+
+    //     all_feature_container& operator++() {
+    //         ++it_;
+    //         if(it_ == static_features_.end()) {
+    //             it_ = dynamic_features_.begin();
+    //         }
+    //         return *this;
+    //     }
+
+    //     iterator end() { return dynamic_features_.end(); }
+
+    // };
+
 
     const FrameId frame_id_;
     const Timestamp timestamp_;
@@ -59,20 +98,6 @@ public:
     FeatureContainer dynamic_features_;
     std::map<ObjectId, DynamicObjectObservation> object_observations_;
 
-    void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
-
-    FeatureFilterIterator staticUsableBegin();
-    FeatureFilterIterator dynamicUsableBegin();
-
-private:
-    void updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth);
-
-
-public:
-//    ObjectIds initial_object_labels_; //!Initial object semantic labels as provided by the input semantic/motion mask (does not include background label)
-
-    //also static points that are not used?
-
     Frame(
         FrameId frame_id,
         Timestamp timestamp,
@@ -81,7 +106,29 @@ public:
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features);
 
+    bool exists(TrackletId tracklet_id) const;
+    Feature::Ptr at(TrackletId tracklet_id) const;
+
+    Landmark backProjectToCamera(TrackletId tracklet_id) const;
+    Landmark backProjectToWorld(TrackletId tracklet_id) const;
+
+    void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
+
+
+    void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+    void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+
+protected:
+    void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
+    void getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
+
 private:
+    static void updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth);
+
+    //based on the current set of dynamic features
+    void constructDynamicObservations();
+
+
 
 };
 

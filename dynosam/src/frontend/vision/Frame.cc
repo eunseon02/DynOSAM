@@ -23,6 +23,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
 
 namespace dyno {
 
@@ -39,20 +40,125 @@ Frame::Frame(
             camera_(camera),
             tracking_images_(tracking_images),
             static_features_(static_features),
-            dynamic_features_(dynamic_features) {}
+            dynamic_features_(dynamic_features)
+        {
+            constructDynamicObservations();
+        }
+
+bool Frame::exists(TrackletId tracklet_id) const {
+    const bool result = static_features_.exists(tracklet_id) || dynamic_features_.exists(tracklet_id);
+
+    //debug checking -> should only be in one feature container
+    if(result) {
+        CHECK(!(static_features_.exists(tracklet_id) &&  dynamic_features_.exists(tracklet_id)))
+            << "Tracklet Id " <<  tracklet_id << " exists in both static and dynamic feature sets. Should be unique!";
+    }
+    return result;
+}
+
+Feature::Ptr Frame::at(TrackletId tracklet_id) const {
+    if(!exists(tracklet_id)) {
+        return nullptr;
+    }
+
+    if(static_features_.exists(tracklet_id)) {
+        CHECK(!dynamic_features_.exists(tracklet_id));
+        return static_features_.getByTrackletId(tracklet_id);
+    }
+    else {
+        CHECK(dynamic_features_.exists(tracklet_id));
+        return dynamic_features_.getByTrackletId(tracklet_id);
+    }
+}
+
+
+Landmark Frame::backProjectToCamera(TrackletId tracklet_id) const {
+    Feature::Ptr feature = at(tracklet_id);
+    if(!feature) {
+        throw std::runtime_error("Failed to backProjectToCamera - tracklet id " + std::to_string(tracklet_id) + " does not exist");
+    }
+
+    //if no depth, project to unitsphere?
+    CHECK(feature->hasDepth());
+
+    Landmark lmk;
+    camera_->backProject(feature->keypoint_, feature->depth_, &lmk);
+    return lmk;
+}
+
+Landmark Frame::backProjectToWorld(TrackletId tracklet_id) const {
+    Feature::Ptr feature = at(tracklet_id);
+    if(!feature) {
+        throw std::runtime_error("Failed to backProjectToWorld - tracklet id " + std::to_string(tracklet_id) + " does not exist");
+    }
+
+    //if no depth, project to unitsphere?
+    CHECK(feature->hasDepth());
+
+    Landmark lmk;
+    camera_->backProject(feature->keypoint_, feature->depth_, &lmk, T_world_camera_);
+    return lmk;
+}
 
 void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth) {
     updateDepthsFeatureContainer(static_features_, depth, max_static_depth);
     updateDepthsFeatureContainer(dynamic_features_, depth, max_dynamic_depth);
 }
 
+
+void Frame::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
+  correspondences.clear();
+  FeaturePairs feature_correspondences;
+  getCorrespondences(feature_correspondences, previous_frame, kp_type);
+
+  //this will also take a point in the camera frame and put into world frame
+  for(const auto& pair : feature_correspondences) {
+    const Feature::Ptr& prev_feature = pair.first;
+    const Feature::Ptr& curr_feature = pair.second;
+
+    CHECK(prev_feature);
+    CHECK(curr_feature);
+
+    CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
+
+
+    //this will not work for monocular or some other system that never has depth but will eventually have a point?
+    if(!prev_feature->hasDepth()) {
+      throw std::runtime_error("Error in FrameProcessor::getCorrespondences for AbsolutePoseCorrespondences - previous feature does not have depth!");
+    }
+
+    //eventuall map?
+    Landmark lmk_w = previous_frame.backProjectToWorld(prev_feature->tracklet_id_);
+    correspondences.push_back(TrackletCorrespondance(prev_feature->tracklet_id_, lmk_w, curr_feature->keypoint_));
+  }
+
+}
+
+void Frame::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
+    if(kp_type == KeyPointType::STATIC) {
+        getStaticCorrespondences(correspondences, previous_frame);
+    }
+    else {
+        getDynamicCorrespondences(correspondences, previous_frame);
+    }
+}
+void Frame::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
+    vision_tools::getCorrespondences(correspondences, previous_frame.static_features_, static_features_, true);
+}
+
+void Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
+    vision_tools::getCorrespondences(correspondences, previous_frame.dynamic_features_, dynamic_features_, true);
+}
+
+
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
     const cv::Mat& depth_mat = depth;
-    FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
+    // FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
+    auto iter = container.usableIterator();
 
-    for(; iter != container.end(); ++iter) {
-
-        const Feature::Ptr& feature = *iter;
+    for(const Feature::Ptr& feature : iter) {
+        CHECK(feature->usable());
+        // const Feature::Ptr& feature = *iter;
         const int x = functional_keypoint::u(feature->keypoint_);
         const int y = functional_keypoint::v(feature->keypoint_);
         const Depth d = depth_mat.at<Depth>(y, x);
@@ -72,20 +178,46 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 }
 
-Frame::FeatureFilterIterator Frame::staticUsableBegin() {
-    return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
-        {
-            return f->usable();
+
+void Frame::constructDynamicObservations() {
+    CHECK_GT(dynamic_features_.size(), 0u);
+    object_observations_.clear();
+
+    const ObjectIds object_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
+
+    auto inlier_iterator = dynamic_features_.usableIterator();
+    for(const Feature::Ptr& dynamic_feature : inlier_iterator) {
+        CHECK(!dynamic_feature->isStatic());
+        CHECK(dynamic_feature->usable());
+
+        const ObjectId label = dynamic_feature->instance_label_;
+        //this check is just for sanity!
+        CHECK(std::find(object_labels.begin(), object_labels.end(), label) != object_labels.end());
+
+        if(object_observations_.find(label) == object_observations_.end()) {
+            DynamicObjectObservation observation;
+            observation.object_id_ = label;
+            object_observations_[label] = observation;
         }
-    );
+
+        object_observations_[label].object_features_.push_back(dynamic_feature->tracklet_id_);
+    }
 }
 
-Frame::FeatureFilterIterator Frame::dynamicUsableBegin() {
-    return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool
-        {
-            return f->usable();
-        }
-    );
-}
+// Frame::FeatureFilterIterator Frame::staticUsableBegin() {
+//     return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
+//         {
+//             return f->usable();
+//         }
+//     );
+// }
+
+// Frame::FeatureFilterIterator Frame::dynamicUsableBegin() {
+//     return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool
+//         {
+//             return f->usable();
+//         }
+//     );
+// }
 
 } //dyno

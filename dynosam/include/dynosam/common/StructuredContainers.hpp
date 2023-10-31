@@ -50,10 +50,7 @@ public:
     using ValueType = typename filter_iterator_detail<Container>::value_type;
     using ReferenceType = typename filter_iterator_detail<Container>::reference_type;
 
-    filter_iterator(Container& container, const FilterFunction& filter_func) : container_(container), filter_func_(filter_func), it_(container.begin())
-    {
-        find_first_valid();
-    }
+    filter_iterator(Container& container, const FilterFunction& filter_func) : filter_iterator(container, filter_func, container.begin()) {}
 
     ReferenceType operator*() { return *it_; }
     ReferenceType operator->() { return *it_; }
@@ -76,6 +73,10 @@ public:
         return *this;
     }
 
+    //allows the iterator to be used as a enhanced for loop
+    filter_iterator begin() { return filter_iterator(container_, filter_func_, container_.begin()); }
+    filter_iterator end() { return filter_iterator(container_, filter_func_, container_.end()); }
+
 private:
     bool is_invalid() {
         return it_ != container_.end() && !filter_func_(*it_);
@@ -86,6 +87,11 @@ private:
             this->operator++();
         }
     }
+
+protected:
+    filter_iterator(Container& container, const FilterFunction& filter_func, Iterator it)
+        :   container_(container), filter_func_(filter_func), it_(it)
+        {  find_first_valid(); }
 
 protected:
     Container& container_; //! reference to container

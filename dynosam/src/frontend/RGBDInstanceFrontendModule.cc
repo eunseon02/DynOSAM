@@ -127,7 +127,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     AbsolutePoseCorrespondences correspondences;
     //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
     //bearing vectors are also not undistorted atm!!
-    rgbd_processor_.getCorrespondences(correspondences, *previous_frame_, *frame, KeyPointType::STATIC);
+    // rgbd_processor_.getCorrespondences(correspondences, *previous_frame_, *frame, KeyPointType::STATIC);
+    frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC);
 
     LOG(INFO) << "Gotten correspondances, solving camera pose";
 
@@ -141,10 +142,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
 
-    cv::Mat moving_object_mat;
-    rgbd_processor_.updateMovingObjects(*previous_frame_, frame, moving_object_mat);
+    // cv::Mat moving_object_mat;
+    // // rgbd_processor_.updateMovingObjects(*previous_frame_, frame, moving_object_mat);
 
-    if(display_queue_) display_queue_->push(ImageToDisplay("moving objects", moving_object_mat));
+    // if(display_queue_) display_queue_->push(ImageToDisplay("moving objects", moving_object_mat));
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));

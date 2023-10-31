@@ -23,7 +23,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-// #include "dynosam/common/S"
+#include "dynosam/common/StructuredContainers.hpp"
 
 #include <map>
 #include <vector>
@@ -132,6 +132,9 @@ public:
     }
 };
 
+
+
+
 using FeaturePtrs = std::vector<Feature::Ptr>;
 using FeaturePair = std::pair<Feature::Ptr, Feature::Ptr>; //! Pair of feature (shared) pointers
 using FeaturePairs = std::vector<FeaturePair>; //! Vector of feature pairs
@@ -146,11 +149,17 @@ public:
     using reference = Feature::Ptr&;
     using const_iterator = FeaturePtrs::const_iterator;
 
+    //iterator over the internal feature vector (similar to the iterator provided
+    //by begin() but this is a custom iterator for filtering)
+    using FilterIterator = internal::filter_iterator<FeaturePtrs>;
+
     FeatureContainer();
     FeatureContainer(const FeaturePtrs feature_vector);
 
     void add(Feature::Ptr feature);
     TrackletIds collectTracklets(bool only_usable = true) const;
+
+    FilterIterator usableIterator();
 
     void markOutliers(const TrackletIds outliers);
 
@@ -170,10 +179,14 @@ public:
     inline const_iterator end() const { return feature_vector_.cend(); }
 
 
+
+
+
 private:
     TrackletToFeatureMap feature_map_;
     FeaturePtrs feature_vector_;
 };
+
 
 
 

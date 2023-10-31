@@ -42,6 +42,9 @@ namespace vision_tools {
 
 
 void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv::Mat& depth);
+void getCorrespondences(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features, bool only_usable = true);
+//unique object labels as present in a semantic/motion segmented image -> does not include background label
+ObjectIds getObjectLabels(const cv::Mat& image);
 
 
 
@@ -60,8 +63,8 @@ public:
     void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
     void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
 
-    static ObjectIds getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image);
-    static ObjectIds getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image);
+    // static ObjectIds getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image);
+    // static ObjectIds getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image);
 
 
 protected:
@@ -71,7 +74,6 @@ protected:
     void getCorrespondencesFromContainer(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features) const;
 
 private:
-    static ObjectIds getObjectLabels(const cv::Mat& image);
 
 protected:
     const FrontendParams params_;
