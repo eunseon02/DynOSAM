@@ -42,6 +42,21 @@ void FeatureContainer::add(Feature::Ptr feature) {
     feature_vector_.push_back(feature);
 }
 
+ //TODO: test
+ //this will mess up any iterator that currently has a reference to any feature_vector (so any of the filters)
+void FeatureContainer::remove(TrackletId tracklet_id) {
+    if(!exists(tracklet_id)) {
+        throw std::runtime_error("Cannot remove feature with tracklet id " + std::to_string(tracklet_id) + " as feature does not exist!");
+    }
+
+    feature_map_.erase(tracklet_id);
+
+    auto find_by_tracklet_id = [&](const Feature::Ptr& f) { return f->tracklet_id_ == tracklet_id; };
+    auto it = std::find_if(feature_vector_.begin(), feature_vector_.end(), find_by_tracklet_id);
+    CHECK(it != feature_vector_.end());
+    feature_vector_.erase(it);
+}
+
 TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     TrackletIds tracklets;
     for(const auto& feature : *this) {

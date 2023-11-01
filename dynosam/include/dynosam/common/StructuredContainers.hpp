@@ -37,34 +37,47 @@ namespace internal {
 
 template<typename Container>
 struct filter_iterator_detail {
-    //or use iterator traits?  std::iterator_traits<Iter>::reference
+    //! naming conventions to match those required by iterator traits
     using iterator = typename Container::iterator;
-    using value_type = typename iterator::value_type;
-    using reference_type = typename iterator::reference;
+    using value_type = typename std::iterator_traits<iterator>::value_type;
+    using reference_type = typename std::iterator_traits<iterator>::reference;
+    using difference_type = typename std::iterator_traits<iterator>::difference_type;
+    using iterator_category = std::forward_iterator_tag; //i guess? only forward is defined (++iter) right now
 };
 
+
 template<typename Container, typename FilterFunction = std::function<bool(const typename filter_iterator_detail<Container>::reference_type)>>
-struct filter_iterator {
+struct filter_iterator : public filter_iterator_detail<Container> {
 public:
-    using Iterator = typename filter_iterator_detail<Container>::iterator;
-    using ValueType = typename filter_iterator_detail<Container>::value_type;
-    using ReferenceType = typename filter_iterator_detail<Container>::reference_type;
+
+    using BaseDetail = filter_iterator_detail<Container>;
+    using typename BaseDetail::iterator;
+    using typename BaseDetail::value_type;
+    using typename BaseDetail::reference_type;
+    using typename BaseDetail::difference_type;
+    using typename BaseDetail::iterator_category;
 
     filter_iterator(Container& container, const FilterFunction& filter_func) : filter_iterator(container, filter_func, container.begin()) {}
 
-    ReferenceType operator*() { return *it_; }
-    ReferenceType operator->() { return *it_; }
+    reference_type operator*() { return *it_; }
+    reference_type operator->() { return *it_; }
 
     bool operator==(const filter_iterator& other) const {
         return it_ == other.it_;
     }
     bool operator!=(const filter_iterator& other) const { return it_ != other.it_; }
 
-    bool operator==(const Iterator& other) const {
+    bool operator==(const iterator& other) const {
         return it_ == other;
     }
-    bool operator!=(const Iterator& other) const { return it_ != other; }
+    bool operator!=(const iterator& other) const { return it_ != other; }
 
+    // inline size_t size() const {
+    //     return std::distance(begin(), end());
+    // }
+
+
+    //preincrement (++iter)
     filter_iterator& operator++() {
         do {
             ++it_;
@@ -73,30 +86,35 @@ public:
         return *this;
     }
 
+    filter_iterator& operator++(int x) { return *this;}
+
     //allows the iterator to be used as a enhanced for loop
     filter_iterator begin() { return filter_iterator(container_, filter_func_, container_.begin()); }
     filter_iterator end() { return filter_iterator(container_, filter_func_, container_.end()); }
+
+    const filter_iterator begin() const { return filter_iterator(container_, filter_func_, container_.begin()); }
+    const filter_iterator end() const { return filter_iterator(container_, filter_func_, container_.end()); }
 
 private:
     bool is_invalid() {
         return it_ != container_.end() && !filter_func_(*it_);
     }
 
-    void find_first_valid() {
+    void find_next_valid() {
         while(is_invalid()) {
             this->operator++();
         }
     }
 
 protected:
-    filter_iterator(Container& container, const FilterFunction& filter_func, Iterator it)
+    filter_iterator(Container& container, const FilterFunction& filter_func, iterator it)
         :   container_(container), filter_func_(filter_func), it_(it)
-        {  find_first_valid(); }
+        {  find_next_valid(); }
 
 protected:
     Container& container_; //! reference to container
     FilterFunction filter_func_;
-    Iterator it_;
+    mutable iterator it_;
 
 };
 

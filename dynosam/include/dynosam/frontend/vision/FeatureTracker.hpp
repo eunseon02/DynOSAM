@@ -57,6 +57,8 @@ protected:
                    size_t& n_new_tracks);
     void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& dynamic_features);
 
+    void propogateMask(TrackingInputImages& tracking_images);
+
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
     bool posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const;

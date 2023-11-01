@@ -46,8 +46,6 @@ public:
     DYNO_POINTER_TYPEDEFS(Frame)
     DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
 
-    using FeatureFilterIterator = internal::filter_iterator<FeatureContainer>;
-
     // struct all_feature_container {
     //     using iterator = FeatureContainer::iterator;
     //     using value_type = FeatureContainer::value_type;
@@ -96,6 +94,10 @@ public:
 
     FeatureContainer static_features_;
     FeatureContainer dynamic_features_;
+
+    static ObjectId global_object_id;
+
+    //semantic instance label to object observation (by the actual observations in the image)
     std::map<ObjectId, DynamicObjectObservation> object_observations_;
 
     Frame(
@@ -106,8 +108,30 @@ public:
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features);
 
+    //inliers and outliers
+    inline size_t numStaticFeatures() const { return static_features_.size(); }
+
+    //TODO: test
+    inline size_t numStaticUsableFeatures() {
+        auto iter = usableStaticFeaturesBegin();
+        return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
+    }
+
+    inline size_t numDynamicFeatures() const { return dynamic_features_.size(); }
+    //TODO: test
+    inline size_t numDynamicUsableFeatures() {
+        auto iter = usableDynamicFeaturesBegin();
+        return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
+    }
+
+    //inliers and outliers
+    inline size_t numTotalFeatures() const { return numStaticFeatures() +  numDynamicFeatures(); }
+
+
     bool exists(TrackletId tracklet_id) const;
     Feature::Ptr at(TrackletId tracklet_id) const;
+
+    FeaturePtrs collectFeatures(TrackletIds tracklet_ids) const;
 
     Landmark backProjectToCamera(TrackletId tracklet_id) const;
     Landmark backProjectToWorld(TrackletId tracklet_id) const;
@@ -115,8 +139,20 @@ public:
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
 
 
+    //TODO: this really needs testing
+    void moveObjectToStatic(ObjectId instance_label);
+    //TODO: testing
+    //also updates all the tracking_labels of the features associated with this object
+    void updateObjectTrackingLabel(const DynamicObjectObservation& observation, ObjectId new_tracking_label);
+
+
+
     void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
     void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+
+    //special iterator types
+    FeatureFilterIterator usableStaticFeaturesBegin();
+    FeatureFilterIterator usableDynamicFeaturesBegin();
 
 protected:
     void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;

@@ -46,7 +46,7 @@ void getCorrespondences(FeaturePairs& correspondences, const FeatureContainer& p
 //unique object labels as present in a semantic/motion segmented image -> does not include background label
 ObjectIds getObjectLabels(const cv::Mat& image);
 
-
+std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const Frame& previous_frame, Frame::Ptr current_frame);
 
 } //vision_tools
 

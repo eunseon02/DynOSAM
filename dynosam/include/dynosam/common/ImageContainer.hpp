@@ -226,6 +226,12 @@ public:
         return std::get<Index<ImageType>()>(image_storage_).image;
     }
 
+
+    template<typename ImageType>
+    cv::Mat& get() {
+        return std::get<Index<ImageType>()>(image_storage_).image;
+    }
+
     /**
      * @brief Gets the corresponding ImageWrapper corresponding to the ImageType.
      * ImageType must be in the class parameter pack (ImageTypes...) or the code will fail to compile.

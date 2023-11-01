@@ -148,6 +148,7 @@ public:
     using value_type = Feature::Ptr;
     using reference = Feature::Ptr&;
     using const_iterator = FeaturePtrs::const_iterator;
+    using difference_type = std::ptrdiff_t;
 
     //iterator over the internal feature vector (similar to the iterator provided
     //by begin() but this is a custom iterator for filtering)
@@ -157,6 +158,9 @@ public:
     FeatureContainer(const FeaturePtrs feature_vector);
 
     void add(Feature::Ptr feature);
+    //TODO: test
+    void remove(TrackletId tracklet_id);
+
     TrackletIds collectTracklets(bool only_usable = true) const;
 
     FilterIterator usableIterator();
@@ -187,7 +191,17 @@ private:
     FeaturePtrs feature_vector_;
 };
 
+/// @brief filter iterator over a FeatureContainer class
+using FeatureFilterIterator = internal::filter_iterator<FeatureContainer>;
 
+} //dyno
 
+//add iterator traits so we can use smart thigns on the FeatureFilterIterator like std::count, std::distance...
+template<>
+struct std::iterator_traits<dyno::FeatureFilterIterator> : public dyno::internal::filter_iterator_detail<dyno::FeatureFilterIterator> {};
 
-}
+template<>
+struct std::iterator_traits<dyno::FeatureContainer> : public dyno::internal::filter_iterator_detail<dyno::FeatureContainer> {};
+
+template<>
+struct std::iterator_traits<dyno::FeaturePtrs> : public dyno::internal::filter_iterator_detail<dyno::FeaturePtrs> {};

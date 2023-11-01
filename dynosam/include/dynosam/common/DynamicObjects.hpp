@@ -33,12 +33,14 @@ class Camera;
 struct DynamicObjectObservation {
 
     TrackletIds object_features_; //! Tracklet id's of object features within the frame. Does not indicate usability
-    ObjectId object_id_;
+    ObjectId tracking_label_; //tracking id (not necessarily instance label???), -1 if not tracked yet
+    ObjectId instance_label_; //this shoudl really be constant and part of the constructor as we get this straight from the input image and will never change
     bool marked_as_moving_{false};
 
-    DynamicObjectObservation() : object_features_(), object_id_(-1) {}
-    DynamicObjectObservation(const TrackletIds& object_features, ObjectId object_id) : object_features_(object_features), object_id_(object_id) {}
+    DynamicObjectObservation() : object_features_(), tracking_label_(-1) {}
+    DynamicObjectObservation(const TrackletIds& object_features, ObjectId tracking_label) : object_features_(object_features), tracking_label_(tracking_label) {}
 
 };
+
 
 }

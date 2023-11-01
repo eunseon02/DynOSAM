@@ -27,6 +27,7 @@
 
 namespace dyno {
 
+ObjectId Frame::global_object_id{1};
 
 Frame::Frame(
         FrameId frame_id,
@@ -69,6 +70,21 @@ Feature::Ptr Frame::at(TrackletId tracklet_id) const {
         CHECK(dynamic_features_.exists(tracklet_id));
         return dynamic_features_.getByTrackletId(tracklet_id);
     }
+}
+
+
+FeaturePtrs Frame::collectFeatures(TrackletIds tracklet_ids) const {
+    FeaturePtrs features;
+    for(const auto tracklet_id : tracklet_ids) {
+        Feature::Ptr feature = at(tracklet_id);
+        if(!feature) {
+            throw std::runtime_error("Failed to collectFeatures - tracklet id " + std::to_string(tracklet_id) + " does not exist");
+        }
+
+        features.push_back(feature);
+    }
+
+    return features;
 }
 
 
@@ -156,7 +172,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
     // FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
     auto iter = container.usableIterator();
 
-    for(const Feature::Ptr& feature : iter) {
+    for(Feature::Ptr feature : iter) {
         CHECK(feature->usable());
         // const Feature::Ptr& feature = *iter;
         const int x = functional_keypoint::u(feature->keypoint_);
@@ -183,34 +199,91 @@ void Frame::constructDynamicObservations() {
     CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
 
-    const ObjectIds object_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
+
+    const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
 
     auto inlier_iterator = dynamic_features_.usableIterator();
     for(const Feature::Ptr& dynamic_feature : inlier_iterator) {
         CHECK(!dynamic_feature->isStatic());
         CHECK(dynamic_feature->usable());
 
-        const ObjectId label = dynamic_feature->instance_label_;
+        const ObjectId instance_label = dynamic_feature->instance_label_;
         //this check is just for sanity!
-        CHECK(std::find(object_labels.begin(), object_labels.end(), label) != object_labels.end());
+        CHECK(std::find(instance_labels.begin(), instance_labels.end(), instance_label) != instance_labels.end());
 
-        if(object_observations_.find(label) == object_observations_.end()) {
+        if(object_observations_.find(instance_label) == object_observations_.end()) {
             DynamicObjectObservation observation;
-            observation.object_id_ = label;
-            object_observations_[label] = observation;
+            observation.tracking_label_ = -1;
+            observation.instance_label_ = instance_label;
+            object_observations_[instance_label] = observation;
         }
 
-        object_observations_[label].object_features_.push_back(dynamic_feature->tracklet_id_);
+        object_observations_[instance_label].object_features_.push_back(dynamic_feature->tracklet_id_);
     }
 }
 
-// Frame::FeatureFilterIterator Frame::staticUsableBegin() {
-//     return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
-//         {
-//             return f->usable();
-//         }
-//     );
-// }
+void Frame::moveObjectToStatic(ObjectId instance_label) {
+    auto it = object_observations_.find(instance_label);
+    CHECK(it != object_observations_.end());
+
+
+    DynamicObjectObservation& observation = it->second;
+    observation.marked_as_moving_ = false;
+    CHECK(observation.instance_label_ == instance_label);
+    //go through all features, move them to from dynamic structure and add them to static
+    for(TrackletId tracklet_id : observation.object_features_) {
+        CHECK(dynamic_features_.exists(tracklet_id));
+        Feature::Ptr dynamic_feature = dynamic_features_.getByTrackletId(tracklet_id);
+
+        if(!dynamic_feature->usable()) {continue;}
+
+
+        CHECK(!dynamic_feature->isStatic());
+        CHECK_EQ(dynamic_feature->tracklet_id_, tracklet_id);
+        CHECK_EQ(dynamic_feature->instance_label_, instance_label);
+        dynamic_feature->type_ = KeyPointType::STATIC;
+        dynamic_feature->instance_label_ = background_label;
+        dynamic_feature->tracking_label_ = background_label;
+
+        dynamic_features_.remove(tracklet_id);
+        static_features_.add(dynamic_feature);
+    }
+
+    object_observations_.erase(it);
+
+}
+
+void Frame::updateObjectTrackingLabel(const DynamicObjectObservation& observation, ObjectId new_tracking_label) {
+    auto it = object_observations_.find(observation.instance_label_);
+    CHECK(it != object_observations_.end());
+
+    auto& obs = it->second;
+    obs.tracking_label_ = new_tracking_label;
+    //update all features
+    for(TrackletId tracklet_id : obs.object_features_) {
+        Feature::Ptr feature = dynamic_features_.getByTrackletId(tracklet_id);
+        CHECK(feature);
+        feature->tracking_label_ = new_tracking_label;
+    }
+}
+
+
+FeatureFilterIterator Frame::usableStaticFeaturesBegin() {
+    return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
+        {
+            return f->usable();
+        }
+    );
+}
+
+FeatureFilterIterator Frame::usableDynamicFeaturesBegin() {
+    return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool
+        {
+            return f->usable();
+        }
+    );
+}
+
 
 // Frame::FeatureFilterIterator Frame::dynamicUsableBegin() {
 //     return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool

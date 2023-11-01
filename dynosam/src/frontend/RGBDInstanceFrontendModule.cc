@@ -77,6 +77,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
     // rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
 
+
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     previous_frame_ = frame;
 
@@ -141,6 +142,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
     frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
+
+    vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
 
     // cv::Mat moving_object_mat;
     // // rgbd_processor_.updateMovingObjects(*previous_frame_, frame, moving_object_mat);

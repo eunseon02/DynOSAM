@@ -21,6 +21,7 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
@@ -49,10 +50,13 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
 }
 
 Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks) {
+    //take "copy" of tracking_images which is then given to the frame
+    //this will mean that the tracking images (input) are not necessarily the same as the ones inside the returned frame
+    TrackingInputImages input_images = tracking_images;
 
     if(initial_computation_) {
         //intitial computation
-        const cv::Size& other_size = tracking_images.get<ImageType::RGBMono>().size();
+        const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
         CHECK(!previous_frame_);
         CHECK(img_size_.width == other_size.width && img_size_.height == other_size.height);
         computeImageBounds(img_size_, min_x_, max_x_, min_y_, max_y_);
@@ -64,16 +68,16 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
         initial_computation_ = false;
     }
     else {
-        //TODO:: update frame mask
+        propogateMask(input_images);
         CHECK(previous_frame_);
         CHECK_EQ(previous_frame_->frame_id_, frame_id - 1u) << "Incoming frame id must be consequative";
     }
 
     FeaturePtrs static_features;
-    trackStatic(frame_id, tracking_images, static_features, n_optical_flow, n_new_tracks);
+    trackStatic(frame_id, input_images, static_features, n_optical_flow, n_new_tracks);
 
     FeaturePtrs dynamic_features;
-    trackDynamic(frame_id, tracking_images, dynamic_features);
+    trackDynamic(frame_id, input_images, dynamic_features);
 
 
     auto new_frame = std::make_shared<Frame>(
@@ -83,8 +87,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       tracking_images,
       FeatureContainer(static_features),
       FeatureContainer(dynamic_features));
-    // constructDynamicObjectObservations(new_frame);
-    // new_frame->initial_object_labels_ = FrameProcessor::getObjectLabels(tracking_images.get<ImageType::MotionMask>());
 
     previous_frame_ = new_frame;
     return new_frame;
@@ -133,27 +135,54 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
     }
   }
 
+  for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
+    CHECK(object_observation.marked_as_moving_);
+    //get average center of 2 object
+    FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
 
-  // for (size_t i = 0; i < current_frame.dynamic_features_.size(); ++i) {
-  //   const Feature::Ptr& feature = current_frame.dynamic_features_.at(i);
-  //   const Keypoint& px_cur = feature->keypoint_;
-  //   if (!feature->usable()) {  // Untracked landmarks are red.
-  //     // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
-  //   } else {
+    size_t count = 0;
+    int center_x = 0, center_y = 0;
+    auto usable_iterator = internal::filter_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return f->usable(); });
+    for(const Feature::Ptr& feature : usable_iterator) {
+      center_x += functional_keypoint::u(feature->keypoint_);
+      center_y += functional_keypoint::v(feature->keypoint_);
+      count++;
+    }
+
+    center_x /= features.size();
+    center_y /= features.size();
+
+    cv::putText(
+      img_rgb,
+      std::to_string(object_observation.tracking_label_),
+      cv::Point(center_x, center_y),
+      cv::FONT_HERSHEY_DUPLEX,
+      1.0,
+      CV_RGB(118, 185, 0),  // font color
+      3);
+
+  }
+
+  for (size_t i = 0; i < current_frame.dynamic_features_.size(); ++i) {
+    const Feature::Ptr& feature = current_frame.dynamic_features_.at(i);
+    const Keypoint& px_cur = feature->keypoint_;
+    if (!feature->usable()) {  // Untracked landmarks are red.
+      // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
+    } else {
 
 
-  //     const Feature::Ptr& prev_feature = previous_frame.dynamic_features_.getByTrackletId(feature->tracklet_id_);
-  //     if (prev_feature) {
-  //       // If feature was in previous frame, display tracked feature with
-  //       // green circle/line:
-  //       // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
-  //       const Keypoint& px_prev = prev_feature->keypoint_;
-  //       cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
-  //     } else {  // New feature tracks are blue.
-  //       cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 1, blue, 1);
-  //     }
-  //   }
-  // }
+      const Feature::Ptr& prev_feature = previous_frame.dynamic_features_.getByTrackletId(feature->tracklet_id_);
+      if (prev_feature) {
+        // If feature was in previous frame, display tracked feature with
+        // green circle/line:
+        // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
+        const Keypoint& px_prev = prev_feature->keypoint_;
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
+      } else {  // New feature tracks are blue.
+        // cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 1, blue, 1);
+      }
+    }
+  }
 
 
   return img_rgb;
@@ -351,8 +380,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
       ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
 
-      const Keypoint previous_point = previous_dynamic_feature->keypoint_;
-      // InstanceLabel previous_label = previous_frame_->images_.semantic_mask.at<InstanceLabel>(previous_point.pt.y,
+      // const Keypoint previous_point = previous_dynamic_feature->keypoint_;
+      // InstanceLabel previous_label = previous_frame__->images_.semantic_mask.at<InstanceLabel>(previous_point.pt.y,
       // previous_point.pt.x); bool same_propogated_label = previous_label == predicted_label;
       if(camera_->isKeypointContained(kp) && previous_dynamic_feature->usable() && predicted_label != background_label) {
         size_t new_age = age + 1;
@@ -386,7 +415,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         // camera_.backProject(previous_point, previous_dynamic_feature->depth, &lmk_previous);
 
         // //put both into the world frame
-        // lmk_previous = previous_frame_->pose_.transformFrom(lmk_previous);
+        // lmk_previous = previous_frame__->pose_.transformFrom(lmk_previous);
 
         //  cv::arrowedLine(viz,
         //     utils::gtsamPointToCV(previous_feature->keypoint_),
@@ -469,6 +498,119 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
   // std::vector<InstanceLabel> unique_instance_labels = instance_labels;
   // unique_instance_labels.erase(std::unique(unique_instance_labels.begin(), unique_instance_labels.end()),
   //                              unique_instance_labels.end());
+}
+
+
+void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
+  if(!previous_frame_) return;
+
+
+  const cv::Mat& previous_rgb = previous_frame_->tracking_images_.get<ImageType::RGBMono>();
+  const cv::Mat& previous_mask = previous_frame_->tracking_images_.get<ImageType::MotionMask>();
+  const cv::Mat& previous_flow = previous_frame_->tracking_images_.get<ImageType::OpticalFlow>();
+
+  // note reference
+  cv::Mat& current_mask = tracking_images.get<ImageType::MotionMask>();
+
+  ObjectIds instance_labels;
+  for(const Feature::Ptr& dynamic_feature : previous_frame_->usableDynamicFeaturesBegin()) {
+    instance_labels.push_back(dynamic_feature->instance_label_);
+  }
+
+  CHECK_EQ(instance_labels.size(), previous_frame_->numDynamicUsableFeatures());
+  std::sort(instance_labels.begin(), instance_labels.end());
+  instance_labels.erase(std::unique(instance_labels.begin(), instance_labels.end()), instance_labels.end());
+  std::vector<ObjectIds> object_features(instance_labels.size());
+
+  // collect the predicted labels and semantic labels in vector
+  for (size_t i = 0; i < previous_frame_->numDynamicFeatures(); i++)
+  {
+    Feature::Ptr dynamic_feature = previous_frame_->dynamic_features_.at(i);
+    for (size_t j = 0; j < instance_labels.size(); j++)
+    {
+      // save object label for object j with feature i
+      if (dynamic_feature->instance_label_ == instance_labels[j])
+      {
+        object_features[j].push_back(i);
+        break;
+      }
+    }
+  }
+
+   // check each object label distribution in the coming frame
+  int updated_mask_points = 0;
+  for (size_t i = 0; i < object_features.size(); i++)
+  {
+    ObjectIds temp_label;
+    for (size_t j = 0; j < object_features[i].size(); j++)
+    {
+      Feature::Ptr feature = previous_frame_->dynamic_features_.at(object_features[i][j]);
+      const Keypoint& predicted_kp = feature->predicted_keypoint_;
+      const int u = functional_keypoint::u(predicted_kp);
+      const int v = functional_keypoint::v(predicted_kp);
+      // ensure u and v are sitll inside the CURRENT frame
+      if (u < previous_rgb.cols && u > 0 && v < previous_rgb.rows && v > 0)
+      {
+        temp_label.push_back(current_mask.at<ObjectId>(v, u));
+      }
+    }
+
+    if (temp_label.size() < 100)
+    {
+      LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " poins size - "
+                   << temp_label.size();
+      // then do we mark as outliers?
+      continue;
+    }
+
+    // find label that appears most in LabTmp()
+    // (1) count duplicates
+    std::map<int, int> label_duplicates;
+    for (int k : temp_label)
+    {
+      if (label_duplicates.find(k) == label_duplicates.end())
+      {
+        label_duplicates.insert({ k, 0 });
+      }
+      else
+      {
+        label_duplicates.at(k)++;
+      }
+    }
+    // (2) and sort them by descending order by number of times an object appeared (ie. by pair.second)
+    std::vector<std::pair<int, int>> sorted;
+    for (auto k : label_duplicates)
+    {
+      sorted.push_back(std::make_pair(k.first, k.second));
+    }
+
+    auto sort_pair_int = [](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool {
+      return (a.second > b.second);
+    };
+    std::sort(sorted.begin(), sorted.end(), sort_pair_int);
+
+    // recover the missing mask (time consuming!)
+    if (sorted[0].first == 0)  //?
+    {
+      for (int j = 0; j < previous_rgb.rows; j++)
+      {
+        for (int k = 0; k < previous_rgb.cols; k++)
+        {
+          if (previous_mask.at<ObjectId>(j, k) == instance_labels[i])
+          {
+            const int flow_x = previous_flow.at<cv::Vec2f>(j, k)[0];
+            const int flow_y = previous_flow.at<cv::Vec2f>(j, k)[1];
+
+            if (k + flow_x < previous_rgb.cols && k + flow_x > 0 && j + flow_y < previous_rgb.rows && j + flow_y > 0)
+            {
+              current_mask.at<ObjectId>(j + flow_y, k + flow_x) = instance_labels[i];
+              updated_mask_points++;
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 

@@ -31,6 +31,12 @@
 
 using namespace dyno;
 
+using IntFilterIterator = internal::filter_iterator<std::vector<int>>;
+
+/// @brief make definition for testing
+template<>
+struct std::iterator_traits<IntFilterIterator> : public dyno::internal::filter_iterator_detail<IntFilterIterator> {};
+
 
 TEST(FilterIterator, testNormalIteration) {
 
@@ -106,4 +112,32 @@ TEST(FilterIterator, testConditionalIteratorWithInvalidStartingIndex) {
     EXPECT_NE(v_iter, v.end());
     ++v_iter;
     EXPECT_EQ(v_iter, v.end());
+}
+
+
+TEST(FilterIterator, testStdDistance) {
+
+    {
+        std::vector<int> v = {1, 2, 3, 4, 5, 6};
+        //true on even numbers
+        internal::filter_iterator<std::vector<int>> v_iter(v, [](const int& v) -> bool { return v % 2 == 0; });
+        EXPECT_EQ(std::distance(v_iter.begin(), v_iter.end()), 3);
+    }
+
+    {
+        //start with valid element at v(0)
+        std::vector<int> v = {1, 2, 3};
+        //true on even numbers
+        internal::filter_iterator<std::vector<int>> v_iter(v, [](const int& v) -> bool { return v % 2 == 0; });
+        EXPECT_EQ(std::distance(v_iter.begin(), v_iter.end()), 1);
+    }
+
+
+     {
+        //start with valid element at v(0)
+        std::vector<int> v = {2, 2, 2};
+        //true on even numbers
+        internal::filter_iterator<std::vector<int>> v_iter(v, [](const int& v) -> bool { return v % 2 == 0; });
+        EXPECT_EQ(std::distance(v_iter.begin(), v_iter.end()), 3);
+    }
 }
