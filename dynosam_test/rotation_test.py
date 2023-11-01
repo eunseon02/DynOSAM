@@ -94,15 +94,19 @@ def decompose_essential(essential):
 
   return R1, R2, t
 
-def compute_essential(cam_pose_target, points_motion):
+def compute_essential(cam_pose_target, points_motion, cam_pose_origin):
   cam_rot = cam_pose_target[0:3, 0:3]
   cam_rot_inv = cam_rot.T
   cam_t = cam_pose_target[0:3, 3][np.newaxis].T
 
+  ori_rot = cam_pose_origin[0:3, 0:3]
+  ori_rot_inv = ori_rot.T
+  ori_t = cam_pose_origin[0:3, 3][np.newaxis].T
+
   mot_rot = points_motion[0:3, 0:3]
   mot_t = points_motion[0:3, 3][np.newaxis].T
 
-  translation = np.matmul(cam_rot_inv, (mot_t - cam_t))
+  translation = np.matmul(cam_rot_inv, (np.matmul(mot_rot, ori_t) + mot_t - cam_t))
   translation_cross = np.zeros((3, 3))
   translation_cross[0, 1] = -translation[2]
   translation_cross[1, 0] = translation[2]
@@ -111,13 +115,18 @@ def compute_essential(cam_pose_target, points_motion):
   translation_cross[1, 2] = -translation[0]
   translation_cross[2, 1] = translation[0]
 
-  rotation = np.matmul(cam_rot_inv, mot_rot)
+  rotation = np.matmul(cam_rot_inv, np.matmul(mot_rot, ori_rot))
   essential = np.matmul(translation_cross, rotation)
 
   return essential, translation
 
 def main():
-  cam_pose_origin = np.identity(4)
+  cam_ori_xyz_mean = np.array([0., 0., 0.]) # in meter
+  cam_ori_rpy_mean = np.array([0., 0., 0.]) # in degree 
+  cam_ori_xyz_range = np.array([2., 2., 2.]) # in meter
+  cam_ori_rpy_range = np.array([5., 5., 5.]) # in degree 
+  cam_pose_origin = gen_random_pose(cam_ori_xyz_mean, cam_ori_rpy_mean, cam_ori_xyz_range, cam_ori_rpy_range)
+  # cam_pose_origin = np.identity(4)
 
   cam_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
   cam_mot_rpy_mean = np.array([30., 45., 60.]) # in degree 
@@ -127,7 +136,8 @@ def main():
   # cam_mot_rpy_mean = np.array([0., 0., 0.]) # in degree 
   # cam_mot_xyz_range = np.array([0., 0., 0.]) # in meter
   # cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
-  cam_pose_target = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
+  cam_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
+  cam_pose_target = np.matmul(cam_motion, cam_pose_origin)
 
   print("Camera pose origin:")
   print(cam_pose_origin)
@@ -212,7 +222,7 @@ def main():
   print("Test expected rotational component:")
   print(test_rotation)
 
-  test_essential, test_translation = compute_essential(cam_pose_target, points_motion)
+  test_essential, test_translation = compute_essential(cam_pose_target, points_motion, cam_pose_origin)
 
   print("Test expected translation component:")
   print(test_translation)
