@@ -79,7 +79,7 @@ def compute_projection_matrix(camera_pose, intrinsic):
   return projection_matrix
 
 def main():
-  example_length = 4
+  example_length = 2
 
   # Set GT camera poses and points
 
@@ -95,7 +95,7 @@ def main():
   cam_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
   cam_mot_rpy_mean = np.array([5., 15., 5.]) # in degree 
   cam_mot_xyz_range = np.array([2., 2., 2.]) # in meter
-  cam_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
+  cam_mot_rpy_range = np.array([3., 3., 3.]) # in degree 
 
   for step in range(example_length-1):
     cam_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
@@ -119,7 +119,7 @@ def main():
     points_mot_rpy_mean = np.array([0., 0., 0.]) # in degree 
     points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
     points_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
-    points_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
+    points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
     points_target = transform_points(points_origin, points_motion)
     points.append(points_target)
 
@@ -156,7 +156,11 @@ def main():
 
       points_triangulated = cv2.triangulatePoints(projection_matrix_prev, projection_matrix_curr, pixels_observation[step-1], pixels_observation[step])
 
-      print("Triangulated points", step-1, "to", step, ": \n", points_triangulated)
+      points_normalised = np.zeros((3, number_points))
+      for i in range(number_points):
+        points_normalised[0:3, i] = np.array([points_triangulated[0, i]/points_triangulated[3, i], points_triangulated[1, i]/points_triangulated[3, i], points_triangulated[2, i]/points_triangulated[3, i]])
+
+      print("Triangulated points", step-1, "to", step, ": \n", points_normalised)
 
 
 if __name__ == "__main__":
