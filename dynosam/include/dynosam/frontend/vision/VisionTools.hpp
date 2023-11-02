@@ -51,59 +51,6 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 } //vision_tools
 
 
-
-class FrameProcessor {
-
-public:
-    FrameProcessor(const FrontendParams& params, Camera::Ptr camera);
-
-    const FrontendParams& getParams() const { return params_; }
-
-    //assume everything rectified, depth etc at this stage, previous frame has pose
-    void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
-    void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame, KeyPointType kp_type) const;
-
-    // static ObjectIds getObjectLabels(const ImageWrapper<ImageType::MotionMask>& image);
-    // static ObjectIds getObjectLabels(const ImageWrapper<ImageType::SemanticMask>& image);
-
-
-protected:
-    void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const;
-    void getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, const Frame& current_frame) const;
-
-    void getCorrespondencesFromContainer(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features) const;
-
-private:
-
-protected:
-    const FrontendParams params_;
-    Camera::Ptr camera_;
-
-};
-
-
-class RGBDProcessor : public FrameProcessor {
-
-public:
-    RGBDProcessor(const FrontendParams& params, Camera::Ptr camera);
-
-    //this is really disparty not depth
-    void updateDepth(Frame::Ptr frame, ImageWrapper<ImageType::Depth> disparity);
-    void disparityToDepth(const cv::Mat& disparity, cv::Mat& depth);
-
-    //expects frame pose to be hpdated for both frames
-    void updateMovingObjects(const Frame& previous_frame, Frame::Ptr current_frame, cv::Mat& debug) const;
-
-
-private:
-
-    //copy but everything is a ptr anyway??
-    void setDepths(FeatureContainer features, const cv::Mat& depth, double max_threshold);
-
-
-};
-
-
 void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklets, TrackletIds& outliers);
 
 

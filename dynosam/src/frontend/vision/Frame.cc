@@ -73,6 +73,16 @@ Feature::Ptr Frame::at(TrackletId tracklet_id) const {
 }
 
 
+bool Frame::isFeatureUsable(TrackletId tracklet_id) const {
+    const auto& feature = at(tracklet_id);
+    if(!feature) {
+        throw std::runtime_error("Failed to check feature usability - tracklet id " + std::to_string(tracklet_id) + " does not exist");
+    }
+
+    return feature->usable();
+}
+
+
 FeaturePtrs Frame::collectFeatures(TrackletIds tracklet_ids) const {
     FeaturePtrs features;
     for(const auto tracklet_id : tracklet_ids) {
@@ -170,7 +180,7 @@ void Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
     const cv::Mat& depth_mat = depth;
     // FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
-    auto iter = container.usableIterator();
+    auto iter = container.beginUsable();
 
     for(Feature::Ptr feature : iter) {
         CHECK(feature->usable());
@@ -202,7 +212,7 @@ void Frame::constructDynamicObservations() {
 
     const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
 
-    auto inlier_iterator = dynamic_features_.usableIterator();
+    auto inlier_iterator = dynamic_features_.beginUsable();
     for(const Feature::Ptr& dynamic_feature : inlier_iterator) {
         CHECK(!dynamic_feature->isStatic());
         CHECK(dynamic_feature->usable());
@@ -237,7 +247,6 @@ void Frame::moveObjectToStatic(ObjectId instance_label) {
 
         if(!dynamic_feature->usable()) {continue;}
 
-
         CHECK(!dynamic_feature->isStatic());
         CHECK_EQ(dynamic_feature->tracklet_id_, tracklet_id);
         CHECK_EQ(dynamic_feature->instance_label_, instance_label);
@@ -269,19 +278,11 @@ void Frame::updateObjectTrackingLabel(const DynamicObjectObservation& observatio
 
 
 FeatureFilterIterator Frame::usableStaticFeaturesBegin() {
-    return FeatureFilterIterator(static_features_, [&](const Feature::Ptr& f) -> bool
-        {
-            return f->usable();
-        }
-    );
+    return static_features_.beginUsable();
 }
 
 FeatureFilterIterator Frame::usableDynamicFeaturesBegin() {
-    return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool
-        {
-            return f->usable();
-        }
-    );
+    return dynamic_features_.beginUsable();
 }
 
 

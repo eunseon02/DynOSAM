@@ -27,7 +27,7 @@
 
 namespace dyno {
 
-FeatureContainer::FeatureContainer() : feature_map_(), feature_vector_() {}
+FeatureContainer::FeatureContainer() : feature_map_() {}
 
 FeatureContainer::FeatureContainer(const FeaturePtrs feature_vector) {
     for(size_t i = 0; i < feature_vector.size(); i++) {
@@ -35,15 +35,18 @@ FeatureContainer::FeatureContainer(const FeaturePtrs feature_vector) {
     }
 }
 
+void FeatureContainer::add(const Feature& feature) {
+    auto feature_ptr = std::make_shared<Feature>(feature);
+    add(feature_ptr);
+}
+
 void FeatureContainer::add(Feature::Ptr feature) {
     CHECK(!exists(feature->tracklet_id_));
-
     feature_map_[feature->tracklet_id_] = feature;
-    feature_vector_.push_back(feature);
 }
 
  //TODO: test
- //this will mess up any iterator that currently has a reference to any feature_vector (so any of the filters)
+ //this will mess up any iterator that currently has a reference to any feature_map_ (so any of the filters)
 void FeatureContainer::remove(TrackletId tracklet_id) {
     if(!exists(tracklet_id)) {
         throw std::runtime_error("Cannot remove feature with tracklet id " + std::to_string(tracklet_id) + " as feature does not exist!");
@@ -51,10 +54,6 @@ void FeatureContainer::remove(TrackletId tracklet_id) {
 
     feature_map_.erase(tracklet_id);
 
-    auto find_by_tracklet_id = [&](const Feature::Ptr& f) { return f->tracklet_id_ == tracklet_id; };
-    auto it = std::find_if(feature_vector_.begin(), feature_vector_.end(), find_by_tracklet_id);
-    CHECK(it != feature_vector_.end());
-    feature_vector_.erase(it);
 }
 
 TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
@@ -71,9 +70,6 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     return tracklets;
 }
 
-FeatureContainer::FilterIterator FeatureContainer::usableIterator() {
-    return FilterIterator(feature_vector_, [](const Feature::Ptr& f) -> bool { return f->usable(); });
-}
 
  void FeatureContainer::markOutliers(const TrackletIds outliers) {
     for(TrackletId tracklet_id : outliers) {
@@ -84,8 +80,11 @@ FeatureContainer::FilterIterator FeatureContainer::usableIterator() {
  }
 
 size_t FeatureContainer::size() const {
-    CHECK(feature_map_.size() == feature_vector_.size());
-    return feature_vector_.size();
+    // CHECK(feature_map_.size() == feature_vector_.size());
+    //we check the feature map as we dont actually remove the features from the feature_vector we just make them null
+    //but we don remvoe them from the feature_map
+    //however, we still want the total size of the vector if we want to iterate over things, we just need to ensure they are non-null
+    return feature_map_.size();
 }
 
 Feature::Ptr FeatureContainer::getByTrackletId(TrackletId tracklet_id) const {
@@ -95,12 +94,22 @@ Feature::Ptr FeatureContainer::getByTrackletId(TrackletId tracklet_id) const {
     return feature_map_.at(tracklet_id);
 }
 
-Feature::Ptr FeatureContainer::at(size_t i) const {
-    return feature_vector_.at(i);
-}
-
 bool FeatureContainer::exists(TrackletId tracklet_id) const {
     return feature_map_.find(tracklet_id) != feature_map_.end();
 }
+
+
+FeatureContainer::FilterIterator FeatureContainer::beginUsable() {
+    return FilterIterator(*this, [](const Feature::Ptr& f) -> bool {
+        return f->usable();
+    });
+}
+
+// FeatureContainer::ConstFilterIterator FeatureContainer::beginUsable() const {
+//     return ConstFilterIterator(*this, [](const Feature::Ptr& f) -> bool {
+//         return f->usable();
+//     });
+// }
+
 
 } //dyno

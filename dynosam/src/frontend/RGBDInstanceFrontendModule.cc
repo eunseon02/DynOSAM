@@ -34,7 +34,6 @@ namespace dyno {
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : FrontendModule(frontend_params, display_queue),
       camera_(camera),
-      rgbd_processor_(frontend_params, camera),
       motion_solver_(frontend_params, camera->getParams())
 {
     CHECK_NOTNULL(camera_);
@@ -87,6 +86,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
     ImageContainer::Ptr image_container = input->image_container_;
+    LOG(INFO) << "In RGBD instance module frontend nominal";
 
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
@@ -109,16 +109,19 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     }
 
     if(display_queue_) {
-        cv::Mat depth_disp;
-        const cv::Mat& depth = image_container->getDepth();
-        rgbd_processor_.disparityToDepth(depth, depth_disp);
+        // cv::Mat depth_disp;
+        // const cv::Mat& depth = image_container->getDepth();
+        // //we do this compu
+        // vision_tools::disparityToDepth(base_params_, depth, depth_disp);
 
-        depth_disp.convertTo(depth_disp, CV_8UC1);
-        display_queue_->push(ImageToDisplay("depth", depth_disp)); //eh something here no work
+        // depth_disp.convertTo(depth_disp, CV_8UC1);
+        // display_queue_->push(ImageToDisplay("depth", depth_disp)); //eh something here no work
     }
 
     size_t n_optical_flow, n_new_tracks;
+    LOG(INFO) << "Beginning tracking on frame " << input->getFrameId();
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+    LOG(INFO) << "Done tracking";
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
@@ -168,8 +171,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     }
 
 
-
-    LOG(INFO) << "In RGBD instance module frontend nominal";
     previous_frame_ = frame;
 
 

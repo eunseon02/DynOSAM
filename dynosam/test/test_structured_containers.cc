@@ -28,6 +28,7 @@
 #include <gtest/gtest.h>
 #include <exception>
 #include <vector>
+#include <iterator>
 
 using namespace dyno;
 
@@ -35,8 +36,83 @@ using IntFilterIterator = internal::filter_iterator<std::vector<int>>;
 
 /// @brief make definition for testing
 template<>
-struct std::iterator_traits<IntFilterIterator> : public dyno::internal::filter_iterator_detail<IntFilterIterator> {};
+struct std::iterator_traits<IntFilterIterator> : public dyno::internal::filter_iterator_detail<IntFilterIterator::pointer> {};
 
+
+// //iterator is the pointer type... this is weird naming but is what the c++ standard does
+// template<typename _Iterator>
+// struct _filter_iterator_detail {
+//     //! naming conventions to match those required by iterator traits
+//     using value_type = typename std::iterator_traits<_Iterator>::value_type;
+//     using reference = typename std::iterator_traits<_Iterator>::reference;
+//     using pointer = typename std::iterator_traits<_Iterator>::pointer;
+//     using difference_type = typename std::iterator_traits<_Iterator>::difference_type;
+//     using iterator_category = std::forward_iterator_tag; //i guess? only forward is defined (++iter) right now
+// };
+
+// //in this case iter is the actual iterator (so _Container::iterator or _container::const_iterator)
+// template<typename _Iter, typename _Container>
+// struct _filter_iterator : public _filter_iterator_detail<typename _Iter::pointer> {
+
+//     using BaseDetail = _filter_iterator_detail<typename _Iter::pointer>;
+//     using iterator = _Iter;
+//     using typename BaseDetail::value_type;
+//     using typename BaseDetail::reference;
+//     using typename BaseDetail::pointer;
+//     using typename BaseDetail::difference_type;
+//     using typename BaseDetail::iterator_category;
+
+//     _filter_iterator(_Container& container,_Iter it) : container_(container), it_(it) {}
+
+//     _Container& container_;
+//     iterator it_;
+
+//     reference operator*() { return *it_; }
+//     reference operator->() { return *it_; }
+
+//     bool operator==(const _filter_iterator& other) const {
+//         return it_ == other.it_;
+//     }
+//     bool operator!=(const _filter_iterator& other) const { return it_ != other.it_; }
+
+//     bool operator==(const iterator& other) const {
+//         return it_ == other;
+//     }
+//     bool operator!=(const iterator& other) const { return it_ != other; }
+
+//     _filter_iterator& operator++() {
+//         // do {
+//         //     ++it_;
+//         // }
+//         // while(is_invalid());
+//         ++it_;
+//         return *this;
+//     }
+
+
+//     //allows the iterator to be used as a enhanced for loop
+//     _filter_iterator begin() { return _filter_iterator(container_, container_.begin()); }
+//     _filter_iterator end() { return _filter_iterator(container_, container_.end()); }
+
+//     const _filter_iterator begin() const { return _filter_iterator(container_, container_.begin()); }
+//     const _filter_iterator end() const { return _filter_iterator(container_, container_.end()); }
+
+
+// };
+
+// TEST(FilterIterator, basic) {
+
+//     using T = std::shared_ptr<int>;
+
+//     std::vector<T> v;
+//     _filter_iterator<std::vector<T>::iterator, std::vector<T>> fi(v, v.begin());
+
+//     for(std::shared_ptr<int> i : fi) {}
+
+
+//     const _filter_iterator<std::vector<T>::const_iterator, std::vector<T>> fi_c(v, v.cbegin());
+//     for(std::shared_ptr<int> i : fi_c) {}
+// }
 
 TEST(FilterIterator, testNormalIteration) {
 

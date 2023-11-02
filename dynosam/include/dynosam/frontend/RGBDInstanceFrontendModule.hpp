@@ -40,7 +40,6 @@ public:
 
 private:
     Camera::Ptr camera_;
-    RGBDProcessor rgbd_processor_;
     MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
 

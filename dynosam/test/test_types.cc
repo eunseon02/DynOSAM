@@ -30,6 +30,8 @@ using namespace dyno;
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+
+
 TEST(ImageType, testRGBMonoValidation) {
 
     {
@@ -258,6 +260,101 @@ TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
         ImageWrapper<ImageType::SemanticMask>(semantic_mask)
     );}, InvalidImageContainerException);
 
+}
+
+TEST(FeatureContainer, basicAdd) {
+    FeatureContainer fc;
+    EXPECT_EQ(fc.size(), 0u);
+    EXPECT_FALSE(fc.exists(1));
+
+    Feature f;
+    f.tracklet_id_ = 1;
+
+    fc.add(f);
+    EXPECT_EQ(fc.size(), 1u);
+    EXPECT_TRUE(fc.exists(1));
+
+    //this implicitly tests map access
+    auto fr = fc.getByTrackletId(1);
+    EXPECT_TRUE(fr != nullptr);
+    EXPECT_EQ(*fr, f);
+}
+
+TEST(FeatureContainer, basicRemove) {
+    FeatureContainer fc;
+    EXPECT_EQ(fc.size(), 0u);
+
+    Feature f;
+    f.tracklet_id_ = 1;
+
+    fc.add(f);
+    EXPECT_EQ(fc.size(), 1u);
+
+   fc.remove(1);
+   EXPECT_FALSE(fc.exists(1));
+
+   auto fr = fc.getByTrackletId(1);
+   EXPECT_TRUE(fr == nullptr);
+
+}
+
+TEST(FeatureContainer, testVectorLikeIteration) {
+    FeatureContainer fc;
+
+    for(size_t i = 0; i < 10u; i++) {
+        Feature f;
+        f.tracklet_id_ = i;
+        fc.add(f);
+    }
+
+    int count = 0;
+    for(const auto& i : fc) {
+        EXPECT_TRUE(i != nullptr);
+        count++;
+    }
+
+    EXPECT_EQ(count, 10);
+    count = 0;
+
+    fc.remove(0);
+    fc.remove(1);
+
+    for(const auto& i : fc) {
+        EXPECT_TRUE(i != nullptr);
+        EXPECT_TRUE(i->tracklet_id_ != 0 || i->tracklet_id_ != 1);
+        count++;
+    }
+
+    EXPECT_EQ(count, 8);
+}
+
+
+TEST(FeatureContainer, testusableIterator) {
+    FeatureContainer fc;
+
+    for(size_t i = 0; i < 10u; i++) {
+        Feature f;
+        f.tracklet_id_ = i;
+        fc.add(f);
+        EXPECT_TRUE(f.usable());
+    }
+
+    {
+        auto usable_iterator = fc.beginUsable();
+        EXPECT_EQ(std::distance(usable_iterator.begin(), usable_iterator.end()), 10);
+    }
+
+    fc.markOutliers({3});
+    fc.markOutliers({4});
+
+    {
+        auto usable_iterator = fc.beginUsable();
+        EXPECT_EQ(std::distance(usable_iterator.begin(), usable_iterator.end()), 8);
+
+        for(const auto& i : usable_iterator) {
+            EXPECT_TRUE(i->tracklet_id_ != 3 || i->tracklet_id_ != 4);
+        }
+    }
 }
 
 

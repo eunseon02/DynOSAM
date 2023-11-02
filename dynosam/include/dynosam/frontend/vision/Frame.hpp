@@ -130,6 +130,7 @@ public:
 
     bool exists(TrackletId tracklet_id) const;
     Feature::Ptr at(TrackletId tracklet_id) const;
+    bool isFeatureUsable(TrackletId tracklet_id) const;
 
     FeaturePtrs collectFeatures(TrackletIds tracklet_ids) const;
 

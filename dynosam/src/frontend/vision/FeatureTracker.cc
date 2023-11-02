@@ -115,8 +115,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   // }
 
   // Add all keypoints in cur_frame with the tracks.
-  for (size_t i = 0; i < current_frame.static_features_.size(); ++i) {
-    const Feature::Ptr& feature = current_frame.static_features_.at(i);
+  for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint_;
     if (!feature->usable()) {  // Untracked landmarks are red.
       cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 4, red, 2);
@@ -142,7 +141,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
     size_t count = 0;
     int center_x = 0, center_y = 0;
-    auto usable_iterator = internal::filter_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return f->usable(); });
+    auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return f->usable(); });
     for(const Feature::Ptr& feature : usable_iterator) {
       center_x += functional_keypoint::u(feature->keypoint_);
       center_y += functional_keypoint::v(feature->keypoint_);
@@ -163,8 +162,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
   }
 
-  for (size_t i = 0; i < current_frame.dynamic_features_.size(); ++i) {
-    const Feature::Ptr& feature = current_frame.dynamic_features_.at(i);
+  for ( const Feature::Ptr& feature : current_frame.dynamic_features_) {
     const Keypoint& px_cur = feature->keypoint_;
     if (!feature->usable()) {  // Untracked landmarks are red.
       // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
@@ -520,18 +518,20 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   CHECK_EQ(instance_labels.size(), previous_frame_->numDynamicUsableFeatures());
   std::sort(instance_labels.begin(), instance_labels.end());
   instance_labels.erase(std::unique(instance_labels.begin(), instance_labels.end()), instance_labels.end());
-  std::vector<ObjectIds> object_features(instance_labels.size());
+  std::vector<TrackletIds> object_features(instance_labels.size());
 
   // collect the predicted labels and semantic labels in vector
-  for (size_t i = 0; i < previous_frame_->numDynamicFeatures(); i++)
+
+  //TODO: inliers?
+  for (const Feature::Ptr& dynamic_feature : previous_frame_->dynamic_features_)
   {
-    Feature::Ptr dynamic_feature = previous_frame_->dynamic_features_.at(i);
+    CHECK(Feature::isNotNull(dynamic_feature));
     for (size_t j = 0; j < instance_labels.size(); j++)
     {
       // save object label for object j with feature i
       if (dynamic_feature->instance_label_ == instance_labels[j])
       {
-        object_features[j].push_back(i);
+        object_features[j].push_back(dynamic_feature->tracklet_id_);
         break;
       }
     }
@@ -544,13 +544,15 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     ObjectIds temp_label;
     for (size_t j = 0; j < object_features[i].size(); j++)
     {
-      Feature::Ptr feature = previous_frame_->dynamic_features_.at(object_features[i][j]);
+      Feature::Ptr feature = previous_frame_->dynamic_features_.getByTrackletId(object_features[i][j]);
+      CHECK(Feature::isNotNull(dynamic_feature));
       const Keypoint& predicted_kp = feature->predicted_keypoint_;
       const int u = functional_keypoint::u(predicted_kp);
       const int v = functional_keypoint::v(predicted_kp);
       // ensure u and v are sitll inside the CURRENT frame
       if (u < previous_rgb.cols && u > 0 && v < previous_rgb.rows && v > 0)
       {
+        //add instance label at predicted keypoint
         temp_label.push_back(current_mask.at<ObjectId>(v, u));
       }
     }
@@ -559,7 +561,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     {
       LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " poins size - "
                    << temp_label.size();
-      // then do we mark as outliers?
+      //TODO:mark has static!!
       continue;
     }
 

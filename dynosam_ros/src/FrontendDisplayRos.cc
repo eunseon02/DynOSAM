@@ -21,6 +21,8 @@
  *   SOFTWARE.
  */
 
+#include <dynosam/visualizer/ColourMap.hpp>
+
 #include "dynosam_ros/FrontendDisplayRos.hpp"
 #include "dynosam_ros/RosUtils.hpp"
 
@@ -46,18 +48,31 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase& frontend_outpu
 }
 
 void FrontendDisplayRos::publishVisibleCloud(const FrontendOutputPacketBase& frontend_output) {
-    pcl::PointCloud<pcl::PointXYZ> cloud;
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
     const auto& tracked_landmarks = frontend_output.tracked_landmarks;
     LOG(INFO) << "Publishing points" << tracked_landmarks.size();
 
     for(auto i = tracked_landmarks.begin(); i != tracked_landmarks.end(); i++) {
         const Landmark& lmk = i->second;
 
-        pcl::PointXYZ pt(lmk(0), lmk(1), lmk(2));
+        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 255, 255, 255);
         cloud.points.push_back(pt);
     }
 
-    // auto pc2_msg = std::make_shared<sensor_msgs::msg::PointCloud2>();
+    const Frame::Ptr& frame = frontend_output.frame_;
+    for(const auto& [instance_id, object_observation] : frame->object_observations_) {
+        for(const TrackletId tracklet_id : object_observation.object_features_) {
+
+            if(!frame->isFeatureUsable(tracklet_id)) {continue;}
+
+            Landmark lmk = frame->backProjectToWorld(tracklet_id);
+
+            const cv::Scalar colour = ColourMap::getObjectColour(object_observation.instance_label_);
+            pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(1));
+            cloud.points.push_back(pt);
+        }
+    }
+
     sensor_msgs::msg::PointCloud2 pc2_msg;
     pcl::toROSMsg(cloud, pc2_msg);
     pc2_msg.header.frame_id = "world";
