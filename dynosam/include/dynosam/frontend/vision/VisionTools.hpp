@@ -42,7 +42,12 @@ namespace vision_tools {
 
 
 void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv::Mat& depth);
-void getCorrespondences(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features, bool only_usable = true);
+
+//does not do any undistortion etc on the image pairs -> simply looks to see which tracklet ids's are in both frames
+//iteratoes over the current features and checks to see if the feature is in the previous feature set
+//previous features can probably just be a FeatureCOntainer but i guess we want to check that it is valid too, via the filter iterator?
+void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterator& previous_features, const FeatureFilterIterator& current_features);
+
 //unique object labels as present in a semantic/motion segmented image -> does not include background label
 ObjectIds getObjectLabels(const cv::Mat& image);
 
@@ -56,3 +61,6 @@ void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklet
 
 
 } //dyno
+
+
+#include "dynosam/frontend/vision/VisionTools-inl.hpp"

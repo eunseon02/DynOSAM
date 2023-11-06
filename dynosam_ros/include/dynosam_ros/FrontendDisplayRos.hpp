@@ -30,6 +30,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 
 namespace dyno {
@@ -49,6 +50,11 @@ private:
 
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr tracked_points_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
+
+    //sort of just for now
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_;
+
+
     image_transport::Publisher tracking_image_pub_;
 
 };

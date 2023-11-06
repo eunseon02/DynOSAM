@@ -57,7 +57,6 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
   }
 
 
-  //TODO: gt?
 
   if(!queue_state) {
     //  LOG(WARNING)
@@ -66,7 +65,15 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
   }
 
   CHECK(packet);
-  return std::make_shared<FrontendInputPacketBase>(packet);
+
+
+  GroundTruthInputPacket::Optional ground_truth;
+  if(ground_truth_packets_.find(packet->getFrameId()) != ground_truth_packets_.end()) {
+    VLOG(5) << "Gotten ground truth packet for frame id " << packet->getFrameId();
+    ground_truth = ground_truth_packets_.at(packet->getFrameId());
+  }
+
+  return std::make_shared<FrontendInputPacketBase>(packet, ground_truth);
 }
 
 bool DataInterfacePipeline::hasWork() const {

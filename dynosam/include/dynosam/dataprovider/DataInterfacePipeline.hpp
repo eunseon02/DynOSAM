@@ -39,6 +39,10 @@ public:
         packet_queue_.push(image_container);
     }
 
+    virtual inline void addGroundTruthPacket(const GroundTruthInputPacket& gt_packet) {
+        ground_truth_packets_[gt_packet.frame_id_] = gt_packet;
+    }
+
 protected:
     virtual void onShutdown() {}
 
@@ -56,6 +60,8 @@ private:
 protected:
     ThreadsafeQueue<ImageContainer::Ptr> packet_queue_;
     std::atomic_bool parallel_run_;
+
+    std::map<FrameId, GroundTruthInputPacket> ground_truth_packets_;
 
 };
 

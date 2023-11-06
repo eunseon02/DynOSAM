@@ -136,9 +136,17 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     LOG(INFO) << "Gotten correspondances, solving camera pose";
 
-    // //also update the inliers outliers?
     TrackletIds inliers, outliers;
-    frame->T_world_camera_ = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+    MotionResult camera_pose_result = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+
+    if(camera_pose_result.valid()) {
+        frame->T_world_camera_ = camera_pose_result.get();
+    }
+    else {
+        LOG(ERROR) << "Unable to solve camera pose for frame " << frame->frame_id_;
+        frame->T_world_camera_ = gtsam::Pose3::Identity();
+
+    }
     // LOG(INFO) << "Solved camera pose";
 
     TrackletIds tracklets = frame->static_features_.collectTracklets();
@@ -148,10 +156,75 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
 
-    // cv::Mat moving_object_mat;
-    // // rgbd_processor_.updateMovingObjects(*previous_frame_, frame, moving_object_mat);
+    std::map<ObjectId, gtsam::Pose3> per_frame_object_poses; //for viz
+    for(const auto& [object_id, observations] : frame->object_observations_) {
+        LOG(INFO) << "Looking at object " << object_id;
+        AbsolutePoseCorrespondences dynamic_correspondences;
+        //get the corresponding feature pairs
+        bool result = frame->getDynamicCorrespondences(dynamic_correspondences, *previous_frame_, object_id);
+        LOG(INFO) << "gotten correspondences";
 
-    // if(display_queue_) display_queue_->push(ImageToDisplay("moving objects", moving_object_mat));
+        if(!result) {
+            continue;
+        }
+
+
+        LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
+
+        TrackletIds inliers, outliers;
+        const MotionResult object_motion_result = motion_solver_.solveObjectMotion(
+            dynamic_correspondences,
+            frame->T_world_camera_,
+            inliers,
+            outliers);
+
+        if(object_motion_result.valid()) {
+            LOG(INFO) << object_motion_result.get();
+
+            frame->dynamic_features_.markOutliers(outliers);
+
+            if(!input->optional_gt_.has_value()) {
+                LOG(WARNING) << "Cannot update object pose because no gt!";
+                continue;
+            }
+
+            const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
+            CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
+            auto it = std::find_if(gt_packet.object_poses_.begin(), gt_packet.object_poses_.end(),
+                           [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
+
+            if(it == gt_packet.object_poses_.end()) {
+                LOG(WARNING) << "Object Id " << object_id << " cannot be found in the gt packet for frame " << frame->frame_id_;
+                continue;
+            }
+
+            const ObjectPoseGT& object_gt_packet = *it;
+
+            if(object_poses_.find(object_id) == object_poses_.end()) {
+                // AbsolutePoseCorrespondences inlier_dynamic_correspondences;
+                // frame->getDynamicCorrespondences(inlier_dynamic_correspondences, *previous_frame_, object_id);
+
+                // //calculate centroid (lazy)
+                // gtsam::Point3 centroid;
+                // for(const AbsolutePoseCorrespondence& corr : inlier_dynamic_correspondences) {
+                //     centroid += corr.ref_;
+                // }
+                // centroid /= inlier_dynamic_correspondences.size();
+                object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
+            }
+            else {
+                //propogate
+                const gtsam::Pose3& old_object_pose = object_poses_[object_id];
+                const gtsam::Pose3 propogated_pose = object_motion_result.get() * old_object_pose;
+                object_poses_[object_id] = propogated_pose;
+                //  object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
+            }
+
+            per_frame_object_poses[object_id] = object_poses_[object_id];
+        }
+    }
+
+    LOG(INFO) << "stopped looking at objects";
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
@@ -177,7 +250,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     auto output = std::make_shared<FrontendOutputPacketBase>();
     output->input_ = input;
     output->frame_ = frame;
-    output->tracked_landmarks = landmark_map;
+    // output->tracked_landmarks = landmark_map;
+    output->object_poses_ = per_frame_object_poses;
     return {State::Nominal, output};
 }
 

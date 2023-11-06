@@ -168,7 +168,10 @@ namespace internal {
 /// in other words, that the template iterates over Feature Ptr's.
 /// @tparam Iter
 template<typename Iter>
-using is_feature_ptr_iterator = typename std::is_same<Feature::Ptr, typename Iter::value_type>::value;
+using is_feature_ptr_iterator = std::is_same<Feature::Ptr, typename Iter::value_type>;
+
+template<typename Iter>
+using enable_if_feature_ptr_iterator = typename std::enable_if<is_feature_ptr_iterator<Iter>::value, void>::type;
 
 } //internal
 
@@ -225,6 +228,7 @@ public:
     using const_reference = const Feature::Ptr&;
     using difference_type = std::ptrdiff_t;
 
+    //MUST be defined after the iterator typedefs (using for FeatureContainer), e.g interator, pointer etc... for the filter_iterator definition to work
     using FilterIterator = internal::filter_iterator<FeatureContainer>;
     using ConstFilterIterator = internal::filter_const_iterator<FeatureContainer>;
 
@@ -273,6 +277,7 @@ public:
     inline const_vector_iterator end() const { return const_vector_iterator(feature_map_.cend()); }
 
     FilterIterator beginUsable();
+    FilterIterator beginUsable() const;
     // ConstFilterIterator beginUsable() const;
 
 

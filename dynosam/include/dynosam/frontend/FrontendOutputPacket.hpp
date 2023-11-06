@@ -35,6 +35,9 @@ struct FrontendOutputPacketBase {
     FrontendInputPacketBase::ConstPtr input_; //for reference and possible display
     Frame::Ptr frame_;
     LandmarkMap tracked_landmarks;
+
+    //for now
+    std::map<ObjectId, gtsam::Pose3> object_poses_;
     //should this be here?
     // std::vector<ImageToDisplay> debug_images;
 };

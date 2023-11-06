@@ -33,6 +33,8 @@ public:
     using ImuSingleInputCallback = std::function<void(const ImuMeasurement&)>;
     using ImuMultiInputCallback = std::function<void(const ImuMeasurements&)>;
 
+    using GroundTruthPacketCallback = std::function<void(const GroundTruthInputPacket&)>;
+
     //this one will not guarnatee a binding of bind the data prover module
     DataProvider() = default;
     DataProvider(DataInterfacePipeline* module);
@@ -54,6 +56,10 @@ public:
         image_container_callback_ = callback;
     }
 
+    inline void registerGroundTruthPacketCallback(const GroundTruthPacketCallback& callback) {
+        ground_truth_packet_callback_ = callback;
+    }
+
     /**
      * @brief Spins the dataset for one "step" of the dataset
      *
@@ -69,6 +75,8 @@ protected:
     ImageContainerCallback image_container_callback_;
     ImuSingleInputCallback imu_single_input_callback_;
     ImuMultiInputCallback imu_multi_input_callback_;
+
+    GroundTruthPacketCallback ground_truth_packet_callback_;
 
     // Shutdown switch to stop data provider.
     std::atomic_bool shutdown_ = {false};

@@ -25,6 +25,8 @@
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
+#include "dynosam/visualizer/ColourMap.hpp"
+
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
@@ -141,7 +143,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
     size_t count = 0;
     int center_x = 0, center_y = 0;
-    auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return f->usable(); });
+    auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return Feature::IsUsable(f); });
     for(const Feature::Ptr& feature : usable_iterator) {
       center_x += functional_keypoint::u(feature->keypoint_);
       center_y += functional_keypoint::v(feature->keypoint_);
@@ -175,7 +177,8 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
         // green circle/line:
         // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
-        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
+        const cv::Scalar colour = ColourMap::getObjectColour(feature->instance_label_);
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), colour, 1);
       } else {  // New feature tracks are blue.
         // cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 1, blue, 1);
       }
@@ -218,7 +221,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   // save detections
   // orb_detections_.insert({ frame_id, detected_keypoints });
   // cv::drawKeypoints(viz, detected_keypoints, viz, cv::Scalar(0, 0, 255));
-  VLOG(20) << "detected - " << detected_keypoints.size();
+  LOG(INFO) << "detected - " << detected_keypoints.size();
 
   // static_features = feature_correspondences;
   FeaturePtrs features_tracked;
@@ -262,12 +265,12 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   }
 
   n_optical_flow = features_tracked.size();
-  VLOG(20) << "tracked with optical flow - " << n_optical_flow;
+  LOG(INFO) << "tracked with optical flow - " << n_optical_flow;
 
   // Assign Features to Grid Cells
   // int n_reserve = (FRAME_GRID_COLS * FRAME_GRID_ROWS) / (0.5 * min_tracks);
-  int n_reserve = (FRAME_GRID_COLS * FRAME_GRID_ROWS) / (0.5 * n_optical_flow);
-  VLOG(20) << "reserving - " << n_reserve;
+  const int n_reserve = (FRAME_GRID_COLS * FRAME_GRID_ROWS) / (0.5 * n_optical_flow);
+  // LOG(INFO) << "reserving - " << n_reserve;
 
   // assign tracked features to grid
   FeaturePtrs features_assigned;
@@ -285,7 +288,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 
    // container used just for sanity check
   FeaturePtrs new_features;
-  VLOG(20) << "assigned grid features - " << features_assigned.size();
+  // LOG(INFO) << "assigned grid features - " << features_assigned.size();
   // only add new features if tracks drop below min tracks
   if (features_assigned.size() < min_tracks)
   {
@@ -336,8 +339,8 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 
   size_t total_tracks = features_assigned.size();
   n_new_tracks = total_tracks - n_optical_flow;
-  VLOG(1) << "new tracks - " << n_new_tracks;
-  VLOG(1) << "total tracks - " << total_tracks;
+  LOG(INFO) << "new tracks - " << n_new_tracks;
+  LOG(INFO) << "total tracks - " << total_tracks;
 
   static_features.clear();
   static_features = features_assigned;
@@ -512,6 +515,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
 
   ObjectIds instance_labels;
   for(const Feature::Ptr& dynamic_feature : previous_frame_->usableDynamicFeaturesBegin()) {
+    CHECK(dynamic_feature->instance_label_ != background_label);
     instance_labels.push_back(dynamic_feature->instance_label_);
   }
 
@@ -523,15 +527,16 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   // collect the predicted labels and semantic labels in vector
 
   //TODO: inliers?
-  for (const Feature::Ptr& dynamic_feature : previous_frame_->dynamic_features_)
+  for (const Feature::Ptr& dynamic_feature : previous_frame_->usableDynamicFeaturesBegin())
   {
-    CHECK(Feature::isNotNull(dynamic_feature));
+    CHECK(Feature::IsNotNull(dynamic_feature));
     for (size_t j = 0; j < instance_labels.size(); j++)
     {
       // save object label for object j with feature i
       if (dynamic_feature->instance_label_ == instance_labels[j])
       {
         object_features[j].push_back(dynamic_feature->tracklet_id_);
+        CHECK(dynamic_feature->instance_label_ != background_label);
         break;
       }
     }
@@ -545,7 +550,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     for (size_t j = 0; j < object_features[i].size(); j++)
     {
       Feature::Ptr feature = previous_frame_->dynamic_features_.getByTrackletId(object_features[i][j]);
-      CHECK(Feature::isNotNull(dynamic_feature));
+      CHECK(Feature::IsNotNull(feature));
       const Keypoint& predicted_kp = feature->predicted_keypoint_;
       const int u = functional_keypoint::u(predicted_kp);
       const int v = functional_keypoint::v(predicted_kp);
@@ -559,7 +564,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
 
     if (temp_label.size() < 100)
     {
-      LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " poins size - "
+      LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " points size - "
                    << temp_label.size();
       //TODO:mark has static!!
       continue;

@@ -41,7 +41,7 @@ void FeatureContainer::add(const Feature& feature) {
 }
 
 void FeatureContainer::add(Feature::Ptr feature) {
-    CHECK(!exists(feature->tracklet_id_));
+    CHECK(!exists(feature->tracklet_id_)) << "Feailure in FeatureContainer::add - Tracklet Id " << feature->tracklet_id_ << " already exists";
     feature_map_[feature->tracklet_id_] = feature;
 }
 
@@ -80,10 +80,6 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
  }
 
 size_t FeatureContainer::size() const {
-    // CHECK(feature_map_.size() == feature_vector_.size());
-    //we check the feature map as we dont actually remove the features from the feature_vector we just make them null
-    //but we don remvoe them from the feature_map
-    //however, we still want the total size of the vector if we want to iterate over things, we just need to ensure they are non-null
     return feature_map_.size();
 }
 
@@ -101,15 +97,16 @@ bool FeatureContainer::exists(TrackletId tracklet_id) const {
 
 FeatureContainer::FilterIterator FeatureContainer::beginUsable() {
     return FilterIterator(*this, [](const Feature::Ptr& f) -> bool {
-        return f->usable();
+        return Feature::IsUsable(f);
     });
 }
 
-// FeatureContainer::ConstFilterIterator FeatureContainer::beginUsable() const {
-//     return ConstFilterIterator(*this, [](const Feature::Ptr& f) -> bool {
-//         return f->usable();
-//     });
-// }
+FeatureContainer::FilterIterator FeatureContainer::beginUsable() const {
+    FeatureContainer& t = const_cast<FeatureContainer&>(*this);
+    return FilterIterator(t, [](const Feature::Ptr& f) -> bool {
+        return Feature::IsUsable(f);
+    });
+}
 
 
 } //dyno

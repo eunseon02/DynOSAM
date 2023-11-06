@@ -65,6 +65,7 @@ public:
 
     using BaseDetail = filter_iterator_detail<typename Iter::pointer>;
     using iterator = Iter;
+    using container = Container;
     using typename BaseDetail::value_type;
     using typename BaseDetail::reference_type;
     using typename BaseDetail::pointer;
@@ -90,6 +91,13 @@ public:
     //     return std::distance(begin(), end());
     // }
 
+    Container& getContainer() { return container_; }
+    const Container& getContainer() const { return container_; }
+
+    bool operator()(typename Container::const_reference arg) const {
+        return filter_func_(arg);
+    }
+
 
     //preincrement (++iter)
     filter_iterator_base& operator++() {
@@ -101,7 +109,13 @@ public:
     }
 
     //TODO??
-    filter_iterator_base& operator++(int x) { return *this;}
+    filter_iterator_base& operator++(int x) {
+        do {
+            it_+=x;
+        }
+        while(is_invalid());
+        return *this;
+    }
 
     //allows the iterator to be used as a enhanced for loop
     filter_iterator_base begin() { return filter_iterator_base(container_, filter_func_, container_.begin()); }

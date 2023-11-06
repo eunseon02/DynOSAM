@@ -46,45 +46,6 @@ public:
     DYNO_POINTER_TYPEDEFS(Frame)
     DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
 
-    // struct all_feature_container {
-    //     using iterator = FeatureContainer::iterator;
-    //     using value_type = FeatureContainer::value_type;
-    //     using reference = FeatureContainer::reference;
-
-    //     FeatureContainer& static_features_; //! ref
-    //     FeatureContainer& dynamic_features_; //! ref
-    //     iterator it_;
-
-    //     all_feature_container(const FeatureContainer& static_features, const FeatureContainer& dynamic_features)
-    //         :   static_features_(static_features), dynamic_features_(dynamic_features), it_(static_features.begin()) {}
-
-    //     reference operator*() { return *it_; }
-    //     reference operator->() { return *it_; }
-
-    //     bool operator==(const all_feature_container& other) const {
-    //         return it_ == other.it_;
-    //     }
-    //     bool operator!=(const all_feature_container& other) const { return it_ != other.it_; }
-
-    //     bool operator==(const iterator& other) const {
-    //         return it_ == other;
-    //     }
-    //     bool operator!=(const iterator& other) const { return it_ != other; }
-
-
-    //     all_feature_container& operator++() {
-    //         ++it_;
-    //         if(it_ == static_features_.end()) {
-    //             it_ = dynamic_features_.begin();
-    //         }
-    //         return *this;
-    //     }
-
-    //     iterator end() { return dynamic_features_.end(); }
-
-    // };
-
-
     const FrameId frame_id_;
     const Timestamp timestamp_;
     Camera::Ptr camera_;
@@ -132,6 +93,7 @@ public:
     Feature::Ptr at(TrackletId tracklet_id) const;
     bool isFeatureUsable(TrackletId tracklet_id) const;
 
+    //can be inliers or outliers
     FeaturePtrs collectFeatures(TrackletIds tracklet_ids) const;
 
     Landmark backProjectToCamera(TrackletId tracklet_id) const;
@@ -147,17 +109,29 @@ public:
     void updateObjectTrackingLabel(const DynamicObjectObservation& observation, ObjectId new_tracking_label);
 
 
-
+    //also does distortion of the feauture pairs and projection along the ray using the camera params
     void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
     void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+
+    //via the object id in the object_observations_ map
+    //searches for instance via object instance
+    //all in world
+    bool getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const;
+    bool getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const;
+
+     //points in world frame
+    void convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const;
+
 
     //special iterator types
     FeatureFilterIterator usableStaticFeaturesBegin();
     FeatureFilterIterator usableDynamicFeaturesBegin();
 
 protected:
+    //these do not do distortion or projection along the ray
     void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
     void getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
+
 
 private:
     static void updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth);

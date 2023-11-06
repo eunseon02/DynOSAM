@@ -35,9 +35,7 @@
 #include <glog/logging.h>
 #include <unistd.h>
 
-namespace dyno
-{
-namespace testing
+namespace dyno_testing
 {
 
 TempFile::TempFile()
@@ -100,5 +98,4 @@ void TempFile::write(const std::string& data)
   write_stream.close();
 }
 
-}  // namespace testing
-}  // namespace dyno
+}  // namespace dyno_testing

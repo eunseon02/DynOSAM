@@ -33,13 +33,10 @@
 #include <cstdio>
 #include <cstdlib>
 
-namespace dyno
-{
+namespace dyno_testing {
 static constexpr std::string_view endl = "\n";
 
 
-namespace testing
-{
 class TempFile
 {
 public:
@@ -90,5 +87,4 @@ inline TempFile& operator<<(TempFile& tmp_file, const std::string& data)
   return tmp_file;
 }
 
-} // testing
-} // dyno
+} // dyno_testing

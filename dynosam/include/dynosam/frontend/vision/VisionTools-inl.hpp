@@ -23,28 +23,15 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Feature.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
+
 
 namespace dyno {
 
-template<typename U, typename V>
-struct TrackletCorrespondance {
-    TrackletId tracklet_id_;
-    U ref_;
-    V cur_;
 
-    TrackletCorrespondance() {}
-    TrackletCorrespondance(TrackletId tracklet_id, U ref, V cur)
-    :   tracklet_id_(tracklet_id), ref_(ref), cur_(cur) {}
-};
+namespace vision_tools {
 
-template<typename RefType, typename CurType>
-using GenericCorrespondences = std::vector<TrackletCorrespondance<RefType, CurType>>;
 
-//! Correspondes format for a 3D->2D PnP solver. In the form of 3D Landmark in the world frame,
-//! and 2D observation in the current camera frame
-using AbsolutePoseCorrespondence =  TrackletCorrespondance<Landmark, Keypoint>;
-using AbsolutePoseCorrespondences = std::vector<AbsolutePoseCorrespondence>;
 
-}
+} //vision_tools
+} //dyno

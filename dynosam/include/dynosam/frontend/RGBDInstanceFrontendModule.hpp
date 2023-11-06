@@ -45,6 +45,8 @@ private:
 
     Frame::Ptr previous_frame_;
 
+    std::map<ObjectId, gtsam::Pose3> object_poses_; //just for now (viz)
+
 
     bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;

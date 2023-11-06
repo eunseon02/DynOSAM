@@ -30,6 +30,7 @@
 #include "dynosam/utils/GtsamUtils.hpp"
 
 #include <opengv/absolute_pose/CentralAbsoluteAdapter.hpp>
+#include <opengv/absolute_pose/methods.hpp>
 #include <opengv/types.hpp>
 
 #include <glog/logging.h>
@@ -39,8 +40,29 @@ namespace dyno {
 MotionSolver::MotionSolver(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
 
 
-gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& correspondences,  TrackletIds& inliers, TrackletIds& outliers) {
-    const size_t& n_matches = correspondences.size();
+MotionResult MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& correspondences,  TrackletIds& inliers, TrackletIds& outliers) {
+    return solve3D2DRansac(correspondences, inliers, outliers);
+}
+
+MotionResult MotionSolver::solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers) {
+    const MotionResult result = solve3D2DRansac(correspondences, inliers, outliers);
+    if(result.valid()) {
+        const gtsam::Pose3 G_w = result.get().inverse();
+        const gtsam::Pose3 H_w = curr_T_world_camera_ * G_w;
+        return MotionResult(H_w);
+    }
+
+    //if not valid, return motion result as is
+    return result;
+}
+
+
+MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers) {
+     const size_t& n_matches = correspondences.size();
+
+    if(n_matches < 5u) {
+        return MotionResult::NotEnoughCorrespondences();
+    }
 
     gtsam::Matrix K = gtsam::Matrix::Identity(3, 3);
     cv::cv2eigen(camera_params_.getCameraMatrix(), K);
@@ -64,6 +86,7 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     }
 
 
+
     opengv::absolute_pose::CentralAbsoluteAdapter adapter(bearing_vectors, points );
 
     // create a Ransac object
@@ -79,11 +102,12 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     // run ransac
     ransac.sac_model_ = absposeproblem_ptr;
     //https://github.com/laurentkneip/opengv/issues/121
-    ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
-    ransac.max_iterations_ = 100;
+    // ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
+    ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+    ransac.max_iterations_ = 500;
     if(!ransac.computeModel(0)) {
         LOG(WARNING) << "Could not compute ransac mode";
-        return gtsam::Pose3::Identity();
+        return MotionResult::Unsolvable();
     }
 
     // // get the result
@@ -93,9 +117,20 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
 
     gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
     poseMat.block<3, 4>(0, 0) = best_transformation;
-
     gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse
-    gtsam::Pose3 T_world(opengv_transform.rotation(), opengv_transform.translation());
+
+
+    // opengv::absolute_pose::CentralAbsoluteAdapter nl_adapter(bearing_vectors, points );
+    // nl_adapter.sett(opengv_transform.translation());
+    // nl_adapter.setR(opengv_transform.rotation().matrix());
+    // opengv::transformation_t nonlinear_transformation =
+    //     opengv::absolute_pose::optimize_nonlinear(nl_adapter);
+
+    // gtsam::Matrix pose_mat_nl = gtsam::Matrix::Identity(4, 4);
+    // pose_mat_nl.block<3, 4>(0, 0) = nonlinear_transformation;
+    // gtsam::Pose3 opengv_transform_nl(pose_mat_nl); //opengv has rotation as the inverse
+
+    // gtsam::Pose3 T_world(opengv_transform.rotation(), opengv_transform.translation());
 
     inliers.clear();
     outliers.clear();
@@ -109,12 +144,15 @@ gtsam::Pose3 MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& co
     CHECK_EQ((inliers.size() + outliers.size()), tracklets_.size());
     CHECK_EQ(inliers.size(), ransac.inliers_.size());
 
-    if(VLOG_IS_ON(10)) {
+
+    //TODO: update result if inliers < outliers or something!!!
+
+    // if(VLOG_IS_ON(10)) {
         LOG(INFO) << "PnP RANSAC success with\n"
             << " - inliers/outliers: " << inliers.size() << "/" << outliers.size();
-    }
+    // }
 
-    return T_world;
+    return MotionResult(opengv_transform);
 }
 
 } //dyno

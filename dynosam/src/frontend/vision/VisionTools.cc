@@ -56,22 +56,21 @@ void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv
 }
 
 
-void getCorrespondences(FeaturePairs& correspondences, const FeatureContainer& previous_features, const FeatureContainer& current_features,  bool only_usable) {
+void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterator& previous_features, const FeatureFilterIterator& current_features) {
   correspondences.clear();
 
   for(const auto& curr_feature : current_features) {
     //check if previous feature and is valid
-    if(previous_features.exists(curr_feature->tracklet_id_)) {
-      const auto prev_feature = previous_features.getByTrackletId(curr_feature->tracklet_id_);
+    const FeatureContainer& previous_feature_container = previous_features.getContainer();
+    if(previous_feature_container.exists(curr_feature->tracklet_id_)) {
+      const auto prev_feature = previous_feature_container.getByTrackletId(curr_feature->tracklet_id_);
       CHECK(prev_feature);
 
-      //only if valid
-      if(only_usable && prev_feature->usable()) {
-        correspondences.push_back({prev_feature, curr_feature});
+      //having checked that feature is in the previous set, also check that it ahderes to the filter
+      if(!previous_features(prev_feature)) {
+        continue;
       }
-      else {
-        correspondences.push_back({prev_feature, curr_feature});
-      }
+      correspondences.push_back({prev_feature, curr_feature});
     }
   }
 }

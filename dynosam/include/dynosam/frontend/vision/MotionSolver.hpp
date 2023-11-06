@@ -31,20 +31,58 @@
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
 #include <opengv/sac/Ransac.hpp>
 
+#include <optional>
+
 using AbsolutePoseProblem = opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem;
 using AbsolutePoseSacProblem = opengv::sac::Ransac<AbsolutePoseProblem>;
 
 namespace dyno {
 
+class MotionResult : public std::optional<gtsam::Pose3> {
+public:
+    enum Status { VALID, NOT_ENOUGH_CORRESPONDENCES, NOT_ENOUGH_INLIERS, UNSOLVABLE };
+    Status status;
+
+private:
+    MotionResult(Status s) : status(s) {};
+
+public:
+    MotionResult() {}
+
+    MotionResult(const gtsam::Pose3& pose) : status(VALID) { emplace(pose); }
+
+    operator const gtsam::Pose3&() const { return get(); }
+
+    static MotionResult NotEnoughCorrespondences() { return MotionResult(NOT_ENOUGH_CORRESPONDENCES); }
+    static MotionResult NotEnoughInliers() { return MotionResult(NOT_ENOUGH_INLIERS); }
+    static MotionResult Unsolvable() { return MotionResult(UNSOLVABLE); }
+
+    inline bool valid() const { return status == VALID; }
+    inline bool notEnoughCorrespondences() const { return status == NOT_ENOUGH_CORRESPONDENCES; }
+    inline bool notEnoughInliers() const { return status == NOT_ENOUGH_INLIERS; }
+    inline bool unsolvable() const { return status == UNSOLVABLE; }
+
+    const gtsam::Pose3& get() const {
+        if (!has_value()) throw std::runtime_error("MotionResult has no value");
+        return value();
+    }
+
+};
 
 
 class MotionSolver {
 
 public:
+
+
     MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
 
     //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
-    gtsam::Pose3 solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
+    MotionResult solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
+    MotionResult solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers);
+
+protected:
+    MotionResult solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
 
 protected:
     const FrontendParams params_;

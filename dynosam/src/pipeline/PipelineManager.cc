@@ -44,7 +44,15 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
     //TODO: factories for different loaders etc later
     data_interface_ = std::make_unique<DataInterfacePipeline>(params.parallel_run_);
-    data_loader_->registerImageContainerCallback(std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue, data_interface_.get(), std::placeholders::_1));
+    data_loader_->registerImageContainerCallback(
+        std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue, data_interface_.get(), std::placeholders::_1)
+    );
+
+    //ground truth
+    data_loader_->registerGroundTruthPacketCallback(
+        std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket, data_interface_.get(), std::placeholders::_1)
+    );
+
     data_interface_->registerOutputQueue(&frontend_input_queue_);
 
     FrontendModule::Ptr frontend = nullptr;

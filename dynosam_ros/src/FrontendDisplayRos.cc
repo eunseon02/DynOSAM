@@ -40,11 +40,43 @@ FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHE
     tracking_image_pub_ = image_transport::create_publisher(node.get(), "tracking_image");
     tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("tracked_points", 2);
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 2);
+    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_pose", 2);
 }
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase& frontend_output) {
     publishVisibleCloud(frontend_output);
     publishOdometry(frontend_output);
+
+    visualization_msgs::msg::MarkerArray marker_array;
+
+    for(const auto&[object_id, pose] : frontend_output.object_poses_) {
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "world";
+        // marker.ns = "my_namespace";
+        marker.id = object_id;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = pose.x();
+        marker.pose.position.y = pose.y();
+        marker.pose.position.z = pose.z();
+        marker.pose.orientation.x = pose.rotation().toQuaternion().x();
+        marker.pose.orientation.y = pose.rotation().toQuaternion().y();
+        marker.pose.orientation.z = pose.rotation().toQuaternion().z();
+        marker.pose.orientation.w = pose.rotation().toQuaternion().w();
+        marker.scale.x = 1;
+        marker.scale.y = 1;
+        marker.scale.z = 1;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+        marker.color.r = colour(0)/255.0;
+        marker.color.g = colour(1)/255.0;
+        marker.color.b = colour(2)/255.0;
+
+        marker_array.markers.push_back(marker);
+    }
+
+    object_pose_pub_->publish(marker_array);
 }
 
 void FrontendDisplayRos::publishVisibleCloud(const FrontendOutputPacketBase& frontend_output) {
