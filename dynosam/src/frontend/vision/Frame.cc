@@ -405,7 +405,15 @@ FeatureFilterIterator Frame::usableStaticFeaturesBegin() {
     return static_features_.beginUsable();
 }
 
+FeatureFilterIterator Frame::usableStaticFeaturesBegin() const {
+    return static_features_.beginUsable();
+}
+
 FeatureFilterIterator Frame::usableDynamicFeaturesBegin() {
+    return dynamic_features_.beginUsable();
+}
+
+FeatureFilterIterator Frame::usableDynamicFeaturesBegin() const {
     return dynamic_features_.beginUsable();
 }
 

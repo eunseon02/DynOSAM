@@ -29,7 +29,7 @@ namespace dyno {
 
 class OpenCVFrontendDisplay : public FrontendDisplay {
 
-    void spinOnce(const FrontendOutputPacketBase& frontend_output) override;
+    void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) override;
 
 };
 

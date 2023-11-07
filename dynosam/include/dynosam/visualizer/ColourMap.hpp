@@ -44,6 +44,15 @@ static inline cv::Scalar getRainbowColour(size_t index) {
         255.0);
 }
 
+//if use_opencv_conventtion then colours are reversed to be BGRA
+static inline cv::Scalar convertConention(ObjectId label, bool use_opencv_convention = false) {
+  cv::Scalar colour = getObjectColour();
+  if(use_opencv_convention) {
+    return cv::Scalar(colour(2), colour(1), colour(0), colour(3));
+  }
+  return colour;
+}
+
 static inline cv::Scalar getObjectColour(ObjectId label) {
     while (label > 25)
   {

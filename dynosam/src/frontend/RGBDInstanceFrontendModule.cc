@@ -201,15 +201,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
             const ObjectPoseGT& object_gt_packet = *it;
 
             if(object_poses_.find(object_id) == object_poses_.end()) {
-                // AbsolutePoseCorrespondences inlier_dynamic_correspondences;
-                // frame->getDynamicCorrespondences(inlier_dynamic_correspondences, *previous_frame_, object_id);
-
-                // //calculate centroid (lazy)
-                // gtsam::Point3 centroid;
-                // for(const AbsolutePoseCorrespondence& corr : inlier_dynamic_correspondences) {
-                //     centroid += corr.ref_;
-                // }
-                // centroid /= inlier_dynamic_correspondences.size();
                 object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
             }
             else {
@@ -229,30 +220,68 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
-    LandmarkMap landmark_map; //map of current features in world frame
-    for(const Feature::Ptr& feature : frame->static_features_) {
-        if(feature->usable()) {
-            CHECK(feature->hasDepth());
-
-            Landmark lmk_world;
-            camera_->backProject(
-                feature->keypoint_, feature->depth_, &lmk_world, frame->T_world_camera_
-            );
-
-            landmark_map.insert({feature->tracklet_id_, lmk_world});
-        }
-    }
-
 
     previous_frame_ = frame;
 
-    auto output = RGBDInstanceOutputPacket::Create(frame);
-    // auto output = std::make_shared<FrontendOutputPacketBase>();
-    // output->input_ = input;
-    // output->frame_ = frame;
-    // output->tracked_landmarks = landmark_map;
-    // output->object_poses_ = per_frame_object_poses;
+    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses);
     return {State::Nominal, output};
+}
+
+
+RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(const Frame& frame, const cv::Mat& debug_image, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
+    StatusKeypointMeasurements static_keypoint_measurements;
+    Landmarks static_landmarks;
+    for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
+        const TrackletId tracklet_id = f->tracklet_id_;
+        const Keypoint kp = f->keypoint_;
+        const Landmark lmk = frame.backProjectToWorld(tracklet_id);
+        CHECK(f->isStatic());
+        CHECK(Feature::IsUsable(f));
+
+        KeypointStatus status = KeypointStatus::Static();
+        KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
+
+        static_keypoint_measurements.push_back(std::make_pair(status, measurement));
+        static_landmarks.push_back(lmk);
+    }
+
+
+    StatusKeypointMeasurements dynamic_keypoint_measurements;
+    Landmarks dynamic_landmarks;
+    for(const auto& [object_id, obs] : frame.object_observations_) {
+        CHECK_EQ(object_id, obs.instance_label_);
+        CHECK(obs.marked_as_moving_);
+
+        for(const TrackletId tracklet : obs.object_features_) {
+            if(frame.isFeatureUsable(tracklet)) {
+                const Feature::Ptr f = frame.at(tracklet);
+                CHECK(!f->isStatic());
+                CHECK_EQ(f->instance_label_, object_id);
+
+                const TrackletId tracklet_id = f->tracklet_id_;
+                const Keypoint kp = f->keypoint_;
+                const Landmark lmk = frame.backProjectToWorld(tracklet_id);
+
+                KeypointStatus status = KeypointStatus::Dynamic(object_id);
+                KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
+
+                dynamic_keypoint_measurements.push_back(std::make_pair(status, measurement));
+                dynamic_landmarks.push_back(lmk);
+            }
+        }
+
+    }
+
+    return std::make_shared<RGBDInstanceOutputPacket>(
+        static_keypoint_measurements,
+        dynamic_keypoint_measurements,
+        static_landmarks,
+        dynamic_landmarks,
+        frame.T_world_camera_,
+        frame,
+        propogated_object_poses,
+        debug_image
+    );
 }
 
 } //dyno

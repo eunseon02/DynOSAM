@@ -24,6 +24,8 @@
 #pragma once
 
 #include <dynosam/visualizer/FrontendDisplay.hpp>
+#include <dynosam/frontend/RGBDInstance-Definitions.hpp>
+
 #include "image_transport/image_transport.hpp"
 
 
@@ -39,16 +41,23 @@ class FrontendDisplayRos : public FrontendDisplay {
 public:
     FrontendDisplayRos(rclcpp::Node::SharedPtr node);
 
-    void spinOnce(const FrontendOutputPacketBase& frontend_output) override;
+    void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) override;
 
 private:
-    void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
-    void publishOdometry(const FrontendOutputPacketBase& frontend_output);
+    void processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output);
+
+    void publishStaticCloud(const Landmarks& static_landmarks);
+    void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
+    void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
+
+    // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
+    void publishOdometry(const gtsam::Pose3& T_world_camera);
 
 private:
     rclcpp::Node::SharedPtr node_;
 
-    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr tracked_points_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr static_tracked_points_pub_;
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr dynamic_tracked_points_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
 
     //sort of just for now

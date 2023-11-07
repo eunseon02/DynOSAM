@@ -22,6 +22,8 @@
  */
 
 #include <dynosam/visualizer/ColourMap.hpp>
+#include <dynosam/frontend/RGBDInstance-Definitions.hpp>
+#include <dynosam/utils/SafeCast.hpp>
 
 #include "dynosam_ros/FrontendDisplayRos.hpp"
 #include "dynosam_ros/RosUtils.hpp"
@@ -38,24 +40,79 @@ FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHE
 
     // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     tracking_image_pub_ = image_transport::create_publisher(node.get(), "tracking_image");
-    tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("tracked_points", 2);
+    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("static", 2);
+    dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic", 2);
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 2);
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_pose", 2);
 }
 
-void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase& frontend_output) {
-    publishVisibleCloud(frontend_output);
-    publishOdometry(frontend_output);
+void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
+    auto rgbd_output = safeCast<FrontendOutputPacketBase, RGBDInstanceOutputPacket>(frontend_output);
+    if(rgbd_output) {
+        processRGBDOutputpacket(rgbd_output);
+    }
 
+    publishOdometry(frontend_output->T_world_camera_);
+}
+
+
+
+void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
+    CHECK(rgbd_frontend_output);
+    publishStaticCloud(rgbd_frontend_output->static_landmarks_);
+    publishObjectCloud(rgbd_frontend_output->dynamic_keypoint_measurements_, rgbd_frontend_output->dynamic_landmarks_);
+    publishObjectPositions(rgbd_frontend_output->propogated_object_poses_);
+}
+
+void FrontendDisplayRos::publishStaticCloud(const Landmarks& static_landmarks) {
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+    for(const Landmark& lmk : static_landmarks) {
+        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 255, 255, 255);
+        cloud.points.push_back(pt);
+    }
+
+
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pcl::toROSMsg(cloud, pc2_msg);
+    pc2_msg.header.frame_id = "world";
+    static_tracked_points_pub_->publish(pc2_msg);
+}
+
+void FrontendDisplayRos::publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks) {
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    CHECK_EQ(dynamic_measurements.size(), dynamic_landmarks.size());
+
+    const size_t num_measurements = dynamic_measurements.size();
+
+    for(size_t i = 0; i < num_measurements; i++) {
+        const StatusKeypointMeasurement& kpm = dynamic_measurements.at(i);
+        const KeypointStatus& status = kpm.first;
+        const Landmark& lmk = dynamic_landmarks.at(i);
+
+         const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(1));
+        cloud.points.push_back(pt);
+    }
+
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pcl::toROSMsg(cloud, pc2_msg);
+    pc2_msg.header.frame_id = "world";
+    dynamic_tracked_points_pub_->publish(pc2_msg);
+}
+
+
+void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
     visualization_msgs::msg::MarkerArray marker_array;
 
-    for(const auto&[object_id, pose] : frontend_output.object_poses_) {
+    for(const auto&[object_id, pose] : propogated_object_poses) {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "world";
-        // marker.ns = "my_namespace";
+        marker.ns = "object_positions";
         marker.id = object_id;
         marker.type = visualization_msgs::msg::Marker::SPHERE;
         marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.header.stamp = node_->now();
         marker.pose.position.x = pose.x();
         marker.pose.position.y = pose.y();
         marker.pose.position.z = pose.z();
@@ -79,44 +136,11 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase& frontend_outpu
     object_pose_pub_->publish(marker_array);
 }
 
-void FrontendDisplayRos::publishVisibleCloud(const FrontendOutputPacketBase& frontend_output) {
-    pcl::PointCloud<pcl::PointXYZRGB> cloud;
-    const auto& tracked_landmarks = frontend_output.tracked_landmarks;
-    LOG(INFO) << "Publishing points" << tracked_landmarks.size();
-
-    for(auto i = tracked_landmarks.begin(); i != tracked_landmarks.end(); i++) {
-        const Landmark& lmk = i->second;
-
-        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 255, 255, 255);
-        cloud.points.push_back(pt);
-    }
-
-    const Frame::Ptr& frame = frontend_output.frame_;
-    for(const auto& [instance_id, object_observation] : frame->object_observations_) {
-        for(const TrackletId tracklet_id : object_observation.object_features_) {
-
-            if(!frame->isFeatureUsable(tracklet_id)) {continue;}
-
-            Landmark lmk = frame->backProjectToWorld(tracklet_id);
-
-            const cv::Scalar colour = ColourMap::getObjectColour(object_observation.instance_label_);
-            pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(1));
-            cloud.points.push_back(pt);
-        }
-    }
-
-    sensor_msgs::msg::PointCloud2 pc2_msg;
-    pcl::toROSMsg(cloud, pc2_msg);
-    pc2_msg.header.frame_id = "world";
-    tracked_points_pub_->publish(pc2_msg);
-}
 
 
-void FrontendDisplayRos::publishOdometry(const FrontendOutputPacketBase& frontend_output) {
-    const gtsam::Pose3 pose = frontend_output.frame_->T_world_camera_;
-
+void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera) {
     nav_msgs::msg::Odometry odom_msg;
-    convert(pose, odom_msg);
+    convert(T_world_camera, odom_msg);
     odom_msg.header.frame_id = "world";
     odom_msg.child_frame_id = "camera";
     odometry_pub_->publish(odom_msg);

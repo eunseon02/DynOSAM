@@ -28,6 +28,7 @@
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
+#include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 
 namespace dyno {
 
@@ -45,12 +46,18 @@ private:
 
     Frame::Ptr previous_frame_;
 
-    std::map<ObjectId, gtsam::Pose3> object_poses_; //just for now (viz)
+    std::map<ObjectId, gtsam::Pose3> object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
 
+private:
 
     bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
+
+    RGBDInstanceOutputPacket::Ptr constructOutput(const Frame& frame, const cv::Mat& debug_image = cv::Mat(), const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {});
+
+    // std::map<ObjectId, gtsam::Pose3> constructVisibleObjectPoses()
+
 
 };
 

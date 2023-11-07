@@ -28,7 +28,7 @@
 
 namespace dyno {
 
-void OpenCVFrontendDisplay::spinOnce(const FrontendOutputPacketBase& frontend_output) {
+void OpenCVFrontendDisplay::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
     LOG(INFO) << "In frontend opencv display";
 
     // cv::Mat input_frames;

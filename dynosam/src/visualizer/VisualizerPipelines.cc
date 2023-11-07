@@ -29,7 +29,7 @@ FrontendVizPipeline::FrontendVizPipeline(InputQueue* input_queue, FrontendDispla
     :   SIMO("frontend-viz", input_queue), frontend_display_(frontend_display) {}
 
 NullPipelinePayload::ConstPtr FrontendVizPipeline::process(const FrontendOutputPacketBase::ConstPtr& input) {
-    frontend_display_->spinOnce(*input);
+    frontend_display_->spinOnce(input);
     static auto null_payload = std::make_shared<NullPipelinePayload>();
     return null_payload;
 }

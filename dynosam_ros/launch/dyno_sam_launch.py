@@ -20,7 +20,7 @@ def generate_launch_description():
             executable='dynosam_node',
             parameters=[
                 {"params_folder_path": "/home/user/dev_ws/src/DynOSAM/dynosam/params/"},
-                {"dataset_path": "/root/data/vdo_slam/kitti/kitti/0004"}
+                {"dataset_path": "/root/data/vdo_slam/kitti/kitti/0000"}
             ],
             arguments=['--flagfile=src/DynOSAM/dynosam/params/example.flags', '-v=20']
             )

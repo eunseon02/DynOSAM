@@ -145,7 +145,11 @@ public:
 
     //special iterator types
     FeatureFilterIterator usableStaticFeaturesBegin();
+    FeatureFilterIterator usableStaticFeaturesBegin() const;
+
     FeatureFilterIterator usableDynamicFeaturesBegin();
+    FeatureFilterIterator usableDynamicFeaturesBegin() const;
+
 
 protected:
     //these do not do distortion or projection along the ray

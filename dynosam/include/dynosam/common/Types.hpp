@@ -32,6 +32,8 @@
 #include <vector>
 #include <optional>
 
+#include <glog/logging.h>
+
 
 namespace dyno
 {
@@ -89,7 +91,7 @@ struct KeypointStatus {
     CHECK(label != background_label);
     return KeypointStatus(KeyPointType::DYNAMIC, label);
   }
-}
+};
 
 using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
 using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;

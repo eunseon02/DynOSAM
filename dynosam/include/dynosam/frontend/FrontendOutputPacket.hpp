@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 
 namespace dyno {
 
@@ -35,24 +36,24 @@ public:
 
 
 public:
+    const FrontendType frontend_type_;
     const StatusKeypointMeasurements static_keypoint_measurements_;
     const StatusKeypointMeasurements dynamic_keypoint_measurements_;
-    const DynamicObjectObservations object_observations_;
     const gtsam::Pose3 T_world_camera_;
     const Frame frame_;
     const cv::Mat& debug_image_;
 
     FrontendOutputPacketBase(
+        const FrontendType frontend_type,
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
-        const DynamicObjectObservations& object_observations,
         const gtsam::Pose3& T_world_camera,
         const Frame& frame,
         const cv::Mat& debug_image = cv::Mat()
     )
-    :   static_keypoint_measurements_(static_keypoint_measurements),
+    :   frontend_type_(frontend_type),
+        static_keypoint_measurements_(static_keypoint_measurements),
         dynamic_keypoint_measurements_(dynamic_keypoint_measurements),
-        object_observations_(object_observations),
         T_world_camera_(T_world_camera),
         frame_(frame),
         debug_image_(debug_image)

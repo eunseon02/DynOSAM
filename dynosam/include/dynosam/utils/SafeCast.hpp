@@ -58,6 +58,14 @@ inline std::shared_ptr<Derived> safeCast(std::shared_ptr<Base> base_ptr) {
   }
 }
 
+//new pointer
+template <typename Base, typename Derived>
+inline std::shared_ptr<const Derived> safeCast(std::shared_ptr<const Base> base_ptr) {
+  CHECK(base_ptr);
+  std::shared_ptr<Base> base = std::const_pointer_cast<Base>(base_ptr);
+  return safeCast<Base, Derived>(base);
+}
+
 // Safely downcast unique pointers.
 // NOTE: pass by rvalue because this prevents the copy of the pointer and
 // is faster. All others don't transfer ownership (aren't using move types)

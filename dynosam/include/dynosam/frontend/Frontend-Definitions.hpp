@@ -23,26 +23,10 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-
-
-#include "dynosam/visualizer/Visualizer-Definitions.hpp" //for image queue
-
-
 namespace dyno {
 
-
-class FrontendDisplay {
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendDisplay)
-
-    FrontendDisplay() {}
-    virtual ~FrontendDisplay() {}
-
-    virtual void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) = 0;
-
-
+enum class FrontendType {
+    kRGBD = 0
 };
 
-} //dyno
+}

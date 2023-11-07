@@ -177,7 +177,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
         // green circle/line:
         // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
-        const cv::Scalar colour = ColourMap::getObjectColour(feature->instance_label_);
+        const cv::Scalar colour = ColourMap::getObjectColour(feature->instance_label_, true);
         cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), colour, 1);
       } else {  // New feature tracks are blue.
         // cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 1, blue, 1);
