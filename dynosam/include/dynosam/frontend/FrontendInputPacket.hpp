@@ -39,35 +39,6 @@ namespace dyno {
 
 
 
-// // //inherit from to add more IMAGE data
-// struct InputImagePacketBase {
-//     DYNO_POINTER_TYPEDEFS(InputImagePacketBase)
-
-//     const FrameId frame_id_;
-//     const Timestamp timestamp_;
-//     const cv::Mat rgb_; //could be either rgb or greyscale?
-//     const cv::Mat optical_flow_;
-
-//     InputImagePacketBase(const FrameId frame_id, const Timestamp timestamp, const cv::Mat& rgb, const cv::Mat& optical_flow)
-//         :   frame_id_(frame_id), timestamp_(timestamp), rgb_(rgb), optical_flow_(optical_flow)
-//     {
-//         CHECK(rgb_.type() == CV_8UC1 || rgb_.type() == CV_8UC3) << "The provided rgb image is not grayscale or rgb";
-//         CHECK(!rgb.empty()) << "The provided rgb image is empty!";
-
-//         CHECK(optical_flow_.type() == CV_32FC2) << "The provided optical flow image is not of datatype CV_32FC2 ("
-//             << "was " << utils::cvTypeToString(optical_flow_.type()) << ")";
-//         CHECK(!optical_flow_.empty()) << "The provided optical flow image is empty!";
-//     }
-
-//     virtual ~InputImagePacketBase() = default;
-
-//     //should be overwritten in derived class to make the visualzier work properly
-//     virtual void draw(cv::Mat& img) const {
-
-//     }
-// };
-
-
 //inherit to add more sensor data (eg imu)
 //can be of any InputImagePacketBase with this as the default. We use this so we can
 //create a FrontendInputPacketBase type with the InputPacketType as the actual derived type

@@ -32,14 +32,6 @@
 
 namespace dyno {
 
-enum KeyPointType {
-    STATIC,
-    DYNAMIC
-};
-
-//! Expected label for the background in a semantic or motion mask
-constexpr static ObjectId background_label = 0u;
-
 struct functional_keypoint {
 
     template<typename T = int>

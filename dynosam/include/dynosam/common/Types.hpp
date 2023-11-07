@@ -65,6 +65,36 @@ using Keypoints = gtsam::Point2Vector; //! Vector of 2D keypoints using gtsam's 
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 
+
+enum KeyPointType {
+    STATIC,
+    DYNAMIC
+};
+
+//! Expected label for the background in a semantic or motion mask
+constexpr static ObjectId background_label = 0u;
+
+//unsure if should be in types but whatever for now
+struct KeypointStatus {
+  const KeyPointType kp_type_;
+  const ObjectId label_; //! Will be 0 if background
+
+  KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
+
+  inline static KeypointStatus Static() {
+    return KeypointStatus(KeyPointType::STATIC, background_label);
+  }
+
+  inline static KeypointStatus Dynamic(ObjectId label) {
+    CHECK(label != background_label);
+    return KeypointStatus(KeyPointType::DYNAMIC, label);
+  }
+}
+
+using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
+using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
+using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
+
 //Optional string that can be modified directly (similar to old-stype boost::optional)
 //to access the mutable reference the internal string must be accessed with get()
 // e.g. optional->get() = "updated string value";

@@ -22,7 +22,7 @@
  */
 
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/frontend/RGBDInstancePacket.hpp"
+#include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
@@ -131,8 +131,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     AbsolutePoseCorrespondences correspondences;
     //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
     //bearing vectors are also not undistorted atm!!
-    // rgbd_processor_.getCorrespondences(correspondences, *previous_frame_, *frame, KeyPointType::STATIC);
-    frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC);
+    //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
+    frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
 
     LOG(INFO) << "Gotten correspondances, solving camera pose";
 
@@ -161,7 +161,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         LOG(INFO) << "Looking at object " << object_id;
         AbsolutePoseCorrespondences dynamic_correspondences;
         //get the corresponding feature pairs
-        bool result = frame->getDynamicCorrespondences(dynamic_correspondences, *previous_frame_, object_id);
+        bool result = frame->getDynamicCorrespondences(dynamic_correspondences, *previous_frame_, object_id, frame->landmarkWorldKeypointCorrespondance());
         LOG(INFO) << "gotten correspondences";
 
         if(!result) {
@@ -246,12 +246,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     previous_frame_ = frame;
 
-
-    auto output = std::make_shared<FrontendOutputPacketBase>();
-    output->input_ = input;
-    output->frame_ = frame;
+    auto output = RGBDInstanceOutputPacket::Create(frame);
+    // auto output = std::make_shared<FrontendOutputPacketBase>();
+    // output->input_ = input;
+    // output->frame_ = frame;
     // output->tracked_landmarks = landmark_map;
-    output->object_poses_ = per_frame_object_poses;
+    // output->object_poses_ = per_frame_object_poses;
     return {State::Nominal, output};
 }
 

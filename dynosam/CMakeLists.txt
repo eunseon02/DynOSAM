@@ -67,6 +67,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc
+  src/frontend/vision/UndistortRectifier.cc
   src/frontend/vision/Frame.cc
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc

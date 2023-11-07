@@ -44,6 +44,13 @@ Frame::Frame(
             dynamic_features_(dynamic_features)
         {
             constructDynamicObservations();
+
+            // NOTE: no rectification, use camera matrix as P for cv::undistortPoints
+            // see https://stackoverflow.com/questions/22027419/bad-results-when-undistorting-points-using-opencv-in-python
+            const CameraParams& cam_params = camera->getParams();
+            cv::Mat P = cam_params.getCameraMatrix();
+            cv::Mat R = cv::Mat::eye(3,3,CV_32FC1);
+            undistorter_ = std::make_shared<UndistorterRectifier>(P, cam_params, R);
         }
 
 bool Frame::exists(TrackletId tracklet_id) const {
@@ -133,44 +140,75 @@ void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max
 }
 
 
-void Frame::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
-  correspondences.clear();
-  FeaturePairs feature_correspondences;
-  getCorrespondences(feature_correspondences, previous_frame, kp_type);
-  convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
-}
+// void Frame::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
+//   correspondences.clear();
+//   FeaturePairs feature_correspondences;
+//   getCorrespondences(feature_correspondences, previous_frame, kp_type);
+//   convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
+// }
 
-void Frame::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
+bool Frame::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
     if(kp_type == KeyPointType::STATIC) {
-        getStaticCorrespondences(correspondences, previous_frame);
+        return getStaticCorrespondences(correspondences, previous_frame);
     }
     else {
-        getDynamicCorrespondences(correspondences, previous_frame);
+        return getDynamicCorrespondences(correspondences, previous_frame);
     }
 }
 
+Frame::ConstructCorrespondanceFunc<Landmark, Keypoint> Frame::landmarkWorldKeypointCorrespondance() const {
+    auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        if(!previous_feature->hasDepth()) {
+            throw std::runtime_error("Error in constructing Landmark (w) -> keypoint correspondences - previous feature does not have depth!");
+        }
 
-bool Frame::getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const {
-    FeaturePairs feature_correspondences;
-    const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
-    if(!result) {
-        return false;
-    }
+        //eventuall map?
+        Landmark lmk_w = previous_frame.backProjectToWorld(previous_feature->tracklet_id_);
+        return TrackletCorrespondance(previous_feature->tracklet_id_, lmk_w, current_feature->keypoint_);
+    };
 
-    //unncessary but just for sanity check
-    for(const auto& feature_pairs : feature_correspondences) {
-        CHECK_EQ(feature_pairs.first->instance_label_, object_id);
-        CHECK(feature_pairs.first->usable());
-
-        CHECK_EQ(feature_pairs.second->instance_label_, object_id);
-        CHECK(feature_pairs.second->usable());
-
-        CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
-    }
-
-    convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
-    return result;
+    return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 }
+
+Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorldProjectedBearingCorrespondance() const {
+    auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        if(!previous_feature->hasDepth()) {
+            throw std::runtime_error("Error in constructing Landmark (w) -> keypoint correspondences - previous feature does not have depth!");
+        }
+
+        //eventuall map?
+        Landmark lmk_w = previous_frame.backProjectToWorld(previous_feature->tracklet_id_);
+
+        gtsam::Vector3 projected_versor = undistorter_->undistortKeypointAndGetProjectedVersor(current_feature->keypoint_);
+        return TrackletCorrespondance(previous_feature->tracklet_id_, lmk_w, projected_versor);
+    };
+
+    return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+}
+
+
+
+// bool Frame::getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const {
+//     FeaturePairs feature_correspondences;
+//     const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
+//     if(!result) {
+//         return false;
+//     }
+
+//     //unncessary but just for sanity check
+//     for(const auto& feature_pairs : feature_correspondences) {
+//         CHECK_EQ(feature_pairs.first->instance_label_, object_id);
+//         CHECK(feature_pairs.first->usable());
+
+//         CHECK_EQ(feature_pairs.second->instance_label_, object_id);
+//         CHECK(feature_pairs.second->usable());
+
+//         CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
+//     }
+
+//     convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
+//     return result;
+// }
 
 bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const {
 
@@ -213,47 +251,50 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
 }
 
 
-void Frame::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
+bool Frame::getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
     vision_tools::getCorrespondences(
         correspondences,
         previous_frame.static_features_.beginUsable(),
         static_features_.beginUsable()
     );
+
+    return correspondences.size() > 0u;
 }
 
-void Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
+bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const {
     vision_tools::getCorrespondences(
         correspondences,
         previous_frame.dynamic_features_.beginUsable(),
         dynamic_features_.beginUsable()
     );
+    return correspondences.size() > 0u;
 }
 
-void Frame::convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const {
-    absolute_pose_correspondences.clear();
-    //this will also take a point in the camera frame and put into world frame
-    for(const auto& pair : correspondences) {
-        const Feature::Ptr& prev_feature = pair.first;
-        const Feature::Ptr& curr_feature = pair.second;
+// void Frame::convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const {
+//     absolute_pose_correspondences.clear();
+//     //this will also take a point in the camera frame and put into world frame
+//     for(const auto& pair : correspondences) {
+//         const Feature::Ptr& prev_feature = pair.first;
+//         const Feature::Ptr& curr_feature = pair.second;
 
-        CHECK(prev_feature);
-        CHECK(curr_feature);
+//         CHECK(prev_feature);
+//         CHECK(curr_feature);
 
-        CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
-        CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
-        CHECK_EQ(curr_feature->frame_id_, frame_id_);
+//         CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
+//         CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
+//         CHECK_EQ(curr_feature->frame_id_, frame_id_);
 
 
-        //this will not work for monocular or some other system that never has depth but will eventually have a point?
-        if(!prev_feature->hasDepth()) {
-            throw std::runtime_error("Error in FrameProcessor::getCorrespondences for AbsolutePoseCorrespondences - previous feature does not have depth!");
-        }
+//         //this will not work for monocular or some other system that never has depth but will eventually have a point?
+//         if(!prev_feature->hasDepth()) {
+//             throw std::runtime_error("Error in FrameProcessor::getCorrespondences for AbsolutePoseCorrespondences - previous feature does not have depth!");
+//         }
 
-        //eventuall map?
-        Landmark lmk_w = previous_frame.backProjectToWorld(prev_feature->tracklet_id_);
-        absolute_pose_correspondences.push_back(TrackletCorrespondance(prev_feature->tracklet_id_, lmk_w, curr_feature->keypoint_));
-    }
-}
+//         //eventuall map?
+//         Landmark lmk_w = previous_frame.backProjectToWorld(prev_feature->tracklet_id_);
+//         absolute_pose_correspondences.push_back(TrackletCorrespondance(prev_feature->tracklet_id_, lmk_w, curr_feature->keypoint_));
+//     }
+// }
 
 
 

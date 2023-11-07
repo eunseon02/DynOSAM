@@ -49,13 +49,31 @@ class YamlParser {
   ~YamlParser() { closeFile(&fs_); }
 
   template <class T>
-  void getYamlParam(const std::string& id, T* output) const {
+  bool getYamlParam(const std::string& id, T* output) const {
     CHECK(!id.empty());
+    CHECK_NOTNULL(output);
     const cv::FileNode& file_handle = fs_[id];
     CHECK_NE(file_handle.type(), cv::FileNode::NONE)
         << "Missing parameter: " << id.c_str()
         << " in file: " << filepath_.c_str();
-    file_handle >> *CHECK_NOTNULL(output);
+    file_handle >> *output;
+    return true;
+  }
+
+  template <class T>
+  bool getYamlParam(const std::string& id, T* output, T default_value) const {
+    CHECK(!id.empty());
+    CHECK_NOTNULL(output);
+    const cv::FileNode& file_handle = fs_[id];
+    if(file_handle.type() == cv::FileNode::NONE) {
+      *output = default_value;
+      return false;
+    }
+    else {
+      file_handle >> *output;
+      return true;
+    }
+
   }
 
   template <class T>

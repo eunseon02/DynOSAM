@@ -120,18 +120,18 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint_;
     if (!feature->usable()) {  // Untracked landmarks are red.
-      cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 4, red, 2);
+      cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 4, red, 2);
     } else {
 
       const Feature::Ptr& prev_feature = previous_frame.static_features_.getByTrackletId(feature->tracklet_id_);
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
+        cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
-        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), green, 1);
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), green, 1);
       } else {  // New feature tracks are blue.
-        cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 6, blue, 1);
+        cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 6, blue, 1);
       }
     }
   }
@@ -167,7 +167,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   for ( const Feature::Ptr& feature : current_frame.dynamic_features_) {
     const Keypoint& px_cur = feature->keypoint_;
     if (!feature->usable()) {  // Untracked landmarks are red.
-      // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 1, red, 2);
+      // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 1, red, 2);
     } else {
 
 
@@ -175,12 +175,12 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        // cv::circle(img_rgb,  utils::gtsamPointToCV(px_cur), 6, green, 1);
+        // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
         const cv::Scalar colour = ColourMap::getObjectColour(feature->instance_label_);
-        cv::arrowedLine(img_rgb, utils::gtsamPointToCV(px_prev), utils::gtsamPointToCV(px_cur), colour, 1);
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), colour, 1);
       } else {  // New feature tracks are blue.
-        // cv::circle(img_rgb, utils::gtsamPointToCV(px_cur), 1, blue, 1);
+        // cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 1, blue, 1);
       }
     }
   }
@@ -253,11 +253,11 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
         {
 
           // cv::arrowedLine(viz,
-          //   utils::gtsamPointToCV(previous_feature->keypoint_),
-          //   utils::gtsamPointToCV(kp),
+          //   utils::gtsamPointToCv(previous_feature->keypoint_),
+          //   utils::gtsamPointToCv(kp),
           //   cv::Scalar(255, 0, 0));
 
-          // utils::drawCircleInPlace(viz, utils::gtsamPointToCV(kp), cv::Scalar(0, 0, 255));
+          // utils::drawCircleInPlace(viz, utils::gtsamPointToCv(kp), cv::Scalar(0, 0, 255));
           features_tracked.push_back(feature);
         }
       }
@@ -330,7 +330,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
             features_assigned.push_back(feature);
             new_features.push_back(feature);
             // draw an untracked kp
-            utils::drawCircleInPlace(viz, utils::gtsamPointToCV(feature->keypoint_), cv::Scalar(0, 255, 0));
+            utils::drawCircleInPlace(viz, utils::gtsamPointToCv(feature->keypoint_), cv::Scalar(0, 255, 0));
           }
         }
       }
@@ -419,11 +419,11 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         // lmk_previous = previous_frame__->pose_.transformFrom(lmk_previous);
 
         //  cv::arrowedLine(viz,
-        //     utils::gtsamPointToCV(previous_feature->keypoint_),
-        //     utils::gtsamPointToCV(kp),
+        //     utils::gtsamPointToCv(previous_feature->keypoint_),
+        //     utils::gtsamPointToCv(kp),
         //     cv::Scalar(255, 0, 0));
 
-        //   utils::drawCircleInPlace(viz, utils::gtsamPointToCV(kp), cv::Scalar(0, 0, 255));
+        //   utils::drawCircleInPlace(viz, utils::gtsamPointToCv(kp), cv::Scalar(0, 0, 255));
 
         // cv::arrowedLine(viz, previous_dynamic_feature->keypoint.pt, feature->keypoint.pt,
         //                 Display::getObjectColour(feature->instance_label));

@@ -73,6 +73,8 @@ CameraParams::CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionC
 
   CameraParams::convertDistortionVectorToMatrix(distortion_coeff_, &D_);
   CameraParams::convertIntrinsicsVectorToMatrix(intrinsics_, &K_);
+
+  K_.copyTo(P_);
 }
 
 CameraParams CameraParams::fromYamlFile(const std::string& file_path) {

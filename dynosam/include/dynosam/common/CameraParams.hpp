@@ -136,6 +136,10 @@ public:
     return T_robot_camera_;
   }
 
+  inline DistortionModel getDistortionModel() const {
+    return distortion_model_;
+  }
+
 
 
   static void convertDistortionVectorToMatrix(const DistortionCoeffs& distortion_coeffs,
@@ -192,6 +196,7 @@ private:
 
   //! New camera matrix constructed from
   //! estimateNewCameraMatrixForUndistortRectify
+  //! for mono case not touched and initalised as K_
   cv::Mat P_;
 
   cv::Mat D_;

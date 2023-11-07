@@ -115,9 +115,10 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
         ransac.model_coefficients_;
 
 
-    gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
-    poseMat.block<3, 4>(0, 0) = best_transformation;
-    gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse
+    // gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
+    // poseMat.block<3, 4>(0, 0) = best_transformation;
+    // gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse
+    gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
 
 
     // opengv::absolute_pose::CentralAbsoluteAdapter nl_adapter(bearing_vectors, points );

@@ -30,14 +30,42 @@
 namespace dyno {
 
 struct FrontendOutputPacketBase {
+public:
     DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
 
-    FrontendInputPacketBase::ConstPtr input_; //for reference and possible display
-    Frame::Ptr frame_;
-    LandmarkMap tracked_landmarks;
 
-    //for now
-    std::map<ObjectId, gtsam::Pose3> object_poses_;
+public:
+    const StatusKeypointMeasurements static_keypoint_measurements_;
+    const StatusKeypointMeasurements dynamic_keypoint_measurements_;
+    const DynamicObjectObservations object_observations_;
+    const gtsam::Pose3 T_world_camera_;
+    const Frame frame_;
+    const cv::Mat& debug_image_;
+
+    FrontendOutputPacketBase(
+        const StatusKeypointMeasurements& static_keypoint_measurements,
+        const StatusKeypointMeasurements& dynamic_keypoint_measurements,
+        const DynamicObjectObservations& object_observations,
+        const gtsam::Pose3& T_world_camera,
+        const Frame& frame,
+        const cv::Mat& debug_image = cv::Mat()
+    )
+    :   static_keypoint_measurements_(static_keypoint_measurements),
+        dynamic_keypoint_measurements_(dynamic_keypoint_measurements),
+        object_observations_(object_observations),
+        T_world_camera_(T_world_camera),
+        frame_(frame),
+        debug_image_(debug_image)
+    {}
+
+    virtual ~FrontendOutputPacketBase() {}
+
+    // FrontendInputPacketBase::ConstPtr input_; //for reference and possible display
+    // Frame::Ptr frame_;
+    // LandmarkMap tracked_landmarks;
+
+    // //for now
+    // std::map<ObjectId, gtsam::Pose3> object_poses_;
     //should this be here?
     // std::vector<ImageToDisplay> debug_images;
 };

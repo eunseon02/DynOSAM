@@ -52,6 +52,10 @@ struct FrontendParams {
   int init_threshold_fast = 20;
   int min_threshold_fast = 7;
 
+
+  //PnP outlier rejection options
+
+
   static FrontendParams fromYaml(const std::string& file_path);
 
 };

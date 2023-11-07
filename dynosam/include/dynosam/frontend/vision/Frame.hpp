@@ -31,20 +31,19 @@
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 
+#include "dynosam/frontend/vision/UndistortRectifier.hpp"
+
 #include <functional>
 
 
 
 namespace dyno {
 
-//should this be here?
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
 
 class Frame {
 
 public:
     DYNO_POINTER_TYPEDEFS(Frame)
-    DYNO_DELETE_COPY_CONSTRUCTORS(Frame)
 
     const FrameId frame_id_;
     const Timestamp timestamp_;
@@ -108,19 +107,40 @@ public:
     //also updates all the tracking_labels of the features associated with this object
     void updateObjectTrackingLabel(const DynamicObjectObservation& observation, ObjectId new_tracking_label);
 
+    template<typename RefType, typename CurType>
+    using ConstructCorrespondanceFunc = std::function<
+        /* In the form previous frame, previous feature, current feature*/
+        TrackletCorrespondance<RefType, CurType>(const Frame&, const Feature::Ptr&, const Feature::Ptr&)>;
 
-    //also does distortion of the feauture pairs and projection along the ray using the camera params
-    void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
-    void getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+    ConstructCorrespondanceFunc<Landmark, Keypoint> landmarkWorldKeypointCorrespondance() const;
+    ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> landmarkWorldProjectedBearingCorrespondance() const;
+
+    template<typename RefType, typename CurType>
+    bool getCorrespondences(
+        GenericCorrespondences<RefType, CurType>& correspondences,
+        const Frame& previous_frame,
+        KeyPointType kp_type,
+        const ConstructCorrespondanceFunc<RefType, CurType>& func) const;
+
+    // void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+    bool getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+
+
+    template<typename RefType, typename CurType>
+    bool getDynamicCorrespondences(
+        GenericCorrespondences<RefType, CurType>& correspondences,
+        const Frame& previous_frame,
+        ObjectId object_id,
+        const ConstructCorrespondanceFunc<RefType, CurType>& func) const;
 
     //via the object id in the object_observations_ map
     //searches for instance via object instance
     //all in world
-    bool getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const;
+    // bool getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const;
     bool getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const;
 
      //points in world frame
-    void convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const;
+    // void convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const;
 
 
     //special iterator types
@@ -129,8 +149,8 @@ public:
 
 protected:
     //these do not do distortion or projection along the ray
-    void getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
-    void getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
+    bool getStaticCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
+    bool getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame) const;
 
 
 private:
@@ -139,9 +159,71 @@ private:
     //based on the current set of dynamic features
     void constructDynamicObservations();
 
-
+private:
+    UndistorterRectifier::Ptr undistorter_;
 
 };
+
+template<typename RefType, typename CurType>
+bool Frame::getCorrespondences(
+    GenericCorrespondences<RefType, CurType>& correspondences,
+    const Frame& previous_frame,
+    KeyPointType kp_type,
+    const ConstructCorrespondanceFunc<RefType, CurType>& func) const
+{
+    correspondences.clear();
+    FeaturePairs feature_correspondences;
+    const bool result = getCorrespondences(feature_correspondences, previous_frame, kp_type);
+     if(!result) {
+        return false;
+    }
+
+    for(const auto& pair : feature_correspondences) {
+        const Feature::Ptr& prev_feature = pair.first;
+        const Feature::Ptr& curr_feature = pair.second;
+
+        CHECK(prev_feature);
+        CHECK(curr_feature);
+
+        CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
+        CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
+        CHECK_EQ(curr_feature->frame_id_, frame_id_);
+
+        correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    }
+    return true;
+}
+
+template<typename RefType, typename CurType>
+bool Frame::getDynamicCorrespondences(
+    GenericCorrespondences<RefType, CurType>& correspondences,
+    const Frame& previous_frame,
+    ObjectId object_id,
+    const ConstructCorrespondanceFunc<RefType, CurType>& func) const
+{
+    FeaturePairs feature_correspondences;
+    const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
+    if(!result) {
+        return false;
+    }
+
+    //unncessary but just for sanity check
+    for(const auto& feature_pairs : feature_correspondences) {
+        const Feature::Ptr& prev_feature = feature_pairs.first;
+        const Feature::Ptr& curr_feature = feature_pairs.second;
+
+        CHECK_EQ(feature_pairs.first->instance_label_, object_id);
+        CHECK(feature_pairs.first->usable());
+
+        CHECK_EQ(feature_pairs.second->instance_label_, object_id);
+        CHECK(feature_pairs.second->usable());
+
+        CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
+
+        correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    }
+    return true;
+}
 
 
 

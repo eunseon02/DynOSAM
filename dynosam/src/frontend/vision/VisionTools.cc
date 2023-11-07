@@ -59,9 +59,10 @@ void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv
 void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterator& previous_features, const FeatureFilterIterator& current_features) {
   correspondences.clear();
 
+  const FeatureContainer& previous_feature_container = previous_features.getContainer();
+
   for(const auto& curr_feature : current_features) {
     //check if previous feature and is valid
-    const FeatureContainer& previous_feature_container = previous_features.getContainer();
     if(previous_feature_container.exists(curr_feature->tracklet_id_)) {
       const auto prev_feature = previous_feature_container.getByTrackletId(curr_feature->tracklet_id_);
       CHECK(prev_feature);
