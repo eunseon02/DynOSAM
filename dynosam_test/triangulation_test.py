@@ -4,6 +4,10 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import random
 
+from mpl_toolkits import mplot3d
+import matplotlib
+import matplotlib.pyplot as plt
+
 def gen_random_pose(xyz_mean, rpy_mean, xyz_range, rpy_range):
   # rpy mean and range are all in degree
   # xyz mean and range are all in meter
@@ -92,9 +96,9 @@ def main():
   cam_poses = []
   cam_poses.append(cam_pose_origin)
 
-  cam_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
+  cam_mot_xyz_mean = np.array([3., 3., 3.]) # in meter
   cam_mot_rpy_mean = np.array([5., 15., 5.]) # in degree 
-  cam_mot_xyz_range = np.array([2., 2., 2.]) # in meter
+  cam_mot_xyz_range = np.array([1., 1., 1.]) # in meter
   cam_mot_rpy_range = np.array([3., 3., 3.]) # in degree 
 
   for step in range(example_length-1):
@@ -115,9 +119,9 @@ def main():
   points = []
   points.append(points_origin)
   for step in range(example_length-1):
-    points_mot_xyz_mean = np.array([0., 0., 0.]) # in meter
+    points_mot_xyz_mean = np.array([2., 2., 2.]) # in meter
     points_mot_rpy_mean = np.array([0., 0., 0.]) # in degree 
-    points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
+    points_mot_xyz_range = np.array([1., 1., 1.]) # in meter
     points_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
     points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
     points_target = transform_points(points_origin, points_motion)
@@ -162,6 +166,41 @@ def main():
 
       print("Triangulated points", step-1, "to", step, ": \n", points_normalised)
 
+
+  fig = plt.figure(figsize = (10,10))
+  ax = plt.axes(projection="3d")
+
+  # for steps in range(example_length):
+  #   ax.scatter3D(points[step][0, :], points[step][1, :], points[step][2, :])
+
+  ax.scatter3D(points[0][0, :], points[0][1, :], points[0][2, :])
+  ax.scatter3D(points[1][0, :], points[1][1, :], points[1][2, :])
+
+  ax.scatter3D(points_normalised[0, :], points_normalised[1, :], points_normalised[2, :])
+
+  x_axis = np.array([1, 0, 0, 1])
+  y_axis = np.array([0, 1, 0, 1])
+  z_axis = np.array([0, 0, 1, 1])
+
+  x_axis_origin = np.matmul(cam_pose_origin, x_axis[np.newaxis].T)[0:3]
+  y_axis_origin = np.matmul(cam_pose_origin, y_axis[np.newaxis].T)[0:3]
+  z_axis_origin = np.matmul(cam_pose_origin, z_axis[np.newaxis].T)[0:3]
+  o_origin = cam_pose_origin[0:3, 3][np.newaxis].T
+  ax.plot3D(np.array([o_origin[0], x_axis_origin[0]]), np.array([o_origin[1], x_axis_origin[1]]), np.array([o_origin[2], x_axis_origin[2]]), 'red')
+  ax.plot3D(np.array([o_origin[0], y_axis_origin[0]]), np.array([o_origin[1], y_axis_origin[1]]), np.array([o_origin[2], y_axis_origin[2]]), 'green')
+  ax.plot3D(np.array([o_origin[0], z_axis_origin[0]]), np.array([o_origin[1], z_axis_origin[1]]), np.array([o_origin[2], z_axis_origin[2]]), 'blue')
+
+  x_axis_target = np.matmul(cam_poses[1], x_axis[np.newaxis].T)[0:3]
+  y_axis_target = np.matmul(cam_poses[1], y_axis[np.newaxis].T)[0:3]
+  z_axis_target = np.matmul(cam_poses[1], z_axis[np.newaxis].T)[0:3]
+  o_target = cam_poses[1][0:3, 3][np.newaxis].T
+  ax.plot3D(np.array([o_target[0], x_axis_target[0]]), np.array([o_target[1], x_axis_target[1]]), np.array([o_target[2], x_axis_target[2]]), 'red')
+  ax.plot3D(np.array([o_target[0], y_axis_target[0]]), np.array([o_target[1], y_axis_target[1]]), np.array([o_target[2], y_axis_target[2]]), 'green')
+  ax.plot3D(np.array([o_target[0], z_axis_target[0]]), np.array([o_target[1], z_axis_target[1]]), np.array([o_target[2], z_axis_target[2]]), 'blue')
+
+  ax.set_box_aspect([1,1,1])
+
+  plt.show()
 
 if __name__ == "__main__":
   main()
