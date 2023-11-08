@@ -74,8 +74,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-    // rgbd_processor_.updateDepth(frame, image_container->getImageWrapper<ImageType::Depth>());
-
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
     previous_frame_ = frame;

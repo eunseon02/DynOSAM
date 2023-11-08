@@ -44,7 +44,7 @@ int main(int argc, char* argv[]) {
 
     dyno::DynoParams params(FLAGS_params_folder_path);
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti);
+    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti, dyno::KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
     auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
     dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);

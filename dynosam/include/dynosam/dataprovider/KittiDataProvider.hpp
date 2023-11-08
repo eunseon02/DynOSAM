@@ -257,7 +257,12 @@ private:
 class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
-    KittiDataLoader(const fs::path& dataset_path) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+    enum MaskType {
+        MOTION,
+        SEMANTIC_INSTANCE
+    };
+
+    KittiDataLoader(const fs::path& dataset_path, MaskType mask_type) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path)
     {
         TimestampFile::Ptr timestamp_file =  std::dynamic_pointer_cast<TimestampFile>(this->getLoader<TimestampFileIdx>());
@@ -266,7 +271,19 @@ public:
         CHECK(timestamp_file);
         CHECK(rgb_folder);
 
-        InstantanceSegMaskFolder::Ptr mask_folder = std::make_shared<InstantanceSegMaskFolder>(rgb_folder);
+        SegMaskFolder::Ptr mask_folder = nullptr;
+        if(mask_type == MaskType::MOTION) {
+            mask_folder = std::make_shared<MotionSegMaskFolder>(rgb_folder);
+            LOG(INFO) << "Using MaskType::MOTION for loading mask";
+        }
+        else if(mask_type == MaskType::SEMANTIC_INSTANCE) {
+            mask_folder = std::make_shared<InstantanceSegMaskFolder>(rgb_folder);
+            LOG(INFO) << "Using MaskType::SEMANTIC_INSTANCE for loading mask";
+        }
+        else {
+            LOG(FATAL) << "Unknown MaskType for KittiDataLoader";
+        }
+        CHECK_NOTNULL(mask_folder);
 
         KittiCameraPoseFolder::Ptr camera_pose_folder = std::make_shared<KittiCameraPoseFolder>();
         KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
@@ -281,40 +298,39 @@ public:
             camera_pose_folder,
             object_pose_gt_folder
         );
+
+        auto callback = [&](size_t frame_id,
+            Timestamp timestamp,
+            cv::Mat rgb,
+            cv::Mat optical_flow,
+            cv::Mat depth,
+            cv::Mat instance_mask,
+            gtsam::Pose3 camera_pose_gt,
+            GroundTruthInputPacket gt_object_pose_gt) -> bool
+        {
+            CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world_));
+            CHECK(timestamp == gt_object_pose_gt.timestamp_);
+
+            CHECK(ground_truth_packet_callback_);
+            if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
+
+            auto image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::SemanticMask>(instance_mask)
+            );
+
+
+            CHECK(image_container_callback_);
+            if(image_container_callback_) image_container_callback_(image_container);
+            return true;
+        };
+
+        this->setCallback(callback);
     }
-
-
-    bool dataInputCallback(
-        size_t frame_id,
-        Timestamp timestamp,
-        cv::Mat rgb,
-        cv::Mat optical_flow,
-        cv::Mat depth,
-        cv::Mat instance_mask,
-        gtsam::Pose3 camera_pose_gt,
-        GroundTruthInputPacket gt_object_pose_gt) override
-    {
-        CHECK(camera_pose_gt.equals(gt_object_pose_gt.X_world_));
-        CHECK(timestamp == gt_object_pose_gt.timestamp_);
-
-        CHECK(ground_truth_packet_callback_);
-        if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
-
-        auto image_container = ImageContainer::Create(
-            timestamp,
-            frame_id,
-            ImageWrapper<ImageType::RGBMono>(rgb),
-            ImageWrapper<ImageType::Depth>(depth),
-            ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-            ImageWrapper<ImageType::SemanticMask>(instance_mask)
-        );
-
-
-        CHECK(image_container_callback_);
-        if(image_container_callback_) image_container_callback_(image_container);
-        return true;
-    }
-
 
 
 };

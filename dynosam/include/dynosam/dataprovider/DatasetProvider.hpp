@@ -46,7 +46,12 @@ struct _DynoDatasetConstructor {
     using DataInputCallback = std::function<bool(size_t, const DynoDataTypes...)>;
 
     virtual ~_DynoDatasetConstructor() {}
-    virtual bool dataInputCallback(size_t frame_id, const DynoDataTypes... data) = 0;
+
+    void setCallback(const DataInputCallback& data_input_callback) {
+        data_input_callback_ = data_input_callback;
+    }
+
+    DataInputCallback data_input_callback_;
 };
 
 
@@ -181,8 +186,15 @@ public:
         //get default data
         DynoDataTypesTuple loaded_data = std::tuple_cat(default_data, extra_data);
 
-        auto construct_input_func = [&](auto&&... args) { return this->dataInputCallback(frame_id, args...); };
-        return std::apply(construct_input_func, loaded_data);
+        if(this->data_input_callback_) {
+            auto construct_input_func = [&](auto&&... args) { return this->data_input_callback_(frame_id, args...); };
+            return std::apply(construct_input_func, loaded_data);
+        }
+        else {
+            LOG(WARNING) << "Data input callback not set with DynoDataset::setCallback!";
+            return false;
+        }
+
     }
 
     //TODO: set start and end idx?

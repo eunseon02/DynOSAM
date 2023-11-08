@@ -69,7 +69,7 @@ static inline cv::Scalar getObjectColour(ObjectId label, bool use_opencv_convent
       colour = cv::Scalar(128, 0, 128, 255);  // 255, 165, 0
       break;
     case 2:
-      colour =  cv::Scalar(255, 255, 0, 255);
+      colour =  cv::Scalar(10, 255, 0, 255);
       break;
     case 3:
       colour =  cv::Scalar(0, 255, 0, 255);  // 255,255,0
@@ -123,7 +123,7 @@ static inline cv::Scalar getObjectColour(ObjectId label, bool use_opencv_convent
       colour =  cv::Scalar(128, 0, 128, 255);
        break;
     case 20:
-      colour =  cv::Scalar(255, 255, 255, 255);
+      colour =  cv::Scalar(125, 255, 75, 255);
        break;
     case 21:
       colour =  cv::Scalar(255, 228, 196, 255);

@@ -178,23 +178,34 @@ public:
 };
 
 
-class InstantanceSegMaskFolder : public dyno::DataFolder<cv::Mat> {
+class SegMaskFolder : public dyno::DataFolder<cv::Mat> {
 
 public:
-    InstantanceSegMaskFolder(RGBDataFolder::Ptr rgb_data_folder) : rgb_data_folder_(rgb_data_folder) {
+    DYNO_POINTER_TYPEDEFS(SegMaskFolder)
+    SegMaskFolder(RGBDataFolder::Ptr rgb_data_folder) : rgb_data_folder_(rgb_data_folder) {
         CHECK(rgb_data_folder_);
     }
+    virtual ~SegMaskFolder() {}
 
-    /**
-     * @brief "semantic" as folder name
-     *
-     * @return std::string
-     */
-    inline std::string getFolderName() const override { return "semantic"; }
     cv::Mat getItem(size_t idx) override;
 
-private:
+protected:
     RGBDataFolder::Ptr rgb_data_folder_;
+};
+
+
+class InstantanceSegMaskFolder : public SegMaskFolder {
+public:
+    InstantanceSegMaskFolder(RGBDataFolder::Ptr rgb_data_folder) : SegMaskFolder(rgb_data_folder) {}
+
+    inline std::string getFolderName() const override { return "semantic"; }
+};
+
+class MotionSegMaskFolder : public SegMaskFolder {
+public:
+    MotionSegMaskFolder(RGBDataFolder::Ptr rgb_data_folder) : SegMaskFolder(rgb_data_folder) {}
+
+    inline std::string getFolderName() const override { return "motion"; }
 };
 
 

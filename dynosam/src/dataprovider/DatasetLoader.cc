@@ -74,7 +74,7 @@ cv::Mat DepthDataFolder::getItem(size_t idx) {
 }
 
 
-cv::Mat InstantanceSegMaskFolder::getItem(size_t idx) {
+cv::Mat SegMaskFolder::getItem(size_t idx) {
   std::stringstream ss;
   ss << std::setfill('0') << std::setw(6) << idx;
   const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".txt";
