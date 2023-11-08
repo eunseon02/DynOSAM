@@ -64,6 +64,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetLoader.cc
   src/dataprovider/DataProviderUtils.cc
+  src/dataprovider/VirtualKittidataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc

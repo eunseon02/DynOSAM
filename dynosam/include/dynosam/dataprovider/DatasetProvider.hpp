@@ -230,6 +230,8 @@ class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvid
 
 public:
     using BaseDynoDataset = DynoDataset<DataTypes...>;
+    using This = DynoDatasetProvider<DataTypes...>;
+    DYNO_POINTER_TYPEDEFS(This)
 
     //does not accept DataProviderModule* for dataprovider
     DynoDatasetProvider(
