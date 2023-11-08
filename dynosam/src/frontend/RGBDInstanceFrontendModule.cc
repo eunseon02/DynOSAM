@@ -161,8 +161,11 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         LOG(INFO) << "Looking at object " << object_id;
         AbsolutePoseCorrespondences dynamic_correspondences;
         //get the corresponding feature pairs
-        bool result = frame->getDynamicCorrespondences(dynamic_correspondences, *previous_frame_, object_id, frame->landmarkWorldKeypointCorrespondance());
-        LOG(INFO) << "gotten correspondences";
+        bool result = frame->getDynamicCorrespondences(
+            dynamic_correspondences,
+            *previous_frame_,
+            object_id,
+            frame->landmarkWorldKeypointCorrespondance());
 
         if(!result) {
             continue;

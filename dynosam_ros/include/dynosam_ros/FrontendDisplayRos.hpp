@@ -52,6 +52,7 @@ private:
 
     // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera);
+    void publishDebugImage(const cv::Mat& debug_image);
 
 private:
     rclcpp::Node::SharedPtr node_;

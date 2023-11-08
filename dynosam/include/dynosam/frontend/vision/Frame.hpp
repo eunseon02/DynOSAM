@@ -68,34 +68,101 @@ public:
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features);
 
-    //inliers and outliers
+    /**
+     * @brief Gets the total number of static features observed at this frame. Includes usables (inliers) and outliers.
+     *
+     * @return size_t
+     */
     inline size_t numStaticFeatures() const { return static_features_.size(); }
 
-    //TODO: test
+    /**
+     * @brief Gets the total number of static inlier features
+     *
+     * @return size_t
+     */
     inline size_t numStaticUsableFeatures() {
         auto iter = usableStaticFeaturesBegin();
         return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
     }
 
+    /**
+     * @brief Gets the total number of dynamic features observed at this frame. Includes usables (inliers) and outliers.
+     *
+     * @return size_t
+     */
     inline size_t numDynamicFeatures() const { return dynamic_features_.size(); }
-    //TODO: test
+
+    /**
+     * @brief Gets the total number of dynamic inlier features
+     *
+     * @return size_t
+     */
     inline size_t numDynamicUsableFeatures() {
         auto iter = usableDynamicFeaturesBegin();
         return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
     }
 
-    //inliers and outliers
+    /**
+     * @brief Gets the total number of features (static + dynamic) in this frame. Includes usables (inliers) and outliers.
+     *
+     * @return size_t
+     */
     inline size_t numTotalFeatures() const { return numStaticFeatures() +  numDynamicFeatures(); }
 
-
+    /**
+     * @brief Checks if a feature exists within this frame. Could be static or dynamic.
+     *
+     * @param tracklet_id TrackletId
+     * @return true
+     * @return false
+     */
     bool exists(TrackletId tracklet_id) const;
+
+    /**
+     * @brief Gets a feature from its tracklet ID. Could be static or dynamic.
+     * Nullptr is returned if the feature does not exist.
+     *
+     * @param tracklet_id TrackletId
+     * @return Feature::Ptr
+     */
     Feature::Ptr at(TrackletId tracklet_id) const;
+
+    /**
+     * @brief Returns true if the feature is usable (inlier).
+     * Throws std::runtime_error if the feature does not exist. Use in conjunction with Frame::exists.
+     *
+     * @param tracklet_id TrackletId
+     * @return true
+     * @return false
+     */
     bool isFeatureUsable(TrackletId tracklet_id) const;
 
-    //can be inliers or outliers
+    /**
+     * @brief Collects a vector of feature pointers given a vector of tracklet ids.
+     * Features returned could be inliers or outliers.
+     * If a feature does not exist std::runtime_error
+     *
+     * @param tracklet_ids TrackletIds
+     * @return FeaturePtrs
+     */
     FeaturePtrs collectFeatures(TrackletIds tracklet_ids) const;
 
+    /**
+     * @brief Project the feature into the camera frame and returns the 3D landmark.
+     * Currently requires the feature to have depth associated with it
+     *
+     * @param tracklet_id TrackletId
+     * @return Landmark
+     */
     Landmark backProjectToCamera(TrackletId tracklet_id) const;
+
+    /**
+     * @brief Project the feature into the world frame using the frames pose (T_world_camera_) and returns the 3D landmark.
+     * Currently requires the feature to have depth associated with it
+     *
+     * @param tracklet_id TrackletId
+     * @return Landmark
+     */
     Landmark backProjectToWorld(TrackletId tracklet_id) const;
 
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
@@ -107,12 +174,79 @@ public:
     //also updates all the tracking_labels of the features associated with this object
     void updateObjectTrackingLabel(const DynamicObjectObservation& observation, ObjectId new_tracking_label);
 
+    /**
+     * @brief Gets the set of tracked pairs between this frame and the previous frame.
+     * All correspondences will be usable (inliers).
+     * The correspondences will be in the form of feature pairs where first = feature in the previous frame and
+     * second = feature in this frame.
+     *
+     * True is returned if the number of correspondences > 0
+     *
+     * @param correspondences FeaturePairs& vector of feature pairs
+     * @param previous_frame const Frame&
+     * @param kp_type KeyPointType
+     * @return true
+     * @return false
+     */
+    bool getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
+
+    /**
+     * @brief Gets the set of tracked pairs between this frame and the previous frame for a tracked dynamic object
+     * seen in both frames.
+     *
+     * All correspondences will be usable (inliers).
+     * The correspondences will be in the form of feature pairs where first = feature in the previous frame and
+     * second = feature in this frame.
+     *
+     * The object id is checked via the this frames Frame::object_observations_ map and is currently implemented as
+     * the object instance label (not tracking label).
+     *
+     * True is returned if the number of correspondences > 0.
+     *
+     * @param correspondences FeaturePairs& vector of feature pairs
+     * @param previous_frame const Frame&
+     * @param object_id ObjectId
+     * @return true
+     * @return false
+     */
+    bool getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const;
+
+
+
+    /**
+     * @brief Functional alias that constructs a TrackletCorrespondance from a pair of features (tracked features in the
+     * previous and current frame respectively) and the previous frame.
+     * The function arguments are in the form previous frame, previous feature, current feature.
+     *
+     * We functionalise this operation so that we can define any type of TrackletCorrespondance for a set of tracked features via
+     * Frame::getCorrespondences which takes a ConstructCorrespondanceFunc as an argument.
+     *
+     * @tparam RefType Type to be used as the reference type in the TrackletCorrespondance
+     * @tparam CurType Type to be used as the current type in the TrackletCorrespondance
+     */
     template<typename RefType, typename CurType>
     using ConstructCorrespondanceFunc = std::function<
-        /* In the form previous frame, previous feature, current feature*/
         TrackletCorrespondance<RefType, CurType>(const Frame&, const Feature::Ptr&, const Feature::Ptr&)>;
 
+    /**
+     * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a
+     * TrackletCorrespondance where the ref type is a Landmark in the world frame and the cur type is a Keypoint in the current frame.
+     *
+     * This is useful for 3D-2D correspondence types.
+     *
+     * @return ConstructCorrespondanceFunc<Landmark, Keypoint>
+     */
     ConstructCorrespondanceFunc<Landmark, Keypoint> landmarkWorldKeypointCorrespondance() const;
+
+    /**
+     * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a TrackletCorrespondance
+     * where the ref type is a Landmark in the world frame and the curr type is a normalized bearing vector constructed from the
+     * corresponding Keypoint in the current frame.
+     *
+     * This is useful for 3D-2D correspondence types for the motion solver which expected correctly projected bearing vectors.
+     *
+     * @return ConstructCorrespondanceFunc<Landmark, gtsam::Vector3>
+     */
     ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> landmarkWorldProjectedBearingCorrespondance() const;
 
     template<typename RefType, typename CurType>
@@ -122,9 +256,6 @@ public:
         KeyPointType kp_type,
         const ConstructCorrespondanceFunc<RefType, CurType>& func) const;
 
-    // void getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
-    bool getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const;
-
 
     template<typename RefType, typename CurType>
     bool getDynamicCorrespondences(
@@ -132,16 +263,6 @@ public:
         const Frame& previous_frame,
         ObjectId object_id,
         const ConstructCorrespondanceFunc<RefType, CurType>& func) const;
-
-    //via the object id in the object_observations_ map
-    //searches for instance via object instance
-    //all in world
-    // bool getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const;
-    bool getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const;
-
-     //points in world frame
-    // void convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const;
-
 
     //special iterator types
     FeatureFilterIterator usableStaticFeaturesBegin();
@@ -168,70 +289,8 @@ private:
 
 };
 
-template<typename RefType, typename CurType>
-bool Frame::getCorrespondences(
-    GenericCorrespondences<RefType, CurType>& correspondences,
-    const Frame& previous_frame,
-    KeyPointType kp_type,
-    const ConstructCorrespondanceFunc<RefType, CurType>& func) const
-{
-    correspondences.clear();
-    FeaturePairs feature_correspondences;
-    const bool result = getCorrespondences(feature_correspondences, previous_frame, kp_type);
-     if(!result) {
-        return false;
-    }
-
-    for(const auto& pair : feature_correspondences) {
-        const Feature::Ptr& prev_feature = pair.first;
-        const Feature::Ptr& curr_feature = pair.second;
-
-        CHECK(prev_feature);
-        CHECK(curr_feature);
-
-        CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
-        CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
-        CHECK_EQ(curr_feature->frame_id_, frame_id_);
-
-        correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
-    }
-    return true;
-}
-
-template<typename RefType, typename CurType>
-bool Frame::getDynamicCorrespondences(
-    GenericCorrespondences<RefType, CurType>& correspondences,
-    const Frame& previous_frame,
-    ObjectId object_id,
-    const ConstructCorrespondanceFunc<RefType, CurType>& func) const
-{
-    FeaturePairs feature_correspondences;
-    const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
-    if(!result) {
-        return false;
-    }
-
-    //unncessary but just for sanity check
-    for(const auto& feature_pairs : feature_correspondences) {
-        const Feature::Ptr& prev_feature = feature_pairs.first;
-        const Feature::Ptr& curr_feature = feature_pairs.second;
-
-        CHECK_EQ(feature_pairs.first->instance_label_, object_id);
-        CHECK(feature_pairs.first->usable());
-
-        CHECK_EQ(feature_pairs.second->instance_label_, object_id);
-        CHECK(feature_pairs.second->usable());
-
-        CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
-
-        correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
-    }
-    return true;
-}
-
-
-
-
-
 
 } //dyno
+
+
+#include "dynosam/frontend/vision/Frame-inl.hpp"

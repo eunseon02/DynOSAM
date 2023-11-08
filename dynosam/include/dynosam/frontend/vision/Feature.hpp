@@ -46,20 +46,6 @@ struct functional_keypoint {
 };
 
 
-// /**
-//  * @brief A 3D point on the surface of a scene
-//  *
-//  */
-// class Point {
-// public:
-//     DYNO_POINTER_TYPEDEFS(Point)
-
-//     TrackletId tracklet_id_; //should match observing features
-//     std::vector<FrameId> observing_frames_; //! which frames saw this keypoint (should also loosly mean age)
-//     Landmark landmark_; //! 3d position of the point in the world frame
-// }
-
-
 
 
 /**

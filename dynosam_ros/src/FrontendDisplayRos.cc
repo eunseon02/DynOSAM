@@ -33,6 +33,7 @@
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <sensor_msgs/msg/point_cloud2.hpp>
+#include <cv_bridge/cv_bridge.h>
 
 namespace dyno {
 
@@ -53,6 +54,7 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
     }
 
     publishOdometry(frontend_output->T_world_camera_);
+    publishDebugImage(frontend_output->debug_image_);
 }
 
 
@@ -68,7 +70,7 @@ void FrontendDisplayRos::publishStaticCloud(const Landmarks& static_landmarks) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
     for(const Landmark& lmk : static_landmarks) {
-        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 255, 255, 255);
+        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 0, 0, 0);
         cloud.points.push_back(pt);
     }
 
@@ -90,7 +92,7 @@ void FrontendDisplayRos::publishObjectCloud(const StatusKeypointMeasurements& dy
         const KeypointStatus& status = kpm.first;
         const Landmark& lmk = dynamic_landmarks.at(i);
 
-         const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+        const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(1));
         cloud.points.push_back(pt);
     }
@@ -105,10 +107,14 @@ void FrontendDisplayRos::publishObjectCloud(const StatusKeypointMeasurements& dy
 void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
     visualization_msgs::msg::MarkerArray marker_array;
 
+    static visualization_msgs::msg::Marker delete_marker;
+    delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+    marker_array.markers.push_back(delete_marker);
+
     for(const auto&[object_id, pose] : propogated_object_poses) {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "world";
-        marker.ns = "object_positions";
+        marker.ns = "frontend_object_positions";
         marker.id = object_id;
         marker.type = visualization_msgs::msg::Marker::SPHERE;
         marker.action = visualization_msgs::msg::Marker::ADD;
@@ -144,6 +150,20 @@ void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera) {
     odom_msg.header.frame_id = "world";
     odom_msg.child_frame_id = "camera";
     odometry_pub_->publish(odom_msg);
+
+}
+
+
+void FrontendDisplayRos::publishDebugImage(const cv::Mat& debug_image) {
+    if(debug_image.empty()) return;
+
+    cv::Mat resized_image;
+    cv::resize(debug_image, resized_image, cv::Size(640, 480));
+
+    std_msgs::msg::Header hdr;
+    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", resized_image).toImageMsg();
+    tracking_image_pub_.publish(msg);
+
 
 }
 

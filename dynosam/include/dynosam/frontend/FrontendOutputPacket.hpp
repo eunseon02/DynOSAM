@@ -41,7 +41,7 @@ public:
     const StatusKeypointMeasurements dynamic_keypoint_measurements_;
     const gtsam::Pose3 T_world_camera_;
     const Frame frame_;
-    const cv::Mat& debug_image_;
+    const cv::Mat debug_image_;
 
     FrontendOutputPacketBase(
         const FrontendType frontend_type,

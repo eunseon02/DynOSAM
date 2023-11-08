@@ -140,12 +140,6 @@ void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max
 }
 
 
-// void Frame::getCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
-//   correspondences.clear();
-//   FeaturePairs feature_correspondences;
-//   getCorrespondences(feature_correspondences, previous_frame, kp_type);
-//   convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
-// }
 
 bool Frame::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
     if(kp_type == KeyPointType::STATIC) {
@@ -270,38 +264,9 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
     return correspondences.size() > 0u;
 }
 
-// void Frame::convertCorrespondencesWorld(AbsolutePoseCorrespondences& absolute_pose_correspondences, const FeaturePairs& correspondences, const Frame& previous_frame) const {
-//     absolute_pose_correspondences.clear();
-//     //this will also take a point in the camera frame and put into world frame
-//     for(const auto& pair : correspondences) {
-//         const Feature::Ptr& prev_feature = pair.first;
-//         const Feature::Ptr& curr_feature = pair.second;
-
-//         CHECK(prev_feature);
-//         CHECK(curr_feature);
-
-//         CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
-//         CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
-//         CHECK_EQ(curr_feature->frame_id_, frame_id_);
-
-
-//         //this will not work for monocular or some other system that never has depth but will eventually have a point?
-//         if(!prev_feature->hasDepth()) {
-//             throw std::runtime_error("Error in FrameProcessor::getCorrespondences for AbsolutePoseCorrespondences - previous feature does not have depth!");
-//         }
-
-//         //eventuall map?
-//         Landmark lmk_w = previous_frame.backProjectToWorld(prev_feature->tracklet_id_);
-//         absolute_pose_correspondences.push_back(TrackletCorrespondance(prev_feature->tracklet_id_, lmk_w, curr_feature->keypoint_));
-//     }
-// }
-
-
-
 
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
     const cv::Mat& depth_mat = depth;
-    // FeatureFilterIterator iter(container, [&](const Feature::Ptr& f) -> bool { return f->usable();});
     auto iter = container.beginUsable();
 
     for(Feature::Ptr feature : iter) {
