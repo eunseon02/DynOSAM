@@ -265,8 +265,8 @@ public:
     KittiDataLoader(const fs::path& dataset_path, MaskType mask_type) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path)
     {
-        TimestampFile::Ptr timestamp_file =  std::dynamic_pointer_cast<TimestampFile>(this->getLoader<TimestampFileIdx>());
-        RGBDataFolder::Ptr rgb_folder = std::dynamic_pointer_cast<RGBDataFolder>(this->getLoader<RGBFolderIdx>());
+        TimestampFile::Ptr timestamp_file =  std::make_shared<TimestampFile>();
+        RGBDataFolder::Ptr rgb_folder = std::make_shared<RGBDataFolder>();
 
         CHECK(timestamp_file);
         CHECK(rgb_folder);
@@ -293,6 +293,10 @@ public:
 
 
         this->setLoaders(
+            timestamp_file,
+            rgb_folder,
+            //should really be called kitti optical flow and kitti depth data folder
+            std::make_shared<OpticalFlowDataFolder>(),
             std::make_shared<DepthDataFolder>(),
             mask_folder,
             camera_pose_folder,

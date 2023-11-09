@@ -53,6 +53,20 @@ int main(int argc, char* argv[]) {
     // while(pipeline.spin()) {};
 
     dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", "Scene01", "clone");
+    d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {
+        LOG(INFO) << "Frame " << frame << " ts " << timestamp;
+
+        cv::Mat flow_viz;
+        dyno::utils::flowToRgb(optical_flow, flow_viz);
+
+        cv::imshow("RGB", rgb);
+        cv::imshow("OF", flow_viz);
+
+        cv::waitKey(1);
+        return true;
+    });
+
+    while(d.spin()) {}
 
 
 

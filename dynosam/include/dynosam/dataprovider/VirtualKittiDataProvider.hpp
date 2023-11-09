@@ -32,17 +32,19 @@
 
 namespace dyno {
 
-class VirtualKittiDataLoader : public DataProvider {
+
+//depth, motion mask and gt
+using VirtualKittiDatasetProvider = DynoDatasetProvider<cv::Mat, cv::Mat, GroundTruthInputPacket>;
+
+class VirtualKittiDataLoader : public VirtualKittiDatasetProvider {
 
 public:
-    using InternalDatasetProvider = DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>;
 
     //expect to be the top level where the folders undearneath are in the form vkitti_2.0.3_depth... (or as in the download...)
     VirtualKittiDataLoader(const fs::path& dataset_path, const std::string& scene, const std::string& scene_type);
-    bool spin() override;
+    // bool spin() override;
 
 private:
-    InternalDatasetProvider::UniquePtr dyno_dataset_provider_;
 
     const std::string v_depth_folder = "vkitti_2.0.3_depth";
     const std::string v_forward_flow_folder = "vkitti_2.0.3_forwardFlow";

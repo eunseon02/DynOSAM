@@ -29,6 +29,9 @@
 #include <opencv4/opencv2/opencv.hpp> //for cv::Rect
 #include <gtsam/geometry/Pose3.h> //for Pose3
 
+#include "dynosam/utils/OpenCVUtils.hpp"
+#include "dynosam/visualizer/ColourMap.hpp"
+
 namespace dyno {
 
 
@@ -39,6 +42,21 @@ struct ObjectPoseGT {
     ObjectId object_id_;
     gtsam::Pose3 L_camera_; //!object pose in camera frame
     cv::Rect bounding_box_; //!box of detection on image plane
+
+    /// @brief 3D object 'dimensions' in meters. Not all datasets will contain. Used to represent a 3D bounding box.
+    /// Expected order is {width, height, length}
+    std::optional<gtsam::Vector3> object_dimensions_;
+
+    /**
+     * @brief Draws the object label and bounding box on the provided image
+     *
+     * @param img
+     */
+    inline void drawBoundingBox(cv::Mat& img) const {
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id_, true);
+        const std::string label = "Object: " + std::to_string(object_id_);
+        utils::drawLabel(img, label, colour, bounding_box_);
+    }
 };
 
 struct GroundTruthInputPacket : public PipelinePayload {

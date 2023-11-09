@@ -49,7 +49,8 @@ public:
         const gtsam::Pose3 T_world_camera,
         const Frame& frame,
         const std::map<ObjectId, gtsam::Pose3> propogated_object_poses = {},
-        const cv::Mat& debug_image = cv::Mat()
+        const cv::Mat& debug_image = cv::Mat(),
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
     )
     :
     FrontendOutputPacketBase(
@@ -58,7 +59,8 @@ public:
         dynamic_keypoint_measurements,
         T_world_camera,
         frame,
-        debug_image),
+        debug_image,
+        gt_packet),
     static_landmarks_(static_landmarks),
     dynamic_landmarks_(dynamic_landmarks),
     propogated_object_poses_(propogated_object_poses)

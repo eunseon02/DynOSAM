@@ -54,7 +54,11 @@ private:
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 
-    RGBDInstanceOutputPacket::Ptr constructOutput(const Frame& frame, const cv::Mat& debug_image = cv::Mat(), const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {});
+    RGBDInstanceOutputPacket::Ptr constructOutput(
+        const Frame& frame,
+        const cv::Mat& debug_image = cv::Mat(),
+        const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
 
     // std::map<ObjectId, gtsam::Pose3> constructVisibleObjectPoses()
 

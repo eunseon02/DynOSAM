@@ -144,6 +144,15 @@ std::string type_name()
 }
 
 
+template<class Container>
+inline std::string container_to_string(const Container& container) {
+  std::stringstream ss;
+  for(const auto& c : container) {
+    ss << c << " ";
+  }
+  return ss.str();
+}
+
 
 
 

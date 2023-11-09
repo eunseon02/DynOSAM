@@ -23,6 +23,7 @@
 
 #pragma once
 
+#include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -42,6 +43,7 @@ public:
     const gtsam::Pose3 T_world_camera_;
     const Frame frame_;
     const cv::Mat debug_image_;
+    const GroundTruthInputPacket::Optional gt_packet_;
 
     FrontendOutputPacketBase(
         const FrontendType frontend_type,
@@ -49,14 +51,16 @@ public:
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const gtsam::Pose3& T_world_camera,
         const Frame& frame,
-        const cv::Mat& debug_image = cv::Mat()
+        const cv::Mat& debug_image = cv::Mat(),
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
     )
     :   frontend_type_(frontend_type),
         static_keypoint_measurements_(static_keypoint_measurements),
         dynamic_keypoint_measurements_(dynamic_keypoint_measurements),
         T_world_camera_(T_world_camera),
         frame_(frame),
-        debug_image_(debug_image)
+        debug_image_(debug_image),
+        gt_packet_(gt_packet)
     {}
 
     virtual ~FrontendOutputPacketBase() {}

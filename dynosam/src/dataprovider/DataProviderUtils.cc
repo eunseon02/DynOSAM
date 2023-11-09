@@ -100,4 +100,65 @@ void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::M
 }
 
 
+// gtsam::Pose3 constructkittiObjectPose(double tx, double ty, double tz, double ry, double rx, double rz) {
+//     cv::Mat t(3, 1, CV_64FC1);
+//     t.at<double>(0) = tx;
+//     t.at<double>(1) = ty;
+//     t.at<double>(2) = tz;
+
+//     // from Euler to Rotation Matrix
+//     cv::Mat R(3, 3, CV_64FC1);
+
+//     // assign r vector
+//     double y = obj_pose_gt[9] + (3.1415926 / 2);  // +(3.1415926/2)
+//     double x = 0.0;
+//     double z = 0.0;
+
+//     // the angles are in radians.
+//     double cy = cos(y);
+//     double sy = sin(y);
+//     double cx = cos(x);
+//     double sx = sin(x);
+//     double cz = cos(z);
+//     double sz = sin(z);
+
+//     double m00, m01, m02, m10, m11, m12, m20, m21, m22;
+
+//     m00 = cy * cz + sy * sx * sz;
+//     m01 = -cy * sz + sy * sx * cz;
+//     m02 = sy * cx;
+//     m10 = cx * sz;
+//     m11 = cx * cz;
+//     m12 = -sx;
+//     m20 = -sy * cz + cy * sx * sz;
+//     m21 = sy * sz + cy * sx * cz;
+//     m22 = cy * cx;
+
+//     R.at<double>(0, 0) = m00;
+//     R.at<double>(0, 1) = m01;
+//     R.at<double>(0, 2) = m02;
+//     R.at<double>(1, 0) = m10;
+//     R.at<double>(1, 1) = m11;
+//     R.at<double>(1, 2) = m12;
+//     R.at<double>(2, 0) = m20;
+//     R.at<double>(2, 1) = m21;
+//     R.at<double>(2, 2) = m22;
+
+//     // construct 4x4 transformation matrix
+//     cv::Mat Pose = cv::Mat::eye(4, 4, CV_64F);
+//     Pose.at<double>(0, 0) = R.at<double>(0, 0);
+//     Pose.at<double>(0, 1) = R.at<double>(0, 1);
+//     Pose.at<double>(0, 2) = R.at<double>(0, 2);
+//     Pose.at<double>(0, 3) = t.at<double>(0);
+//     Pose.at<double>(1, 0) = R.at<double>(1, 0);
+//     Pose.at<double>(1, 1) = R.at<double>(1, 1);
+//     Pose.at<double>(1, 2) = R.at<double>(1, 2);
+//     Pose.at<double>(1, 3) = t.at<double>(1);
+//     Pose.at<double>(2, 0) = R.at<double>(2, 0);
+//     Pose.at<double>(2, 1) = R.at<double>(2, 1);
+//     Pose.at<double>(2, 2) = R.at<double>(2, 2);
+//     Pose.at<double>(2, 3) = t.at<double>(2);
+// }
+
+
 } //dyno

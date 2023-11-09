@@ -224,12 +224,17 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     previous_frame_ = frame;
 
-    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses);
+    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses, input->optional_gt_);
     return {State::Nominal, output};
 }
 
 
-RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(const Frame& frame, const cv::Mat& debug_image, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
+RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
+    const Frame& frame,
+    const cv::Mat& debug_image,
+    const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses,
+    const GroundTruthInputPacket::Optional& gt_packet)
+{
     StatusKeypointMeasurements static_keypoint_measurements;
     Landmarks static_landmarks;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
@@ -281,7 +286,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(const 
         frame.T_world_camera_,
         frame,
         propogated_object_poses,
-        debug_image
+        debug_image,
+        gt_packet
     );
 }
 
