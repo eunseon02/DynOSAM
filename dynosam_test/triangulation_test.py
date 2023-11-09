@@ -141,11 +141,19 @@ def triangulate_with_rotation(cam_pose_origin, cam_pose_target, intrinsic, obv_o
     coeffs = np.concatenate((coeffs_target, -coeffs_origin), axis=1)
     results = np.matmul(obj_rot, cam_tran_origin) - cam_tran_target
 
+    depths_lstsq, residuals, rank, singulars = np.linalg.lstsq(coeffs, results)
+    print(depths_lstsq)
+
     lhs = coeffs[0:2, :]
     rhs = results[0:2][np.newaxis].T
     depths = np.matmul(np.linalg.inv(lhs), rhs)
+    print(depths)
 
-    # check third function
+    depths = depths_lstsq[np.newaxis].T
+
+    # # Check with function 3
+    # print(coeffs[2, 0] * depths[0] + coeffs[2, 1] * depths[1])
+    # print(results[2])
 
     this_point_target = np.matmul(K_inv, depths[0]*this_obv_target)
     this_point_origin = np.matmul(K_inv, depths[1]*this_obv_origin)
@@ -201,9 +209,9 @@ def main():
   points.append(points_origin)
   for step in range(example_length-1):
     points_mot_xyz_mean = np.array([1., 1., 1.]) # in meter
-    points_mot_rpy_mean = np.array([15., 15., 15.]) # in degree 
+    points_mot_rpy_mean = np.array([10., 20., 30.]) # in degree 
     points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
-    points_mot_rpy_range = np.array([1., 1., 1.]) # in degree 
+    points_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
     points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
     # points_motion = np.identity(4, dtype=float)
     points_target = transform_points(points_origin, points_motion)
