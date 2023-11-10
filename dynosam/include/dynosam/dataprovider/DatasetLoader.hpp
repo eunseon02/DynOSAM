@@ -254,6 +254,12 @@ private:
     std::vector<double> times;
 };
 
+/// @brief enum to indicate what type of mask to load (if both are available)
+enum MaskType {
+    MOTION,
+    SEMANTIC_INSTANCE
+};
+
 
 
 

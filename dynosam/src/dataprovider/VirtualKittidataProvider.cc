@@ -24,6 +24,8 @@
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/dataprovider/DataProviderUtils.hpp"
 
+#include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
+
 #include <glog/logging.h>
 #include <fstream>
 
@@ -42,7 +44,7 @@ public:
     GenericVirtualKittiImageLoader(const std::string& full_path) : full_path_(full_path) {}
 
     std::string getFolderName() const override { return ""; }
-    const std::string full_path_;
+    const std::string full_path_; //! Full path as set by the full path constructor argument
 };
 
 class VirtualKittiRGBDataFolder : public GenericVirtualKittiImageLoader {
@@ -93,29 +95,34 @@ private:
 
         CHECK_EQ(bgr.type(), CV_16UC3) << "type was " << utils::cvTypeToString(bgr);
         CHECK_EQ(c, 3);
-        //b == invalid flow flag == 0 for sky or other invalid flow
-        cv::Mat invalid = (bgr.col(0) == 0);
-        CHECK(!invalid.empty());
 
-        // g, r == flow_y, x normalized by height, width and scaled to [0;2**16 – 1]
+        cv::Mat bgr_channels[3];
+        cv::split(bgr, bgr_channels);
+        cv::Mat b_channel = bgr_channels[0];
+
+        cv::Mat bgr_float;
+        //float 32
+        bgr.convertTo(bgr_float, CV_32F);
+
+        cv::Mat unscaled_out_flow = 2.0 / (std::pow(2, 16) - 1.0) * bgr_float - 1;
+
+        cv::Mat channels[2];
+        //now only take g and r channels
+        cv::split(unscaled_out_flow, channels);
+        cv::Mat& g = channels[1];
+        cv::Mat& r = channels[2];
+        g *= w -1.0;
+        r *= h -1.0;
+
         cv::Mat out_flow;
-        cv::Mat temp = bgr.colRange(2, 0);
-        CHECK(!temp.empty());
-        temp.copyTo(out_flow, CV_32F);
-        out_flow = 2.0 / (std::pow(2, 16) - 1.0) * out_flow - 1;
+        cv::merge(channels, 2, out_flow);
 
-        CHECK(!out_flow.empty());
+        //b == invalid flow flag == 0 for sky or other invalid flow
+        cv::Mat invalid = (b_channel == 0);
+        CHECK(!invalid.empty());
+        out_flow.setTo(0,invalid);
 
-        out_flow.col(0) *= w - 1;
-        out_flow.col(1) *= h - 1;
-
-        // Set values to 0 for invalid flows
-        for (int i = 0; i < out_flow.rows; ++i) {
-            if (invalid.at<uchar>(i, 0) == 1) {
-                out_flow.at<float>(i, 0) = 0; // or another value (e.g., std::numeric_limits<float>::quiet_NaN())
-                out_flow.at<float>(i, 1) = 0; // or another value (e.g., std::numeric_limits<float>::quiet_NaN())
-            }
-        }
+        out_flow.convertTo(out_flow, CV_32F);
 
         return out_flow;
 
@@ -204,6 +211,30 @@ public:
         return gt_packets_.size();
     }
 
+    /**
+     * @brief Queries if an object is moving in the current frame
+     *
+     * Unlike in Virtual kitti which indicates if movement is between frame t and t+1,
+     * we need to know if the object moved between t-1 and t (as we estimate for t-1 to t)
+     *
+     * The frame argument is considered to be frame t and we requery the isMoving variable of the BBoxMetaData at t-1.
+     *
+     * If object does not exist at frame return false?
+     *
+     * @param frame
+     * @param object_id
+     * @return true
+     * @return false
+     */
+    bool isMoving(FrameId frame, ObjectId object_id) const {
+        //check current frame and prev frame
+        if(checkExists(frame, object_id, bbox_data_) && checkExists(frame-1, object_id, bbox_data_)) {
+            return bbox_data_.at(frame - 1).at(object_id).is_moving;
+        }
+        return false;
+    }
+
+
 private:
     /**
      * @brief Nested map mapping frame id to a map of object ids to a type T
@@ -245,29 +276,6 @@ private:
         bool is_moving; //!flag to indicate whether the object is really moving between this frame and the next one
     };
 
-
-    /**
-     * @brief Queries if an object is moving in the current frame
-     *
-     * Unlike in Virtual kitti which indicates if movement is between frame t and t+1,
-     * we need to know if the object moved between t-1 and t (as we estimate for t-1 to t)
-     *
-     * The frame argument is considered to be frame t and we requery the isMoving variable of the BBoxMetaData at t-1.
-     *
-     * If object does not exist at frame return false?
-     *
-     * @param frame
-     * @param object_id
-     * @return true
-     * @return false
-     */
-    bool isMoving(FrameId frame, ObjectId object_id) const {
-        //check current frame and prev frame
-        if(checkExists(frame, object_id, bbox_data_) && checkExists(frame-1, object_id, bbox_data_)) {
-            return bbox_data_.at(frame - 1).at(object_id).is_moving;
-        }
-        return false;
-    }
 
 private:
     void loadBBoxMetaData(FrameObjectIDMap<BBoxMetaData>& bbox_metadata) {
@@ -324,9 +332,9 @@ private:
                 const int right =  std::stoi(split_line.at(header_map.at("right")));
                 const int top =  std::stoi(split_line.at(header_map.at("top")));
                 const int bottom =  std::stoi(split_line.at(header_map.at("bottom")));
-                const int number_pixels =  std::stoi(split_line.at(header_map.at("number_pixels")));
-                const double truncation_ratio =  std::stod(split_line.at(header_map.at("truncation_ratio")));
-                const double occupancy_ratio =  std::stod(split_line.at(header_map.at("occupancy_ratio")));
+                // const int number_pixels =  std::stoi(split_line.at(header_map.at("number_pixels")));
+                // const double truncation_ratio =  std::stod(split_line.at(header_map.at("truncation_ratio")));
+                // const double occupancy_ratio =  std::stod(split_line.at(header_map.at("occupancy_ratio")));
                 const bool is_moving =  convert_string_bool(split_line.at(header_map.at("isMoving")));
 
                 if(camera_id != 0) {
@@ -405,16 +413,16 @@ private:
                     continue; //hardcoded for only one camera atm
                 }
 
-                const double alpha = std::stod(split_line.at(header_map.at("alpha")));
+                // const double alpha = std::stod(split_line.at(header_map.at("alpha")));
                 const double width = std::stod(split_line.at(header_map.at("width")));
                 const double height = std::stod(split_line.at(header_map.at("height")));
                 const double length = std::stod(split_line.at(header_map.at("length")));
-                const double world_space_X =  std::stod(split_line.at(header_map.at("world_space_X")));
-                const double world_space_Y =  std::stod(split_line.at(header_map.at("world_space_Y")));
-                const double world_space_Z =  std::stod(split_line.at(header_map.at("world_space_Z")));
-                const double rotation_world_space_y =  std::stod(split_line.at(header_map.at("rotation_world_space_y")));
-                const double rotation_world_space_x =  std::stod(split_line.at(header_map.at("rotation_world_space_x")));
-                const double rotation_world_space_z =  std::stod(split_line.at(header_map.at("rotation_world_space_z")));
+                // const double world_space_X =  std::stod(split_line.at(header_map.at("world_space_X")));
+                // const double world_space_Y =  std::stod(split_line.at(header_map.at("world_space_Y")));
+                // const double world_space_Z =  std::stod(split_line.at(header_map.at("world_space_Z")));
+                // const double rotation_world_space_y =  std::stod(split_line.at(header_map.at("rotation_world_space_y")));
+                // const double rotation_world_space_x =  std::stod(split_line.at(header_map.at("rotation_world_space_x")));
+                // const double rotation_world_space_z =  std::stod(split_line.at(header_map.at("rotation_world_space_z")));
                 const double camera_space_X =  std::stod(split_line.at(header_map.at("camera_space_X")));
                 const double camera_space_Y =  std::stod(split_line.at(header_map.at("camera_space_Y")));
                 const double camera_space_Z =  std::stod(split_line.at(header_map.at("camera_space_Z")));
@@ -577,9 +585,10 @@ private:
                 const auto& object_id_pose_map = it->second;
                 for(const auto& [object_id, object_pose_gt] : object_id_pose_map) {
                     //query for moving
-                    if(isMoving(frame_id, object_id)) {
+                    // if(isMoving(frame_id, object_id)) {
+                        // LOG(INFO) << "Added moving object " << frame_id << " " << object_id;
                         gt_packet.object_poses_.push_back(object_pose_gt);
-                    }
+                    // }
                 }
             }
 
@@ -623,27 +632,124 @@ private:
     FrameObjectIDMap<BBoxMetaData> bbox_data_; //! all object poses
 
     std::vector<gtsam::Pose3> camera_poses_; //! camera poses in the world frame
-    std::vector<GroundTruthInputPacket> gt_packets_;
-
+    std::vector<GroundTruthInputPacket> gt_packets_; //!
 
 };
 
-
-//this one we will have to remove semgentation mask depending on whats in the gt folder
-class VirtualKittiMotionSegFolder : public GenericVirtualKittiImageLoader {
-
+//to be inherited either for MOTION segmentation or normal instance seg
+class VirtualKittiGenericInstanceSegFolder : public GenericVirtualKittiImageLoader {
 public:
-    VirtualKittiMotionSegFolder(const std::string& path, VirtualKittiTextGtLoader::Ptr gt_loader): GenericVirtualKittiImageLoader(path), gt_loader_(CHECK_NOTNULL(gt_loader)) {}
+    DYNO_POINTER_TYPEDEFS(VirtualKittiGenericInstanceSegFolder)
+
+    VirtualKittiGenericInstanceSegFolder(const std::string& path, VirtualKittiTextGtLoader::Ptr gt_loader) : GenericVirtualKittiImageLoader(path), gt_loader_(CHECK_NOTNULL(gt_loader)) {}
+    virtual ~VirtualKittiGenericInstanceSegFolder() = default;
 
     cv::Mat getItem(size_t idx) override {
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(5) << idx;
         const std::string file_path = full_path_  + "/instancegt_" + ss.str() + ".png";
         throwExceptionIfPathInvalid(file_path);
-        return cv::Mat();
+
+        const GroundTruthInputPacket& gt_packet = gt_loader_->getGTPacket(idx);
+        return loadImage(file_path, idx, gt_packet);
     }
 
+protected:
+    virtual cv::Mat loadImage(const std::string& file_path, FrameId frame, const GroundTruthInputPacket& gt_packet) = 0;
+
+    /**
+     * @brief Loads instance semantic mask from the file path. Does not change pixel values but converts to ImageType::SemanticMask::OpenCVType
+     *
+     * @param file_path
+     * @return cv::Mat
+     */
+    cv::Mat loadSemanticInstanceUnchanged(const std::string& file_path) const {
+        cv::Mat semantic;
+        loadRGB(file_path, semantic);
+
+
+        LOG(INFO) << "Semantic channels " << utils::cvTypeToString(semantic.type());
+
+        // semantic.convertTo(semantic, ImageType::SemanticMask::OpenCVType);
+        return semantic;
+    }
+
+protected:
     VirtualKittiTextGtLoader::Ptr gt_loader_;
+
+};
+
+
+//this one we will have to remove semgentation mask depending on whats in the gt folder
+class VirtualKittiMotionSegFolder : public VirtualKittiGenericInstanceSegFolder {
+
+public:
+    VirtualKittiMotionSegFolder(const std::string& path, VirtualKittiTextGtLoader::Ptr gt_loader): VirtualKittiGenericInstanceSegFolder(path, gt_loader) {}
+
+    cv::Mat loadImage(const std::string& file_path, FrameId frame, const GroundTruthInputPacket& gt_packet) override {
+        //remove object in semantic mask
+        cv::Mat instance_semantic_mask = loadSemanticInstanceUnchanged(file_path);
+
+        // cv::cvtColor(instance_semantic_mask, instance_semantic_mask, cv::COLOR_RGB2GRAY);
+        ObjectIds object_ids = vision_tools::getObjectLabels(instance_semantic_mask);
+
+        std::stringstream ss;
+        for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
+            ss << object_pose_gt.object_id_ << " ";
+        }
+
+        CHECK_EQ(frame, gt_packet.frame_id_);
+
+        for(int row = 0; row < instance_semantic_mask.rows; row++) {
+            for(int col = 0; col < instance_semantic_mask.cols; col++) {
+                // const uchar label = instance_semantic_mask.at<uchar>(row, col);
+                const cv::Vec3b pixels = instance_semantic_mask.at<cv::Vec3b>(row, col);
+                // LOG(INFO) << ss.str();
+                // LOG(INFO) << (int)label;
+
+                // // LOG(INFO) << container_to_string(object_ids);
+                LOG(INFO) << static_cast<int>(pixels[0]) <<" " <<static_cast<int>(pixels[1]) << " " <<static_cast<int>(pixels[2]) ;
+
+            }
+
+        }
+        //iterate over each object and if not moving remove
+        for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
+            const ObjectId object_id = object_pose_gt.object_id_;
+
+
+
+            // cv::Mat idx_mask = (instance_semantic_mask == object_id+1);
+            // cv::Mat roi = instance_semantic_mask(idx_mask);
+
+            // const cv::Vec3d pixels = roi.at<cv::Vec3d>(0, 0);
+
+            // //just a sanity (debug) check
+            // const auto& it = std::find(object_ids.begin(), object_ids.end(), object_id);
+            // CHECK(it != object_ids.end()) << "Object id " << object_id << " appears in gt packet but"
+            //     "is not in mask when loading motion mask for Virtual Kitti at frame " << frame;
+
+            // if(!gt_loader_->isMoving(frame, object_id)) {
+            //     cv::Mat idx_mask = (instance_semantic_mask == object_id);
+            //     CHECK(!idx_mask.empty());
+            //     instance_semantic_mask.setTo(0,idx_mask);
+            // }
+        }
+        return instance_semantic_mask;
+    }
+
+
+};
+
+//instance segmentation for all objects regardless of motion
+class VirtualKittiInstanceSegFolder : public VirtualKittiGenericInstanceSegFolder {
+
+public:
+    VirtualKittiInstanceSegFolder(const std::string& path, VirtualKittiTextGtLoader::Ptr gt_loader) : VirtualKittiGenericInstanceSegFolder(path, gt_loader) {}
+
+    cv::Mat loadImage(const std::string& file_path, FrameId, const GroundTruthInputPacket&) override {
+        return loadSemanticInstanceUnchanged(file_path);
+    }
 
 };
 
@@ -664,7 +770,7 @@ public:
 
 
 //everything current assumes camera0!! This includes loading things like extrinsics...
-VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  const std::string& scene, const std::string& scene_type) : VirtualKittiDatasetProvider(dataset_path) {
+VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  const std::string& scene, const std::string& scene_type, MaskType mask_type) : VirtualKittiDatasetProvider(dataset_path) {
 
     const std::string path = dataset_path;
 
@@ -689,7 +795,21 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     auto rgb_loader = std::make_shared<VirtualKittiRGBDataFolder>(rgb_folder);
     auto optical_flow_loader = std::make_shared<VirtualKittiForwardFlowDataFolder>(forward_flow_folder);
     auto depth_loader = std::make_shared<VirtualKittiDepthDataFolder>(depth_folder);
-    auto motion_mask_loader = std::make_shared<VirtualKittiMotionSegFolder>(instance_segmentation_folder, gt_loader);
+
+    VirtualKittiGenericInstanceSegFolder::Ptr motion_mask_loader = nullptr;
+    if(mask_type == MaskType::MOTION) {
+        LOG(INFO) << "Using MaskType::MOTION for loading mask";
+        motion_mask_loader =  std::make_shared<VirtualKittiMotionSegFolder>(instance_segmentation_folder, gt_loader);
+    }
+    else if(mask_type == MaskType::SEMANTIC_INSTANCE) {
+        LOG(INFO) << "Using MaskType::SEMANTIC_INSTANCE for loading mask";
+        motion_mask_loader = std::make_shared<VirtualKittiInstanceSegFolder>(instance_segmentation_folder, gt_loader);
+    }
+    else {
+        LOG(FATAL) << "Unknown MaskType for KittiDataLoader";
+    }
+    CHECK_NOTNULL(motion_mask_loader);
+
     auto gt_loader_folder = std::make_shared<VirtualKittiGTFolder>(gt_loader);
 
     this->setLoaders(

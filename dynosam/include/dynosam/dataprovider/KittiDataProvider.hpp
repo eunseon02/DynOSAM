@@ -257,10 +257,6 @@ private:
 class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
-    enum MaskType {
-        MOTION,
-        SEMANTIC_INSTANCE
-    };
 
     KittiDataLoader(const fs::path& dataset_path, MaskType mask_type) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path)

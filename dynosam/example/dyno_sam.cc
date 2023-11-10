@@ -59,8 +59,12 @@ int main(int argc, char* argv[]) {
         cv::Mat flow_viz;
         dyno::utils::flowToRgb(optical_flow, flow_viz);
 
+        cv::Mat mask_viz;
+        // dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
+
         cv::imshow("RGB", rgb);
         cv::imshow("OF", flow_viz);
+        // cv::imshow("Motion", mask_viz);
 
         cv::waitKey(1);
         return true;

@@ -41,7 +41,7 @@ class VirtualKittiDataLoader : public VirtualKittiDatasetProvider {
 public:
 
     //expect to be the top level where the folders undearneath are in the form vkitti_2.0.3_depth... (or as in the download...)
-    VirtualKittiDataLoader(const fs::path& dataset_path, const std::string& scene, const std::string& scene_type);
+    VirtualKittiDataLoader(const fs::path& dataset_path, const std::string& scene, const std::string& scene_type, MaskType mask_type = MaskType::MOTION);
     // bool spin() override;
 
 private:

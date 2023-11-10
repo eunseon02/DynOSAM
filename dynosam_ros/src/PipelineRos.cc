@@ -51,7 +51,7 @@ DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& option
     dyno::DynoParams params(params_path);
 
     // TODO: and which dataset!!
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>(dataset_path, dyno::KittiDataLoader::MaskType::MOTION);
+    auto data_loader = std::make_unique<dyno::KittiDataLoader>(dataset_path, dyno::MaskType::MOTION);
     auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
 
 

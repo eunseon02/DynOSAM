@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
 
     const std::string path = "/root/data/vdo_slam/kitti/kitti/0018";
     //becuase this uses the KittiDataLoader, this will use whatever semantic/instance laoder is in
-    KittiDataLoader loader(path, KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
+    KittiDataLoader loader(path, MaskType::SEMANTIC_INSTANCE);
 
     size_t index = 0;
     auto callback = [&](size_t,
