@@ -111,13 +111,18 @@ void DynoPipelineManager::shutdownPipelines() {
 bool DynoPipelineManager::spin() {
 
     if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
-        // frontend_pipeline_->spinOnce();
-        displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
+        spinViz(); //for now
         //a later problem!
         return true;
     }
     return false;
 
+}
+
+bool DynoPipelineManager::spinViz() {
+    // if()
+    displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
+    return true;
 }
 
 

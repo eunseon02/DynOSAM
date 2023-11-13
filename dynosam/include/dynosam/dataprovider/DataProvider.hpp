@@ -61,6 +61,16 @@ public:
     }
 
 
+    /**
+     * @brief Virtual Image Container Preprocessor function that is registered to the data interface pipeline
+     *
+     * By default does nothing and just returns the argument.
+     * This function is called (via callback) when a ImageContainer is sent to the pipeline via DataProvider::image_container_callback_
+     * and enables each data-provider to implement their own data-preprocessing as necessary
+     *
+     * @param image_container
+     * @return ImageContainer::Ptr
+     */
     inline virtual ImageContainer::Ptr imageContainerPreprocessor(ImageContainer::Ptr image_container) {
         return image_container;
     }

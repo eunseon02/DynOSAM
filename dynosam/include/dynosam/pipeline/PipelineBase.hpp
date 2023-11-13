@@ -84,20 +84,6 @@ public:
 
 
 protected:
-  // template <typename T = std::chrono::milliseconds>
-  // void logTiming(const std::string& name, const T& duration)
-  // {
-  //   double duration_s = utils::Timer::toSeconds<T>(duration);
-  //   utils::StatsCollector stats(getLogHandle(name));
-  //   stats.AddSample(duration_s);
-  // }
-
-  // inline std::string getLogHandle(const std::string& name) const
-  // {
-  //   return "pipeline." + module_name_ + "." + name;
-  // }
-
-protected:
   const std::string module_name_;
 
 
