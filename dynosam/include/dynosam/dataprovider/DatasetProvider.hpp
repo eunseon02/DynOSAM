@@ -262,7 +262,7 @@ public:
 
     }
 
-private:
+protected:
     size_t active_frame_id = 0u;
 
 };

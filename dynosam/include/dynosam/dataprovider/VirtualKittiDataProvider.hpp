@@ -75,6 +75,7 @@ private:
 
     const std::string v_depth_folder = "vkitti_2.0.3_depth";
     const std::string v_forward_flow_folder = "vkitti_2.0.3_forwardFlow";
+    const std::string v_backward_flow_folder = "vkitti_2.0.3_backwardFlow";
     const std::string v_forward_scene_flow_folder = "vkitti_2.0.3_forwardSceneFlow";
     const std::string v_instance_segmentation_folder = "vkitti_2.0.3_instanceSegmentation";
     const std::string v_rgb_folder = "vkitti_2.0.3_rgb";

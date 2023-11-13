@@ -80,15 +80,16 @@ public:
     }
 };
 
-class VirtualKittiForwardFlowDataFolder : public GenericVirtualKittiImageLoader  {
+class VirtualKittiFlowDataFolder : public GenericVirtualKittiImageLoader  {
 
 public:
-    VirtualKittiForwardFlowDataFolder(const std::string& path) : GenericVirtualKittiImageLoader(path) {}
+    VirtualKittiFlowDataFolder(const std::string& path) : GenericVirtualKittiImageLoader(path) {}
 
     cv::Mat getItem(size_t idx) override {
         std::stringstream ss;
         ss << std::setfill('0') << std::setw(5) << idx;
         const std::string file_path = full_path_  + "/flow_" + ss.str() + ".png";
+        // const std::string file_path = full_path_  + "/backwardFlow_" + ss.str() + ".png"; //specific to backwards flow
         throwExceptionIfPathInvalid(file_path);
         return vKittiPngToFlow(file_path);
     }
@@ -120,18 +121,27 @@ private:
         //float 32
         bgr.convertTo(bgr_float, CV_32F);
 
+        //scaled to [0;2**16 – 1]
         cv::Mat unscaled_out_flow = 2.0 / (std::pow(2, 16) - 1.0) * bgr_float - 1;
 
         cv::Mat channels[2];
         //now only take g and r channels
         cv::split(unscaled_out_flow, channels);
-        cv::Mat& g = channels[1];
-        cv::Mat& r = channels[2];
-        g *= w -1.0;
-        r *= h -1.0;
+        // cv::Mat& g = channels[1];
+        // cv::Mat& r = channels[2];
+        // g *= w -1.0;
+        // r *= h -1.0;
 
+        // g,r == flow_y,x normalized by height,width
+        cv::Mat& flow_y = channels[1];
+        cv::Mat& flow_x = channels[2];
+        flow_x *= w -1.0;
+        flow_y *= h -1.0;
+
+        //re-order channels so x is first and then y
+        cv::Mat x_y_ordered_channels[] = {flow_x, flow_y};
         cv::Mat out_flow;
-        cv::merge(channels, 2, out_flow);
+        cv::merge(x_y_ordered_channels, 2, out_flow);
 
         //b == invalid flow flag == 0 for sky or other invalid flow
         cv::Mat invalid = (b_channel == 0);
@@ -464,7 +474,8 @@ private:
 
                 {
                     // assign r vector
-                    double y = rotation_camera_space_y + (3.1415926 / 2);  // +(3.1415926/2)
+                    // double y = rotation_camera_space_y + (3.1415926 / 2);  // +(3.1415926/2)
+                    double y = rotation_camera_space_y;  // +(3.1415926/2)
                     double x = rotation_camera_space_x;
                     double z = rotation_camera_space_z;
 
@@ -591,20 +602,19 @@ private:
                 gtsam::Pose3 pose(gtsam::Rot3(rot), gtsam::Point3(t1, t2, t3));
 
 
-                // const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, -1, 1), gtsam::traits<gtsam::Point3>::Identity());
                 const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
-                //pose is in world coordinate convention so we put into camera
-                pose = camera_to_world.inverse() * pose;
+                // const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(M_PI_2, 0, M_PI_2), gtsam::traits<gtsam::Point3>::Identity());
+                //pose is in world coordinate convention so we put into camera convention (the camera_to_world.inverse())
+                //the pose provided is actually world -> camera but we want camera -> world eg T_world_camera, so we apply the inverse transform
+                pose = camera_to_world.inverse() * pose.inverse();
 
                 if(!set_initial_pose) {
                     initial_pose = pose;
                     set_initial_pose = true;
                 }
 
-                //offset initial pose so we start at "0, 0, 0"
+                // offset initial pose so we start at "0, 0, 0"
                 pose = initial_pose.inverse() * pose;
-
-
                 camera_poses.push_back(pose);
             }
 
@@ -839,6 +849,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     LOG(INFO) << "Starting VirtualKittiDataLoader with path " << path << " requested scene " << scene << " and scene type " << scene_type;
     const std::string depth_folder = path + "/" + v_depth_folder + "/" + scene + "/" + scene_type + "/frames/depth/Camera_0";
     const std::string forward_flow_folder = path + "/" + v_forward_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardFlow/Camera_0";
+    const std::string backward_flow_folder = path + "/" + v_backward_flow_folder + "/" + scene + "/" + scene_type + "/frames/backwardFlow/Camera_0";
     const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardsceneFlow/Camera_0";
     const std::string instance_segmentation_folder = path + "/" + v_instance_segmentation_folder + "/" + scene + "/" + scene_type + "/frames/instanceSegmentation/Camera_0";
     const std::string rgb_folder = path + "/" + v_rgb_folder + "/" + scene + "/" + scene_type + "/frames/rgb/Camera_0";
@@ -855,7 +866,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
     auto timestamp_folder = std::make_shared<VirtualKittiTimestampLoader>(gt_loader->size());
     auto rgb_loader = std::make_shared<VirtualKittiRGBDataFolder>(rgb_folder);
-    auto optical_flow_loader = std::make_shared<VirtualKittiForwardFlowDataFolder>(forward_flow_folder);
+    auto optical_flow_loader = std::make_shared<VirtualKittiFlowDataFolder>(forward_flow_folder);
     auto depth_loader = std::make_shared<VirtualKittiDepthDataFolder>(depth_folder);
 
     VirtualKittiGenericInstanceSegFolder::Ptr motion_mask_loader = nullptr;
@@ -926,23 +937,9 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
     this->setCallback(callback);
 
-
 }
 
 
-// ImageContainer::Ptr VirtualKittiDataLoader::imageContainerPreprocessor(ImageContainer::Ptr image_container) {
-//     cv::Mat& disparity = image_container->get<ImageType::Depth>();
-
-//     cv::Mat depth;
-//     disparity.copyTo(depth);
-//     depth.convertTo(depth, CV_8UC1);
-//     cv::imshow("Depth", depth);
-//     cv::waitKey(1);
-
-//     //depth mat is held as cm so divide by 100 to get to meters
-//     disparity /= 100.0;
-//     return image_container;
-// }
 
 
 VirtualKittiDataLoader::Params VirtualKittiDataLoader::Params::fromYaml(const std::string& params_folder) {
