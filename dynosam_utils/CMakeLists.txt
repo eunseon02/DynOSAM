@@ -95,6 +95,30 @@ kitti_semantic_to_motion
 
 
 
+
+
+add_executable(InstanceVizReader src/InstanceVizReader.cc)
+
+target_link_libraries(InstanceVizReader
+png
+)
+
+ament_target_dependencies(InstanceVizReader
+rclcpp
+std_msgs
+dynosam
+)
+
+ament_target_dependencies(InstanceVizReader "rclcpp" "std_msgs"
+"dynosam"
+)
+
+install(TARGETS
+InstanceVizReader
+DESTINATION lib/${PROJECT_NAME})
+
+
+
 # if(BUILD_TESTING)
 #   # find_package(ament_cmake_gtest REQUIRED)
 #   find_package(ament_cmake_gmock REQUIRED)

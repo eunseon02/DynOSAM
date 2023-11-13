@@ -60,6 +60,11 @@ public:
         ground_truth_packet_callback_ = callback;
     }
 
+
+    inline virtual ImageContainer::Ptr imageContainerPreprocessor(ImageContainer::Ptr image_container) {
+        return image_container;
+    }
+
     /**
      * @brief Spins the dataset for one "step" of the dataset
      *

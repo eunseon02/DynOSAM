@@ -72,7 +72,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
+    // vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
@@ -108,12 +108,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     if(display_queue_) {
         // cv::Mat depth_disp;
-        // const cv::Mat& depth = image_container->getDepth();
-        // //we do this compu
-        // vision_tools::disparityToDepth(base_params_, depth, depth_disp);
+        // const cv::Mat depth = image_container->getDepth();
 
-        // depth_disp.convertTo(depth_disp, CV_8UC1);
-        // display_queue_->push(ImageToDisplay("depth", depth_disp)); //eh something here no work
+        // depth.convertTo(depth, CV_8UC1);
+        // display_queue_->push(ImageToDisplay("depth", depth)); //eh something here no work
     }
 
     size_t n_optical_flow, n_new_tracks;
@@ -122,7 +120,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     LOG(INFO) << "Done tracking";
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
     frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 
@@ -219,7 +216,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     LOG(INFO) << "stopped looking at objects";
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
-    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
+    // if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
 
     previous_frame_ = frame;

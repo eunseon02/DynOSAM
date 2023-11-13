@@ -32,7 +32,23 @@
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <png++/png.hpp> //libpng-dev
+
 namespace dyno {
+
+/**
+ * @brief NOTE!!: In vitual kitti, the track id's start at 0 and then the ground truth instances in the
+ * semantic instances are indexed from trackId+1 such that a pixel value of zero means not a vehicle.
+ * In order to reduce confusion when we work with the semantic images and then associate with the ground truth labels,
+ * we will index all tracks as trackID = virtualKittiTrackID + 1 so all tracks start from 0!
+ *
+ * @param split_string
+ * @param idx
+ * @return int
+ */
+inline int getTrackID(const std::vector<std::string>& split_string, int idx) {
+    return std::stoi(split_string.at(idx)) + 1;
+}
 
 /**
  * @brief Loading class for the Virtual Kitti 2 dataset: https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/
@@ -142,7 +158,18 @@ public:
 
         //TODO: for now? When to apply preprocessing?
         cv::Mat depth;
-        loadDepth(file_path, depth);
+        loadRGB(file_path, depth);
+
+        //apply depth factor first to get information into meters (from cm)
+        depth /= 100.0;
+        depth.convertTo(depth, CV_64F);
+
+        cv::Mat viz;
+        depth.copyTo(viz);
+        viz.convertTo(viz, CV_8UC1);
+        cv::imshow("Depth", viz);
+        cv::waitKey(1);
+
         return depth;
     }
 };
@@ -327,7 +354,7 @@ private:
             else {
                 const int frame =  std::stoi(split_line.at(header_map.at("frame")));
                 const int camera_id =  std::stoi(split_line.at(header_map.at("cameraID")));
-                const int track_id =  std::stoi(split_line.at(header_map.at("trackID")));
+                const int track_id = getTrackID(split_line, header_map.at("trackID"));
                 const int left =  std::stoi(split_line.at(header_map.at("left")));
                 const int right =  std::stoi(split_line.at(header_map.at("right")));
                 const int top =  std::stoi(split_line.at(header_map.at("top")));
@@ -407,7 +434,7 @@ private:
 
                 const int frame =  std::stoi(split_line.at(header_map.at("frame")));
                 const int camera_id =  std::stoi(split_line.at(header_map.at("cameraID")));
-                const int track_id =  std::stoi(split_line.at(header_map.at("trackID")));
+                const int track_id = getTrackID(split_line, header_map.at("trackID"));
 
                 if(camera_id != 0) {
                     continue; //hardcoded for only one camera atm
@@ -503,6 +530,9 @@ private:
 
         bool is_first = true;
 
+        gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
+        bool set_initial_pose = false;
+
         while (!fstream.eof()) {
             std::vector<std::string> split_line;
             if(!getLine(fstream, split_line)) continue;
@@ -558,8 +588,24 @@ private:
                 CHECK_EQ(std::stod(split_line.at(16)), 0);
                 CHECK_EQ(std::stod(split_line.at(17)), 1);
 
+                gtsam::Pose3 pose(gtsam::Rot3(rot), gtsam::Point3(t1, t2, t3));
 
-                camera_poses.push_back(gtsam::Pose3(gtsam::Rot3(rot), gtsam::Point3(t1, t2, t3)));
+
+                // const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, -1, 1), gtsam::traits<gtsam::Point3>::Identity());
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+                //pose is in world coordinate convention so we put into camera
+                pose = camera_to_world.inverse() * pose;
+
+                if(!set_initial_pose) {
+                    initial_pose = pose;
+                    set_initial_pose = true;
+                }
+
+                //offset initial pose so we start at "0, 0, 0"
+                pose = initial_pose.inverse() * pose;
+
+
+                camera_poses.push_back(pose);
             }
 
         }
@@ -658,20 +704,33 @@ protected:
     virtual cv::Mat loadImage(const std::string& file_path, FrameId frame, const GroundTruthInputPacket& gt_packet) = 0;
 
     /**
-     * @brief Loads instance semantic mask from the file path. Does not change pixel values but converts to ImageType::SemanticMask::OpenCVType
+     * @brief Loads instance semantic mask from the file path.
+     *
+     * This loads the image using libpng++ since we need to load the image as an 8bit indexed PNG file (which opencv does not have functionality)
+     * for. Keeping consistent with the ground truth indexing we use for VirtualKitti we do not need to modify the trackID's within the image
+     * since we want the trackID's to be indexed from 1
      *
      * @param file_path
      * @return cv::Mat
      */
     cv::Mat loadSemanticInstanceUnchanged(const std::string& file_path) const {
-        cv::Mat semantic;
-        loadRGB(file_path, semantic);
+        png::image<png::index_pixel> index_image(file_path);
 
+        cv::Size size(index_image.get_width(), index_image.get_height());
+        cv::Mat semantic_image(size, ImageType::MotionMask::OpenCVType);
 
-        LOG(INFO) << "Semantic channels " << utils::cvTypeToString(semantic.type());
+        for (size_t y = 0; y < index_image.get_height(); ++y)
+        {
+            for (size_t x = 0; x < index_image.get_width(); ++x)
+            {
+                const auto& pixel = index_image.get_pixel(x, y);
 
-        // semantic.convertTo(semantic, ImageType::SemanticMask::OpenCVType);
-        return semantic;
+                //the semantic label
+                int i_byte = static_cast<int>(pixel);
+                semantic_image.at<int>(y, x) = i_byte;
+            }
+        }
+        return semantic_image;
     }
 
 protected:
@@ -689,53 +748,50 @@ public:
     cv::Mat loadImage(const std::string& file_path, FrameId frame, const GroundTruthInputPacket& gt_packet) override {
         //remove object in semantic mask
         cv::Mat instance_semantic_mask = loadSemanticInstanceUnchanged(file_path);
+        cv::Mat motion_mask;
+        instance_semantic_mask.copyTo(motion_mask);
 
-        // cv::cvtColor(instance_semantic_mask, instance_semantic_mask, cv::COLOR_RGB2GRAY);
+
         ObjectIds object_ids = vision_tools::getObjectLabels(instance_semantic_mask);
 
-        std::stringstream ss;
+
+        //collect only moving labels
+        std::vector<int> moving_labels;
         for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
-            ss << object_pose_gt.object_id_ << " ";
+            const ObjectId& object_id = object_pose_gt.object_id_;
+            if(gt_loader_->isMoving(frame, object_id)) {
+                moving_labels.push_back(object_id);
+            }
+
+            //this is just a sanity (debug) check to ensure all the labels in the image
+            //match up with the ones we have already collected in the ground truth packet
+            const auto& it = std::find(object_ids.begin(), object_ids.end(), object_id);
+            CHECK(it != object_ids.end()) << "Object id " << object_id << " appears in gt packet but"
+                "is not in mask when loading motion mask for Virtual Kitti at frame " << frame;
+
         }
 
         CHECK_EQ(frame, gt_packet.frame_id_);
 
-        for(int row = 0; row < instance_semantic_mask.rows; row++) {
-            for(int col = 0; col < instance_semantic_mask.cols; col++) {
-                // const uchar label = instance_semantic_mask.at<uchar>(row, col);
-                const cv::Vec3b pixels = instance_semantic_mask.at<cv::Vec3b>(row, col);
-                // LOG(INFO) << ss.str();
-                // LOG(INFO) << (int)label;
-
-                // // LOG(INFO) << container_to_string(object_ids);
-                LOG(INFO) << static_cast<int>(pixels[0]) <<" " <<static_cast<int>(pixels[1]) << " " <<static_cast<int>(pixels[2]) ;
-
-            }
-
-        }
         //iterate over each object and if not moving remove
-        for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
-            const ObjectId object_id = object_pose_gt.object_id_;
+        for (int i = 0; i < motion_mask.rows; i++)
+        {
+            for (int j = 0; j < motion_mask.cols; j++)
+            {
 
+                int label = motion_mask.at<int>(i, j);
+                if(label == 0) {
+                    continue;
+                }
 
-
-            // cv::Mat idx_mask = (instance_semantic_mask == object_id+1);
-            // cv::Mat roi = instance_semantic_mask(idx_mask);
-
-            // const cv::Vec3d pixels = roi.at<cv::Vec3d>(0, 0);
-
-            // //just a sanity (debug) check
-            // const auto& it = std::find(object_ids.begin(), object_ids.end(), object_id);
-            // CHECK(it != object_ids.end()) << "Object id " << object_id << " appears in gt packet but"
-            //     "is not in mask when loading motion mask for Virtual Kitti at frame " << frame;
-
-            // if(!gt_loader_->isMoving(frame, object_id)) {
-            //     cv::Mat idx_mask = (instance_semantic_mask == object_id);
-            //     CHECK(!idx_mask.empty());
-            //     instance_semantic_mask.setTo(0,idx_mask);
-            // }
+                //check if label is in moving labels. if not, make zero!
+                auto it = std::find(moving_labels.begin(), moving_labels.end(), label);
+                if(it == moving_labels.end()) {
+                    motion_mask.at<int>(i, j) = 0;
+                }
+            }
         }
-        return instance_semantic_mask;
+        return motion_mask;
     }
 
 
@@ -756,22 +812,28 @@ public:
 class VirtualKittiGTFolder : public DataFolder<GroundTruthInputPacket> {
 
 public:
-    VirtualKittiGTFolder(VirtualKittiTextGtLoader::Ptr gt_loader): gt_loader_(CHECK_NOTNULL(gt_loader)) {}
+    VirtualKittiGTFolder(VirtualKittiTextGtLoader::Ptr gt_loader, VirtualKittiTimestampLoader::Ptr timestamp_loader)
+    : gt_loader_(CHECK_NOTNULL(gt_loader)),  timestamp_loader_(CHECK_NOTNULL(timestamp_loader)) {}
 
     std::string getFolderName() const override { return ""; }
 
     GroundTruthInputPacket getItem(size_t idx) override {
-       return gt_loader_->getGTPacket(idx);
+       auto packet = gt_loader_->getGTPacket(idx);
+       packet.timestamp_ = timestamp_loader_->getItem(idx);
+       return packet;
     }
 
     VirtualKittiTextGtLoader::Ptr gt_loader_;
+    VirtualKittiTimestampLoader::Ptr timestamp_loader_;
 
 };
 
 
 //everything current assumes camera0!! This includes loading things like extrinsics...
-VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  const std::string& scene, const std::string& scene_type, MaskType mask_type) : VirtualKittiDatasetProvider(dataset_path) {
-
+VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  const Params& params) : VirtualKittiDatasetProvider(dataset_path), params_(params) {
+    const std::string& scene = params.scene;
+    const std::string& scene_type = params.scene_type;
+    const auto& mask_type = params.mask_type;
     const std::string path = dataset_path;
 
     LOG(INFO) << "Starting VirtualKittiDataLoader with path " << path << " requested scene " << scene << " and scene type " << scene_type;
@@ -810,7 +872,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     }
     CHECK_NOTNULL(motion_mask_loader);
 
-    auto gt_loader_folder = std::make_shared<VirtualKittiGTFolder>(gt_loader);
+    auto gt_loader_folder = std::make_shared<VirtualKittiGTFolder>(gt_loader, timestamp_folder);
 
     this->setLoaders(
         timestamp_folder,
@@ -821,8 +883,82 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
         gt_loader_folder
     );
 
+    auto callback = [&](size_t frame_id,
+        Timestamp timestamp,
+        cv::Mat rgb,
+        cv::Mat optical_flow,
+        cv::Mat depth,
+        cv::Mat instance_mask,
+        GroundTruthInputPacket gt_object_pose_gt) -> bool
+    {
+        CHECK(timestamp == gt_object_pose_gt.timestamp_);
+
+        CHECK(ground_truth_packet_callback_);
+        if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
+
+        ImageContainer::Ptr image_container = nullptr;
+
+        if(params.mask_type == MaskType::MOTION) {
+            image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::MotionMask>(instance_mask));
+        }
+        else {
+            image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+        }
+
+
+        CHECK(image_container);
+        CHECK(image_container_callback_);
+        if(image_container_callback_) image_container_callback_(image_container);
+        return true;
+    };
+
+    this->setCallback(callback);
+
 
 }
+
+
+// ImageContainer::Ptr VirtualKittiDataLoader::imageContainerPreprocessor(ImageContainer::Ptr image_container) {
+//     cv::Mat& disparity = image_container->get<ImageType::Depth>();
+
+//     cv::Mat depth;
+//     disparity.copyTo(depth);
+//     depth.convertTo(depth, CV_8UC1);
+//     cv::imshow("Depth", depth);
+//     cv::waitKey(1);
+
+//     //depth mat is held as cm so divide by 100 to get to meters
+//     disparity /= 100.0;
+//     return image_container;
+// }
+
+
+VirtualKittiDataLoader::Params VirtualKittiDataLoader::Params::fromYaml(const std::string& params_folder) {
+    YamlParser yaml_parser(params_folder + "DatasetParams.yaml");
+
+    Params params;
+
+    std::string mask_type;
+    yaml_parser.getYamlParam("mask_type", &mask_type);
+    params.mask_type = maskTypeFromString(mask_type);
+
+    yaml_parser.getYamlParam("scene", &params.scene);
+    yaml_parser.getYamlParam("scene_type", &params.scene_type);
+    return params;
+}
+
 
 // bool VirtualKittiDataLoader::spin() {
 //     return false;

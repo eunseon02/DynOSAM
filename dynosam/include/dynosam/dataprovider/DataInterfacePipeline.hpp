@@ -28,6 +28,9 @@ public:
       MIMOPipelineModule<FrontendInputPacketBase, FrontendInputPacketBase>;
     using OutputQueue = typename MIMO::OutputQueue;
 
+    using ImageContainerPreprocesser = std::function<ImageContainer::Ptr(ImageContainer::Ptr)>;
+
+
     DataInterfacePipeline(bool parallel_run = false);
     virtual ~DataInterfacePipeline() = default;
 
@@ -36,11 +39,20 @@ public:
 
     //expects input packet
     virtual inline void fillImageContainerQueue(ImageContainer::Ptr image_container) {
-        packet_queue_.push(image_container);
+        if(image_container_preprocessor_) {
+            packet_queue_.push(CHECK_NOTNULL(image_container_preprocessor_(image_container)));
+        }
+        else {
+            packet_queue_.push(image_container);
+        }
     }
 
     virtual inline void addGroundTruthPacket(const GroundTruthInputPacket& gt_packet) {
         ground_truth_packets_[gt_packet.frame_id_] = gt_packet;
+    }
+
+    virtual inline void registerImageContainerPreprocessor(const ImageContainerPreprocesser& func) {
+        image_container_preprocessor_ = func;
     }
 
 protected:
@@ -62,6 +74,11 @@ protected:
     std::atomic_bool parallel_run_;
 
     std::map<FrameId, GroundTruthInputPacket> ground_truth_packets_;
+
+    //callback to handle dataset specific pre-processing of the images before they are sent to the frontend
+    //if one is registered, called immediately before adding any ImageContainers to the packet_queue. Registered functions
+    //should return quickly
+    ImageContainerPreprocesser image_container_preprocessor_;
 
 };
 

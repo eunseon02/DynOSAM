@@ -76,22 +76,23 @@ def get_rgb_from_id(instance_id, hue_min=0, hue_max=1, saturation=0.9, value=0.9
 img_path = "/root/data/virtual_kitti/vkitti_2.0.3_rgb/Scene01/clone/frames/rgb/Camera_0/rgb_00000.jpg"
 inst_path = "/root/data/virtual_kitti/vkitti_2.0.3_instanceSegmentation/Scene01/clone/frames/instanceSegmentation/Camera_0/instancegt_00000.png"
 
-img_inst = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+# img_inst = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
 
-img_inst = cv2.cvtColor(img_inst, cv2.COLOR_BGR2RGB)
-inst = cv2.imread(inst_path, cv2.IMREAD_UNCHANGED)
+# img_inst = cv2.cvtColor(img_inst, cv2.COLOR_BGR2RGB)
+# inst = cv2.imread(inst_path, cv2.IMREAD_UNCHANGED)
 
-# img_inst = io.imread(img_path)
-# inst = io.imread(inst_path)
+img_inst = io.imread(img_path)
+inst = io.imread(inst_path)
 
 alpha = 0.6
 
 inst_color = map_instance_to_color(inst)
 print(type(inst_color))
+mask = inst_color.sum(axis=2)
+img_inst[:] = img_inst[:]*0.5
 print(inst_color.shape)
-# mask = inst_color.sum(axis=2)
-# img_inst[:] = img_inst[:]*0.5
+
 # img_inst[mask!=0,:] = img_inst[mask!=0,:]*(1-alpha) + inst_color[mask!=0,:]*256*alpha
 
-cv2.imshow("Thing", inst_color)
-cv2.waitKey(0)
+# cv2.imshow("Thing", inst_color)
+# cv2.waitKey(0)

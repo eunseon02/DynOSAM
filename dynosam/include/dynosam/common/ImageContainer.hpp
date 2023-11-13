@@ -392,6 +392,14 @@ public:
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask);
 
+    static ImageContainer::Ptr Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+
 protected:
     explicit ImageContainer(
         const Timestamp timestamp,

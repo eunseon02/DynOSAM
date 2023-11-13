@@ -51,6 +51,8 @@ public:
     FrontendParams frontend_params_;
     CameraParams camera_params_;
 
+    int data_provider_type_; //Kitti, VirtualKitti, Online...
+
     //! Pipeline level params
     bool parallel_run_{true};
 

@@ -53,6 +53,11 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket, data_interface_.get(), std::placeholders::_1)
     );
 
+    //preprocessing
+    data_interface_->registerImageContainerPreprocessor(
+        std::bind(&dyno::DataProvider::imageContainerPreprocessor, data_loader_.get(), std::placeholders::_1)
+    );
+
     data_interface_->registerOutputQueue(&frontend_input_queue_);
 
     FrontendModule::Ptr frontend = nullptr;

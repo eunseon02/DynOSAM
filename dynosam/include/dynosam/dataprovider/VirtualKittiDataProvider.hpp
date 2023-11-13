@@ -30,7 +30,20 @@
 
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 
+/**
+ * @brief A note on ground truth track ID indexing - VirtualKitti starts their trackID's from 0 which is annoying
+ * when handling the trackID's within a semantic/motion image mask since we normally expect the id's to be the exact pixel
+ * values (where 0 is background).
+ *
+ * Instead we increase the actual trackID index to be the ground truth one (eg the one provided in the poses.txt file) + 1
+ * so we can index the trackId's directly in the instance mask which will line up with the ones stored in the ground truth packets (after we have
+ * +1 to their index)
+ *
+ */
+
 namespace dyno {
+
+
 
 
 //depth, motion mask and gt
@@ -40,11 +53,25 @@ class VirtualKittiDataLoader : public VirtualKittiDatasetProvider {
 
 public:
 
+    struct Params {
+        std::string scene; //eg Scene01
+        std::string scene_type; //eg clone, fog...
+        MaskType mask_type = MaskType::MOTION;
+
+        static Params fromYaml(const std::string& params_folder);
+
+    };
+
+
     //expect to be the top level where the folders undearneath are in the form vkitti_2.0.3_depth... (or as in the download...)
-    VirtualKittiDataLoader(const fs::path& dataset_path, const std::string& scene, const std::string& scene_type, MaskType mask_type = MaskType::MOTION);
-    // bool spin() override;
+    VirtualKittiDataLoader(const fs::path& dataset_path, const Params& params);
+
+    // ImageContainer::Ptr imageContainerPreprocessor(ImageContainer::Ptr image_container) override;
 
 private:
+
+private:
+    const Params params_;
 
     const std::string v_depth_folder = "vkitti_2.0.3_depth";
     const std::string v_forward_flow_folder = "vkitti_2.0.3_forwardFlow";

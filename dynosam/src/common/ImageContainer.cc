@@ -122,6 +122,18 @@ ImageContainer::Ptr ImageContainer::Create(
 
 }
 
+ImageContainer::Ptr ImageContainer::Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask) {
+
+    return std::shared_ptr<ImageContainer>(new ImageContainer(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask));
+}
+
+
 
 void ImageContainer::validateSetup() const {
     //check image sizes are the same

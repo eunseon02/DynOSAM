@@ -21,35 +21,25 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/utils/YamlParser.hpp"
+#pragma once
 
-#include <string>
+#include "dynosam/dataprovider/DataProvider.hpp"
+
+
 
 namespace dyno {
 
-FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
-    YamlParser yaml_parser(file_path);
 
-    FrontendParams params;
-    yaml_parser.getYamlParam("MaxTrackPointBG", &params.max_tracking_points_bg);
-    yaml_parser.getYamlParam("MaxTrackPointOBJ", &params.max_tracking_points_obj);
+enum DatasetType {
+    KITTI,
+    VIRTUAL_KITTI
+};
 
-    yaml_parser.getYamlParam("SFMgThres", &params.scene_flow_magnitude);
-    yaml_parser.getYamlParam("SFDsThres", &params.scene_flow_percentage);
 
-    yaml_parser.getYamlParam("ThDepthBG", &params.depth_background_thresh);
-    yaml_parser.getYamlParam("ThDepthOBJ", &params.depth_obj_thresh);
+struct DataProviderFactory {
 
-    yaml_parser.getYamlParam("ORBextractor.nFeatures", &params.n_features);
-    yaml_parser.getYamlParam("ORBextractor.scaleFactor", &params.scale_factor);
-    yaml_parser.getYamlParam("ORBextractor.nLevels", &params.n_levels);
-    yaml_parser.getYamlParam("ORBextractor.iniThFAST", &params.init_threshold_fast);
-    yaml_parser.getYamlParam("ORBextractor.minThFAST", &params.min_threshold_fast);
+    static DataProvider::UniquePtr Create(const std::string& dataset_folder_path, const std::string& params_folder_path, DatasetType dataset_type);
 
-    return params;
+};
 
 }
-
-
-} //dyno

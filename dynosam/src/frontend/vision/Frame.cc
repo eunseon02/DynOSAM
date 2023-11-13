@@ -293,7 +293,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 
 void Frame::constructDynamicObservations() {
-    CHECK_GT(dynamic_features_.size(), 0u);
+    // CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
 
 

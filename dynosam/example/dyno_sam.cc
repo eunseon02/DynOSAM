@@ -51,8 +51,12 @@ int main(int argc, char* argv[]) {
 
     // dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
     // while(pipeline.spin()) {};
+    dyno::VirtualKittiDataLoader::Params params;
+    params.scene = "Scene01";
+    params.scene_type = "clone";
+    params.mask_type = dyno::MaskType::MOTION;
 
-    dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", "Scene01", "clone");
+    dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
     d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {
         LOG(INFO) << "Frame " << frame << " ts " << timestamp;
 
@@ -60,11 +64,11 @@ int main(int argc, char* argv[]) {
         dyno::utils::flowToRgb(optical_flow, flow_viz);
 
         cv::Mat mask_viz;
-        // dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
+        dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
 
         cv::imshow("RGB", rgb);
         cv::imshow("OF", flow_viz);
-        // cv::imshow("Motion", mask_viz);
+        cv::imshow("Motion", mask_viz);
 
         cv::waitKey(1);
         return true;

@@ -41,7 +41,7 @@ namespace dyno {
 namespace vision_tools {
 
 
-void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv::Mat& depth);
+// void disparityToDepth(const FrontendParams& params, const cv::Mat& disparity, cv::Mat& depth);
 
 //does not do any undistortion etc on the image pairs -> simply looks to see which tracklet ids's are in both frames
 //iteratoes over the current features and checks to see if the feature is in the previous feature set

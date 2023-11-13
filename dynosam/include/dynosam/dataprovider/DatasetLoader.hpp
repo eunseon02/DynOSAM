@@ -261,6 +261,24 @@ enum MaskType {
 };
 
 
+/**
+ * @brief Converts an input string into a enun MaskType
+ *
+ * @param mask_type
+ * @return MaskType
+ */
+inline MaskType maskTypeFromString(const std::string& mask_type) {
+    if(mask_type == "motion") {
+        return MaskType::MOTION;
+    }
+    else if(mask_type == "semantic") {
+        return MaskType::SEMANTIC_INSTANCE;
+    }
+
+    throw std::runtime_error("Cannot load mask type from string - unknown input " + mask_type);
+}
+
+
 
 
 /**
