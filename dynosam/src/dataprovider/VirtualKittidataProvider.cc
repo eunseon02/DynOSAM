@@ -86,8 +86,10 @@ public:
     VirtualKittiFlowDataFolder(const std::string& path) : GenericVirtualKittiImageLoader(path) {}
 
     cv::Mat getItem(size_t idx) override {
+        CHECK(idx > 0);
         std::stringstream ss;
-        ss << std::setfill('0') << std::setw(5) << idx;
+        //index at frame -1 so that we get the flow from t-t to t (where the idx is t)
+        ss << std::setfill('0') << std::setw(5) << idx-1;
         const std::string file_path = full_path_  + "/flow_" + ss.str() + ".png";
         // const std::string file_path = full_path_  + "/backwardFlow_" + ss.str() + ".png"; //specific to backwards flow
         throwExceptionIfPathInvalid(file_path);
@@ -173,12 +175,6 @@ public:
         //apply depth factor first to get information into meters (from cm)
         depth /= 100.0;
         depth.convertTo(depth, CV_64F);
-
-        cv::Mat viz;
-        depth.copyTo(viz);
-        viz.convertTo(viz, CV_8UC1);
-        cv::imshow("Depth", viz);
-        cv::waitKey(1);
 
         return depth;
     }
@@ -936,6 +932,8 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     };
 
     this->setCallback(callback);
+
+    active_frame_id = 1u; //have to start at at least 1 so we can index backwards with optical flow
 
 }
 

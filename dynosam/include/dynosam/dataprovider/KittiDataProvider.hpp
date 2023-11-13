@@ -399,14 +399,7 @@ public:
 
         cv::Mat& disparity = image_container->get<ImageType::Depth>();
         depth.copyTo(disparity);
-
         depth.convertTo(depth, CV_64F);
-
-        cv::Mat viz;
-        depth.copyTo(viz);
-        viz.convertTo(viz, CV_8UC1);
-        cv::imshow("Depth", viz);
-        cv::waitKey(1);
 
         return image_container;
     }

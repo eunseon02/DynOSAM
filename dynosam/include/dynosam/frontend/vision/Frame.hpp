@@ -284,8 +284,15 @@ private:
     //based on the current set of dynamic features
     void constructDynamicObservations();
 
+    Landmark getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature, const gtsam::Pose3& X_world) const;
+
 private:
     UndistorterRectifier::Ptr undistorter_;
+
+    //! cached projections of each landmark depending on the frame to save speed
+    //! Based off the initial 2d observation and depth from the feature
+    mutable LandmarkMap landmark_in_camera_cache_;
+    mutable LandmarkMap landmark_in_world_cache_;
 
 };
 
