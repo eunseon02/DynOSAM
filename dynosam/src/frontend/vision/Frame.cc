@@ -115,9 +115,9 @@ Landmark Frame::backProjectToCamera(TrackletId tracklet_id) const {
     //if no depth, project to unitsphere?
     CHECK(feature->hasDepth());
 
-    Landmark lmk;
-    camera_->backProject(feature->keypoint_, feature->depth_, &lmk);
-    return lmk;
+    // Landmark lmk;
+    return getLandmarkFromCache(landmark_in_camera_cache_, feature, gtsam::Pose3::Identity());
+    // return lmk;
 }
 
 Landmark Frame::backProjectToWorld(TrackletId tracklet_id) const {
@@ -129,9 +129,9 @@ Landmark Frame::backProjectToWorld(TrackletId tracklet_id) const {
     //if no depth, project to unitsphere?
     CHECK(feature->hasDepth());
 
-    Landmark lmk;
-    camera_->backProject(feature->keypoint_, feature->depth_, &lmk, T_world_camera_);
-    return lmk;
+    // Landmark lmk;
+    // camera_->backProject(feature->keypoint_, feature->depth_, &lmk, T_world_camera_);
+    return getLandmarkFromCache(landmark_in_world_cache_, feature, T_world_camera_);
 }
 
 void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth) {
@@ -293,7 +293,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 
 void Frame::constructDynamicObservations() {
-    CHECK_GT(dynamic_features_.size(), 0u);
+    // CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
 
 
@@ -382,6 +382,19 @@ FeatureFilterIterator Frame::usableDynamicFeaturesBegin() const {
     return dynamic_features_.beginUsable();
 }
 
+
+
+Landmark Frame::getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature, const gtsam::Pose3& X_world) const {
+    const auto& it = cache.find(feature->tracklet_id_);
+    if(it != cache.end()) {
+        return it->second;
+    }
+
+    Landmark lmk;
+    camera_->backProject(feature->keypoint_, feature->depth_, &lmk, X_world);
+    cache.insert({feature->tracklet_id_, lmk});
+    return lmk;
+}
 
 // Frame::FeatureFilterIterator Frame::dynamicUsableBegin() {
 //     return FeatureFilterIterator(dynamic_features_, [&](const Feature::Ptr& f) -> bool

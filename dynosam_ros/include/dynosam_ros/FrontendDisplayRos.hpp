@@ -24,6 +24,7 @@
 #pragma once
 
 #include <dynosam/visualizer/FrontendDisplay.hpp>
+#include <dynosam/common/GroundTruthPacket.hpp>
 #include <dynosam/frontend/RGBDInstance-Definitions.hpp>
 
 #include "image_transport/image_transport.hpp"
@@ -54,6 +55,8 @@ private:
     void publishOdometry(const gtsam::Pose3& T_world_camera);
     void publishDebugImage(const cv::Mat& debug_image);
 
+    void publishGroundTruthInfo(const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
+
 private:
     rclcpp::Node::SharedPtr node_;
 
@@ -63,9 +66,12 @@ private:
 
     //sort of just for now
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_;
-
-
     image_transport::Publisher tracking_image_pub_;
+
+    //ground truth publishers
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_pose_pub_;
+    rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr gt_odometry_pub_;
+    image_transport::Publisher gt_bounding_box_pub_;
 
 };
 

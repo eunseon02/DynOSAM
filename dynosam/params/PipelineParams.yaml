@@ -1,3 +1,6 @@
 %YAML:1.0
 
 parallel_run: false
+
+# KITTI: 0, VIRTUAL_KITTI: 1
+data_provider_type: 0

@@ -1,0 +1,13 @@
+%YAML:1.0
+
+mask_type: "motion"
+
+
+## KITTI Params
+base_line: 387.5744
+depth_scale_factor: 256.0
+
+
+## Virtual Kiti Params
+scene: "Scene18"
+scene_type: "clone"

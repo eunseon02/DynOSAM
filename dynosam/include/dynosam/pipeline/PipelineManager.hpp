@@ -42,9 +42,20 @@ public:
     DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display);
     ~DynoPipelineManager();
 
-    //need on shutdown etc for ros
-    //spin once
-    bool spin();
+    /**
+     * @brief Spins the whole pipeline by spinning the data provider.
+     * If in sequential mode, it will return for each spin
+     * If in parallel mode, it will not return until the pipeline is shutdown.
+     *
+     * The return value indicates the data provider modules state: false if finished or shutdown,
+     * true its working nominally
+     *
+     * @return true
+     * @return false
+     */
+    virtual bool spin();
+
+    virtual bool spinViz();
 
 private:
     void launchSpinners();

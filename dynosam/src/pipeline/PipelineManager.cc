@@ -53,6 +53,11 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket, data_interface_.get(), std::placeholders::_1)
     );
 
+    //preprocessing
+    data_interface_->registerImageContainerPreprocessor(
+        std::bind(&dyno::DataProvider::imageContainerPreprocessor, data_loader_.get(), std::placeholders::_1)
+    );
+
     data_interface_->registerOutputQueue(&frontend_input_queue_);
 
     FrontendModule::Ptr frontend = nullptr;
@@ -106,13 +111,18 @@ void DynoPipelineManager::shutdownPipelines() {
 bool DynoPipelineManager::spin() {
 
     if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
-        // frontend_pipeline_->spinOnce();
-        displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
+        spinViz(); //for now
         //a later problem!
         return true;
     }
     return false;
 
+}
+
+bool DynoPipelineManager::spinViz() {
+    // if()
+    displayer_.process(); //when enabled this gives a segafault when the process ends. when commented out the program just waits at thee end
+    return true;
 }
 
 

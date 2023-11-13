@@ -64,6 +64,8 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetLoader.cc
   src/dataprovider/DataProviderUtils.cc
+  src/dataprovider/DataProviderFactory.cc
+  src/dataprovider/VirtualKittidataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc
@@ -85,6 +87,7 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
   src/utils/Spinner.cc
+  src/utils/Statistics.cc
 
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc
@@ -116,6 +119,7 @@ target_link_libraries(${PROJECT_NAME}
   gtsam
   gtsam_unstable
   Boost::boost
+  png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
 )

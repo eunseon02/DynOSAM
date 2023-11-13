@@ -209,12 +209,24 @@ public:
 };
 
 
+class TimestampBaseLoader : public dyno::DataFolder<double> {
+public:
+    DYNO_POINTER_TYPEDEFS(TimestampBaseLoader)
+    TimestampBaseLoader() {}
+
+    virtual ~TimestampBaseLoader() = default;
+    virtual size_t size() const = 0;
+
+};
+
 //TODO: (jesse) add comments - this is the really important one as we base the size of the dataset on this data!!!
-class TimestampFile : public dyno::DataFolder<double> {
+class TimestampFile : public TimestampBaseLoader {
 
 public:
     DYNO_POINTER_TYPEDEFS(TimestampFile)
     TimestampFile() {}
+
+    virtual ~TimestampFile() = default;
 
     /**
      * @brief "times.txt" as file name
@@ -225,22 +237,46 @@ public:
     double getItem(size_t idx) override;
 
     //TODO: coment!!
-    size_t size() const {
+    size_t size() const override {
         //only valid after loading
         //we go up to -1 becuase the optical flow has ONE LESS image
         return times.size()-1u;
     }
 
-private:
+protected:
     /**
      * @brief Setup ifstream and read everything in the data vector
      *
      */
-    void onPathInit() override;
+    virtual void onPathInit() override;
 
 private:
     std::vector<double> times;
 };
+
+/// @brief enum to indicate what type of mask to load (if both are available)
+enum MaskType {
+    MOTION,
+    SEMANTIC_INSTANCE
+};
+
+
+/**
+ * @brief Converts an input string into a enun MaskType
+ *
+ * @param mask_type
+ * @return MaskType
+ */
+inline MaskType maskTypeFromString(const std::string& mask_type) {
+    if(mask_type == "motion") {
+        return MaskType::MOTION;
+    }
+    else if(mask_type == "semantic") {
+        return MaskType::SEMANTIC_INSTANCE;
+    }
+
+    throw std::runtime_error("Cannot load mask type from string - unknown input " + mask_type);
+}
 
 
 

@@ -51,6 +51,8 @@ void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
 void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz);
 
 
+void drawLabel(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
+
 
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for the read/write optical flow functions in 4.x

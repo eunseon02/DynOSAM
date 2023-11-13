@@ -201,6 +201,29 @@ void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_vi
   }
 }
 
+void drawLabel(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
+  constexpr static double kFontScale = 0.5;
+  constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
+  constexpr static int kThickness = 2;
+  // Display the label at the top of the bounding box.
+  int base_line;
+  cv::Size label_size = cv::getTextSize(label, kFontFace, kFontScale, kThickness, &base_line);
+  // Top left corner.
+  const cv::Point& tlc = bounding_box.tl();
+  const auto left = tlc.x;
+  const auto top = tlc.y;
+  // Bottom right corner.
+  cv::Point brc = cv::Point(left + label_size.width, top + label_size.height + base_line);
+  // Draw white rectangle.
+  cv::rectangle(image, tlc, brc, colour);
+  // Put the label on the black rectangle.
+  cv::putText(image, label, cv::Point(left, top + label_size.height), kFontFace, kFontScale, colour, kThickness);
+
+  //draw bounding box
+  cv::rectangle(image, bounding_box, colour);
+}
+
+
 
 bool compareCvMatsUpToTol(const cv::Mat& mat1, const cv::Mat& mat2, const double& tol)
 {

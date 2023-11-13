@@ -44,7 +44,13 @@ FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHE
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("static", 2);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic", 2);
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 2);
-    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_pose", 2);
+    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("composed_object_poses", 2);
+
+    gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 2);
+    gt_object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_poses", 2);
+    gt_bounding_box_pub_= image_transport::create_publisher(node.get(), "~/ground_truth/bounding_boxes");
+
+
 }
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
@@ -55,6 +61,11 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
 
     publishOdometry(frontend_output->T_world_camera_);
     publishDebugImage(frontend_output->debug_image_);
+
+    if(frontend_output->gt_packet_) {
+        const auto& rgb_image = frontend_output->frame_.tracking_images_.get<ImageType::RGBMono>();
+        publishGroundTruthInfo(frontend_output->gt_packet_.value(), rgb_image);
+    }
 }
 
 
@@ -114,7 +125,7 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
     for(const auto&[object_id, pose] : propogated_object_poses) {
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = "world";
-        marker.ns = "frontend_object_positions";
+        marker.ns = "frontend_composed_object_positions";
         marker.id = object_id;
         marker.type = visualization_msgs::msg::Marker::SPHERE;
         marker.action = visualization_msgs::msg::Marker::ADD;
@@ -140,6 +151,7 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
     }
 
     object_pose_pub_->publish(marker_array);
+
 }
 
 
@@ -163,8 +175,75 @@ void FrontendDisplayRos::publishDebugImage(const cv::Mat& debug_image) {
     std_msgs::msg::Header hdr;
     sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", resized_image).toImageMsg();
     tracking_image_pub_.publish(msg);
+}
 
+void FrontendDisplayRos::publishGroundTruthInfo(const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb) {
+    const gtsam::Pose3& T_world_camera = gt_packet.X_world_;
+    nav_msgs::msg::Odometry odom_msg;
+    convert(T_world_camera, odom_msg);
+    odom_msg.header.frame_id = "world";
+    odom_msg.child_frame_id = "camera";
+    gt_odometry_pub_->publish(odom_msg);
 
+    cv::Mat disp_image;
+    rgb.copyTo(disp_image);
+
+    visualization_msgs::msg::MarkerArray marker_array;
+
+    static visualization_msgs::msg::Marker delete_marker;
+    delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+    marker_array.markers.push_back(delete_marker);
+
+    for(const auto& object_pose_gt : gt_packet.object_poses_) {
+        const gtsam::Pose3 L_world = T_world_camera * object_pose_gt.L_camera_;
+        const ObjectId object_id = object_pose_gt.object_id_;
+
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = "world";
+        marker.ns = "ground_truth_object_poses";
+        marker.id = object_id;
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.header.stamp = node_->now();
+        marker.pose.position.x = L_world.x();
+        marker.pose.position.y = L_world.y();
+        marker.pose.position.z = L_world.z();
+        marker.pose.orientation.x = L_world.rotation().toQuaternion().x();
+        marker.pose.orientation.y = L_world.rotation().toQuaternion().y();
+        marker.pose.orientation.z = L_world.rotation().toQuaternion().z();
+        marker.pose.orientation.w = L_world.rotation().toQuaternion().w();
+        marker.scale.x = 0.5;
+        marker.scale.y = 0.5;
+        marker.scale.z = 0.5;
+        marker.color.a = 1.0; // Don't forget to set the alpha!
+
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+        marker.color.r = colour(0)/255.0;
+        marker.color.g = colour(1)/255.0;
+        marker.color.b = colour(2)/255.0;
+
+        visualization_msgs::msg::Marker text_marker = marker;
+        text_marker.ns = "ground_truth_object_labels";
+        text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+        text_marker.text = std::to_string(object_id);
+        text_marker.pose.position.z += 1.0; //make it higher than the pose marker
+        text_marker.scale.z = 0.7;
+
+        marker_array.markers.push_back(marker);
+        marker_array.markers.push_back(text_marker);
+
+        //draw on bbox
+        object_pose_gt.drawBoundingBox(disp_image);
+    }
+
+    gt_object_pose_pub_->publish(marker_array);
+
+    cv::Mat resized_image;
+    cv::resize(disp_image, resized_image, cv::Size(640, 480));
+
+    std_msgs::msg::Header hdr;
+    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", resized_image).toImageMsg();
+    gt_bounding_box_pub_.publish(msg);
 }
 
 }

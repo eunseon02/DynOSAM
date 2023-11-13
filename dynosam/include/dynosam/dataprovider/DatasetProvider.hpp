@@ -66,7 +66,7 @@ struct _DynoDatasetConstructor {
  */
 template<typename... DataTypes>
 class DynoDataset : public _DynoDatasetConstructor<Timestamp, cv::Mat, cv::Mat, DataTypes...> {
-
+     //TODO: timestamp really shouldn't be default as not all datasets will have this! We can get time some other way!! maybe just dont have default
     //TODO: (jesse) print folder structure functions and checks!!
     //TODO: (jesse) mix use of the term folder and loader (should revert everything to loader!!)
 public:
@@ -74,7 +74,7 @@ public:
     using DefaultDataset = GenericDataset<Timestamp, cv::Mat, cv::Mat>;
 
     using Base = _DynoDatasetConstructor<Timestamp, cv::Mat, cv::Mat, DataTypes...>;
-    using DynoDataTypesTuple = typename Base::DynoDataTypesTuple; //! All the dataypes declared in one tuple (cv::Mat, cv::Mat, Timestamp, ....)
+    using DynoDataTypesTuple = typename Base::DynoDataTypesTuple; //! All the dataypes declared in one tuple (Timestamp, cv::Mat, cv::Mat, ....)
 
     //TODO: check that the type created by the _DynoDatasetConstructor is the same as the concat of the
     // DefaultDataset and TypedGenericDataset
@@ -99,36 +99,36 @@ public:
     // using ConcatDataTypes = decltype(std::tuple_cat(DefaultDataset::DataTypeTuple{}, typename TypedGenericDataset::DataTypeTuple{}));
 
     //uses timestamp file to set the size
-    DynoDataset(const fs::path& dataset_path)
-        : dataset_path_(dataset_path), timestamp_file_(std::make_shared<TimestampFile>())
+    DynoDataset(
+          const fs::path& dataset_path)
+        : dataset_path_(dataset_path)
     {
-
-        //timestamp_file_ one will give us the number of files (frames) to expect
-
-        default_dataset_ = std::make_unique<DefaultDataset>(
-            dataset_path,
-            timestamp_file_,
-            std::make_shared<RGBDataFolder>(),
-            std::make_shared<OpticalFlowDataFolder>()
-        );
-
-        dataset_size_ = timestamp_file_->size();
-
-        CHECK(dataset_size_ > 0);
-        //TODO: error for now
-        LOG(ERROR) << "DynoDataset prepared with an expected size of " << dataset_size_
-            << " - loaded from timestamps file found at " << default_dataset_->getAbsoluteFolderPath<TimestampFileIdx>();
-
     }
 
     virtual ~DynoDataset() {}
 
-    void setLoaders( typename DataFolder<DataTypes>::Ptr... data_folders) {
+    //timestamp used to determine the size of the dataset
+    void setLoaders(TimestampBaseLoader::Ptr timestamp_loader,
+          dyno::DataFolder<cv::Mat>::Ptr rgb_loader,
+          dyno::DataFolder<cv::Mat>::Ptr optical_flow_loader,
+          typename DataFolder<DataTypes>::Ptr... data_folders) {
+
+        timestamp_file_ = CHECK_NOTNULL(timestamp_loader);
+        default_dataset_ = std::make_unique<DefaultDataset>(
+            dataset_path_,
+            timestamp_file_,
+            rgb_loader,
+            optical_flow_loader
+        );
+
         dataset_ = std::make_unique<TypedGenericDataset>(dataset_path_, data_folders...);
+
+        LOG(ERROR) << "DynoDataset prepared with an expected size of " << getDatasetSize()
+            << " - loaded from timestamps file found at " << default_dataset_->getAbsoluteFolderPath<TimestampFileIdx>();
     }
 
     //only valid after load
-    size_t getDatasetSize() const { return dataset_size_; }
+    virtual size_t getDatasetSize() const { return timestamp_file_->size(); }
     const std::string getDatasetPath() const { return dataset_path_; }
 
     bool processSingle(size_t frame_id) {
@@ -136,7 +136,7 @@ public:
             LOG(ERROR) << "Dataset not loaded with setLoaders()! Skipping processing";
             return false;
         }
-        if(frame_id >= dataset_size_) {
+        if(frame_id >= getDatasetSize()) {
             throw std::runtime_error("Failure when processing a single frame_id!");
         }
 
@@ -199,7 +199,7 @@ public:
 
     //TODO: set start and end idx?
     void processRange() {
-        for (size_t frame_id = 0; frame_id < dataset_size_; frame_id++) {
+        for (size_t frame_id = 0; frame_id < getDatasetSize(); frame_id++) {
             processSingle(frame_id);
         }
     }
@@ -218,10 +218,7 @@ private:
     typename TypedGenericDataset::UniquePtr dataset_;
     typename DefaultDataset::UniquePtr default_dataset_;
 
-    TimestampFile::Ptr timestamp_file_;
-
-    size_t dataset_size_{0}; //only valid after load
-
+    TimestampBaseLoader::Ptr timestamp_file_;
 };
 
 //should not be inherited but instead is functional!!
@@ -230,6 +227,8 @@ class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvid
 
 public:
     using BaseDynoDataset = DynoDataset<DataTypes...>;
+    using This = DynoDatasetProvider<DataTypes...>;
+    DYNO_POINTER_TYPEDEFS(This)
 
     //does not accept DataProviderModule* for dataprovider
     DynoDatasetProvider(
@@ -238,8 +237,8 @@ public:
 
     virtual ~DynoDatasetProvider() {}
 
-    bool spin() override {
-        const size_t dataset_size = BaseDynoDataset::getDatasetSize();
+    virtual bool spin() override {
+        const size_t dataset_size = this->getDatasetSize();
         if(active_frame_id >= dataset_size) {
             LOG_FIRST_N(INFO, 1) << "Finished dataset";
             return false;
@@ -263,7 +262,7 @@ public:
 
     }
 
-private:
+protected:
     size_t active_frame_id = 0u;
 
 };

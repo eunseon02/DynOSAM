@@ -257,26 +257,63 @@ private:
 class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
-    enum MaskType {
-        MOTION,
-        SEMANTIC_INSTANCE
+
+    struct Params {
+        MaskType mask_type;
+
+        //needed for input dispartity to depth conversion
+        double base_line =  387.5744;
+        double depth_scale_factor = 256.0;
+
+        static Params fromYaml(const std::string& params_folder) {
+            YamlParser yaml_parser(params_folder + "DatasetParams.yaml");
+
+            Params params;
+
+            std::string mask_type;
+            yaml_parser.getYamlParam("mask_type", &mask_type);
+            params.mask_type = maskTypeFromString(mask_type);
+
+            yaml_parser.getYamlParam("base_line", &params.base_line);
+            yaml_parser.getYamlParam("depth_scale_factor", &params.depth_scale_factor);
+            return params;
+
+        }
     };
 
-    KittiDataLoader(const fs::path& dataset_path, MaskType mask_type) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
-        dataset_path)
+
+
+    /**
+     * @brief Construct a new Kitti Data Loader object
+     *
+     * Path should be the full path to the set of folders
+     *  /depth
+     *  /flow
+     *  /image_0
+     *  /motion
+     *  /semantic
+     *  /object_pose.txt
+     *  /pose_gt.txt
+     *  /times.txt
+     *
+     * @param dataset_path
+     * @param params
+     */
+    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+        dataset_path), params_(params)
     {
-        TimestampFile::Ptr timestamp_file =  std::dynamic_pointer_cast<TimestampFile>(this->getLoader<TimestampFileIdx>());
-        RGBDataFolder::Ptr rgb_folder = std::dynamic_pointer_cast<RGBDataFolder>(this->getLoader<RGBFolderIdx>());
+        TimestampFile::Ptr timestamp_file =  std::make_shared<TimestampFile>();
+        RGBDataFolder::Ptr rgb_folder = std::make_shared<RGBDataFolder>();
 
         CHECK(timestamp_file);
         CHECK(rgb_folder);
 
         SegMaskFolder::Ptr mask_folder = nullptr;
-        if(mask_type == MaskType::MOTION) {
+        if(params.mask_type == MaskType::MOTION) {
             mask_folder = std::make_shared<MotionSegMaskFolder>(rgb_folder);
             LOG(INFO) << "Using MaskType::MOTION for loading mask";
         }
-        else if(mask_type == MaskType::SEMANTIC_INSTANCE) {
+        else if(params.mask_type == MaskType::SEMANTIC_INSTANCE) {
             mask_folder = std::make_shared<InstantanceSegMaskFolder>(rgb_folder);
             LOG(INFO) << "Using MaskType::SEMANTIC_INSTANCE for loading mask";
         }
@@ -293,6 +330,10 @@ public:
 
 
         this->setLoaders(
+            timestamp_file,
+            rgb_folder,
+            //should really be called kitti optical flow and kitti depth data folder
+            std::make_shared<OpticalFlowDataFolder>(),
             std::make_shared<DepthDataFolder>(),
             mask_folder,
             camera_pose_folder,
@@ -331,6 +372,40 @@ public:
 
         this->setCallback(callback);
     }
+
+    ImageContainer::Ptr imageContainerPreprocessor(ImageContainer::Ptr image_container) override {
+        if(!image_container->hasDepth()) {
+            throw std::runtime_error("Cannot preprocess ImageContainer in Kitti dataset as no depth!");
+        }
+
+        const auto& base_line = params_.base_line;
+        const auto& depth_scale_factor = params_.depth_scale_factor;
+
+        const cv::Mat& const_disparity = image_container->getDepth();
+        cv::Mat depth;
+        const_disparity.copyTo(depth);
+        for (int i = 0; i < const_disparity.rows; i++)
+        {
+            for (int j = 0; j < const_disparity.cols; j++)
+            {
+                if (const_disparity.at<double>(i, j) < 0) {
+                    depth.at<double>(i, j) = 0;
+                }
+                else {
+                    depth.at<double>(i, j) = base_line / (const_disparity.at<double>(i, j) / depth_scale_factor);
+                }
+            }
+        }
+
+        cv::Mat& disparity = image_container->get<ImageType::Depth>();
+        depth.copyTo(disparity);
+        depth.convertTo(depth, CV_64F);
+
+        return image_container;
+    }
+
+private:
+    const Params params_;
 
 
 };

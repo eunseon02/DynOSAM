@@ -24,6 +24,7 @@
 #pragma once
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <gtsam/geometry/Pose3.h>
 
 namespace dyno {
 
@@ -39,6 +40,22 @@ void loadDepth(const std::string& image_path, cv::Mat& img);
 
 //CV_32SC1
 void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::Mat& mask);
+
+// /**
+//  * @brief Converts RAW kitti (object) pose information into a full pose.
+//  *
+//  * The rotation information is expected to be in raw form (-pi to pi) which then be handled within the function
+//  * No frame change is made.
+//  *
+//  * @param tx
+//  * @param ty
+//  * @param tz
+//  * @param ry
+//  * @param rx
+//  * @param rz
+//  * @return gtsam::Pose3
+//  */
+// gtsam::Pose3 constructkittiObjectPose(double tx, double ty, double tz, double ry, double rx, double rz);
 
 
 } //dyno

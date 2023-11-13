@@ -60,21 +60,27 @@ struct ImageType {
 
     //really should be disparity?
     struct Depth {
+        constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
         static void validate(const cv::Mat& input);
         static std::string name() { return "Depth"; }
     };
     struct OpticalFlow {
+        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
         static void validate(const cv::Mat& input);
         static std::string name() { return "OpticalFlow"; }
     };
     struct SemanticMask {
+        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for SemanticMask image type
         static void validate(const cv::Mat& input);
         static std::string name() { return "SemanticMask"; }
     };
     struct MotionMask {
+        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for MotionMask image type
         static void validate(const cv::Mat& input);
         static std::string name() { return "MotionMask"; }
     };
+
+    static_assert(SemanticMask::OpenCVType == MotionMask::OpenCVType);
 };
 
 
@@ -385,6 +391,14 @@ public:
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask);
+
+    static ImageContainer::Ptr Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask);
 
 protected:
     explicit ImageContainer(

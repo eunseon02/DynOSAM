@@ -26,6 +26,8 @@
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
 #include "dynosam/pipeline/PipelineParams.hpp"
 
+#include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
+
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
@@ -42,13 +44,38 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    dyno::DynoParams params(FLAGS_params_folder_path);
+    // dyno::DynoParams params(FLAGS_params_folder_path);
 
-    auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti, dyno::KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
-    auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
+    // auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti, dyno::KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
+    // auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
-    dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
-    while(pipeline.spin()) {};
+    // dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
+    // while(pipeline.spin()) {};
+    dyno::VirtualKittiDataLoader::Params params;
+    params.scene = "Scene01";
+    params.scene_type = "clone";
+    params.mask_type = dyno::MaskType::MOTION;
+
+    dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
+    d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {
+        LOG(INFO) << "Frame " << frame << " ts " << timestamp;
+
+        cv::Mat flow_viz;
+        dyno::utils::flowToRgb(optical_flow, flow_viz);
+
+        cv::Mat mask_viz;
+        dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
+
+        cv::imshow("RGB", rgb);
+        cv::imshow("OF", flow_viz);
+        cv::imshow("Motion", mask_viz);
+
+        cv::waitKey(1);
+        return true;
+    });
+
+    while(d.spin()) {}
+
 
 
 

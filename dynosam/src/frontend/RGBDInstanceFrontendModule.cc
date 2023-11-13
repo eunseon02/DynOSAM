@@ -72,7 +72,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
@@ -106,23 +105,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
-    if(display_queue_) {
-        // cv::Mat depth_disp;
-        // const cv::Mat& depth = image_container->getDepth();
-        // //we do this compu
-        // vision_tools::disparityToDepth(base_params_, depth, depth_disp);
-
-        // depth_disp.convertTo(depth_disp, CV_8UC1);
-        // display_queue_->push(ImageToDisplay("depth", depth_disp)); //eh something here no work
-    }
-
     size_t n_optical_flow, n_new_tracks;
     LOG(INFO) << "Beginning tracking on frame " << input->getFrameId();
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
     LOG(INFO) << "Done tracking";
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    vision_tools::disparityToDepth(base_params_, depth_image_wrapper, depth_image_wrapper);
     frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 
@@ -219,17 +207,22 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     LOG(INFO) << "stopped looking at objects";
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
-    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
+    // if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
 
     previous_frame_ = frame;
 
-    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses);
+    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses, input->optional_gt_);
     return {State::Nominal, output};
 }
 
 
-RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(const Frame& frame, const cv::Mat& debug_image, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
+RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
+    const Frame& frame,
+    const cv::Mat& debug_image,
+    const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses,
+    const GroundTruthInputPacket::Optional& gt_packet)
+{
     StatusKeypointMeasurements static_keypoint_measurements;
     Landmarks static_landmarks;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
@@ -281,7 +274,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(const 
         frame.T_world_camera_,
         frame,
         propogated_object_poses,
-        debug_image
+        debug_image,
+        gt_packet
     );
 }
 
