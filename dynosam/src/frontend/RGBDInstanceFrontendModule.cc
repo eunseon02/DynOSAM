@@ -42,7 +42,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
 }
 
 bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
-    return image_container->hasDepth() && image_container->hasSemanticMask();
+    return image_container->hasDepth();
 }
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
