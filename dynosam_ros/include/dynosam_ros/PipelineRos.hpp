@@ -24,6 +24,7 @@
 #pragma once
 
 #include <dynosam/pipeline/PipelineManager.hpp>
+#include <dynosam/utils/Statistics.hpp>
 
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
@@ -36,7 +37,13 @@ public:
     explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
     bool spinOnce() {
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());
+
         return CHECK_NOTNULL(pipeline_)->spin();
+    }
+
+    std::string getStats() const {
+        return utils::Statistics::Print();
     }
 
 private:

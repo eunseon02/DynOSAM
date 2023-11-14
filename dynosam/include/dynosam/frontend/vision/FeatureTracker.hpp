@@ -53,15 +53,15 @@ public:
 
 protected:
 
-    void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& static_features, size_t& n_optical_flow,
+    void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);
-    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeaturePtrs& dynamic_features);
+    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features);
 
     void propogateMask(TrackingInputImages& tracking_images);
 
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
-    bool posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const;
+    // bool posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const;
 
     Feature::Ptr constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,
                                       FrameId frame_id) const;
@@ -78,18 +78,18 @@ private:
     size_t tracklet_count = 0;
     bool initial_computation_{ true };
 
-    static constexpr int FRAME_GRID_ROWS = 48;
-    static constexpr int FRAME_GRID_COLS = 64;
+    // static constexpr int FRAME_GRID_ROWS = 48;
+    // static constexpr int FRAME_GRID_COLS = 64;
 
-    int min_x_;
-    int min_y_;
-    int max_x_;
-    int max_y_;
+    // int min_x_;
+    // int min_y_;
+    // int max_x_;
+    // int max_y_;
     cv::Size img_size_;  // set on first computation
 
-    // grid of trackled Id's
-    double grid_elements_width_inv_;
-    double grid_elements_height_inv_;
+    // // grid of trackled Id's
+    // double grid_elements_width_inv_;
+    // double grid_elements_height_inv_;
 
 };
 

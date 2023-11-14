@@ -218,6 +218,7 @@ public:
     void add(const Feature& feature);
     void add(Feature::Ptr feature);
     void remove(TrackletId tracklet_id);
+    void clear();
 
     TrackletIds collectTracklets(bool only_usable = true) const;
 

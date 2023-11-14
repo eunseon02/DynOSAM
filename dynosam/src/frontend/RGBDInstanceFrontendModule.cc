@@ -24,6 +24,7 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/utils/SafeCast.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
@@ -107,23 +108,37 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     size_t n_optical_flow, n_new_tracks;
     LOG(INFO) << "Beginning tracking on frame " << input->getFrameId();
-    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
-    LOG(INFO) << "Done tracking";
+    Frame::Ptr frame = nullptr;
+    {
+        utils::TimingStatsCollector tracking_timer("tracking_timer");
+        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+
+    }
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
+    {
+        utils::TimingStatsCollector update_depths_timer("depth_updater");
+        frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
+    }
 
 
     AbsolutePoseCorrespondences correspondences;
     //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
     //bearing vectors are also not undistorted atm!!
     //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
-    frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
-
-    LOG(INFO) << "Gotten correspondances, solving camera pose";
+    {
+        utils::TimingStatsCollector track_dynamic_timer("frame_correspondences");
+        frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
+    }
 
     TrackletIds inliers, outliers;
-    MotionResult camera_pose_result = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+    MotionResult camera_pose_result;
+    {
+        utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
+        camera_pose_result = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+    }
 
     if(camera_pose_result.valid()) {
         frame->T_world_camera_ = camera_pose_result.get();
@@ -140,12 +155,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
 
-    vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
+    {
+        utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
+        vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
+    }
 
     std::map<ObjectId, gtsam::Pose3> per_frame_object_poses; //for viz
     for(const auto& [object_id, observations] : frame->object_observations_) {
-        LOG(INFO) << "Looking at object " << object_id;
+        utils::TimingStatsCollector object_motion_timer("solve_object_motion");
         AbsolutePoseCorrespondences dynamic_correspondences;
+
         //get the corresponding feature pairs
         bool result = frame->getDynamicCorrespondences(
             dynamic_correspondences,
@@ -168,8 +187,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
             outliers);
 
         if(object_motion_result.valid()) {
-            LOG(INFO) << object_motion_result.get();
-
             frame->dynamic_features_.markOutliers(outliers);
 
             if(!input->optional_gt_.has_value()) {
@@ -179,35 +196,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
             const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
             CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
-            auto it = std::find_if(gt_packet.object_poses_.begin(), gt_packet.object_poses_.end(),
-                           [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
-
-            if(it == gt_packet.object_poses_.end()) {
-                LOG(WARNING) << "Object Id " << object_id << " cannot be found in the gt packet for frame " << frame->frame_id_;
-                continue;
-            }
-
-            const ObjectPoseGT& object_gt_packet = *it;
-
-            if(object_poses_.find(object_id) == object_poses_.end()) {
-                object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
-            }
-            else {
-                //propogate
-                const gtsam::Pose3& old_object_pose = object_poses_[object_id];
-                const gtsam::Pose3 propogated_pose = object_motion_result.get() * old_object_pose;
-                object_poses_[object_id] = propogated_pose;
-                //  object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
-            }
-
-            per_frame_object_poses[object_id] = object_poses_[object_id];
+            logAndPropogateObjectPoses(per_frame_object_poses, gt_packet, object_motion_result.get(), object_id);
         }
     }
 
-    LOG(INFO) << "stopped looking at objects";
-
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
-    // if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
+    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
 
     previous_frame_ = frame;
@@ -277,6 +271,31 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         debug_image,
         gt_packet
     );
+}
+
+
+void RGBDInstanceFrontendModule::logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id) {
+    auto it = std::find_if(gt_packet.object_poses_.begin(), gt_packet.object_poses_.end(),
+                    [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
+
+    if(it == gt_packet.object_poses_.end()) {
+        LOG(WARNING) << "Object Id " << object_id << " cannot be found in the gt packet";
+        return;
+    }
+
+    const ObjectPoseGT& object_gt_packet = *it;
+
+    if(object_poses_.find(object_id) == object_poses_.end()) {
+        object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
+    }
+    else {
+        //propogate
+        const gtsam::Pose3& prev_L_world = object_poses_[object_id];
+        const gtsam::Pose3 curr_L_world = prev_H_world_curr * prev_L_world;
+        object_poses_[object_id] = curr_L_world;
+    }
+
+    per_frame_object_poses[object_id] = object_poses_[object_id];
 }
 
 } //dyno

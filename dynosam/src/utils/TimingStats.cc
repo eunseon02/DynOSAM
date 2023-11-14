@@ -21,36 +21,36 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/utils/YamlParser.hpp"
-
-#include <string>
+#include "dynosam/utils/TimingStats.hpp"
 
 namespace dyno {
+namespace utils {
 
-FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
-    YamlParser yaml_parser(file_path);
+TimingStatsCollector::TimingStatsCollector(const std::string& tag)
+    :   collector_(tag + " [ms]"),
+        tic_time_(Timer::tic()) {}
 
-    FrontendParams params;
-    yaml_parser.getYamlParam("MaxTrackPointBG", &params.max_tracking_points_bg);
-    yaml_parser.getYamlParam("MaxTrackPointOBJ", &params.max_tracking_points_obj);
-    yaml_parser.getYamlParam("cell_size", &params.cell_size);
 
-    yaml_parser.getYamlParam("SFMgThres", &params.scene_flow_magnitude);
-    yaml_parser.getYamlParam("SFDsThres", &params.scene_flow_percentage);
-
-    yaml_parser.getYamlParam("ThDepthBG", &params.depth_background_thresh);
-    yaml_parser.getYamlParam("ThDepthOBJ", &params.depth_obj_thresh);
-
-    yaml_parser.getYamlParam("ORBextractor.nFeatures", &params.n_features);
-    yaml_parser.getYamlParam("ORBextractor.scaleFactor", &params.scale_factor);
-    yaml_parser.getYamlParam("ORBextractor.nLevels", &params.n_levels);
-    yaml_parser.getYamlParam("ORBextractor.iniThFAST", &params.init_threshold_fast);
-    yaml_parser.getYamlParam("ORBextractor.minThFAST", &params.min_threshold_fast);
-
-    return params;
-
+TimingStatsCollector::~TimingStatsCollector() {
+    tocAndLog();
 }
 
+void TimingStatsCollector::reset() {
+    tic_time_ = Timer::tic();
+    is_valid_ = true;
+}
 
+bool TimingStatsCollector::isValid() const {
+    return is_valid_;
+}
+
+void TimingStatsCollector::tocAndLog() {
+    if(is_valid_) {
+        auto toc = Timer::toc<std::chrono::milliseconds>(tic_time_);
+        collector_.AddSample(toc.count());
+        is_valid_ = false;
+    }
+}
+
+} //utils
 } //dyno

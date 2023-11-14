@@ -33,6 +33,9 @@ struct FrontendParams {
   int max_tracking_points_bg = 800;
   int max_tracking_points_obj = 800;
 
+  /// @brief  Maximum one feature per bucked with cell_size width and height (used for 2D occupancy grid for static features)
+  int cell_size = 15;
+
   // scene flow thresholds
   double scene_flow_magnitude = 0.12;
   double scene_flow_percentage = 0.5;

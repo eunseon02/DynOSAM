@@ -25,6 +25,8 @@
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
+#include "dynosam/utils/TimingStats.hpp"
+
 namespace dyno {
 
 ObjectId Frame::global_object_id{1};
@@ -47,6 +49,7 @@ Frame::Frame(
 
             // NOTE: no rectification, use camera matrix as P for cv::undistortPoints
             // see https://stackoverflow.com/questions/22027419/bad-results-when-undistorting-points-using-opencv-in-python
+            //i mean, this could just be shared between frames?
             const CameraParams& cam_params = camera->getParams();
             cv::Mat P = cam_params.getCameraMatrix();
             cv::Mat R = cv::Mat::eye(3,3,CV_32FC1);
@@ -295,7 +298,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 void Frame::constructDynamicObservations() {
     // CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
-
+    // utils::TimingStatsCollector construct_obs_timer("construct_dynamic_obs_timer");
 
     const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
 

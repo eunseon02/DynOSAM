@@ -7,6 +7,7 @@
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 #include "dynosam/utils/Timing.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 
 #include <atomic>
 #include <functional>  // for function
@@ -132,8 +133,8 @@ public:
       return PipelineReturnCode::IS_SHUTDOWN;
     }
 
-    auto tic_spin = utils::Timer::tic();
     PipelineReturnCode return_code;
+    utils::TimingStatsCollector timing_stats(module_name_);
 
     InputConstSharedPtr input = nullptr;
     is_thread_working = false;
