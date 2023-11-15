@@ -33,6 +33,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 
@@ -49,13 +50,16 @@ private:
 
     void publishStaticCloud(const Landmarks& static_landmarks);
     void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
-    void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
+    void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
 
     // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
-    void publishOdometry(const gtsam::Pose3& T_world_camera);
+    void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
+    void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     void publishDebugImage(const cv::Mat& debug_image);
 
-    void publishGroundTruthInfo(const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
+    void publishGroundTruthInfo(Timestamp timestamp, const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
+
+
 
 private:
     rclcpp::Node::SharedPtr node_;
@@ -64,14 +68,26 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr dynamic_tracked_points_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
 
-    //sort of just for now
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_;
+
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr odometry_path_pub_;
+    nav_msgs::msg::Path odom_path_msg_;
+
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_path_pub_; //! Path of propogated object poses using the motion estimate
+    std::map<ObjectId, gtsam::Pose3Vector> object_trajectories_;
+    std::map<ObjectId, FrameId> object_trajectories_update_; //! The last frame id that the object was seen in
+
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
     image_transport::Publisher tracking_image_pub_;
 
     //ground truth publishers
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_pose_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr gt_odometry_pub_;
+
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr gt_odom_path_pub_;
+    nav_msgs::msg::Path gt_odom_path_msg_;
+
     image_transport::Publisher gt_bounding_box_pub_;
+
 
 };
 

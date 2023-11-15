@@ -30,7 +30,31 @@
 #include "rclcpp/parameter.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
 
+#include "rosidl_runtime_cpp/traits.hpp"
+
+#include <type_traits>
+
 namespace dyno {
+
+namespace internal {
+
+template<typename Msg, typename = int>
+struct HasMsgHeader : std::false_type{};
+
+template <typename Msg>
+struct HasMsgHeader<Msg, decltype((void) Msg::header, 0)> : std::true_type { };
+
+
+template<typename Msg, typename = int>
+struct HasChildFrame : std::false_type{};
+
+template <typename Msg>
+struct HasChildFrame<Msg, decltype((void) Msg::child_frame_id, 0)> : std::true_type { };
+
+
+}
+
+
 namespace utils {
 
 
@@ -49,6 +73,35 @@ Timestamp fromRosTime(const rclcpp::Time& time);
  * @return rclcpp::Time
  */
 rclcpp::Time toRosTime(Timestamp timestamp);
+
+/**
+ * @brief Converts from input type to output type where output type is a ROS message with a header.
+ * OUTPUT type MUST be a ROS message type
+ *
+ * Checks if the OUTPUT type has a variable called header and then sets the timestamp and frame id
+ * Checks if the OUTPUT type has a variable called child_frame_id and, if child_frame_id provided, sets the value
+ *
+ */
+template<typename INPUT, typename OUTPUT,
+    typename = std::enable_if_t<rosidl_generator_traits::is_message<OUTPUT>::value>>
+bool convertWithHeader(const INPUT& input, OUTPUT& output, Timestamp timestamp, const std::string& frame_id, std::optional<std::string> child_frame_id = std::nullopt) {
+    if(!dyno::convert<INPUT, OUTPUT>(input, output)) return false;
+
+    //does actually have a header
+    if constexpr (internal::HasMsgHeader<OUTPUT>::value) {
+        // output.header.stamp = toRosTime(timestamp);
+        output.header.frame_id = frame_id;
+    }
+
+    //if has child frame id
+    if constexpr (internal::HasChildFrame<OUTPUT>::value) {
+        if(child_frame_id) {
+            output.child_frame_id = child_frame_id.value();
+        }
+    }
+
+    return true;
+}
 
 
 } //utils

@@ -98,7 +98,7 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
         new AbsolutePoseProblem(
         adapter, AbsolutePoseProblem::KNEIP ) );
 
-    LOG(INFO) << "Solving ransac";
+    // LOG(INFO) << "Solving ransac";
     // run ransac
     ransac.sac_model_ = absposeproblem_ptr;
     //https://github.com/laurentkneip/opengv/issues/121
@@ -148,10 +148,10 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
 
     //TODO: update result if inliers < outliers or something!!!
 
-    // if(VLOG_IS_ON(10)) {
-        LOG(INFO) << "PnP RANSAC success with\n"
-            << " - inliers/outliers: " << inliers.size() << "/" << outliers.size();
-    // }
+    // // if(VLOG_IS_ON(10)) {
+    //     LOG(INFO) << "PnP RANSAC success with\n"
+    //         << " - inliers/outliers: " << inliers.size() << "/" << outliers.size();
+    // // }
 
     return MotionResult(opengv_transform);
 }

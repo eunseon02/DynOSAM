@@ -93,8 +93,11 @@ struct KeypointStatus {
   }
 };
 
+/// @brief A pair relating a tracklet ID with an observed keypoint
 using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
+/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
 using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
+/// @brief A vector of StatusKeypointMeasurements
 using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
 
 //Optional string that can be modified directly (similar to old-stype boost::optional)
