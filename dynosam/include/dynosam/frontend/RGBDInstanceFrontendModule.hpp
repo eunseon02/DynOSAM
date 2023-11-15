@@ -60,7 +60,8 @@ private:
         const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
 
-    // std::map<ObjectId, gtsam::Pose3> constructVisibleObjectPoses()
+
+    void logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id);
 
 
 };

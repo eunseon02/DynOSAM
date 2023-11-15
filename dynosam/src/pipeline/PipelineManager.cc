@@ -23,6 +23,8 @@
 
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
+#include "dynosam/utils/TimingStats.hpp"
+
 #include <glog/logging.h>
 
 //TODO: for now should be in params
@@ -105,11 +107,13 @@ void DynoPipelineManager::shutdownPipelines() {
     display_queue_.shutdown();
     frontend_pipeline_->shutdown();
     data_interface_->shutdown();
-    frontend_viz_pipeline_->shutdown();
+
+    if(frontend_viz_pipeline_) frontend_viz_pipeline_->shutdown();
 }
 
 bool DynoPipelineManager::spin() {
 
+    utils::TimingStatsCollector timer("pipeline_spin");
     if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
         spinViz(); //for now
         //a later problem!
@@ -130,7 +134,9 @@ void DynoPipelineManager::launchSpinners() {
     LOG(INFO) << "Running PipelineManager with parallel_run=true";
     frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
     data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataInterfacePipeline::spin, data_interface_.get()), "data-interface-spinner");
-    frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
+
+    if(frontend_viz_pipeline_)
+        frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");
 }
 
 

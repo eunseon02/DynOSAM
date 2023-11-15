@@ -7,6 +7,7 @@
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 #include "dynosam/utils/Timing.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 
 #include <atomic>
 #include <functional>  // for function
@@ -85,9 +86,6 @@ public:
 
 protected:
   const std::string module_name_;
-
-
-  bool parallel_run{ true };
   std::atomic_bool is_thread_working{ false };
 
 private:
@@ -132,8 +130,8 @@ public:
       return PipelineReturnCode::IS_SHUTDOWN;
     }
 
-    auto tic_spin = utils::Timer::tic();
     PipelineReturnCode return_code;
+    utils::TimingStatsCollector timing_stats(module_name_);
 
     InputConstSharedPtr input = nullptr;
     is_thread_working = false;
@@ -286,8 +284,8 @@ public:
   using InputQueue = ThreadsafeQueue<typename Base::InputConstSharedPtr>;
   using OutputQueue = typename Base::OutputQueue;
 
-  SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_)
-    : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_))
+  SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_, bool parallel_run = true)
+    : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_)), parallel_run_(parallel_run)
   {
   }
 
@@ -300,7 +298,14 @@ protected:
     // {
     //   return nullptr;
     // }
-    bool queue_state = input_queue->popBlocking(input);
+    bool queue_state;
+    if(parallel_run_) {
+      queue_state = input_queue->popBlocking(input);
+    }
+    else {
+      queue_state = input_queue->pop(input);
+    }
+
     // bool queue_state = input_queue->pop(input);
     if (queue_state)
     {
@@ -327,6 +332,7 @@ protected:
 
 private:
   InputQueue* input_queue;
+  bool parallel_run_;
 };
 
 }  // namespace dyno

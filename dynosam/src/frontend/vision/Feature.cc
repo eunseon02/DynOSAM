@@ -56,6 +56,10 @@ void FeatureContainer::remove(TrackletId tracklet_id) {
 
 }
 
+void FeatureContainer::clear() {
+    feature_map_.clear();
+}
+
 TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     TrackletIds tracklets;
     for(const auto& feature : *this) {

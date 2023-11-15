@@ -25,6 +25,8 @@
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/Numerical.hpp"
 
+#include "dynosam/utils/Statistics.hpp"
+
 
 #include <glog/logging.h>
 
@@ -46,6 +48,9 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
     return nullptr;
   }
 
+  utils::StatsCollector queue_size_stats("data-interface_queue_size #");
+  queue_size_stats.AddSample(packet_queue_.size());
+
   bool queue_state;
   ImageContainer::Ptr packet = nullptr;
 
@@ -59,7 +64,7 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
 
 
   if(!queue_state) {
-    //  LOG(WARNING)
+    //  LOG_EVERY_N(WARNING, 10)
     //     << "Module: " << MIMO::module_name_ << " - queue is down";
         return nullptr;
   }

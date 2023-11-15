@@ -7,4 +7,4 @@
 --frontend_type=0
 
 
---semantic_mask_step_size=10
+--semantic_mask_step_size=100

@@ -88,6 +88,7 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/GtsamUtils.cc
   src/utils/Spinner.cc
   src/utils/Statistics.cc
+  src/utils/TimingStats.cc
 
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc

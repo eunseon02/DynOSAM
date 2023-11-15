@@ -28,6 +28,8 @@
 #include "rclcpp/time.hpp"
 
 #include "nav_msgs/msg/odometry.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 
 
 
@@ -57,30 +59,45 @@ bool dyno::convert(const dyno::Timestamp& time_seconds, builtin_interfaces::msg:
   return true;
 }
 
-
-//will not do time or tf links
 template <>
-bool dyno::convert(const gtsam::Pose3& pose, nav_msgs::msg::Odometry& odom)
+bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::Pose& msg)
 {
   const gtsam::Rot3& rotation = pose.rotation();
   const gtsam::Quaternion& quaternion = rotation.toQuaternion();
 
   // Position
-  odom.pose.pose.position.x = pose.x();
-  odom.pose.pose.position.y = pose.y();
-  odom.pose.pose.position.z = pose.z();
+  msg.position.x = pose.x();
+  msg.position.y = pose.y();
+  msg.position.z = pose.z();
 
   // Orientation
-  odom.pose.pose.orientation.w = quaternion.w();
-  odom.pose.pose.orientation.x = quaternion.x();
-  odom.pose.pose.orientation.y = quaternion.y();
-  odom.pose.pose.orientation.z = quaternion.z();
+  msg.orientation.w = quaternion.w();
+  msg.orientation.x = quaternion.x();
+  msg.orientation.y = quaternion.y();
+  msg.orientation.z = quaternion.z();
   return true;
 }
+
+template <>
+bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::PoseStamped& msg)
+{
+  return convert<gtsam::Pose3, geometry_msgs::msg::Pose>(pose, msg.pose);
+}
+
+
+//will not do time or tf links or covariance....
+template <>
+bool dyno::convert(const gtsam::Pose3& pose, nav_msgs::msg::Odometry& odom)
+{
+  return convert<gtsam::Pose3, geometry_msgs::msg::Pose>(pose, odom.pose.pose);
+}
+
+
 
 
 namespace dyno
 {
+namespace utils {
 
 Timestamp fromRosTime(const rclcpp::Time& time)
 {
@@ -96,4 +113,5 @@ rclcpp::Time toRosTime(Timestamp timestamp)
   return time;
 }
 
+} //utils
 }  // dyno

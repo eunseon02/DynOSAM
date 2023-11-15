@@ -244,6 +244,8 @@ public:
             return false;
         }
 
+
+        utils::TimingStatsCollector data_set_provider_timer("dataset_spin");
         if(!BaseDynoDataset::processSingle(active_frame_id)) {
             LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id;
             return false;

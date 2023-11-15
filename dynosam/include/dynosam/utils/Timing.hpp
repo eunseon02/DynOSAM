@@ -33,18 +33,23 @@ namespace utils
 class Timer
 {
 public:
-  static std::chrono::high_resolution_clock::time_point tic()
+  /// @brief Alias for high resolution clock
+  using Clock = std::chrono::high_resolution_clock;
+  /// @brief Alias for time point as defined by Timer::Clock
+  using TimePoint = Clock::time_point;
+
+  static TimePoint tic()
   {
-    return std::chrono::high_resolution_clock::now();
+    return Clock::now();
   }
 
   // Stop timer and report duration in given time.
   // Returns duration in milliseconds by default.
   // call .count() on returned duration to have number of ticks.
   template <typename T = std::chrono::milliseconds>
-  static T toc(const std::chrono::high_resolution_clock::time_point& start)
+  static T toc(const TimePoint& start)
   {
-    return std::chrono::duration_cast<T>(std::chrono::high_resolution_clock::now() - start);
+    return std::chrono::duration_cast<T>(Clock::now() - start);
   }
 
   /**
@@ -54,7 +59,7 @@ public:
    */
   static double now()
   {
-    auto t_now = std::chrono::high_resolution_clock::now().time_since_epoch();
+    auto t_now = Clock::now().time_since_epoch();
     return static_cast<double>(std::chrono::duration_cast<std::chrono::nanoseconds>(t_now).count()) / 1e9;
   }
 
@@ -70,6 +75,7 @@ public:
 template <typename T = std::chrono::milliseconds>
 struct Measure
 {
+
   template <typename F, typename... Args>
   static typename T::rep execution(F&& func, Args&&... args)
   {

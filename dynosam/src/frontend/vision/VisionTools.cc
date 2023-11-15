@@ -87,7 +87,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     std::vector<int> sf_range(10,0);
 
     const size_t num_object_features = object_observation.object_features_.size();
-    LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
+    // LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
 
     for(const TrackletId tracklet_id : object_observation.object_features_) {
       if(previous_dynamic_feature_container.exists(tracklet_id)) {
@@ -152,21 +152,21 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
     {
       // label this object as static background
-      LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;
+      // LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;
       instance_labels_to_remove.push_back(instance_label);
     }
     else {
-      LOG(INFO) << "Instance object " << instance_label << " marked as dynamic";
+      // LOG(INFO) << "Instance object " << instance_label << " marked as dynamic";
       object_observation.marked_as_moving_ = true;
     }
   }
 
   //we do the removal after the iteration so as not to mess up the loop
   for(const auto label : instance_labels_to_remove) {
-    LOG(INFO) << "Removing label " << label;
+    // LOG(INFO) << "Removing label " << label;
     //TODO: this is really really slow!!
     current_frame->moveObjectToStatic(label);
-    LOG(INFO) << "Done Removing label " << label;
+    // LOG(INFO) << "Done Removing label " << label;
   }
 
 
@@ -177,7 +177,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
   for(auto& [instance_label, object_observation] : objects_by_instance_label) {
     CHECK(object_observation.marked_as_moving_) << "Object with instance label "
       << instance_label << " is not marked as moving, but should be";
-    LOG(INFO) << "Assigning tracking label for instance " << instance_label;
+    // LOG(INFO) << "Assigning tracking label for instance " << instance_label;
 
     const size_t num_object_features = object_observation.object_features_.size();
     // save semantic labels in last frame
@@ -197,7 +197,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     const bool tracked_in_previous_frame = instance_labels_prev.size() > 0u;
     //since we only call this function after boostrapping (frame > 1) this condition only works when an object appears from frame 2 onwards
     if(!tracked_in_previous_frame) {
-      LOG(INFO) << "New object with instance label " << instance_label << " assigned tracking label " << Frame::global_object_id;
+      // LOG(INFO) << "New object with instance label " << instance_label << " assigned tracking label " << Frame::global_object_id;
       current_frame->updateObjectTrackingLabel(object_observation, Frame::global_object_id);
       Frame::global_object_id++;
       continue;
@@ -243,12 +243,12 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
       //tracking label has not been updated from previous frame? will still be -1?
       if(it != previous_object_observations.end() && it->second.tracking_label_ != -1) {
         ObjectId propogated_tracking_label = it->second.tracking_label_;
-        LOG(INFO) << "Propogating tracking label " << propogated_tracking_label << " from frames " << previous_frame.frame_id_ << " -> " << current_frame->frame_id_;
+        // LOG(INFO) << "Propogating tracking label " << propogated_tracking_label << " from frames " << previous_frame.frame_id_ << " -> " << current_frame->frame_id_;
         current_frame->updateObjectTrackingLabel(object_observation, propogated_tracking_label);
       }
       else {
         // new object (or at least not tracked)
-        LOG(INFO) << "New object with instance label " << instance_label << " assigned tracking label " << Frame::global_object_id;
+        // LOG(INFO) << "New object with instance label " << instance_label << " assigned tracking label " << Frame::global_object_id;
 
         current_frame->updateObjectTrackingLabel(object_observation, Frame::global_object_id);
         Frame::global_object_id++;

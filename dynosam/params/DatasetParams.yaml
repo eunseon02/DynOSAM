@@ -9,5 +9,5 @@ depth_scale_factor: 256.0
 
 
 ## Virtual Kiti Params
-scene: "Scene18"
+scene: "Scene20"
 scene_type: "clone"

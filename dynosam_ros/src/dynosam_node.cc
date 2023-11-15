@@ -40,6 +40,7 @@ int main(int argc, char* argv[]) {
 
     rclcpp::NodeOptions options;
     options.arguments(args);
+    options.use_intra_process_comms(true);
 
     rclcpp::executors::SingleThreadedExecutor exec;
     auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();

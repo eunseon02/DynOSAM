@@ -21,36 +21,50 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/utils/YamlParser.hpp"
+#pragma once
 
-#include <string>
+#include "dynosam/utils/Statistics.hpp"
+#include "dynosam/utils/Timing.hpp"
+#include <atomic>
 
 namespace dyno {
+namespace utils {
 
-FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
-    YamlParser yaml_parser(file_path);
+class TimingStatsCollector {
+public:
+    TimingStatsCollector(const std::string& tag);
+    ~TimingStatsCollector();
 
-    FrontendParams params;
-    yaml_parser.getYamlParam("MaxTrackPointBG", &params.max_tracking_points_bg);
-    yaml_parser.getYamlParam("MaxTrackPointOBJ", &params.max_tracking_points_obj);
-    yaml_parser.getYamlParam("cell_size", &params.cell_size);
+    /**
+     * @brief Resets the current tic_time and sets is_valid = true,
+     * such that when the collector tries to toc, the tic (comparison time) will be valid
+     *
+     *
+     */
+    void reset();
 
-    yaml_parser.getYamlParam("SFMgThres", &params.scene_flow_magnitude);
-    yaml_parser.getYamlParam("SFDsThres", &params.scene_flow_percentage);
+    bool isValid() const;
 
-    yaml_parser.getYamlParam("ThDepthBG", &params.depth_background_thresh);
-    yaml_parser.getYamlParam("ThDepthOBJ", &params.depth_obj_thresh);
+private:
+    /**
+     * @brief Creates a toc time to compare against the latest tic time and logs the diff
+     * as sample to the collector
+     *
+     * Only logs if is_valid_ == true, after which is_valid will be set to false.
+     * The collector then needs to be reset to be used again
+     *
+     */
+    void tocAndLog();
 
-    yaml_parser.getYamlParam("ORBextractor.nFeatures", &params.n_features);
-    yaml_parser.getYamlParam("ORBextractor.scaleFactor", &params.scale_factor);
-    yaml_parser.getYamlParam("ORBextractor.nLevels", &params.n_levels);
-    yaml_parser.getYamlParam("ORBextractor.iniThFAST", &params.init_threshold_fast);
-    yaml_parser.getYamlParam("ORBextractor.minThFAST", &params.min_threshold_fast);
+private:
+    Timer::TimePoint tic_time_; //! Time on creation (the time to compare against)
+    StatsCollector collector_;
 
-    return params;
+    std::atomic_bool is_valid_{true}; //! Indiactes validity of the tic_time and if the collector has been reset allowing a new toc to be made
 
-}
+};
 
 
+
+} //utils
 } //dyno
