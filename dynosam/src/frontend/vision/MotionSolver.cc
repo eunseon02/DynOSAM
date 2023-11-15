@@ -85,8 +85,6 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
         tracklets_.push_back(corres.tracklet_id_);
     }
 
-
-
     opengv::absolute_pose::CentralAbsoluteAdapter adapter(bearing_vectors, points );
 
     // create a Ransac object
@@ -104,17 +102,19 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
     //https://github.com/laurentkneip/opengv/issues/121
     // ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
     ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+    // LOG(INFO) << "Solving ransac";
     ransac.max_iterations_ = 500;
     if(!ransac.computeModel(0)) {
         LOG(WARNING) << "Could not compute ransac mode";
         return MotionResult::Unsolvable();
     }
 
+    // LOG(INFO) << "here";
     // // get the result
     opengv::transformation_t best_transformation =
         ransac.model_coefficients_;
 
-
+    // LOG(INFO) << "here";
     // gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
     // poseMat.block<3, 4>(0, 0) = best_transformation;
     // gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse

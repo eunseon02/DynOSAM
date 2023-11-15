@@ -60,7 +60,7 @@ DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& option
 
     // TODO: and which dataset!!
     // auto data_loader = std::make_unique<dyno::KittiDataLoader>(dataset_path, kitti_params);
-    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
+  auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
 
 
    pipeline_ = std::make_unique<DynoPipelineManager>(params, std::move(data_loader), frontend_display);

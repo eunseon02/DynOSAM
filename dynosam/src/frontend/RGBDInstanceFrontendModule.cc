@@ -114,6 +114,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
 
     }
+    CHECK(frame);
+
+    LOG(INFO) << "Done tracking on frame " << input->getFrameId();
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
 
@@ -122,6 +125,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     }
+
+    LOG(INFO) << "Done depth updagte";
 
 
     AbsolutePoseCorrespondences correspondences;
@@ -133,12 +138,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
     }
 
+    LOG(INFO) << "Done correspondences";
+
     TrackletIds inliers, outliers;
     MotionResult camera_pose_result;
     {
         utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
         camera_pose_result = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
     }
+
+    // LOG(INFO) << "Done correspondences";
 
     if(camera_pose_result.valid()) {
         frame->T_world_camera_ = camera_pose_result.get();

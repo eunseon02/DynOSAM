@@ -89,7 +89,7 @@ bool convertWithHeader(const INPUT& input, OUTPUT& output, Timestamp timestamp, 
 
     //does actually have a header
     if constexpr (internal::HasMsgHeader<OUTPUT>::value) {
-        // output.header.stamp = toRosTime(timestamp);
+        output.header.stamp = toRosTime(timestamp);
         output.header.frame_id = frame_id;
     }
 
