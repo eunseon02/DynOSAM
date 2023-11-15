@@ -41,7 +41,6 @@ namespace dyno {
 
 FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHECK_NOTNULL(node)) {
 
-    //use best effort (sensor data) QoS for large topics: https://github.com/IntelRealSense/realsense-ros/issues/1827
     const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     tracking_image_pub_ = image_transport::create_publisher(node.get(), "~/tracking_image");
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/static", 1);
@@ -62,7 +61,6 @@ FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHE
 }
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
-    // RCLCPP_ERROR_STREAM(node_->get_logger(), "AHGJKDHSJKDFHDS");
     publishOdometry(frontend_output->T_world_camera_, frontend_output->getTimestamp());
     publishOdometryPath(frontend_output->T_world_camera_, frontend_output->getTimestamp());
     publishDebugImage(frontend_output->debug_image_);
@@ -75,9 +73,6 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
     RGBDInstanceOutputPacket::ConstPtr rgbd_output = safeCast<FrontendOutputPacketBase, RGBDInstanceOutputPacket>(frontend_output);
     if(rgbd_output) {
         processRGBDOutputpacket(rgbd_output);
-    }
-    else {
-        LOG(ERROR) << "no rgbd output";
     }
 
 }
@@ -95,6 +90,7 @@ void FrontendDisplayRos::publishStaticCloud(const Landmarks& static_landmarks) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
     for(const Landmark& lmk : static_landmarks) {
+        // publish static lmk's as white
         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 0, 0, 0);
         cloud.points.push_back(pt);
     }
@@ -137,9 +133,6 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
     delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
 
     object_pose_marker_array.markers.push_back(delete_marker);
-    // object_path_marker_array.markers.push_back(delete_marker);
-
-    LOG(INFO) << "PP poses " << propogated_object_poses.size();
 
     for(const auto&[object_id, pose] : propogated_object_poses) {
 
@@ -170,6 +163,7 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
 
             object_pose_marker_array.markers.push_back(marker);
 
+            //update past trajectotries of objects
             auto it = object_trajectories_.find(object_id);
             if(it == object_trajectories_.end()) {
                 object_trajectories_[object_id] = gtsam::Pose3Vector();
@@ -179,23 +173,12 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
             object_trajectories_[object_id].push_back(pose);
     }
 
-    LOG(INFO) << "PP poses " << object_trajectories_.size();
-
-    // for(const auto& [object_id, poses] : object_trajectories_) {
-    //     // LOG(INFO) << frame_id;
-    //     const FrameId last_seen_frame = object_trajectories_update_.at(object_id);
-    //     // const FrameId last_seen_frame = 0;
-    //     LOG(INFO) << poses.size();
-    // }
-
     //iterate over object trajectories and display the ones with enough poses and the ones weve seen recently
     for(const auto& [object_id, poses] : object_trajectories_) {
         const FrameId last_seen_frame = object_trajectories_update_.at(object_id);
-        LOG(INFO) << poses.size();
 
         //if weve seen the object in the last 30 frames and the length is at least 2
         if(poses.size() < 2u) {
-            LOG(ERROR) << "fail";
             continue;
         }
 
@@ -234,74 +217,25 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
                 p.z = prev_pose.z();
 
                 line_list_marker.points.push_back(p);
-                // marker.header.frame_id = "world";
-                // marker.ns = "frontend_composed_object_path";
-                // marker.id = i-1;
-                // marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-                // marker.action = visualization_msgs::msg::Marker::ADD;
-                // marker.header.stamp = node_->now();
-                // marker.pose.position.x = prev_pose.x();
-                // marker.pose.position.y = prev_pose.y();
-                // marker.pose.position.z = prev_pose.z();
-                // marker.pose.orientation.x = 0;
-                // marker.pose.orientation.y = 0;
-                // marker.pose.orientation.z = 0;
-                // marker.pose.orientation.w = 1;
-                // marker.scale.x = 0.1;
-                // // marker.scale.y = 1;
-                // // marker.scale.z = 1;
-                // marker.color.a = 1.0; // Don't forget to set the alpha!
-
-                // const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-                // marker.color.r = colour(0)/255.0;
-                // marker.color.g = colour(1)/255.0;
-                // marker.color.b = colour(2)/255.0;
-
-                // object_path_marker_array.markers.push_back(marker);
-
             }
 
             {
-                // visualization_msgs::msg::Marker marker;
-                // marker.header.frame_id = "world";
-                // marker.ns = "frontend_composed_object_path";
-                // marker.id = i;
-                // marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-                // marker.action = visualization_msgs::msg::Marker::ADD;
-                // marker.header.stamp = node_->now();
-                // marker.pose.position.x = curr_pose.x();
-                // marker.pose.position.y = curr_pose.y();
-                // marker.pose.position.z = curr_pose.z();
-                // marker.pose.orientation.x = 0;
-                // marker.pose.orientation.y = 0;
-                // marker.pose.orientation.z = 0;
-                // marker.pose.orientation.w = 1;
-                // marker.scale.x = 0.1;
-                // // marker.scale.y = 1;
-                // // marker.scale.z = 1;
-                // marker.color.a = 1.0; // Don't forget to set the alpha!
-
-                // const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-                // marker.color.r = colour(0)/255.0;
-                // marker.color.g = colour(1)/255.0;
-                // marker.color.b = colour(2)/255.0;
-
-                // object_path_marker_array.markers.push_back(marker);
-                // LOG(INFO) << "Added marker";
                 geometry_msgs::msg::Point p;
                 p.x = curr_pose.x();
                 p.y = curr_pose.y();
                 p.z = curr_pose.z();
 
                 line_list_marker.points.push_back(p);
-
             }
         }
 
          object_path_marker_array.markers.push_back(line_list_marker);
     }
 
+    // Publish centroids of composed object poses
     object_pose_pub_->publish(object_pose_marker_array);
+
+    // Publish composed object path
     object_pose_path_pub_->publish(object_path_marker_array);
 
 }
@@ -318,8 +252,6 @@ void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Tim
     t.header.frame_id = "world";
     t.child_frame_id = "camera";
 
-    // Turtle only exists in 2D, thus we get x and y translation
-    // coordinates from the message and set the z coordinate to 0
     t.transform.translation.x = T_world_camera.x();
     t.transform.translation.y = T_world_camera.y();
     t.transform.translation.z = T_world_camera.z();
@@ -342,7 +274,7 @@ void FrontendDisplayRos::publishOdometryPath(const gtsam::Pose3& T_world_camera,
     utils::convertWithHeader(T_world_camera, pose_stamped, timestamp, "world");
 
     static std_msgs::msg::Header header;
-    // header.stamp = utils::toRosTime(timestamp);
+    header.stamp = utils::toRosTime(timestamp);
     header.frame_id = "world";
     odom_path_msg_.header = header;
 
@@ -374,7 +306,7 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
     geometry_msgs::msg::PoseStamped pose_stamped;
     utils::convertWithHeader(T_world_camera, pose_stamped, timestamp, "world");
     static std_msgs::msg::Header header;
-    // header.stamp = utils::toRosTime(timestamp);
+    header.stamp = utils::toRosTime(timestamp);
     header.frame_id = "world";
     gt_odom_path_msg_.header = header;
     gt_odom_path_msg_.poses.push_back(pose_stamped);
