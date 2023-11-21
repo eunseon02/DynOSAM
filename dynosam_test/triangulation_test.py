@@ -8,6 +8,8 @@ from mpl_toolkits import mplot3d
 import matplotlib
 import matplotlib.pyplot as plt
 
+import csv
+
 def gen_random_pose(xyz_mean, rpy_mean, xyz_range, rpy_range):
   # rpy mean and range are all in degree
   # xyz mean and range are all in meter
@@ -91,9 +93,9 @@ def plot_whole_test(points_gt, points_est, cam_poses):
   z_axis = np.array([0, 0, 1, 1])
 
   for step in range(len(cam_poses)):
-    ax.scatter3D(points_gt[step][0, :], points_gt[step][1, :], points_gt[step][2, :])
+    ax.scatter3D(points_gt[step][0, :], points_gt[step][1, :], points_gt[step][2, :], label="Point (GT) in world at "+str(step))
     if step > 0:
-      ax.scatter3D(points_est[step-1][0, :], points_est[step-1][1, :], points_est[step-1][2, :])
+      ax.scatter3D(points_est[step-1][0, :], points_est[step-1][1, :], points_est[step-1][2, :], label="Point (Est) in world from "+str(step-1)+" and "+str(step)+" at "+str(step-1))
   
     x_axis_cam = np.matmul(cam_poses[step], x_axis[np.newaxis].T)[0:3]
     y_axis_cam = np.matmul(cam_poses[step], y_axis[np.newaxis].T)[0:3]
@@ -103,9 +105,38 @@ def plot_whole_test(points_gt, points_est, cam_poses):
     ax.plot3D(np.array([o_cam[0], y_axis_cam[0]]), np.array([o_cam[1], y_axis_cam[1]]), np.array([o_cam[2], y_axis_cam[2]]), 'green')
     ax.plot3D(np.array([o_cam[0], z_axis_cam[0]]), np.array([o_cam[1], z_axis_cam[1]]), np.array([o_cam[2], z_axis_cam[2]]), 'blue')
 
-  ax.set_box_aspect([1,1,1])
+    ax.set_xlabel("X")
+    ax.set_ylabel("Y")
+    ax.set_zlabel("Z")
+
+    ax.legend()
+
+    ax.set_aspect('equal', adjustable='datalim')
+    # ax.set_box_aspect([1, 1, 1])
 
   plt.show()
+
+def write_whole_test(points_gt, points_est, cam_poses):
+  file = open('csv/triangulation_1.csv', 'w')
+  writer = csv.writer(file)
+
+  for step in range(len(cam_poses)):
+    writer.writerows(cam_poses[step])
+    writer.writerow([])
+
+  for step in range(len(cam_poses)):
+    this_points_gt = points_gt[step]
+
+    writer.writerows(this_points_gt.T)
+    writer.writerow([])
+
+    if step > 0:
+      this_points_est = points_est[step-1]
+      writer.writerows(this_points_est.T)
+      writer.writerow([])
+
+  file.close()
+
 
 def triangulate_with_rotation(cam_pose_origin, cam_pose_target, intrinsic, obv_origin, obv_target, obj_rot):
   cam_rot_origin = cam_pose_origin[0:3, 0:3]
@@ -185,10 +216,10 @@ def main():
   cam_poses = []
   cam_poses.append(cam_pose_origin)
 
-  cam_mot_xyz_mean = np.array([0.5, 0.5, 3.]) # in meter
+  cam_mot_xyz_mean = np.array([0.1, 0.1, 5.]) # in meter
   cam_mot_rpy_mean = np.array([5., 15., 5.]) # in degree 
-  cam_mot_xyz_range = np.array([0.1, 0.1, 1.]) # in meter
-  cam_mot_rpy_range = np.array([3., 3., 3.]) # in degree 
+  cam_mot_xyz_range = np.array([0., 0., 0.]) # in meter
+  cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
 
   for step in range(example_length-1):
     cam_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
@@ -200,21 +231,21 @@ def main():
 
   print()
 
-  number_points = 8
-  points_origin_centre = np.array([5., 0., 10.])
+  number_points = 12
+  points_origin_centre = np.array([6., 0., 10.])
   points_origin_range = np.array([2., 2., 2.])
   points_origin = gen_random_points(number_points, points_origin_centre, points_origin_range)
 
   points = []
   points.append(points_origin)
   for step in range(example_length-1):
-    points_mot_xyz_mean = np.array([1., 1., 1.]) # in meter
-    points_mot_rpy_mean = np.array([10., 20., 30.]) # in degree 
+    points_mot_xyz_mean = np.array([1., 1., 5.]) # in meter
+    points_mot_rpy_mean = np.array([5., 10., 15.]) # in degree 
     points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
-    points_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
+    points_mot_rpy_range = np.array([1., 1., 1.]) # in degree 
     points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
     # points_motion = np.identity(4, dtype=float)
-    points_target = transform_points(points_origin, points_motion)
+    points_target = transform_points(points[step], points_motion)
     points.append(points_target)
 
   for step in range(len(points)):
@@ -264,6 +295,8 @@ def main():
       points_estimated.append(points_triangulated_test)
 
   plot_whole_test(points, points_estimated, cam_poses)
+
+  write_whole_test(points, points_estimated, cam_poses)
 
 if __name__ == "__main__":
   main()
