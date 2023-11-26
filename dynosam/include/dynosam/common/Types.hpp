@@ -33,6 +33,7 @@
 #include <optional>
 
 #include <glog/logging.h>
+#include <type_traits>
 
 
 namespace dyno
@@ -61,20 +62,83 @@ using Landmark = gtsam::Point3;
 using Landmarks = gtsam::Point3Vector; //! Vector of Landmarks using gtsam's definition for allocation
 using LandmarkMap = std::unordered_map<TrackletId, Landmark>;
 
+using OpticalFlow = gtsam::Point2; //! Observed optical flow vector (ordered x, y)
+
 using Keypoint = gtsam::Point2;
 using Keypoints = gtsam::Point2Vector; //! Vector of 2D keypoints using gtsam's definition for allocation
 
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 
+using Motion3 = gtsam::Pose3;
+using MotionMap = std::unordered_map<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
+
+
+//! Expected label for the background in a semantic or motion mask
+constexpr static ObjectId background_label = 0u;
 
 enum KeyPointType {
     STATIC,
     DYNAMIC
 };
 
-//! Expected label for the background in a semantic or motion mask
-constexpr static ObjectId background_label = 0u;
+enum ReferenceFrame {
+  WORLD,
+  CAMERA,
+  OBJECT
+};
+
+// /**
+//  * @brief Reference wrapper for a type T with operating casting
+//  *
+//  * @tparam T
+//  */
+// template<typename T>
+// struct Ref {
+//   using Type = T;
+
+//   Type& value;
+//   operator Type&() { return value; }
+//   operator const Type&() const { return value; }
+// };
+
+/**
+ * @brief Estimate with a reference frame and operator casting
+ *
+ * If the estimate E should be const, template on const E
+ * If estimate E should be a reference, can template on E&
+ *
+ * @tparam E
+ */
+template<typename E>
+struct ReferenceFrameEstimate {
+  using Estimate = E;
+
+  using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
+
+  Estimate estimate_;
+  const ReferenceFrame frame_;
+
+  ReferenceFrameEstimate() {}
+  ReferenceFrameEstimate(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
+
+  operator Estimate&() { return estimate_; }
+  operator const Estimate&() const { return estimate_; }
+  operator const ReferenceFrame&() const { return frame_; }
+
+};
+
+/**
+ * @brief Map of key to an estimate containting a reference frame
+ *
+ * @tparam Key
+ * @tparam Estimate
+ */
+template<typename Key, typename Estimate>
+using EstimateMap = std::unordered_map<Key, ReferenceFrameEstimate<Estimate>>;
+
+/// @brief Map of object ids to ReferenceFrameEstimate's of motions
+using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
 
 //unsure if should be in types but whatever for now
 struct KeypointStatus {
@@ -99,6 +163,8 @@ using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
 using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
 /// @brief A vector of StatusKeypointMeasurements
 using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
+
+
 
 //Optional string that can be modified directly (similar to old-stype boost::optional)
 //to access the mutable reference the internal string must be accessed with get()

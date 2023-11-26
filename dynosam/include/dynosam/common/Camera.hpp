@@ -42,7 +42,8 @@ public:
 
     // Camera implementation provided by gtsam
     // original one is Cal3_S2 -> not sure what diff is?
-    using CameraImpl = gtsam::PinholeCamera<gtsam::Cal3DS2>;
+    using CalibrationType = gtsam::Cal3DS2;
+    using CameraImpl = gtsam::PinholeCamera<CalibrationType>;
 
     /**
    * @brief Projects a 3D point in the camera frame into the image frame as a

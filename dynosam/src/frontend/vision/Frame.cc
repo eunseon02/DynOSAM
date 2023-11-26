@@ -137,6 +137,12 @@ Landmark Frame::backProjectToWorld(TrackletId tracklet_id) const {
     return getLandmarkFromCache(landmark_in_world_cache_, feature, T_world_camera_);
 }
 
+
+Camera::CameraImpl Frame::getFrameCamera() const {
+    const CameraParams& camera_params = camera_->getParams();
+    return Camera::CameraImpl(T_world_camera_, camera_params.constructGtsamCalibration<Camera::CalibrationType>());
+}
+
 void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth) {
     updateDepthsFeatureContainer(static_features_, depth, max_static_depth);
     updateDepthsFeatureContainer(dynamic_features_, depth, max_dynamic_depth);

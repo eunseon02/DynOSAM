@@ -81,6 +81,8 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
 
+  src/factors/Pose3FlowProjectionFactor.cc
+
   src/pipeline/PipelineManager.cc
   src/pipeline/PIpelineParams.cc
 

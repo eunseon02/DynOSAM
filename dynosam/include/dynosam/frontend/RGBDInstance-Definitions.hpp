@@ -39,6 +39,7 @@ public:
 
     const Landmarks static_landmarks_; //! in the world frame
     const Landmarks dynamic_landmarks_; //! in the world frame
+    const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
     const std::map<ObjectId, gtsam::Pose3> propogated_object_poses_;
 
      RGBDInstanceOutputPacket(
@@ -48,6 +49,7 @@ public:
         const Landmarks& dynamic_landmarks,
         const gtsam::Pose3 T_world_camera,
         const Frame& frame,
+        const MotionEstimateMap& estimated_motions,
         const std::map<ObjectId, gtsam::Pose3> propogated_object_poses = {},
         const cv::Mat& debug_image = cv::Mat(),
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
@@ -63,6 +65,7 @@ public:
         gt_packet),
     static_landmarks_(static_landmarks),
     dynamic_landmarks_(dynamic_landmarks),
+    estimated_motions_(estimated_motions),
     propogated_object_poses_(propogated_object_poses)
     {
         //they need to be the same size as we expect a 1-to-1 relation between the keypoint and the landmark (which acts as an initalisation point)

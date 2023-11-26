@@ -52,7 +52,26 @@ private:
 
     void publishStaticCloud(const Landmarks& static_landmarks);
     void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
+
+    /**
+     * @brief Draw propogated (composed) object poses as estimated with frame to frame motion from the frontend
+     *
+     * Also draw object paths (as separate topic) using LINE_LISTS.
+     *
+     * @param propogated_object_poses
+     * @param frame_id
+     */
     void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
+
+    /**
+     * @brief Draw object motion as arrows starting from the current object pose.
+     *
+     * This viz is slightly misleading as the motion is from t-t to t and the object pose is estimated for time t.
+     *
+     * @param motion_estimates
+     * @param propogated_object_poses
+     */
+    void publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
 
     // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
@@ -77,6 +96,8 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_path_pub_; //! Path of propogated object poses using the motion estimate
     std::map<ObjectId, gtsam::Pose3Vector> object_trajectories_;
     std::map<ObjectId, FrameId> object_trajectories_update_; //! The last frame id that the object was seen in
+
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_motion_pub_; //! Draw object motion as arrows
 
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
     image_transport::Publisher tracking_image_pub_;

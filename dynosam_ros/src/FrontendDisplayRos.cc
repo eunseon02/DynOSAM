@@ -49,6 +49,7 @@ FrontendDisplayRos::FrontendDisplayRos(rclcpp::Node::SharedPtr node) : node_(CHE
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_poses", 1);
     object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
+    object_motion_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_motions", 1);
 
     gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 1);
     gt_object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_poses", sensor_data_qos);
@@ -189,7 +190,7 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
         line_list_marker.ns = "frontend_composed_object_path";
         line_list_marker.id = object_id;
         line_list_marker.header.stamp = node_->now();
-        line_list_marker.scale.x = 0.1;
+        line_list_marker.scale.x = 0.3;
 
         line_list_marker.pose.orientation.x = 0;
         line_list_marker.pose.orientation.y = 0;
@@ -241,6 +242,13 @@ void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::
 }
 
 
+void FrontendDisplayRos::publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
+    CHECK_EQ(motion_estimates.size(), propogated_object_poses.size());
+
+    //should have a 1 to 1 between the motion map and the propogated poses (same object ids in both)
+}
+
+
 
 void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
     nav_msgs::msg::Odometry odom_msg;
@@ -287,11 +295,11 @@ void FrontendDisplayRos::publishOdometryPath(const gtsam::Pose3& T_world_camera,
 void FrontendDisplayRos::publishDebugImage(const cv::Mat& debug_image) {
     if(debug_image.empty()) return;
 
-    cv::Mat resized_image;
-    cv::resize(debug_image, resized_image, cv::Size(640, 480));
+    // cv::Mat resized_image;
+    // cv::resize(debug_image, resized_image, cv::Size(640, 480));
 
     std_msgs::msg::Header hdr;
-    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", resized_image).toImageMsg();
+    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", debug_image).toImageMsg();
     tracking_image_pub_.publish(msg);
 }
 
