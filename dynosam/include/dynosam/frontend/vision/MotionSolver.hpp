@@ -43,13 +43,34 @@ public:
     enum Status { VALID, NOT_ENOUGH_CORRESPONDENCES, NOT_ENOUGH_INLIERS, UNSOLVABLE };
     Status status;
 
+    TrackletIds ids_used_;
+    TrackletIds inliers_;
+    TrackletIds outliers_;
+
 private:
     MotionResult(Status s) : status(s) {};
 
 public:
     MotionResult() {}
 
-    MotionResult(const gtsam::Pose3& pose) : status(VALID) { emplace(pose); }
+    MotionResult(
+        const gtsam::Pose3& pose,
+        const TrackletIds& ids_used,
+        const TrackletIds& inliers,
+        const TrackletIds& outliers)
+    : status(VALID),
+      ids_used_(ids_used),
+      inliers_(inliers),
+      outliers_(outliers)
+    {
+        emplace(pose);
+
+        {
+            //debug check
+            //inliers and outliers together should be the set of ids_used
+            CHECK_EQ(ids_used_.size(), inliers_.size() + outliers_.size());
+        }
+    }
 
     operator const gtsam::Pose3&() const { return get(); }
 
@@ -70,6 +91,29 @@ public:
 };
 
 
+namespace motion_solver_tools {
+
+/**
+ * @brief Generic Motion solver free function called from the MotionSolver class
+ *
+ * Expects the result to be in left hand side multiply form so if solving for camera pose, the pose should be T_world_camera
+ * where P_world = T_world_camera * P_camera
+ *
+ * @tparam RefType
+ * @tparam CurrType
+ * @param correspondences
+ * @param params
+ * @param camera_params
+ * @return MotionResult
+ */
+template<typename RefType, typename CurrType>
+MotionResult solveMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const FrontendParams& params, const CameraParams& camera_params);
+
+}
+
+
+
+
 class MotionSolver {
 
 public:
@@ -77,12 +121,30 @@ public:
 
     MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
 
+    template<typename RefType, typename CurrType>
+    MotionResult solveCameraPose(const GenericCorrespondences<RefType, CurrType>& correspondences) const {
+        return motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
+    }
+
+    template<typename RefType, typename CurrType>
+    MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& curr_T_world_camera_) const {
+        const MotionResult result = motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
+        if(result.valid()) {
+            const gtsam::Pose3 G_w = result.get().inverse();
+            const gtsam::Pose3 H_w = curr_T_world_camera_ * G_w;
+            return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
+        }
+
+        //if not valid, return motion result as is
+        return result;
+    }
+
     //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
-    MotionResult solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
-    MotionResult solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers);
+    // MotionResult solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
+    // MotionResult solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers);
 
 protected:
-    MotionResult solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
+    // MotionResult solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
 
 protected:
     const FrontendParams params_;

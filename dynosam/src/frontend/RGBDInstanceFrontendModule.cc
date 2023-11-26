@@ -23,6 +23,7 @@
 
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -140,11 +141,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     LOG(INFO) << "Done correspondences";
 
-    TrackletIds inliers, outliers;
     MotionResult camera_pose_result;
     {
         utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-        camera_pose_result = motion_solver_.solveCameraPose(correspondences, inliers, outliers);
+        camera_pose_result = motion_solver_.solveCameraPose(correspondences);
     }
 
     // LOG(INFO) << "Done correspondences";
@@ -162,19 +162,35 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     TrackletIds tracklets = frame->static_features_.collectTracklets();
     CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
-    frame->static_features_.markOutliers(outliers); //do we need to mark innliers? Should start as inliers
+    frame->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
 
     {
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
         vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
     }
 
+    MotionEstimateMap motion_estimates;
     std::map<ObjectId, gtsam::Pose3> per_frame_object_poses; //for viz
     for(const auto& [object_id, observations] : frame->object_observations_) {
         utils::TimingStatsCollector object_motion_timer("solve_object_motion");
         AbsolutePoseCorrespondences dynamic_correspondences;
 
-        //get the corresponding feature pairs
+        // auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        //     const Frame& current_frame = *frame;
+
+        //     const Landmark&
+
+        //     return TrackletCorrespondance<Landmark, Landmark>()
+        // }
+
+        // GenericCorrespondences<Landmark, Landmark> dynamic_correspondences;
+        //   bool result = frame->getDynamicCorrespondences(
+        //     dynamic_correspondences,
+        //     *previous_frame_,
+        //     object_id,
+        //     [&]());
+
+        // //get the corresponding feature pairs
         bool result = frame->getDynamicCorrespondences(
             dynamic_correspondences,
             *previous_frame_,
@@ -188,15 +204,15 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
         LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
 
-        TrackletIds inliers, outliers;
         const MotionResult object_motion_result = motion_solver_.solveObjectMotion(
             dynamic_correspondences,
-            frame->T_world_camera_,
-            inliers,
-            outliers);
+            frame->T_world_camera_);
 
         if(object_motion_result.valid()) {
-            frame->dynamic_features_.markOutliers(outliers);
+            frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
+
+            ReferenceFrameEstimate<Motion3> estimate(object_motion_result, ReferenceFrame::WORLD);
+            motion_estimates.insert({object_id, estimate});
 
             if(!input->optional_gt_.has_value()) {
                 LOG(WARNING) << "Cannot update object pose because no gt!";
@@ -215,13 +231,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     previous_frame_ = frame;
 
-    auto output = constructOutput(*frame, tracking_img, per_frame_object_poses, input->optional_gt_);
+    auto output = constructOutput(*frame, motion_estimates, tracking_img, per_frame_object_poses, input->optional_gt_);
     return {State::Nominal, output};
 }
 
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame,
+    const MotionEstimateMap& estimated_motions,
     const cv::Mat& debug_image,
     const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses,
     const GroundTruthInputPacket::Optional& gt_packet)
@@ -276,6 +293,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         dynamic_landmarks,
         frame.T_world_camera_,
         frame,
+        estimated_motions,
         propogated_object_poses,
         debug_image,
         gt_packet

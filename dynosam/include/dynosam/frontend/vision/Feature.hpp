@@ -63,6 +63,7 @@ public:
     constexpr static auto invalid_depth = NaN; //! nan is used to indicate the absense of a depth value (since we have double)
 
     Keypoint keypoint_; //! u,v keypoint at this frame (frame_id)
+    OpticalFlow measured_flow_; //! Observed optical flow that. The predicted keypoint is calculated as keypoint + flow
     Keypoint predicted_keypoint_; //from optical flow
     size_t age_;
     KeyPointType type_; //! starts STATIC
@@ -76,6 +77,7 @@ public:
 
     Feature() :
         keypoint_(),
+        measured_flow_(),
         predicted_keypoint_(),
         age_(0u),
         type_(KeyPointType::STATIC),
@@ -88,6 +90,7 @@ public:
 
     bool operator==(const Feature& other) const {
         return gtsam::equal_with_abs_tol(keypoint_, other.keypoint_) &&
+               gtsam::equal_with_abs_tol(measured_flow_, other.measured_flow_) &&
                gtsam::equal_with_abs_tol(predicted_keypoint_, other.predicted_keypoint_) &&
                age_ == other.age_ &&
                type_ == other.type_ &&
@@ -98,6 +101,26 @@ public:
                tracking_label_ == other.tracking_label_ &&
                fpEqual(depth_, other.depth_);
     }
+
+    static Keypoint CalculatePredictedKeypoint(const Keypoint& keypoint, const OpticalFlow& measured_flow) {
+        return keypoint + measured_flow;
+    }
+
+    /**
+     * @brief Sets the measured optical flow (which should start at the features keypoint)
+     * and updates the predicted keypoint using the flow: predicted_keypoint_ = keypoint_ + measured_flow_;
+     *
+     * Uses the internal Feature::keypoint_ value
+     *
+     * @param measured_flow
+     */
+    void setPredictedKeypoint(const OpticalFlow& measured_flow) {
+        measured_flow_ = measured_flow;
+        predicted_keypoint_ = CalculatePredictedKeypoint(keypoint_, measured_flow_);
+    }
+
+
+
     /**
      * @brief If the feature is valid - a combination of inlier and if the tracklet Id != -1
      *

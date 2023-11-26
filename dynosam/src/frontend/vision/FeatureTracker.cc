@@ -64,11 +64,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
         const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
         CHECK(!previous_frame_);
         CHECK(img_size_.width == other_size.width && img_size_.height == other_size.height);
-        // computeImageBounds(img_size_, min_x_, max_x_, min_y_, max_y_);
-
-        // grid_elements_width_inv_ = static_cast<double>(FRAME_GRID_COLS) / static_cast<double>(max_x_ - min_x_);
-        // grid_elements_height_inv_ = static_cast<double>(FRAME_GRID_ROWS) / static_cast<double>(max_y_ - min_y_);
-
         initial_computation_ = false;
     }
     else {
@@ -273,25 +268,6 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   n_optical_flow = static_features.size();
   LOG(INFO) << "tracked with optical flow - " << n_optical_flow;
 
-  // Assign Features to Grid Cells
-  // int n_reserve = (FRAME_GRID_COLS * FRAME_GRID_ROWS) / (0.5 * min_tracks);
-  // const int n_reserve = (FRAME_GRID_COLS * FRAME_GRID_ROWS) / (0.5 * n_optical_flow);
-  // LOG(INFO) << "reserving - " << n_reserve;
-
-  // assign tracked features to grid and add to static features
-  // static_features.clear();
-  // // FeaturePtrs features_assigned;
-  // for (Feature::Ptr feature : features_tracked)
-  // {
-  //   const Keypoint& kp = feature->keypoint_;
-  //   int grid_x, grid_y;
-  //   if (posInGrid(kp, grid_x, grid_y))
-  //   {
-  //     grid[grid_x][grid_y].push_back(feature->tracklet_id_);
-  //     static_features.add(feature);
-  //   }
-  // }
-
 
   if (static_features.size() < min_tracks)
   {
@@ -387,11 +363,10 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(y, x)[0]);
         double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(y, x)[1]);
 
+        OpticalFlow flow(flow_xe, flow_ye);
+
         // // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
-        // feature->instance_label = images.semantic_mask.at<InstanceLabel>(y, x);
-
-        //this should be up to date after we update the mask with the propogate mask
         feature->instance_label_ = predicted_label;
         feature->tracking_label_ = predicted_label;
         feature->frame_id_ = frame_id;
@@ -399,7 +374,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->age_ = new_age;
         feature->tracklet_id_ = tracklet_id;
         feature->keypoint_ = kp;
-        feature->predicted_keypoint_ = Keypoint(kp(0) + flow_xe, kp(1) + flow_ye);
+        feature->measured_flow_ = flow;
+        feature->predicted_keypoint_ = Feature::CalculatePredictedKeypoint(kp, flow);
 
         // propogate dynamic object label??
         // feature->label_ = previous_dynamic_feature->label_;
@@ -431,7 +407,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
       double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
       double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
 
-      Keypoint predicted_keypoint(j + flow_xe, i+ flow_ye);
+      OpticalFlow flow(flow_xe, flow_ye);
       Keypoint keypoint(j, i);
       const size_t cell_idx = grid.getCellIndex(keypoint);
 
@@ -450,9 +426,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->age_ = 0;
         feature->tracklet_id_ = tracklet_count;
         tracklet_count++;
-        // the flow is not actually what
-        // feature->optical_flow = cv::Point2d(flow_xe, flow_ye);
-        feature->predicted_keypoint_ = predicted_keypoint;
+        feature->predicted_keypoint_ = Feature::CalculatePredictedKeypoint(keypoint, flow);
         feature->keypoint_ = keypoint;
 
         dynamic_features.add(feature);
@@ -631,14 +605,18 @@ Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& t
     return nullptr;
   }
 
+  OpticalFlow flow(flow_xe, flow_ye);
+
   // check predicted flow is within image
-  Keypoint predicted_kp(static_cast<double>(x) + flow_xe,   static_cast<double>(y) + flow_ye);
+  Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(kp, flow);
   if(!camera_->isKeypointContained(predicted_kp)) {
     return nullptr;
   }
 
   Feature::Ptr feature = std::make_shared<Feature>();
   feature->keypoint_ = kp;
+  feature->measured_flow_ = flow;
+  feature->predicted_keypoint_ = predicted_kp;
   feature->age_ = age;
   feature->tracklet_id_ = tracklet_id;
   feature->frame_id_ = frame_id;
@@ -646,7 +624,6 @@ Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& t
   feature->inlier_ = true;
   feature->instance_label_ = background_label;
   feature->tracking_label_ = background_label;
-  feature->predicted_keypoint_ = predicted_kp;
   return feature;
 }
 

@@ -31,45 +31,40 @@
 
 #include <opengv/absolute_pose/CentralAbsoluteAdapter.hpp>
 #include <opengv/absolute_pose/methods.hpp>
+
+#include <opengv/point_cloud/PointCloudAdapter.hpp>
+#include <opengv/point_cloud/methods.hpp>
 #include <opengv/types.hpp>
 
 #include <glog/logging.h>
 
 namespace dyno {
 
-MotionSolver::MotionSolver(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
+namespace motion_solver_tools {
 
-
-MotionResult MotionSolver::solveCameraPose(const AbsolutePoseCorrespondences& correspondences,  TrackletIds& inliers, TrackletIds& outliers) {
-    return solve3D2DRansac(correspondences, inliers, outliers);
-}
-
-MotionResult MotionSolver::solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers) {
-    const MotionResult result = solve3D2DRansac(correspondences, inliers, outliers);
-    if(result.valid()) {
-        const gtsam::Pose3 G_w = result.get().inverse();
-        const gtsam::Pose3 H_w = curr_T_world_camera_ * G_w;
-        return MotionResult(H_w);
-    }
-
-    //if not valid, return motion result as is
-    return result;
-}
-
-
-MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers) {
-     const size_t& n_matches = correspondences.size();
+/**
+ * @brief Specalisation for 3D -> 2D absolute pose solving method
+ *
+ * @tparam
+ * @param correspondences
+ * @param params
+ * @param camera_params
+ * @return MotionResult
+ */
+template<>
+MotionResult solveMotion(const GenericCorrespondences<Landmark, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+    const size_t& n_matches = correspondences.size();
 
     if(n_matches < 5u) {
         return MotionResult::NotEnoughCorrespondences();
     }
 
     gtsam::Matrix K = gtsam::Matrix::Identity(3, 3);
-    cv::cv2eigen(camera_params_.getCameraMatrix(), K);
+    cv::cv2eigen(camera_params.getCameraMatrix(), K);
 
     K = K.inverse();
 
-    TrackletIds tracklets_;
+    TrackletIds tracklets, inliers, outliers;
     //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
     BearingVectors bearing_vectors;
     Landmarks points;
@@ -82,7 +77,7 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
         bearing_vectors.push_back(versor);
 
         points.push_back(corres.ref_);
-        tracklets_.push_back(corres.tracklet_id_);
+        tracklets.push_back(corres.tracklet_id_);
     }
 
     opengv::absolute_pose::CentralAbsoluteAdapter adapter(bearing_vectors, points );
@@ -114,10 +109,6 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
     opengv::transformation_t best_transformation =
         ransac.model_coefficients_;
 
-    // LOG(INFO) << "here";
-    // gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
-    // poseMat.block<3, 4>(0, 0) = best_transformation;
-    // gtsam::Pose3 opengv_transform(poseMat); //opengv has rotation as the inverse
     gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
 
 
@@ -133,27 +124,89 @@ MotionResult MotionSolver::solve3D2DRansac(const AbsolutePoseCorrespondences& co
 
     // gtsam::Pose3 T_world(opengv_transform.rotation(), opengv_transform.translation());
 
-    inliers.clear();
-    outliers.clear();
     CHECK(ransac.inliers_.size() <= correspondences.size());
     for(int inlier_idx : ransac.inliers_) {
         const auto& corres = correspondences.at(inlier_idx);
         inliers.push_back(corres.tracklet_id_);
     }
 
-    determineOutlierIds(inliers, tracklets_, outliers);
-    CHECK_EQ((inliers.size() + outliers.size()), tracklets_.size());
+    determineOutlierIds(inliers, tracklets, outliers);
+    CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
     CHECK_EQ(inliers.size(), ransac.inliers_.size());
 
 
-    //TODO: update result if inliers < outliers or something!!!
-
-    // // if(VLOG_IS_ON(10)) {
-    //     LOG(INFO) << "PnP RANSAC success with\n"
-    //         << " - inliers/outliers: " << inliers.size() << "/" << outliers.size();
-    // // }
-
-    return MotionResult(opengv_transform);
+    return MotionResult(opengv_transform, tracklets, inliers, outliers);
 }
+
+// /**
+//  * @brief Specalisation for 3D -> 3D using the point cloud alignment method
+//  *
+//  * @tparam
+//  * @param correspondences Should be points expressed in the ref and current frames
+//  * @param params
+//  * @param camera_params
+//  * @return MotionResult
+//  */
+// template<>
+// MotionResult solveMotion(const GenericCorrespondences<Landmark, Landmark>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+//     const size_t& n_matches = correspondences.size();
+
+//     if(n_matches < 3u) {
+//         return MotionResult::NotEnoughCorrespondences();
+//     }
+
+//     TrackletIds tracklets, inliers, outliers;
+//     //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
+//     Landmarks points_ref, point_curr;
+//     for(size_t i = 0u; i < n_matches; i ++) {
+//         const auto& corres = correspondences.at(i);
+
+//         points_ref.push_back(corres.ref_);
+//         point_curr.push_back(corres.cur_);
+//         tracklets.push_back(corres.tracklet_id_);
+//     }
+
+//     // create a 3D-3D adapter
+//     opengv::point_cloud::PointCloudAdapter adapter(
+//         points_ref, point_curr );
+//     // create a RANSAC object
+//     opengv::sac::Ransac<opengv::sac_problems::point_cloud::PointCloudSacProblem> ransac;
+//     // create the sample consensus problem
+//     std::shared_ptr<opengv::sac_problems::point_cloud::PointCloudSacProblem>
+//         relposeproblem_ptr(
+//         new opengv::sac_problems::point_cloud::PointCloudSacProblem(adapter) );
+//     // run ransac
+//     ransac.sac_model_ = relposeproblem_ptr;
+//     // ransac.threshold_ = threshold;
+//     // ransac.max_iterations_ = maxIterations;
+//     ransac.computeModel(0);
+
+//     transformation_t best_transformation =
+//         ransac.model_coefficients_;
+
+//     gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
+
+//     CHECK(ransac.inliers_.size() <= correspondences.size());
+//     for(int inlier_idx : ransac.inliers_) {
+//         const auto& corres = correspondences.at(inlier_idx);
+//         inliers.push_back(corres.tracklet_id_);
+//     }
+
+//     determineOutlierIds(inliers, tracklets, outliers);
+//     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
+//     CHECK_EQ(inliers.size(), ransac.inliers_.size());
+
+//     MotionResult result(opengv_transform);
+//     result.inliers = inliers;
+//     result.outliers = outliers;
+//     result.ids_used = tracklets;
+//     return result;
+// }
+
+} // motion_solver_tools
+
+
+MotionSolver::MotionSolver(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
+
 
 } //dyno

@@ -56,6 +56,7 @@ private:
 
     RGBDInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,
+        const MotionEstimateMap& estimated_motions,
         const cv::Mat& debug_image = cv::Mat(),
         const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);

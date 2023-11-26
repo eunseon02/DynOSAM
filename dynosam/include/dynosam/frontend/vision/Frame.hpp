@@ -165,6 +165,13 @@ public:
      */
     Landmark backProjectToWorld(TrackletId tracklet_id) const;
 
+    /**
+     * @brief Constructs a GTSAM camera for this frame using the current pose of this camera (T_world_camera)
+     *
+     * @return Camera::CameraImpl
+     */
+    Camera::CameraImpl getFrameCamera() const;
+
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
 
 
