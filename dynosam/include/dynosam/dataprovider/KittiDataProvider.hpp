@@ -355,14 +355,33 @@ public:
             CHECK(ground_truth_packet_callback_);
             if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
 
-            auto image_container = ImageContainer::Create(
-                timestamp,
-                frame_id,
-                ImageWrapper<ImageType::RGBMono>(rgb),
-                ImageWrapper<ImageType::Depth>(depth),
-                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::SemanticMask>(instance_mask)
-            );
+            ImageContainer::Ptr image_container = nullptr;
+
+            if(params_.mask_type == MaskType::MOTION) {
+                image_container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::MotionMask>(instance_mask));
+            }
+            else {
+                image_container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::SemanticMask>(instance_mask));
+            }
+
+            // cv::Mat mask_viz;
+            // dyno::utils::semanticMaskToRgb(rgb, instance_mask, mask_viz);
+
+            // cv::imshow("Motion", mask_viz);
+
+            // cv::waitKey(1);
 
 
             CHECK(image_container_callback_);

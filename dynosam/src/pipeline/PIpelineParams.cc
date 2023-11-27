@@ -35,6 +35,11 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
 
     pipeline_parser.getYamlParam("data_provider_type", &data_provider_type_);
+
+    int frontend_type_i;
+    pipeline_parser.getYamlParam("frontend_type", &frontend_type_i);
+    frontend_type_ = static_cast<FrontendType>(frontend_type_i);
+
 }
 
 

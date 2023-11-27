@@ -262,15 +262,8 @@ public:
 
     bool exists(TrackletId tracklet_id) const;
 
-//    //vector begin
-//     inline iterator begin() { return feature_vector_.begin(); }
-//     inline const_iterator begin() const { return feature_vector_.cbegin(); }
 
-//     //vector end
-//     inline iterator end() { return feature_vector_.end(); }
-//     inline const_iterator end() const { return feature_vector_.cend(); }
-
-    //vector beginc
+    //vector begin
     inline vector_iterator begin() { return vector_iterator(feature_map_.begin()); }
     inline const_vector_iterator begin() const { return const_vector_iterator(feature_map_.cbegin()); }
 
@@ -280,7 +273,6 @@ public:
 
     FilterIterator beginUsable();
     FilterIterator beginUsable() const;
-    // ConstFilterIterator beginUsable() const;
 
 
 
@@ -288,16 +280,6 @@ public:
 private:
     TrackletToFeatureMap feature_map_;
 };
-
-// template<typename Iter, typename = std::enable_if_t<internal::is_feature_ptr_iterator<Iter>>
-// TrackletIds FeatureContainer::collectTracklets(Iter iter) const {
-//     TrackletIds tracklets;
-//     for(Feature::Ptr feature : iter) {
-//         tracklets.push_back(feature->tracklet_id_);
-//     }
-
-//     return tracklets;
-// }
 
 /// @brief filter iterator over a FeatureContainer class
 using FeatureFilterIterator = FeatureContainer::FilterIterator;

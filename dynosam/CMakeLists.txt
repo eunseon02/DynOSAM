@@ -75,6 +75,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
+  src/frontend/MonoInstanceFrontendModule.cc
 
   src/frontend/vision/ORBextractor.cc
   src/frontend/vision/FeatureTracker.cc
@@ -91,7 +92,9 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/Spinner.cc
   src/utils/Statistics.cc
   src/utils/TimingStats.cc
+  src/utils/Logger.cc
 
+  src/visualizer/ColourMap.cc
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc
   src/visualizer/Visualizer-Definitions.cc

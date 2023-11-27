@@ -99,7 +99,7 @@ ImageContainer::ImageContainer(
 std::string ImageContainer::toString() const {
     std::stringstream ss;
     ss << "Timestamp: " << timestamp_ << "\n";
-    ss << "Frame Id:" << frame_id_ << "\n";
+    ss << "Frame Id: " << frame_id_ << "\n";
 
     const std::string image_config = isImageRGB() ? "RGB" : "Grey";
     ss << "Configuration: " << image_config

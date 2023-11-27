@@ -25,9 +25,6 @@
 
 #include "dynosam/common/Types.hpp"
 
-//eh gross that we need this here - both should be in vision
-// #include "dynosam/frontend/vision/Vision-Definitions.hpp"
-
 
 namespace dyno {
 
@@ -47,19 +44,6 @@ struct DynamicObjectObservation {
 
 using DynamicObjectObservations = std::vector<DynamicObjectObservation>;
 
-
-// class TemporalDynamic3DObject {
-
-// public:
-//     TemporalDynamic3DObject() {}
-
-//     TemporalDynamic3DObject(ObjectId object_id, const GenericCorrespondences<Landmark, Landmark>& world_correspondences);
-
-// private:
-//     ObjectId object_id_;
-//     GenericCorrespondences<Landmark, Landmark>& world_correspondences_;
-
-// };
 
 
 

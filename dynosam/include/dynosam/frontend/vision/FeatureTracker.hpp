@@ -50,6 +50,16 @@ public:
 
     cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const;
 
+    /**
+     * @brief Get the previous frame.
+     *
+     * Will be null on the first call of track
+     *
+     * @return Frame::Ptr
+     */
+    inline Frame::Ptr getPreviousFrame() { return previous_tracked_frame_; }
+    inline const Frame::ConstPtr getPreviousFrame() const { return previous_tracked_frame_; }
+
 
 protected:
 
@@ -72,24 +82,14 @@ protected:
     ImageDisplayQueue* display_queue_;
 
 private:
-    Frame::Ptr previous_frame_{ nullptr };
+    Frame::Ptr previous_frame_{ nullptr }; //! The frame that will be used as the previous frame next time track is called. After track, this is actually the frame that track() returns
+    Frame::Ptr previous_tracked_frame_{nullptr}; //! The frame that has just beed used to track on a new frame is created.
     ORBextractor::UniquePtr feature_detector_{nullptr};
 
     size_t tracklet_count = 0;
     bool initial_computation_{ true };
 
-    // static constexpr int FRAME_GRID_ROWS = 48;
-    // static constexpr int FRAME_GRID_COLS = 64;
-
-    // int min_x_;
-    // int min_y_;
-    // int max_x_;
-    // int max_y_;
     cv::Size img_size_;  // set on first computation
-
-    // // grid of trackled Id's
-    // double grid_elements_width_inv_;
-    // double grid_elements_height_inv_;
 
 };
 

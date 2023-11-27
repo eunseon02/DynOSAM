@@ -29,12 +29,16 @@
 
 
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
+#include <opengv/sac_problems/relative_pose/CentralRelativePoseSacProblem.hpp>
 #include <opengv/sac/Ransac.hpp>
 
 #include <optional>
 
 using AbsolutePoseProblem = opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem;
 using AbsolutePoseSacProblem = opengv::sac::Ransac<AbsolutePoseProblem>;
+
+using RelativePoseProblem = opengv::sac_problems::relative_pose::CentralRelativePoseSacProblem;
+using RelativePoseSacProblem = opengv::sac::Ransac<RelativePoseProblem>;
 
 namespace dyno {
 
@@ -109,7 +113,12 @@ namespace motion_solver_tools {
 template<typename RefType, typename CurrType>
 MotionResult solveMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const FrontendParams& params, const CameraParams& camera_params);
 
-}
+} //motion_solver_tools
+
+
+
+
+
 
 
 
@@ -117,8 +126,6 @@ MotionResult solveMotion(const GenericCorrespondences<RefType, CurrType>& corres
 class MotionSolver {
 
 public:
-
-
     MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
 
     template<typename RefType, typename CurrType>
@@ -127,11 +134,11 @@ public:
     }
 
     template<typename RefType, typename CurrType>
-    MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& curr_T_world_camera_) const {
+    MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& T_world_camera) const {
         const MotionResult result = motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
         if(result.valid()) {
             const gtsam::Pose3 G_w = result.get().inverse();
-            const gtsam::Pose3 H_w = curr_T_world_camera_ * G_w;
+            const gtsam::Pose3 H_w = T_world_camera * G_w;
             return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
         }
 
@@ -139,12 +146,8 @@ public:
         return result;
     }
 
-    //current_keypoints->2d observations in current frame, previous_points->3d landmarks in world frame
-    // MotionResult solveCameraPose(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
-    // MotionResult solveObjectMotion(const AbsolutePoseCorrespondences& correspondences, const gtsam::Pose3& curr_T_world_camera_, TrackletIds& inliers, TrackletIds& outliers);
 
-protected:
-    // MotionResult solve3D2DRansac(const AbsolutePoseCorrespondences& correspondences, TrackletIds& inliers, TrackletIds& outliers);
+
 
 protected:
     const FrontendParams params_;

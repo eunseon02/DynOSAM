@@ -77,7 +77,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     LOG(INFO) << "In RGBD instance module frontend boostrap";
-    previous_frame_ = frame;
 
     return {State::Nominal, nullptr};
 }
@@ -117,6 +116,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     }
     CHECK(frame);
 
+    Frame::Ptr previous_frame = tracker_->getPreviousFrame();
+    CHECK(previous_frame);
+
     LOG(INFO) << "Done tracking on frame " << input->getFrameId();
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
@@ -127,16 +129,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     }
 
-    LOG(INFO) << "Done depth updagte";
-
-
     AbsolutePoseCorrespondences correspondences;
     //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
     //bearing vectors are also not undistorted atm!!
     //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
     {
         utils::TimingStatsCollector track_dynamic_timer("frame_correspondences");
-        frame->getCorrespondences(correspondences, *previous_frame_, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
+        frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
     }
 
     LOG(INFO) << "Done correspondences";
@@ -166,7 +165,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     {
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        vision_tools::trackDynamic(base_params_,*previous_frame_, frame);
+        vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
 
     MotionEstimateMap motion_estimates;
@@ -193,7 +192,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         // //get the corresponding feature pairs
         bool result = frame->getDynamicCorrespondences(
             dynamic_correspondences,
-            *previous_frame_,
+            *previous_frame,
             object_id,
             frame->landmarkWorldKeypointCorrespondance());
 
@@ -225,11 +224,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         }
     }
 
-    cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame_, *frame);
+    cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
-
-    previous_frame_ = frame;
 
     auto output = constructOutput(*frame, motion_estimates, tracking_img, per_frame_object_poses, input->optional_gt_);
     return {State::Nominal, output};

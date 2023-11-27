@@ -71,6 +71,36 @@ struct GroundTruthInputPacket : public PipelinePayload {
     FrameId frame_id_;
     gtsam::Pose3 X_world_; //camera pose in world frame
     std::vector<ObjectPoseGT> object_poses_;
+
+    /**
+     * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
+     *
+     * If the query object is in both this and the other packet, true is returned and obj and other_obj are set
+     *
+     * @param label
+     * @param other
+     * @param obj
+     * @param other_obj
+     * @return true
+     * @return false
+     */
+    // inline bool findAssociatedObject(ObjectLabel label, const GroundTruthInputPacket& other, ObjectPoseGT& obj, ObjectPoseGT& other_obj) const {
+    //     auto it_this = std::find_if(object_poses_.begin(), object_poses_.end(),
+    //                 [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == label; });
+    //     if(it_this == object_poses.end()) {
+    //         return false;
+    //     }
+
+    //     auto it_other = std::find_if(other.object_poses_.begin(), other.object_poses_.end(),
+    //                 [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == label; });
+    //     if(it_other == other.object_poses.end()) {
+    //         return false;
+    //     }
+
+    //     obj = *it_this;
+    //     other_obj= *it_other;
+    //     return true;
+    // }
 };
 
 

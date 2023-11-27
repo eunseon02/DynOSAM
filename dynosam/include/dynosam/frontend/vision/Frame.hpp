@@ -82,6 +82,7 @@ public:
      */
     inline size_t numStaticUsableFeatures() {
         auto iter = usableStaticFeaturesBegin();
+        //we have defined the std::distance operator for this iterator type using std::iterator_traits.
         return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
     }
 
@@ -244,6 +245,17 @@ public:
      * @return ConstructCorrespondanceFunc<Landmark, Keypoint>
      */
     ConstructCorrespondanceFunc<Landmark, Keypoint> landmarkWorldKeypointCorrespondance() const;
+
+
+    /**
+     * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a
+     * TrackletCorrespondance where both types are keypoints (in the ref and cur frame respectively).
+     *
+     *  This is useful for 2D-2D correspondence types.
+     *
+     * @return ConstructCorrespondanceFunc<Keypoint, Keypoint>
+     */
+    ConstructCorrespondanceFunc<Keypoint, Keypoint> imageKeypointCorrespondance() const;
 
     /**
      * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a TrackletCorrespondance

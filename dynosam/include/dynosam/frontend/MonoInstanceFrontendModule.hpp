@@ -20,7 +20,6 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
 #pragma once
 
 #include "dynosam/common/Camera.hpp"
@@ -28,14 +27,14 @@
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
-#include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
 namespace dyno {
 
-class RGBDInstanceFrontendModule : public FrontendModule {
+class MonoInstanceFrontendModule : public FrontendModule {
 
 public:
-    RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    MonoInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     using SpinReturn = FrontendModule::SpinReturn;
 
@@ -43,23 +42,20 @@ private:
     Camera::Ptr camera_;
     MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
-    std::map<ObjectId, gtsam::Pose3> object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
-
 private:
 
     bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 
-    RGBDInstanceOutputPacket::Ptr constructOutput(
+    MonocularInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,
         const MotionEstimateMap& estimated_motions,
         const cv::Mat& debug_image = cv::Mat(),
-        const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
 
 
-    void logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id);
+    // void logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id);
 
 
 };

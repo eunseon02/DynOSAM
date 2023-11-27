@@ -34,6 +34,28 @@ struct ColourMap {
 
 constexpr static int COLOURS_MAX = 150;
 
+#define GET_HUE(hsv) hsv(0)
+#define GET_SATURATION(hsv) hsv(1)
+#define GET_VALUE(hsv) hsv(2)
+
+#define GET_R(rgb) rgb(0)
+#define GET_G(rgb) rgb(1)
+#define GET_B(rgb) rgb(2)
+
+
+/**
+ * @brief Converts HSV to RGB
+ *
+ * H is an angle in degrees
+ * S, V can either be between 0-1 or 0-255
+ *
+ * https://stackoverflow.com/questions/3018313/algorithm-to-convert-rgb-to-hsv-and-hsv-to-rgb-in-range-0-255-for-both
+ *
+ * @param hsv
+ * @param use_opencv_convention
+ * @return cv::Scalar
+ */
+cv::Scalar HSV2RGB(cv::Scalar hsv, bool use_opencv_convention = false);
 
 static inline cv::Scalar getRainbowColour(size_t index) {
     CHECK(index < COLOURS_MAX);
@@ -52,6 +74,19 @@ static inline cv::Scalar RGBA2BGRA(cv::Scalar colour, bool use_opencv_convention
   }
   return colour;
 }
+
+// static inline getObjectColour(ObjectId label, bool use_opencv_convention = false, double hue_min=0, double hue_max=1, double saturation=0.9, double value=0.9) {
+//   CHECK(saturation >=0 && saturation <= 1);
+//   CHECK(value >=0 && value <= 1);
+
+//   constexpr static double kGoldenAngle = 137.0/360.0;
+//   double hue = (static_cast<double>(label) % kGoldenAngle % 1);
+//   //Scale hue in range (hue_min, hue_max)
+//   hue = hue * (hue_max - hue_min) + hue_min;
+//   //Get rgb values
+//   cv::Scalar hsv()
+// }
+
 
 static inline cv::Scalar getObjectColour(ObjectId label, bool use_opencv_convention = false) {
   while (label > 25)

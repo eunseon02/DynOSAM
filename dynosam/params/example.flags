@@ -3,8 +3,8 @@
 --params_folder_path=/home/user/dev_ws/src/DynOSAM/dynosam/params/
 --path_to_kitti=/root/data/vdo_slam/kitti/kitti/0000
 
-#RGBD instance
---frontend_type=0
 
 
 --semantic_mask_step_size=100
+
+--output_path="/root/results/DynoSAM"

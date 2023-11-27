@@ -30,9 +30,8 @@
 namespace dyno
 {
 /// We divide the image into a grid of cells and try to find maximally one
-/// feature per cell. This is to ensure good distribution of features in the
-/// image.
-///https://github.com/uzh-rpg/rpg_svo_pro_open/blob/master/svo_common/include/svo/common/occupancy_grid_2d.h
+/// feature per cell. This is to ensure good distribution of features in the image.
+/// https://github.com/uzh-rpg/rpg_svo_pro_open/blob/master/svo_common/include/svo/common/occupancy_grid_2d.h
 class OccupandyGrid2D
 {
 public:

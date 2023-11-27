@@ -23,13 +23,11 @@
 
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
+#include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 #include <glog/logging.h>
 
-//TODO: for now should be in params
-DEFINE_int32(frontend_type, 0, "Type of parser to use:\n "
-                              "0: RGBDInstance");
 
 namespace dyno {
 
@@ -66,12 +64,17 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
     const CameraParams& camera_params = params_.camera_params_;
     //eventually from actual params
-    switch (FLAGS_frontend_type)
+    switch (params_.frontend_type_)
     {
-        case 0: {
+        case FrontendType::kRGBD: {
             LOG(INFO) << "Making RGBDInstance frontend";
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
+        }   break;
+        case FrontendType::kMono: {
+            LOG(INFO) << "Making MonoInstance frontend";
+            Camera::Ptr camera = std::make_shared<Camera>(camera_params);
+            frontend = std::make_shared<MonoInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
         }   break;
 
         default: {

@@ -26,6 +26,7 @@
 #include "dynosam/utils/Macros.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/common/CameraParams.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 
 #include <iomanip>
 #include <ostream>
@@ -52,6 +53,9 @@ public:
     CameraParams camera_params_;
 
     int data_provider_type_; //Kitti, VirtualKitti, Online...
+
+    FrontendType frontend_type_ = FrontendType::kRGBD;
+
 
     //! Pipeline level params
     bool parallel_run_{true};

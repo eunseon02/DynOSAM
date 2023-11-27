@@ -173,6 +173,16 @@ Frame::ConstructCorrespondanceFunc<Landmark, Keypoint> Frame::landmarkWorldKeypo
     return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 }
 
+
+Frame::ConstructCorrespondanceFunc<Keypoint, Keypoint> Frame::imageKeypointCorrespondance() const {
+    auto func = [&](const Frame&, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        return TrackletCorrespondance(previous_feature->tracklet_id_, previous_feature->keypoint_, current_feature->keypoint_);
+    };
+
+    return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+}
+
 Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorldProjectedBearingCorrespondance() const {
     auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
         if(!previous_feature->hasDepth()) {
@@ -190,29 +200,6 @@ Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorl
 }
 
 
-
-// bool Frame::getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const {
-//     FeaturePairs feature_correspondences;
-//     const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
-//     if(!result) {
-//         return false;
-//     }
-
-//     //unncessary but just for sanity check
-//     for(const auto& feature_pairs : feature_correspondences) {
-//         CHECK_EQ(feature_pairs.first->instance_label_, object_id);
-//         CHECK(feature_pairs.first->usable());
-
-//         CHECK_EQ(feature_pairs.second->instance_label_, object_id);
-//         CHECK(feature_pairs.second->usable());
-
-//         CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
-//     }
-
-//     convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
-//     return result;
-// }
-
 bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const {
 
     if(object_observations_.find(object_id) == object_observations_.end()) {
@@ -221,7 +208,7 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
     }
 
     const DynamicObjectObservation& observation = object_observations_.at(object_id);
-    CHECK(observation.marked_as_moving_);
+    // TODO: need to put back on - if we have motion mask, we should just mark all objects as moving CHECK(observation.marked_as_moving_);
     const TrackletIds& tracklets = observation.object_features_;
 
     FeatureContainer feature_container;

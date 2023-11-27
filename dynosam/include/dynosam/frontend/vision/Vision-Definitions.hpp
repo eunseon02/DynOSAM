@@ -50,4 +50,9 @@ using GenericCorrespondences = std::vector<TrackletCorrespondance<RefType, CurTy
 using AbsolutePoseCorrespondence =  TrackletCorrespondance<Landmark, Keypoint>;
 using AbsolutePoseCorrespondences = std::vector<AbsolutePoseCorrespondence>;
 
+//! Correspondes format for a 2D->2D PnP solver. In the form of 2D observation in the ref camera frame,
+//! and 2D observation in the current camera frame
+using RelativePoseCorrespondence =  TrackletCorrespondance<Keypoint, Keypoint>;
+using RelativePoseCorrespondences = std::vector<RelativePoseCorrespondence>;
+
 }

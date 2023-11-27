@@ -84,8 +84,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       trackDynamic(frame_id, input_images, dynamic_features);
     }
 
+    previous_tracked_frame_ = previous_frame_; // Update previous frame (previous to the newly created frame)
 
-    utils::TimingStatsCollector frame_timer("make_frame");
+
     auto new_frame = std::make_shared<Frame>(
       frame_id,
       timestamp,
@@ -141,7 +142,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   }
 
   for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
-    CHECK(object_observation.marked_as_moving_);
+    // CHECK(object_observation.marked_as_moving_);
     //get average center of 2 object
     FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
 

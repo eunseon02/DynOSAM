@@ -26,7 +26,8 @@
 namespace dyno {
 
 enum class FrontendType {
-    kRGBD = 0
+    kRGBD = 0,
+    kMono = 1
 };
 
 }
