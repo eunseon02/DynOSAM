@@ -28,7 +28,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ROS installs
-RUN apt install ros-humble-diagnostic-updater*
+RUN apt install ros-humble-diagnostic*
 
 
 WORKDIR /root/
@@ -38,7 +38,7 @@ WORKDIR /root/
 # Install OpenCV for Ubuntu
 RUN apt-get update && apt-get install -y \
       unzip \
-      libjpeg-dev libpng-dev libtiff-dev libgtk2.0-dev \
+      libjpeg-dev libpng-dev libpng++-dev libtiff-dev libgtk2.0-dev \
       libatlas-base-dev gfortran
 
 RUN git clone https://github.com/opencv/opencv.git
@@ -99,6 +99,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y libsuitesparse-dev
 
 RUN mkdir -p /home/user/dev_ws/src/DynOSAM
 RUN mkdir -p /home/user/upstream_ws/src
+
+SHELL ["/bin/bash", "-c"]
 
 RUN source /opt/ros/humble/setup.bash
 
