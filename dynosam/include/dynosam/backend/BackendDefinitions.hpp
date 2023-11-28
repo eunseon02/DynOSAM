@@ -24,55 +24,38 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/visualizer/Display.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/backend/BackendOutputPacket.hpp"
 
-#include <glog/logging.h>
-
+#include <gtsam/slam/SmartProjectionPoseFactor.h>
+#include <unordered_map>
 
 namespace dyno {
 
-
-/**
- * @brief Generic pipeline for display
- *
- * @tparam INPUT
- */
-template<typename INPUT>
-class DisplayPipeline : public SIMOPipelineModule<INPUT, NullPipelinePayload> {
-
-public:
-  using Input = INPUT;
-  using This = DisplayPipeline<Input>;
-  using Base =  SIMOPipelineModule<Input, NullPipelinePayload>;
-  using Display = DisplayBase<Input>;
-  DYNO_POINTER_TYPEDEFS(This)
-
-  using InputQueue = typename Base::InputQueue;
-  using InputConstPtr = typename Display::InputConstPtr;
+using SymbolChar = unsigned char;
+static constexpr SymbolChar kPoseSymbolChar = 'X';
+static constexpr SymbolChar kObjectMotionSymbolChar = 'H';
+static constexpr SymbolChar kStaticLandmarkSymbolChar = 'l';
+static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
 
 
-  DisplayPipeline(const std::string& name, InputQueue* input_queue, typename Display::Ptr display)
-    : Base(name, input_queue), display_(CHECK_NOTNULL(display)) {}
+using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
-  NullPipelinePayload::ConstPtr process(const InputConstPtr& input) override {
-    display_->spinOnce(CHECK_NOTNULL(input));
-    static auto null_payload = std::make_shared<NullPipelinePayload>();
-    return null_payload;
-  }
+enum class LandmarkType { SMART, PROJECTION };
+using Slot = long int;
 
-private:
-  typename Display::Ptr display_;
+using SmartProjectionFactor = gtsam::SmartProjectionPoseFactor<CalibrationType>;
+using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
 
-};
+/// @brief Map of tracklet id to slot. If slot is -1, it measns the factor is not in the map yet.
+/// Used for both smart and projection factors
+using TrackletIdSlotMap =
+    std::unordered_map<TrackletId, Slot>>;
 
-using FrontendVizPipeline = DisplayPipeline<FrontendOutputPacketBase>;
-using BackendVizPipeline = DisplayPipeline<BackendOutputPacket>;
+using TrackletIdSmartFactorMap =
+    std::unordered_map<TrackletId, SmartProjectionFactor::shared_ptr>;
 
-
-
+using TrackletIdLabelMap = std::unordered_map<TrackletId, ObjectId>;
+using LandmarkMap = std::unordered_map<TrackletId, Landmark>;
+using TrackletIdToTypeMap = std::unordered_map<TrackletId, LandmarkType>;
 
 
 } //dyno

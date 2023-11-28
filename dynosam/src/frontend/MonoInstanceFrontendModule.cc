@@ -42,7 +42,7 @@ MonoInstanceFrontendModule::MonoInstanceFrontendModule(const FrontendParams& fro
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 }
 
-bool MonoInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+bool MonoInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const {
     return image_container->hasMotionMask();
 }
 

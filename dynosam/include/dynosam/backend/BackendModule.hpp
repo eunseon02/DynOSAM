@@ -20,42 +20,43 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
 #pragma once
 
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
-#include "dynosam/frontend/vision/MotionSolver.hpp"
-#include "dynosam/frontend/MonoInstance-Definitions.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/Exceptions.hpp"
+
+#include "dynosam/backend/BackendParams.hpp"
+#include "dynosam/backend/BackendInputPacket.hpp"
+#include "dynosam/backend/BackendOutputPacket.hpp"
+
 
 namespace dyno {
 
-class MonoInstanceFrontendModule : public FrontendModule {
+/**
+ * @brief Base class to actually do processing. Data passed to this module from the frontend
+ *
+ */
+class BackendModule : public ModuleBase<BackendInputPacket, BackendOutputPacket>  {
 
 public:
-    MonoInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    DYNO_POINTER_TYPEDEFS(BackendModule)
 
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-    Camera::Ptr camera_;
-    MotionSolver motion_solver_;
-    FeatureTracker::UniquePtr tracker_;
-private:
-
-    bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    MonocularInstanceOutputPacket::Ptr constructOutput(
-        const Frame& frame,
-        const MotionEstimateMap& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
+    using Base = ModuleBase<BackendInputPacket, BackendOutputPacket>;
+    using Base::SpinReturn;
 
 
+    BackendModule(const BackendParams& params);
+    ~BackendModule() = default;
 
+
+protected:
+
+    void validateInput(const BackendInputPacket::ConstPtr& input) const override;
+
+protected:
+    const BackendParams base_params_;
 
 };
 

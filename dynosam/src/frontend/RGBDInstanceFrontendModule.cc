@@ -42,7 +42,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 }
 
-bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const {
     return image_container->hasDepth();
 }
 

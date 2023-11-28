@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "dynosam/visualizer/FrontendDisplay.hpp"
+#include "dynosam/visualizer/Display.hpp"
 
 namespace dyno {
 

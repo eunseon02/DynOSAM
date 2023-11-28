@@ -293,11 +293,7 @@ protected:
   typename Base::InputConstSharedPtr getInputPacket() override
   {
     typename Base::InputConstSharedPtr input = nullptr;
-    // assume always parallel run
-    // if (input_queue->empty())
-    // {
-    //   return nullptr;
-    // }
+
     bool queue_state;
     if(parallel_run_) {
       queue_state = input_queue->popBlocking(input);

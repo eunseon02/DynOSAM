@@ -47,7 +47,7 @@ private:
 
 private:
 
-    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
+    bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 

@@ -258,7 +258,7 @@ TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
         ImageWrapper<ImageType::Depth>(depth),
         ImageWrapper<ImageType::OpticalFlow>(optical_flow),
         ImageWrapper<ImageType::SemanticMask>(semantic_mask)
-    );}, InvalidImageContainerException);
+    );}, ImageContainerConstructionException);
 
 }
 

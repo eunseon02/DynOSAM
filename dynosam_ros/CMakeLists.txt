@@ -46,6 +46,7 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED
   src/PipelineRos.cc
   src/FrontendDisplayRos.cc
+  src/BackendDisplayRos.cc
   src/RosUtils.cc
 )
 

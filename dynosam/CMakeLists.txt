@@ -76,11 +76,14 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
   src/frontend/MonoInstanceFrontendModule.cc
-
   src/frontend/vision/ORBextractor.cc
   src/frontend/vision/FeatureTracker.cc
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
+
+  src/backend/BackendPipeline.cc
+  src/backend/BackendModule.cc
+  src/backend/MonoBackendModule.cc
 
   src/factors/Pose3FlowProjectionFactor.cc
 

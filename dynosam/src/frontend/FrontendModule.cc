@@ -28,34 +28,19 @@
 namespace dyno {
 
 FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue)
-    :   base_params_(params), display_queue_(display_queue), frontend_state_(State::Boostrap) {}
+    :   Base("frontend"), base_params_(params), display_queue_(display_queue) {}
 
-FrontendOutputPacketBase::ConstPtr FrontendModule::spinOnce(FrontendInputPacketBase::ConstPtr input) {
-    CHECK(input);
+
+
+void FrontendModule::validateInput(const FrontendInputPacketBase::ConstPtr& input) const {
     CHECK(input->image_container_);
 
-    if(!validateImageContainer(input->image_container_)) {
-        LOG(FATAL) << "Invalid image container configuration: " << input->image_container_->toString();
-    }
+    std::string reason;
+    bool result = validateImageContainer(input->image_container_, reason);
 
-    SpinReturn spin_return{State::Boostrap, nullptr};
+    //throw exception if result is false
+    checkAndThrow<InvalidImageContainerException>(result, *input->image_container_, reason);
 
-    switch (frontend_state_)
-        {
-        case State::Boostrap: {
-            spin_return = boostrapSpin(input);
-        } break;
-        case State::Nominal: {
-            spin_return = nominalSpin(input);
-        } break;
-        default: {
-            LOG(FATAL) << "Unrecognized Frontend state.";
-            break;
-        }
-    }
-
-    frontend_state_ = spin_return.first;
-    return spin_return.second;
 }
 
 } //dyno

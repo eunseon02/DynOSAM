@@ -20,44 +20,23 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
 #pragma once
 
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
-#include "dynosam/frontend/vision/MotionSolver.hpp"
-#include "dynosam/frontend/MonoInstance-Definitions.hpp"
+#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
+#include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
+#include "dynosam/backend/BackendModule.hpp"
+
+#include "dynosam/pipeline/PipelineParams.hpp"
 
 namespace dyno {
 
-class MonoInstanceFrontendModule : public FrontendModule {
+struct ModuleFactory {
 
-public:
-    MonoInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    using Return = std::pair<FrontendModule::Ptr, BackendModule::Ptr> //! Pair of frontend and backend module
 
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-    Camera::Ptr camera_;
-    MotionSolver motion_solver_;
-    FeatureTracker::UniquePtr tracker_;
-private:
-
-    bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    MonocularInstanceOutputPacket::Ptr constructOutput(
-        const Frame& frame,
-        const MotionEstimateMap& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
-
-
-
-
+    static Return Create(const DynoParams& params, ImageDisplayQueue* display_queue = nullptr);
 };
 
 
-} //dyno
+}

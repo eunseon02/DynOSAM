@@ -27,6 +27,7 @@
 #include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 #include "dynosam/dataprovider/DataProvider.hpp"
 #include "dynosam/frontend/FrontendPipeline.hpp"
+#include "dynosam/backend/BackendPipeline.hpp"
 #include "dynosam/visualizer/VisualizerPipelines.hpp"
 #include "dynosam/utils/Spinner.hpp"
 #include "dynosam/common/Types.hpp"
@@ -39,7 +40,7 @@ public:
     DYNO_POINTER_TYPEDEFS(DynoPipelineManager)
 
     //why are some unique and some shared?? silly silly
-    DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display);
+    DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display);
     ~DynoPipelineManager();
 
     /**
@@ -64,9 +65,13 @@ private:
 
 private:
     const DynoParams params_;
-    FrontendPipeline::UniquePtr frontend_pipeline_;
+    FrontendPipeline::UniquePtr frontend_pipeline_{nullptr};
     FrontendPipeline::InputQueue frontend_input_queue_;
-    FrontendPipeline::OutputQueue frontend_output_queue_;
+    FrontendPipeline::OutputQueue frontend_output_queue_; //! also acts as the input to the backend
+
+    BackendPipeline::UniquePtr backend_pipeline_{nullptr};
+    BackendPipeline::OutputQueue backend_output_queue_;
+
 
     //Data-provider pointers
     DataInterfacePipeline::UniquePtr data_interface_;
@@ -74,6 +79,7 @@ private:
 
     //Display and Viz
     FrontendVizPipeline::UniquePtr frontend_viz_pipeline_;
+    BackendVizPipeline::UniquePtr backend_viz_pipeline_;
     ImageDisplayQueue display_queue_;
     OpenCVImageDisplayQueue displayer_;
 
@@ -81,7 +87,9 @@ private:
     //Threaded spinners
     Spinner::UniquePtr data_provider_spinner_;
     Spinner::UniquePtr frontend_pipeline_spinner_;
+    Spinner::UniquePtr backend_pipeline_spinner_;
     Spinner::UniquePtr frontend_viz_pipeline_spinner_;
+    Spinner::UniquePtr backend_viz_pipeline_spinner_;
 
 
 };

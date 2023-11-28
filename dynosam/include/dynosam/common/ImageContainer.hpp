@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/Tuple.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
@@ -37,17 +38,17 @@
 namespace dyno {
 
 //thrown when an image type validation step fails
-class InvalidImageTypeException : public std::runtime_error {
+class InvalidImageTypeException : public DynosamException {
 public:
 
     InvalidImageTypeException(const std::string& reason) :
-        std::runtime_error("Invalid image type exception: " + reason) {}
+       DynosamException("Invalid image type exception: " + reason) {}
 
 };
 
-class InvalidImageContainerException : public std::runtime_error {
+class ImageContainerConstructionException : public DynosamException {
 public:
-    InvalidImageContainerException(const std::string& what) : std::runtime_error(what) {}
+    ImageContainerConstructionException(const std::string& what) : DynosamException(what) {}
 };
 
 
@@ -297,7 +298,7 @@ protected:
 
     /**
      * @brief Validates that the input images (if not empty) are the same size.
-     * Throws InvalidImageContainerException if invalid.
+     * Throws ImageContainerConstructionException if invalid.
      *
      * Compares all non-empty images against the first image size
      *

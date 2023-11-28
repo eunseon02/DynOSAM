@@ -25,6 +25,7 @@
 
 #include "dynosam/utils/Macros.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/common/CameraParams.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 
@@ -50,6 +51,7 @@ public:
 
 public:
     FrontendParams frontend_params_;
+    BackendParams backend_params_;
     CameraParams camera_params_;
 
     int data_provider_type_; //Kitti, VirtualKitti, Online...

@@ -20,42 +20,18 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
 #pragma once
 
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/FrontendModule.hpp"
-#include "dynosam/frontend/vision/FeatureTracker.hpp"
-#include "dynosam/frontend/vision/VisionTools.hpp"
-#include "dynosam/frontend/vision/MotionSolver.hpp"
-#include "dynosam/frontend/MonoInstance-Definitions.hpp"
+#include <string>
 
 namespace dyno {
 
-class MonoInstanceFrontendModule : public FrontendModule {
+struct BackendParams {
 
-public:
-    MonoInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    double smart_projection_noise_sigma_ = 0.1; //! Isotropic noise used for the smart projection factor (mono) on static points
 
-    using SpinReturn = FrontendModule::SpinReturn;
-
-private:
-    Camera::Ptr camera_;
-    MotionSolver motion_solver_;
-    FeatureTracker::UniquePtr tracker_;
-private:
-
-    bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const override;
-    SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
-    SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
-
-    MonocularInstanceOutputPacket::Ptr constructOutput(
-        const Frame& frame,
-        const MotionEstimateMap& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
-
-
-
+    static BackendParams fromYaml(const std::string& file_path);
 
 };
 
