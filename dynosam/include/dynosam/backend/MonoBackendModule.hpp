@@ -57,11 +57,12 @@ private:
     Camera::Ptr camera_;
     boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
 
-    //data structures to hold measurements and landmarks
-    TrackletIdSmartFactorMap tracklet_smart_factor_map_;
-    TrackletIdLabelMap tracklet_to_label_map_;
-    TrackletIdToTypeMap tracklet_to_type_map_;
-    TrackletIdSlotMap tracklet_to_slot_; //also indicates if tracklet factor is in the map (either as smart or projection factor). -1 means not in the map
+    // //data structures to hold measurements and landmarks
+    // TrackletIdSmartFactorMap tracklet_smart_factor_map_;
+    // TrackletIdLabelMap tracklet_to_label_map_;
+    // TrackletIdToTypeMap tracklet_to_type_map_;
+    // TrackletIdSlotMap tracklet_to_slot_; //also indicates if tracklet factor is in the map (either as smart or projection factor). -1 means not in the map
+    ProjectionFactorStatusMap projection_factor_map_;
 
 
     //params for factors

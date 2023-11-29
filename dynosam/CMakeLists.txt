@@ -83,6 +83,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/backend/BackendPipeline.cc
   src/backend/BackendModule.cc
+  src/backend/FactorGraphTools.cc
   src/backend/MonoBackendModule.cc
 
   src/factors/Pose3FlowProjectionFactor.cc

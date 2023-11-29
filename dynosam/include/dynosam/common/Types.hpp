@@ -140,29 +140,6 @@ using EstimateMap = std::unordered_map<Key, ReferenceFrameEstimate<Estimate>>;
 /// @brief Map of object ids to ReferenceFrameEstimate's of motions
 using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
 
-//unsure if should be in types but whatever for now
-struct KeypointStatus {
-  const KeyPointType kp_type_;
-  const ObjectId label_; //! Will be 0 if background
-
-  KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
-
-  inline static KeypointStatus Static() {
-    return KeypointStatus(KeyPointType::STATIC, background_label);
-  }
-
-  inline static KeypointStatus Dynamic(ObjectId label) {
-    CHECK(label != background_label);
-    return KeypointStatus(KeyPointType::DYNAMIC, label);
-  }
-};
-
-/// @brief A pair relating a tracklet ID with an observed keypoint
-using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
-/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
-using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
-/// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
 
 
 

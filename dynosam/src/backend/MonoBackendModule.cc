@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/backend/MonoBackendModule.hpp"
+#include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
@@ -87,37 +88,34 @@ void MonoBackendModule::updateStaticObservations(const StatusKeypointMeasurement
         const TrackletId tracklet_id = measurement.first;
         const Keypoint& kp = measurement.second;
 
-        auto it = tracklet_to_type_map_.find(tracklet_id);
-        if(it == tracklet_to_type_map_.end()) {
+        if(!projection_factor_map_.exists(tracklet_id)) {
             //if the TrackletIdToTypeMap does not have this tracklet, then it should be the first time we have seen
             //it and therefore, should not be in any of the other data structures
-            tracklet_to_type_map_.insert({tracklet_id, LandmarkType::PROJECTION});
-            tracklet_to_label_map_.insert({tracklet_id, object_id});
-            tracklet_to_slot_.insert({tracklet_id, -1});
+            SmartProjectionFactor::shared_ptr smart_factor =
+                factor_graph_tools::constructSmartProjectionFactor(
+                    static_smart_noise_,
+                    gtsam_calibration_,
+                    static_projection_params_,
+                    kp,
+                    frame_id
+                );
 
-            SmartProjectionFactor::shared_ptr smart_factor = boost::make_shared<SmartProjectionFactor>(
-                static_smart_noise_,
-                gtsam_calibration_,
-                static_projection_params_
-            );
-
-            smart_factor->add(kp, gtsam::Symbol(kStaticLandmarkSymbolChar, frame_id));
-
-            tracklet_smart_factor_map_.insert({tracklet_id, smart_factor});
+            ProjectionFactorStatus projection_status(tracklet_id, smart_factor, object_id);
+            projection_factor_map_.add(smart_factor);
         }
 
         //sanity check that the object label is still the same for the tracked object
-        CHECK_EQ(object_id, tracklet_to_label_map_.at(object_id));
+        CHECK_EQ(object_id, tracklet_to_label_map_.at(tracklet_id).object_id);
 
-        const LandmarkType factor_type = tracklet_to_type_map_.at(tracklet_id);
+        const ProjectionFactorType factor_type = projection_factor_map_.getFactorTypeProperty(tracklet_id);
 
-        if(factor_type ==  LandmarkType::PROJECTION) {
-            SmartProjectionFactor::shared_ptr smart_factor = tracklet_smart_factor_map_.at(tracklet_id);
-            smart_factor->add(kp, gtsam::Symbol(kStaticLandmarkSymbolChar, frame_id));
-        }
-        else {
+        // if(factor_type ==  ProjectionFactorType::SMART) {
+        //     SmartProjectionFactor::shared_ptr smart_factor = tracklet_smart_factor_map_.at(tracklet_id);
+        //     smart_factor->add(kp, gtsam::Symbol(kPoseSymbolChar, frame_id));
+        // }
+        // else {
 
-        }
+        // }
 
     }
 }

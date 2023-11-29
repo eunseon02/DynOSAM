@@ -23,11 +23,59 @@
 
 #pragma once
 
+#include "dynosam/common/Types.hpp"
+
 namespace dyno {
 
+/**
+ * @brief Determines which frontend module to load.
+ *
+ *
+ *
+ */
 enum class FrontendType {
     kRGBD = 0,
     kMono = 1
 };
+
+
+
+/**
+ * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
+ *
+ * Label may be background at which point the KeyPointType should be background_label
+ *
+ */
+struct KeypointStatus {
+  const KeyPointType kp_type_;
+  const ObjectId label_; //! Will be 0 if background
+
+  KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
+
+  inline bool isStatic() const {
+    const bool kp_type == KeyPointType::STATIC;
+    {
+      //sanity check
+      if(kp_type) CHECK_EQ(label == background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
+    }
+    return kp_type;
+  }
+
+  inline static KeypointStatus Static() {
+    return KeypointStatus(KeyPointType::STATIC, background_label);
+  }
+
+  inline static KeypointStatus Dynamic(ObjectId label) {
+    CHECK(label != background_label);
+    return KeypointStatus(KeyPointType::DYNAMIC, label);
+  }
+};
+
+/// @brief A pair relating a tracklet ID with an observed keypoint
+using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
+/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
+using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
+/// @brief A vector of StatusKeypointMeasurements
+using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
 
 }
