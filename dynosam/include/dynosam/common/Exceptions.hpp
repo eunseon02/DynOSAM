@@ -26,6 +26,7 @@
 #include <stdexcept>
 #include <string>
 #include <functional>
+#include <ostream>
 
 namespace dyno {
 
@@ -47,6 +48,7 @@ inline void checkAndThrow(bool condition, const std::string& error_message) {
     throw Exception(error_message);
   }
 }
+
 
 template<typename Exception, typename... EArgs>
 inline void checkAndThrow(bool condition, EArgs&& ...eargs) {

@@ -71,6 +71,7 @@ int main(int argc, char* argv[]) {
         cv::imshow("Motion", mask_viz);
 
         cv::waitKey(1);
+
         return true;
     });
 

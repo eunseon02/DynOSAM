@@ -22,30 +22,58 @@
  */
 
 #include "dynosam/backend/FactorGraphTools.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
+
+#include <gtsam/slam/BetweenFactor.h>
 
 
 namespace dyno {
 
 namespace factor_graph_tools {
 
+
 SmartProjectionFactor::shared_ptr constructSmartProjectionFactor(
-    gtsam::SharedNoiseModel static_smart_noise,
+    gtsam::SharedNoiseModel smart_noise,
     boost::shared_ptr<CalibrationType> K,
-    SmartProjectionFactorParams static_projection_params,
+    SmartProjectionFactorParams projection_params)
+{
+    CHECK(smart_noise);
+    CHECK(K);
+
+    return boost::make_shared<SmartProjectionFactor>(
+                smart_noise,
+                K,
+                projection_params);
+}
+
+SmartProjectionFactor::shared_ptr constructSmartProjectionFactor(
+    gtsam::SharedNoiseModel smart_noise,
+    boost::shared_ptr<CalibrationType> K,
+    SmartProjectionFactorParams projection_params,
     Keypoint measurement,
     FrameId frame_id)
 {
-    CHECK(static_smart_noise);
-    CHECK(K)
-
-    SmartProjectionFactor::shared_ptr smart_factor = boost::make_shared<SmartProjectionFactor>(
-                static_smart_noise,
-                K,
-                static_projection_params);
+    SmartProjectionFactor::shared_ptr smart_factor = constructSmartProjectionFactor(
+        smart_noise,
+        K,
+        projection_params);
+    CHECK(smart_factor);
 
     addSmartProjectionMeasurement(smart_factor, measurement, frame_id);
     return smart_factor;
 
+}
+
+void addBetweenFactor(FrameId from_frame, FrameId to_frame, const gtsam::Pose3 from_pose_to, gtsam::SharedNoiseModel noise_model, gtsam::NonlinearFactorGraph& graph) {
+    CHECK(noise_model);
+    CHECK_EQ(noise_model->dim(), 6u);
+
+    graph.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+        CameraPoseSymbol(from_frame),
+        CameraPoseSymbol(to_frame),
+        from_pose_to,
+        noise_model
+    );
 }
 
 

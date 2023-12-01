@@ -43,21 +43,12 @@ static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
 
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
 inline gtsam::Symbol ObjectMotionSymbol(FrameId frame_id) { return gtsam::Symbol(kObjectMotionSymbolChar, frame_id); }
+inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
 
 
 using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
 
-/**
- * @brief
- * SMART: Indicates that the tracklet has a smart factor associated with it but has not yet been triangulated. It may be in the graph (check by looking at the slot)
- * PROJECTION: Indicates that the tracklet has been triangulated and is not a projection factor in the graph
- *
- */
-enum class ProjectionFactorType {
-    SMART,
-    PROJECTION
-};
 using Slot = long int;
 
 constexpr static Slot UninitialisedSlot = -1; //! Inidicates that a factor is not in the graph or uninitialised
@@ -66,99 +57,6 @@ using SmartProjectionFactor = gtsam::SmartProjectionPoseFactor<CalibrationType>;
 using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, CalibrationType>;
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
-
-using ProjectionFactorVariant = std::variant<SmartProjectionFactor::shared_ptr, ProjectionFactor::shared_ptr>;
-
-template<typename Visitor>
-class ProjectionFactorVisitor {
-public:
-    ProjectionFactorVisitor(Visitor& visitor) : visitor_(visitor) {}
-    ProjectionFactorVisitor() : visitor_(std::nullopt) {}
-
-    template<typename SpecificVariant>
-    auto&& operator(SpecificVariant&& variant) const {
-        return std::visit()
-    }
-private:
-    template<typename V>
-    auto&& doVisit(V variant) const {
-        if(visitor_) {
-            Visitor& visitor = visitor_.value();
-            return std::visit(visitor, variant);
-        }
-        else {
-            return std::visit(Visitor{}, variant);
-        }
-
-    }
-
-private:
-    std::optional<Visitor&> visitor_;
-
-};
-
-
-struct ProjectionFactorStatus {
-
-    TrackletId tracklet_id_;
-    ProjectionFactorVariant projection_factor_;
-    ObjectId object_id_;
-    ProjectionFactorType type_;
-    Slot slot_;
-
-    /**
-     * @brief Construct a new Projection Factor Status from a smart projection factor
-     *
-     * We know that with a smart projection factor we will not have an initial measurement yet so the factor will not be in the map.
-     * The ProjectionFactorType is initalized as SMART and the slot is initalized as UninitialisedSlot.
-     *
-     * @param tracklet_id const TrackletId
-     * @param projection_factor SmartProjectionFactor::shared_ptr
-     * @param object_id ObjectId
-     */
-    ProjectionFactorStatus(const TrackletId tracklet_id, SmartProjectionFactor::shared_ptr projection_factor, ObjectId object_id)
-    : tracklet_id_(tracklet_id), projection_factor_(projection_factor), object_id_(object_id), type_(ProjectionFactorType::SMART), slot_(UninitialisedSlot) {}
-
-};
-
-
-class ProjectionFactorStatusMap : public std::unordered_map<TrackletId, ProjectionFactorStatus> {
-public:
-    ProjectionFactorStatusMap();
-
-    inline bool exists(const TrackletId tracklet_id) const {
-        const auto& it = this->find(tracklet_id);
-        return it != this->end();
-    }
-
-    inline void add(const ProjectionFactorStatus& projection_factor_status) {
-        //what if already exists?
-        this->insert({projection_factor_status.tracklet_id_, projection_factor_status})
-    }
-
-    inline ObjectId& getObjectIdProperty(const TrackletId tracklet_id) {
-        return this->at(tracklet_id).object_id_;
-    }
-
-    inline ObjectId getObjectIdProperty(const TrackletId tracklet_id) const {
-        return this->at(tracklet_id).object_id_;
-    }
-
-    inline ProjectionFactorType& getFactorTypeProperty(const TrackletId tracklet_id) {
-        return this->at(tracklet_id).type_;
-    }
-
-    inline ProjectionFactorType getFactorTypeProperty(const TrackletId tracklet_id) const {
-        return this->at(tracklet_id).type_;
-    }
-
-    inline ProjectionFactorType& getFactorTypeProperty(const TrackletId tracklet_id) {
-        return this->at(tracklet_id).type_;
-    }
-
-
-
-};
 
 
 } //dyno

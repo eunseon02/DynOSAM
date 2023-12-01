@@ -27,17 +27,28 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+
 namespace dyno {
 
 namespace factor_graph_tools {
 
+SmartProjectionFactor::shared_ptr constructSmartProjectionFactor(
+    gtsam::SharedNoiseModel smart_noise,
+    boost::shared_ptr<CalibrationType> K,
+    SmartProjectionFactorParams projection_params);
+
 
 SmartProjectionFactor::shared_ptr constructSmartProjectionFactor(
-    gtsam::SharedNoiseModel static_smart_noise,
+    gtsam::SharedNoiseModel smart_noise,
     boost::shared_ptr<CalibrationType> K,
-    SmartProjectionFactorParams static_projection_params,
+    SmartProjectionFactorParams projection_params,
     Keypoint measurement,
     FrameId frame_id);
+
+
+void addBetweenFactor(
+    FrameId from_frame, FrameId to_frame, const gtsam::Pose3 from_pose_to, gtsam::SharedNoiseModel noise_model, gtsam::NonlinearFactorGraph& graph);
 
 
 void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_factor, Keypoint measurement, FrameId frame_id);

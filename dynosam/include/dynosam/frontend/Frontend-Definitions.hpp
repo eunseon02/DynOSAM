@@ -53,12 +53,12 @@ struct KeypointStatus {
   KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
 
   inline bool isStatic() const {
-    const bool kp_type == KeyPointType::STATIC;
+    const bool is_static = (kp_type_ == KeyPointType::STATIC);
     {
       //sanity check
-      if(kp_type) CHECK_EQ(label == background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
+      if(is_static) CHECK_EQ(label_, background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
     }
-    return kp_type;
+    return is_static;
   }
 
   inline static KeypointStatus Static() {
