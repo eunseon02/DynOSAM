@@ -8,3 +8,6 @@
 --semantic_mask_step_size=100
 
 --output_path="/root/results/DynoSAM"
+
+--run_as_graph_file_only=true
+--backend_graph_file="/root/results/DynoSAM/mono_backend_gra.g2o"

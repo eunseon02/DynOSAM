@@ -23,6 +23,6 @@ def generate_launch_description():
                 {"dataset_path": "/root/data/vdo_slam/kitti/kitti/0004"}
                 # {"dataset_path": "/root/data/virtual_kitti"}
             ],
-            arguments=['--flagfile=src/DynOSAM/dynosam/params/example.flags', '-v=20']
+            arguments=['--flagfile=/home/user/dev_ws/src/DynOSAM/dynosam/params/example.flags', '-v=20']
             )
     ])

@@ -32,11 +32,13 @@
 
 int main(int argc, char* argv[]) {
 
-    auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
+    // google::ParseCommandLineFlags(&argc, &argv, true);
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = 1;
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
+
+    auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
 
     rclcpp::NodeOptions options;
     options.arguments(args);

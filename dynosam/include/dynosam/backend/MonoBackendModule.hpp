@@ -40,6 +40,7 @@ class MonoBackendModule : public BackendModule {
 
 public:
     MonoBackendModule(const BackendParams& backend_params, Camera::Ptr camera);
+    ~MonoBackendModule();
 
     using SpinReturn = BackendModule::SpinReturn;
 
@@ -57,24 +58,23 @@ private:
     //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
     void addOdometry(const gtsam::Pose3& T_world_camera, FrameId curr_frame_id, FrameId prev_frame_id, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-    //updates the data structures relevant to smart factors, label and type maps
-    void updateStaticObservations(
-        const StatusKeypointMeasurements& measurements,
-        const FrameId frame_id,
-        gtsam::Values& new_point_values,
-        std::vector<SmartProjectionFactor::shared_ptr>& new_smart_factors,
-        std::vector<SmartProjectionFactor::shared_ptr>& new_projection_factors,
-        TrackletIds& smart_factors_to_convert);
+    // //updates the data structures relevant to smart factors, label and type maps
+    // void updateStaticObservations(
+    //     const StatusKeypointMeasurements& measurements,
+    //     const FrameId frame_id,
+    //     gtsam::Values& new_point_values,
+    //     std::vector<SmartProjectionFactor::shared_ptr>& new_smart_factors,
+    //     std::vector<SmartProjectionFactor::shared_ptr>& new_projection_factors,
+    //     TrackletIds& smart_factors_to_convert);
 
-    // converts smart factors in the state_graph to projection factors, adds them to new factors and deletes them from the current state graph
-    void convertAndDeleteSmartFactors(const gtsam::Values& new_values, const TrackletIds& smart_factors_to_convert, gtsam::NonlinearFactorGraph& new_factors);
-    void addToStatesStructures(const gtsam::Values& new_values, const gtsam::NonlinearFactorGraph& new_factors, const TrackletIds& new_smart_factors);
+    // // converts smart factors in the state_graph to projection factors, adds them to new factors and deletes them from the current state graph
+    // void convertAndDeleteSmartFactors(const gtsam::Values& new_values, const TrackletIds& smart_factors_to_convert, gtsam::NonlinearFactorGraph& new_factors);
+    // void addToStatesStructures(const gtsam::Values& new_values, const gtsam::NonlinearFactorGraph& new_factors, const TrackletIds& new_smart_factors);
 
     void setFactorParams(const BackendParams& backend_params);
 
 
     void saveAllToGraphFile(MonocularInstanceOutputPacket::ConstPtr input);
-
 
 
 private:
@@ -102,6 +102,10 @@ private:
     //!< current state of the system.
     gtsam::Values state_;
     gtsam::NonlinearFactorGraph state_graph_;
+
+    MonocularInstanceOutputPacket::ConstPtr previous_input_;
+    std::stringstream fg_ss_;
+
 
 
 };

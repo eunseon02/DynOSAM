@@ -25,6 +25,7 @@
 
 
 #include <gtsam/base/Vector.h> //for fpequal
+#include <gtsam/base/Matrix.h>
 
 namespace dyno  {
 
@@ -50,5 +51,27 @@ inline bool equals_with_abs_tol(const std::vector<T>& vec1, const std::vector<T>
 
     return true;
 }
+
+
+inline bool saveMatrixAsUpperTriangular(std::ostream& os, const gtsam::Matrix& matrix)
+{
+  const size_t rows = matrix.rows();
+  const size_t cols = matrix.cols();
+
+  if (rows != cols)
+  {
+    throw std::runtime_error("Attempting to save matrix as upper triangular but input size was not square");
+  }
+
+  for (size_t i = 0; i < rows; i++)
+  {
+    for (size_t j = i; j < cols; j++)
+    {
+      os << " " << matrix(i, j);
+    }
+  }
+  return os.good();
+}
+
 
 } //dyno

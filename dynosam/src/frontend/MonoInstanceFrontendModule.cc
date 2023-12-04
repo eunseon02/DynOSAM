@@ -54,6 +54,10 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::boostrapSpin(FrontendInpu
     size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
 
+    CHECK(image_container->hasDepth()) << "Needs depth for initial testing in backend";
+    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
+    frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
     return {State::Nominal, nullptr};
 
 }
@@ -67,6 +71,10 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
     //TODO: if we have a motion mask we should mark all the objects "as_moving" and remove this from the dynamic tracking, we should not do both
     size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+
+    CHECK(image_container->hasDepth()) << "Needs depth for initial testing in backend";
+    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
+    frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     CHECK(previous_frame);

@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "dynosam/utils/Numerical.hpp"
+
 #include <eigen3/Eigen/Core> //must be included before opencv
 #include <gtsam/geometry/Unit3.h>
 #include <gtsam/inference/Symbol.h>
@@ -119,6 +121,12 @@ static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, 
     return false;
   }
 }
+
+inline bool saveNoiseModelAsUpperTriangular(std::ostream& os, const gtsam::noiseModel::Gaussian& noise_model) {
+  const gtsam::Matrix info = noise_model.information();
+  return saveMatrixAsUpperTriangular(os, info);
+}
+
 
 } //utils
 } //dyno
