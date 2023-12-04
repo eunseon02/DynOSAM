@@ -72,7 +72,14 @@ public:
      */
     void initAbsolutePath(const fs::path& absolute_folder_path) {
         absolute_folder_path_ = absolute_folder_path;
-        onPathInit();
+        try {
+            onPathInit();
+        }
+        catch(const std::exception& e) {
+            LOG(FATAL) << "Exception caught when running virtual onPathInit for DataFolder with absolute path: " << absolute_folder_path
+                << ". Error: " << e.what();
+        }
+
     }
 
     /**
@@ -316,7 +323,7 @@ public:
 
     template<size_t I>
     fs::path getAbsoluteFolderPath() const {
-        const auto data_folder = getDataFolder<I>();
+        const auto data_folder = this->template getDataFolder<I>();
         fs::path folder_path = dataset_path_;
         //technically this can also be a file path
         folder_path /= fs::path(data_folder->getFolderName());
@@ -371,6 +378,7 @@ public:
     {
         //this will also set the absolute folder/file path on each DataFolder
         validateFoldersExist();
+        LOG(INFO) << "Done folder validate";
     }
 
     template<size_t I>
@@ -395,7 +403,7 @@ public:
         for (size_t i = 0; i < Base::N; i++) {
             internal::select_apply<Base::N>(i, [&](auto stream_index) {
                 internal::select_apply<Base::N>(stream_index, [&](auto I) {
-                    using Type = typename Base::DataType<I>;
+                    using Type = typename Base::template DataType<I>;
                     auto data_folder = this->template getDataFolder<I>();
                     //loade at idx-1 since we expect all the indexing and loading to be appropiately zero idnexed
                     Type loaded_data = data_folder->getItem(idx-1);
@@ -429,18 +437,16 @@ private:
     void validateFoldersExist() {
         for (size_t i = 0; i < Base::N; i++) {
             internal::select_apply<Base::N>(i, [&](auto stream_index) {
-                internal::select_apply<Base::N>(stream_index, [&](auto I) {
-                    const fs::path absolute_file_path = this->template getAbsoluteFolderPath<I>();
+                const fs::path absolute_file_path = this->template getAbsoluteFolderPath<stream_index>();
 
-                    if(!fs::exists(absolute_file_path)) {
-                        throw std::runtime_error("Error loading datafolder - absolute file path " + std::string(absolute_file_path) + " does not exist");
-                    }
+                if(!fs::exists(absolute_file_path)) {
+                    throw std::runtime_error("Error loading datafolder - absolute file path " + std::string(absolute_file_path) + " does not exist");
+                }
 
-                    LOG(INFO) << "Validated dataset folder: " << absolute_file_path;
-                    auto data_folder = this->template getDataFolder<I>();
-                    data_folder->initAbsolutePath(absolute_file_path);
+                LOG(INFO) << "Validated dataset folder: " << absolute_file_path;
+                auto data_folder = this->template getDataFolder<stream_index>();
+                data_folder->initAbsolutePath(absolute_file_path);
 
-                });
             });
         }
     }

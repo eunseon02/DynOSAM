@@ -34,7 +34,7 @@ namespace dyno {
  * PROJECTION: Indicates that the tracklet has been triangulated and is now a projection factor in the graph
  *
  */
-enum class ProjectionFactorType {
+enum ProjectionFactorType {
     SMART,
     PROJECTION
 };

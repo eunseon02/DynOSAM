@@ -122,6 +122,7 @@ private:
      */
     void onPathInit() override {
         std::ifstream object_pose_stream((std::string)getAbsolutePath(), std::ios::in);
+        CHECK(object_pose_stream.good());
 
         //hmm we dont know the number of expected frames here...
         while (!object_pose_stream.eof())
@@ -326,6 +327,9 @@ public:
         KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
             timestamp_file, camera_pose_folder
         );
+
+        CHECK(camera_pose_folder);
+        CHECK(object_pose_gt_folder);
 
 
 

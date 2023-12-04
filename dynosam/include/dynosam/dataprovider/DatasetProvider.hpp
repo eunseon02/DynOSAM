@@ -121,7 +121,10 @@ public:
             optical_flow_loader
         );
 
+        LOG(INFO) << "Made default dataset";
+
         dataset_ = std::make_unique<TypedGenericDataset>(dataset_path_, data_folders...);
+        LOG(INFO) << "Made generic dataset";
 
         LOG(ERROR) << "DynoDataset prepared with an expected size of " << getDatasetSize()
             << " - loaded from timestamps file found at " << default_dataset_->getAbsoluteFolderPath<TimestampFileIdx>();
@@ -233,7 +236,8 @@ public:
     //does not accept DataProviderModule* for dataprovider
     DynoDatasetProvider(
         const fs::path& dataset_path)
-        : BaseDynoDataset(dataset_path), DataProvider() {}
+        : BaseDynoDataset(dataset_path), DataProvider() {
+        }
 
     virtual ~DynoDatasetProvider() {}
 

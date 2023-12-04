@@ -58,7 +58,33 @@ private:
     //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
     void addOdometry(const gtsam::Pose3& T_world_camera, FrameId curr_frame_id, FrameId prev_frame_id, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-    // //updates the data structures relevant to smart factors, label and type maps
+    void updateSmartStaticObservations(
+        const StatusKeypointMeasurements& measurements,
+        const FrameId frame_id,
+        TrackletIds& new_smart_factors,
+        TrackletIds& updated_smart_factors,
+        StatusKeypointMeasurements& new_projection_measurements);
+
+
+    //adds smart factors from smart factor map and updates slots according to thew NLFG passed in
+    void addNewSmartStaticFactors(const TrackletIds& new_smart_factors,  gtsam::NonlinearFactorGraph& factors);
+
+    //try to triangualte on smart factor factors that have just been updated
+    //if we can triangulate, update and convert existing factor to projection factor
+    //new_and_current_state should be the most up to date values (including the most recent camera pose which may not be in state_)
+    //that we want to use to triangulate the point
+    //this will also add the projection factors to the graph so no need to run another "add projection measurements"
+    void tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
+
+    //the slot in the smart_factor_map should be associted with the factor in factors
+    //will be removed from the smart factor map but remain in the tracklet_to_status_map_ where the status will be updated to PROJECTION
+    bool convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
+
+
+    void addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& factors);
+
+
+    //updates the data structures relevant to smart factors, label and type maps
     // void updateStaticObservations(
     //     const StatusKeypointMeasurements& measurements,
     //     const FrameId frame_id,
