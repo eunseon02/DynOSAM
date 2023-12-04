@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/backend/MonoBackendModule.hpp"
+#include "dynosam/backend/MonoBackendTools.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/common/Exceptions.hpp"
