@@ -55,11 +55,11 @@ DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& option
     dyno::DataProvider::UniquePtr data_loader = dyno::DataProviderFactory::Create(dataset_path, params_path, static_cast<dyno::DatasetType>(params.data_provider_type_));
      RCLCPP_INFO_STREAM(this->get_logger(), "Constructed data loader");
 
-  auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
-  auto backend_display = std::make_shared<dyno::BackendDisplayRos>(this->create_sub_node("backend_viz"));
+    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(this->create_sub_node("frontend_viz"));
+    auto backend_display = std::make_shared<dyno::BackendDisplayRos>(this->create_sub_node("backend_viz"));
 
 
-   pipeline_ = std::make_unique<DynoPipelineManager>(params, std::move(data_loader), frontend_display, backend_display);
+    pipeline_ = std::make_unique<DynoPipelineManager>(params, std::move(data_loader), frontend_display, backend_display);
 }
 
 

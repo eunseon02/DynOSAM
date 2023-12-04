@@ -239,7 +239,7 @@ public:
         : BaseDynoDataset(dataset_path), DataProvider() {
         }
 
-    virtual ~DynoDatasetProvider() {}
+    virtual ~DynoDatasetProvider() = default;
 
     virtual bool spin() override {
         const size_t dataset_size = this->getDatasetSize();
