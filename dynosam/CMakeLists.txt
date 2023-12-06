@@ -210,6 +210,7 @@ if(BUILD_TESTING)
     test/internal/tmp_file.cc
     test/test_tools.cc
     test/test_structured_containers.cc
+    test/test_triangulation.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})
