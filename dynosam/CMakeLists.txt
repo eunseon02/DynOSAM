@@ -81,6 +81,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
 
+  src/backend/BackendDefinitions.cc
   src/backend/BackendPipeline.cc
   src/backend/BackendModule.cc
   src/backend/FactorGraphTools.cc

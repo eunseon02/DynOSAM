@@ -85,8 +85,6 @@ public:
 };
 
 
-class DynamicMeasurementsMap : public gtsam::FastMap<
-
 
 
 } //dyno

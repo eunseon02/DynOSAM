@@ -88,24 +88,25 @@ private:
 
     void addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& factors);
 
-
-    //updates the data structures relevant to smart factors, label and type maps
-    // void updateStaticObservations(
-    //     const StatusKeypointMeasurements& measurements,
-    //     const FrameId frame_id,
-    //     gtsam::Values& new_point_values,
-    //     std::vector<SmartProjectionFactor::shared_ptr>& new_smart_factors,
-    //     std::vector<SmartProjectionFactor::shared_ptr>& new_projection_factors,
-    //     TrackletIds& smart_factors_to_convert);
-
-    // // converts smart factors in the state_graph to projection factors, adds them to new factors and deletes them from the current state graph
-    // void convertAndDeleteSmartFactors(const gtsam::Values& new_values, const TrackletIds& smart_factors_to_convert, gtsam::NonlinearFactorGraph& new_factors);
-    // void addToStatesStructures(const gtsam::Values& new_values, const gtsam::NonlinearFactorGraph& new_factors, const TrackletIds& new_smart_factors);
-
     void setFactorParams(const BackendParams& backend_params);
 
 
     void saveAllToGraphFile(MonocularInstanceOutputPacket::ConstPtr input);
+
+    //dynamic measuerement stuff
+    void updateDynamicObjectTrackletMap(MonocularInstanceOutputPacket::ConstPtr input);
+
+
+    bool attemptObjectTriangulation(
+        FrameId current_frame,
+        FrameId previous_frame,
+        ObjectId id,
+        const EssentialDecompositionResult&  motion_estimate,
+        const gtsam::Pose3& T_world_camera_curr,
+        const gtsam::Pose3& T_world_camera_prev,
+        gtsam::Point3Vector& triangulated_values,
+        TrackletIds& triangulated_tracklets,
+        gtsam::Rot3& R_motion);
 
 
 private:
@@ -127,6 +128,9 @@ private:
     gtsam::SharedNoiseModel static_smart_noise_; //! Projection factor noise for static points
     gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
     gtsam::SharedNoiseModel initial_pose_prior_;
+
+
+    DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;
 
 
     // State.

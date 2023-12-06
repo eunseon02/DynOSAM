@@ -88,10 +88,13 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
 
     frontend_pipeline_ = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend);
-    frontend_pipeline_->registerOutputQueue(&frontend_output_queue_);
+    frontend_pipeline_->registerOutputQueue(&frontend_viz_input_queue_);
 
     if(backend) {
-        backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &frontend_output_queue_, backend);
+        backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
+        //also register connection between front and back
+        frontend_pipeline_->registerOutputQueue(&backend_input_queue_);
+
         backend_pipeline_->registerOutputQueue(&backend_output_queue_);
     }
 
@@ -99,7 +102,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         backend_viz_pipeline_ = std::make_unique<BackendVizPipeline>("backend-viz-pipeline", &backend_output_queue_, backend_display);
     }
 
-    frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>("frontend-viz-pipeline", &frontend_output_queue_, frontend_display);
+    frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>("frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);
 
     launchSpinners();
 

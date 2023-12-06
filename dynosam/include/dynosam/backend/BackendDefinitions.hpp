@@ -24,6 +24,8 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/common/Exceptions.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
@@ -57,6 +59,108 @@ using SmartProjectionFactor = gtsam::SmartProjectionPoseFactor<CalibrationType>;
 using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, CalibrationType>;
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
+
+/**
+ * @brief Definition of a tracklet - a tracket point seen at multiple frames.
+ *
+ *
+ * @tparam MEASUREMENT
+ */
+template<typename MEASUREMENT>
+class DynamicObjectTracklet : public gtsam::FastMap<FrameId, MEASUREMENT> {
+
+public:
+
+    using Measurement = MEASUREMENT;
+    using This = DynamicObjectTracklet<Measurement>;
+    using Base = gtsam::FastMap<FrameId, Measurement>;
+
+    DYNO_POINTER_TYPEDEFS(This)
+
+    DynamicObjectTracklet(TrackletId tracklet_id) : tracklet_id_(tracklet_id) {}
+
+    void add(FrameId frame_id, const Measurement& measurement) {
+        this->insert({frame_id, measurement});
+    }
+
+    inline TrackletId getTrackletId() const { return tracklet_id_; }
+
+private:
+    TrackletId tracklet_id_;
+
+};
+
+
+template<typename MEASUREMENT>
+class DynamicObjectTrackletManager {
+
+public:
+    using DynamicObjectTrackletM = DynamicObjectTracklet<MEASUREMENT>;
+
+    using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;
+
+    /// @brief TrackletId to a DynamicObjectTracklet for quick access
+    using TrackletMap = gtsam::FastMap<TrackletId, typename DynamicObjectTrackletM::Ptr>;
+
+    DynamicObjectTrackletManager() {}
+
+    void add(ObjectId object_id, const TrackletId tracklet_id, const FrameId frame_id, const MEASUREMENT& measurement) {
+        typename DynamicObjectTrackletM::Ptr tracklet = nullptr;
+        if(trackletExists(tracklet_id)) {
+            tracklet = tracklet_map_.at(tracklet_id);
+        }
+        else {
+            //must be a completely new tracklet as we dont have an tracklet associated with it
+            tracklet = std::make_shared<DynamicObjectTrackletM>(tracklet_id);
+            CHECK(tracklet);
+
+            tracklet_map_.insert({tracklet_id, tracklet});
+        }
+
+        CHECK(tracklet);
+        CHECK(!tracklet->exists(frame_id)) << "Attempting to add tracklet measurement with object id "
+            << object_id << " and tracklet_id " << tracklet_id
+            << " to frame " << frame_id << " but an entry already exists at this frame";
+
+        //if new object
+        if(!object_trackletid_map_.exists(object_id)) {
+            object_trackletid_map_.insert({object_id, TrackletIds{}});
+        }
+
+        auto& tracklet_ids = object_trackletid_map_.at(object_id);
+        tracklet_ids.push_back(tracklet_id);
+
+        CHECK(trackletExists(tracklet->getTrackletId()));
+
+        tracklet->add(frame_id, measurement);
+    }
+
+
+    TrackletIds getPerObjectTracklets(const ObjectId object_id) {
+        checkAndThrow(objectExists(object_id), "getPerObjectTracklets query failed as object id id does not exist. Offedning Id " + std::to_string(object_id));
+        return object_trackletid_map_.at(object_id);
+    }
+
+    DynamicObjectTrackletM& getByTrackletId(const TrackletId tracklet_id) {
+        checkAndThrow(trackletExists(tracklet_id), "DynamicObjectTracklet query failed as tracklet id does not exist. Offedning Id " + std::to_string(tracklet_id));
+        return *tracklet_map_.at(tracklet_id);
+    }
+
+    inline bool objectExists(const ObjectId object_id) {
+        return object_trackletid_map_.exists(object_id);
+    }
+
+    inline bool trackletExists(const TrackletId tracklet_id) const {
+        return tracklet_map_.exists(tracklet_id);
+    }
+
+private:
+    ObjectToTrackletIdMap object_trackletid_map_; //!! object ids to tracklet ids
+    TrackletMap tracklet_map_;
+
+};
+
+
 
 
 } //dyno

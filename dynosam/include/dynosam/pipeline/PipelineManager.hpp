@@ -67,9 +67,10 @@ private:
     const DynoParams params_;
     FrontendPipeline::UniquePtr frontend_pipeline_{nullptr};
     FrontendPipeline::InputQueue frontend_input_queue_;
-    FrontendPipeline::OutputQueue frontend_output_queue_; //! also acts as the input to the backend
+    FrontendPipeline::OutputQueue frontend_viz_input_queue_;
 
     BackendPipeline::UniquePtr backend_pipeline_{nullptr};
+    FrontendPipeline::OutputQueue backend_input_queue_;
     BackendPipeline::OutputQueue backend_output_queue_;
 
 

@@ -96,6 +96,8 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoBoostrapSpin(MonocularInsta
     addInitialPose(T_world_camera_measured, current_frame_id, state_, state_graph_);
     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
     addNewSmartStaticFactors(new_smart_factors, state_graph_);
+
+    updateDynamicObjectTrackletMap(input);
     // updateStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_point_values, new_smart_factors, new_projection_factors, smart_factors_to_convert);
     // convertAndDeleteSmartFactors(new_values, smart_factors_to_convert, new_factors);
     // addToStatesStructures(new_values, new_factors, new_smart_factors);
@@ -114,6 +116,7 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     const gtsam::Pose3 T_world_camera_gt = input->gt_packet_->X_world_;
 
     const FrameId current_frame_id =  input->getFrameId();
+    LOG(INFO) << "Running backend on frame " << current_frame_id;
 
     if(FLAGS_run_as_graph_file_only) {
         saveAllToGraphFile(input);
@@ -133,6 +136,33 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, state_graph_);
 
     LOG(INFO) << "New smart factors " << new_smart_factors.size() << " updated smart factors " << updated_smart_factors.size() << " new projections " << new_projection_measurements.size() << " num triangulated " << tracklets_triangulated.size();
+
+    updateDynamicObjectTrackletMap(input);
+
+    const gtsam::Pose3 previous_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id-1));
+    const gtsam::Pose3 current_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
+
+    LOG(ERROR) << "Estimated motions " <<  input->estimated_motions_.size();
+
+    for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
+        const EssentialDecompositionResult& decomposition_result = ref_estimate;
+
+        gtsam::Point3Vector triangulated_values;
+        TrackletIds triangulated_tracklets;
+        gtsam::Rot3 R_motion;
+
+        attemptObjectTriangulation(
+            current_frame_id,
+            current_frame_id-1,
+            object_id,
+            decomposition_result,
+            current_pose,
+            previous_pose,
+            triangulated_values,
+            triangulated_tracklets,
+            R_motion
+            );
+    }
 
     LandmarkMap lmk_map;
     for(const auto&[tracklet_id, status] : tracklet_to_status_map_) {
@@ -172,30 +202,6 @@ void MonoBackendModule::addOdometry(const gtsam::Pose3& T_world_camera, FrameId 
     }
 }
 
-
-// void MonoBackendModule::handleStaticMeasurementsBootstrap(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values&,  gtsam::NonlinearFactorGraph& new_factors) {
-//     const FrameId current_frame_id =  input->getFrameId();
-//     TrackletIds new_smart_factors;
-//     TrackletIds updated_smart_factors;
-//     StatusKeypointMeasurements new_projection_measurements;
-
-//     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
-//     addNewSmartStaticFactors(new_smart_factors, new_factors);
-// }
-
-// void MonoBackendModule::handleStaticMeasurementsNominal(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
-//     const FrameId current_frame_id =  input->getFrameId();
-//     TrackletIds new_smart_factors;
-//     TrackletIds updated_smart_factors;
-//     StatusKeypointMeasurements new_projection_measurements;
-
-//     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
-//     addNewSmartStaticFactors(new_smart_factors, new_factors);
-
-//     gtsam::Values new_and_current_values(new_values);
-//     tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, state_, new_factors);
-//     addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, new_factors);
-// }
 
 
 void MonoBackendModule::updateSmartStaticObservations(
@@ -379,6 +385,106 @@ void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, 
     }
 }
 
+
+void MonoBackendModule::updateDynamicObjectTrackletMap(MonocularInstanceOutputPacket::ConstPtr input) {
+    const FrameId current_frame_id =  input->getFrameId();
+    const auto& dynamic_measurements = input->dynamic_keypoint_measurements_;
+
+    for(const StatusKeypointMeasurement& dynamic_measurement : dynamic_measurements) {
+        const KeypointStatus& status = dynamic_measurement.first;
+        const KeyPointType kp_type = status.kp_type_;
+        const KeypointMeasurement& measurement = dynamic_measurement.second;
+
+        const ObjectId object_id = status.label_;
+
+        CHECK(kp_type == KeyPointType::DYNAMIC);
+        const TrackletId tracklet_id = measurement.first;
+        const Keypoint& kp = measurement.second;
+
+        do_tracklet_manager_.add(object_id, tracklet_id, current_frame_id, kp);
+    }
+}
+
+
+bool MonoBackendModule::attemptObjectTriangulation(
+        FrameId current_frame,
+        FrameId previous_frame,
+        ObjectId object_id,
+        const EssentialDecompositionResult&  motion_estimate,
+        const gtsam::Pose3& T_world_camera_curr,
+        const gtsam::Pose3& T_world_camera_prev,
+        gtsam::Point3Vector& triangulated_values,
+        TrackletIds& triangulated_tracklets,
+        gtsam::Rot3& R_motion)
+{
+
+    int count = 0;
+
+    CHECK(do_tracklet_manager_.objectExists(object_id));
+
+    const TrackletIds tracklet_ids = do_tracklet_manager_.getPerObjectTracklets(object_id);
+    gtsam::Point2Vector observation_curr, observation_prev;
+    for(TrackletId tracklet_id : tracklet_ids) {
+        CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
+
+        DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracklet_id);
+
+        if(tracklet.size() < 2u) { continue; }
+
+        //check if in prev and current frame
+        if(tracklet.exists(current_frame) && tracklet.exists(previous_frame)) {
+            const Keypoint& current_measurement = tracklet.at(current_frame);
+            observation_curr.push_back(current_measurement);
+
+            const Keypoint& prev_measurement = tracklet.at(previous_frame);
+            observation_prev.push_back(prev_measurement);
+        }
+    }
+
+    LOG(WARNING) << count << " tracket points for obj " << object_id;
+    CHECK(observation_curr.size() == observation_prev.size());
+
+    if(observation_curr.size() < 3u) {
+        return false;
+    }
+
+    const gtsam::Matrix3 K = gtsam_calibration_->K();
+    const gtsam::Matrix3 R1 = motion_estimate.R1_.matrix();
+    const gtsam::Matrix3 R2 = motion_estimate.R2_.matrix();
+
+    const gtsam::Matrix3 R_world_camera_curr = T_world_camera_curr.rotation().matrix();
+    const gtsam::Matrix3 R_world_camera_prev = T_world_camera_prev.rotation().matrix();
+
+    //at this point we need to compute W_R where R is the rotation component of H
+    //R1/R2 actually corresponds to the second half of the essential matrix constraint which, when motion is addeded, becomes
+    // X_{k}^R{-1} * {WH^}_R * X_{k-1}^R = R1/R2
+    //and we just want {WH^}_R
+    const gtsam::Matrix3 world_H_R1 = R_world_camera_curr * R1 * R_world_camera_prev.inverse();
+    const gtsam::Matrix3 world_H_R2 = R_world_camera_curr * R2 * R_world_camera_prev.inverse();
+
+    gtsam::Point3Vector triangulated_points_R1 =
+        mono_backend_tools::triangulatePoint3Vector(
+            T_world_camera_prev,
+            T_world_camera_curr,
+            K,
+            observation_prev,
+            observation_curr,
+            world_H_R1
+        );
+
+    gtsam::Point3Vector triangulated_points_R2 =
+        mono_backend_tools::triangulatePoint3Vector(
+            T_world_camera_prev,
+            T_world_camera_curr,
+            K,
+            observation_prev,
+            observation_curr,
+            world_H_R2
+        );
+
+
+    return true;
+}
 
 
 // void MonoBackendModule::updateStaticObservations(

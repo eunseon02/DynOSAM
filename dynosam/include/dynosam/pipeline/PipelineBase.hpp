@@ -135,15 +135,15 @@ public:
 
     InputConstSharedPtr input = nullptr;
     is_thread_working = false;
-    try
-    {
+    // try
+    // {
       input = getInputPacket();
-    }
-    catch (const std::exception& e)
-    {
-      // context::shutdown("Exception raised in pipeline " + module_name_ +
-      //                   " on getInputPacket(): " + std::string(e.what()));
-    }
+    // }
+    // catch (const std::exception& e)
+    // {
+    //   // context::shutdown("Exception raised in pipeline " + module_name_ +
+    //   //                   " on getInputPacket(): " + std::string(e.what()));
+    // }
     is_thread_working = true;
     // this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
 
@@ -153,15 +153,15 @@ public:
       // From this point on, you cannot use input, since process owns it.
       auto tic_process = utils::Timer::tic();
       OutputConstSharedPtr output = nullptr;
-      try
-      {
+      // try
+      // {
         output = process(input);
         // this->logTiming("process", utils::Timer::toc(tic_process));
-      }
-      catch (const std::exception& e)
-      {
-        // context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
-      }
+      // }
+      // catch (const std::exception& e)
+      // {
+      //   // context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
+      // }
 
       if (output)
       {

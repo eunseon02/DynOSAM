@@ -342,7 +342,7 @@ RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const
     constexpr int max_iterations = 500;
     const cv::Mat K = camera_params_.getCameraMatrix();
 
-    cv::Mat ransac_inliers;  // a [N x 1] vector
+    cv::Mat ransac_inliers;  // a [1 x N] vector
 
     const cv::Mat E = cv::findEssentialMat(
         ref_kps,
@@ -356,20 +356,27 @@ RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const
 
     CHECK(ransac_inliers.rows == tracklets.size());
 
+    cv::Mat R1, R2, t;
+    try {
+        cv::decomposeEssentialMat(E, R1, R2, t);
+    }
+    catch(const cv::Exception& e) {
+        LOG(WARNING) << "decomposeEssentialMat failed with error " << e.what();
+        return MotionResult::Unsolvable();
+    }
+
     TrackletIds inliers, outliers;
     for (int i = 0; i < ransac_inliers.rows; i++)
     {
-        int inlier_idx = ransac_inliers.at<int>(i);
-        const auto& corres = correspondences.at(inlier_idx);
-        inliers.push_back(corres.tracklet_id_);
+        if(ransac_inliers.at<int>(i)) {
+            const auto& corres = correspondences.at(i);
+            inliers.push_back(corres.tracklet_id_);
+        }
+
     }
 
     determineOutlierIds(inliers, tracklets, outliers);
     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-    CHECK_EQ(inliers.size(), static_cast<size_t>(ransac_inliers.rows));
-
-    cv::Mat R1, R2, t;
-    cv::decomposeEssentialMat(E, R1, R2, t);
 
     EssentialDecompositionResult result(
         utils::cvMatToGtsamRot3(R1),
@@ -377,6 +384,7 @@ RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const
         utils::cvMatToGtsamPoint3(t)
     );
 
+    // LOG(INFO) << "Solving RelativeObjectMotionSolver with inliers " << inliers.size() << " outliers " <<  outliers.size();
     return MotionResult(result, tracklets, inliers, outliers);
 }
 

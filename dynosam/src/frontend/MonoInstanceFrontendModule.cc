@@ -140,6 +140,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
             frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
 
 
+
             // TODO: jesse - no idea whats going on but commenting the next line in stops the program from reaching the end of the function
             // some weird reference doing something with the PC...?
             ReferenceFrameEstimate<EssentialDecompositionResult> estimate(object_motion_result.value(), ReferenceFrame::WORLD);
@@ -155,6 +156,8 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
             // logAndPropogateObjectPoses(per_frame_object_poses, gt_packet, object_motion_result.get(), object_id);
         }
     }
+
+    LOG(INFO) << motion_estimates.size();
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
