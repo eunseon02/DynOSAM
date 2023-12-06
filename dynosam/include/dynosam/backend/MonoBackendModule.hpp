@@ -58,6 +58,11 @@ private:
     //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
     void addOdometry(const gtsam::Pose3& T_world_camera, FrameId curr_frame_id, FrameId prev_frame_id, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
+
+    // void handleStaticMeasurementsBoostrap(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    // void handleStaticMeasurementsNominal(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+
     void updateSmartStaticObservations(
         const StatusKeypointMeasurements& measurements,
         const FrameId frame_id,
@@ -74,7 +79,7 @@ private:
     //new_and_current_state should be the most up to date values (including the most recent camera pose which may not be in state_)
     //that we want to use to triangulate the point
     //this will also add the projection factors to the graph so no need to run another "add projection measurements"
-    void tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
+    TrackletIds tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
 
     //the slot in the smart_factor_map should be associted with the factor in factors
     //will be removed from the smart factor map but remain in the tracklet_to_status_map_ where the status will be updated to PROJECTION

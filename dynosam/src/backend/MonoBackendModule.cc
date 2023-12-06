@@ -110,6 +110,9 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     StatusKeypointMeasurements new_projection_measurements;
 
     const gtsam::Pose3 T_world_camera_measured = input->T_world_camera_;
+
+    const gtsam::Pose3 T_world_camera_gt = input->gt_packet_->X_world_;
+
     const FrameId current_frame_id =  input->getFrameId();
 
     if(FLAGS_run_as_graph_file_only) {
@@ -117,8 +120,7 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
         return {State::Nominal, nullptr};
     }
 
-    addOdometry(T_world_camera_measured, current_frame_id, current_frame_id-1, state_, state_graph_);
-
+    addOdometry(T_world_camera_gt, current_frame_id, current_frame_id-1, state_, state_graph_);
     //process should be
     //1. make new smart factors for new measurements
     //2. Iterate over smart factors and update or convert
@@ -127,12 +129,26 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     addNewSmartStaticFactors(new_smart_factors, state_graph_);
 
     gtsam::Values new_and_current_values(state_);
-    tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values,state_, state_graph_);
+    auto tracklets_triangulated =  tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, state_, state_graph_);
     addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, state_graph_);
-    // updateStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_point_values, new_smart_factors, new_projection_factors, smart_factors_to_convert);
-    // convertAndDeleteSmartFactors(new_values, smart_factors_to_convert, new_factors);
-    // addToStatesStructures(new_values, new_factors, new_smart_factors);
-    return {State::Nominal, nullptr};
+
+    LOG(INFO) << "New smart factors " << new_smart_factors.size() << " updated smart factors " << updated_smart_factors.size() << " new projections " << new_projection_measurements.size() << " num triangulated " << tracklets_triangulated.size();
+
+    LandmarkMap lmk_map;
+    for(const auto&[tracklet_id, status] : tracklet_to_status_map_) {
+        if(status.pf_type_ == ProjectionFactorType::PROJECTION) {
+            //assume static only atm
+            const auto lmk_symbol = StaticLandmarkSymbol(tracklet_id);
+            CHECK(state_.exists(lmk_symbol));
+            const gtsam::Point3 lmk = state_.at<gtsam::Point3>(lmk_symbol);
+            lmk_map.insert({tracklet_id, lmk});
+        }
+    }
+
+    auto backend_output = std::make_shared<BackendOutputPacket>();
+    backend_output->static_lmks_ = lmk_map;
+
+    return {State::Nominal, backend_output};
 }
 
 
@@ -155,6 +171,32 @@ void MonoBackendModule::addOdometry(const gtsam::Pose3& T_world_camera, FrameId 
         factor_graph_tools::addBetweenFactor(prev_frame_id, frame_id, odom, odometry_noise_, new_factors);
     }
 }
+
+
+// void MonoBackendModule::handleStaticMeasurementsBootstrap(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values&,  gtsam::NonlinearFactorGraph& new_factors) {
+//     const FrameId current_frame_id =  input->getFrameId();
+//     TrackletIds new_smart_factors;
+//     TrackletIds updated_smart_factors;
+//     StatusKeypointMeasurements new_projection_measurements;
+
+//     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
+//     addNewSmartStaticFactors(new_smart_factors, new_factors);
+// }
+
+// void MonoBackendModule::handleStaticMeasurementsNominal(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
+//     const FrameId current_frame_id =  input->getFrameId();
+//     TrackletIds new_smart_factors;
+//     TrackletIds updated_smart_factors;
+//     StatusKeypointMeasurements new_projection_measurements;
+
+//     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
+//     addNewSmartStaticFactors(new_smart_factors, new_factors);
+
+//     gtsam::Values new_and_current_values(new_values);
+//     tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, state_, new_factors);
+//     addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, new_factors);
+// }
+
 
 void MonoBackendModule::updateSmartStaticObservations(
         const StatusKeypointMeasurements& measurements,
@@ -242,7 +284,8 @@ void MonoBackendModule::addNewSmartStaticFactors(const TrackletIds& new_smart_fa
     }
 }
 
-void MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) {
+TrackletIds MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) {
+    TrackletIds triangulated_tracklets;
     for(const TrackletId tracklet_id : updated_smart_factors) {
         CHECK(smart_factor_map_.exists(tracklet_id)) << "Smart factor with tracklet id " << tracklet_id
                 << " has been updated but is not in the smart_factor_map";
@@ -259,9 +302,12 @@ void MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const TrackletI
             CHECK(triangulation_result.valid());
             const gtsam::Point3 point = triangulation_result.value();
             convertSmartToProjectionFactor(tracklet_id, point, new_values, factors);
+
+            triangulated_tracklets.push_back(tracklet_id);
           }
         }
     }
+    return triangulated_tracklets;
 }
 
 bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) {

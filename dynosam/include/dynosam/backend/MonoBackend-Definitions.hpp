@@ -84,43 +84,8 @@ public:
 
 };
 
-// class ProjectionFactorStatusMap : public std::unordered_map<TrackletId, ProjectionFactorStatus> {
-// public:
-//     ProjectionFactorStatusMap();
 
-//     inline bool exists(const TrackletId tracklet_id) const {
-//         const auto& it = this->find(tracklet_id);
-//         return it != this->end();
-//     }
-
-//     inline void add(const ProjectionFactorStatus& projection_factor_status) {
-//         //what if already exists?
-//         this->insert({projection_factor_status.tracklet_id_, projection_factor_status})
-//     }
-
-//     inline ObjectId& getObjectIdProperty(const TrackletId tracklet_id) {
-//         return this->at(tracklet_id).object_id_;
-//     }
-
-//     inline ObjectId getObjectIdProperty(const TrackletId tracklet_id) const {
-//         return this->at(tracklet_id).object_id_;
-//     }
-
-//     inline ProjectionFactorType& getFactorTypeProperty(const TrackletId tracklet_id) {
-//         return this->at(tracklet_id).type_;
-//     }
-
-//     inline ProjectionFactorType getFactorTypeProperty(const TrackletId tracklet_id) const {
-//         return this->at(tracklet_id).type_;
-//     }
-
-//     inline ProjectionFactorType& getFactorTypeProperty(const TrackletId tracklet_id) {
-//         return this->at(tracklet_id).type_;
-//     }
-
-
-
-// };
+class DynamicMeasurementsMap : public gtsam::FastMap<
 
 
 

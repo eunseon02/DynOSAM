@@ -31,6 +31,8 @@ struct BackendOutputPacket {
 
 DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
+    LandmarkMap static_lmks_;
+
 };
 
 } //dyno

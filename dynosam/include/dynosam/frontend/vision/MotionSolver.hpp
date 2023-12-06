@@ -42,8 +42,11 @@ using RelativePoseSacProblem = opengv::sac::Ransac<RelativePoseProblem>;
 
 namespace dyno {
 
-class MotionResult : public std::optional<gtsam::Pose3> {
+template<typename Result>
+class MotionSolverResult : public std::optional<Result> {
 public:
+    using Base = std::optional<Result>;
+    using This = MotionSolverResult<Result>;
     enum Status { VALID, NOT_ENOUGH_CORRESPONDENCES, NOT_ENOUGH_INLIERS, UNSOLVABLE };
     Status status;
 
@@ -52,13 +55,13 @@ public:
     TrackletIds outliers_;
 
 private:
-    MotionResult(Status s) : status(s) {};
+    MotionSolverResult(Status s) : status(s) {};
 
 public:
-    MotionResult() {}
+    MotionSolverResult() {}
 
-    MotionResult(
-        const gtsam::Pose3& pose,
+    MotionSolverResult(
+        const Result& result,
         const TrackletIds& ids_used,
         const TrackletIds& inliers,
         const TrackletIds& outliers)
@@ -67,7 +70,7 @@ public:
       inliers_(inliers),
       outliers_(outliers)
     {
-        emplace(pose);
+        Base::emplace(result);
 
         {
             //debug check
@@ -76,20 +79,20 @@ public:
         }
     }
 
-    operator const gtsam::Pose3&() const { return get(); }
+    operator const Result&() const { return get(); }
 
-    static MotionResult NotEnoughCorrespondences() { return MotionResult(NOT_ENOUGH_CORRESPONDENCES); }
-    static MotionResult NotEnoughInliers() { return MotionResult(NOT_ENOUGH_INLIERS); }
-    static MotionResult Unsolvable() { return MotionResult(UNSOLVABLE); }
+    static This NotEnoughCorrespondences() { return This(NOT_ENOUGH_CORRESPONDENCES); }
+    static This NotEnoughInliers() { return This(NOT_ENOUGH_INLIERS); }
+    static This Unsolvable() { return This(UNSOLVABLE); }
 
     inline bool valid() const { return status == VALID; }
     inline bool notEnoughCorrespondences() const { return status == NOT_ENOUGH_CORRESPONDENCES; }
     inline bool notEnoughInliers() const { return status == NOT_ENOUGH_INLIERS; }
     inline bool unsolvable() const { return status == UNSOLVABLE; }
 
-    const gtsam::Pose3& get() const {
-        if (!has_value()) throw std::runtime_error("MotionResult has no value");
-        return value();
+    const Result& get() const {
+        if (!Base::has_value()) throw std::runtime_error("MotionSolverResult has no value");
+        return Base::value();
     }
 
 };
@@ -110,49 +113,138 @@ namespace motion_solver_tools {
  * @param camera_params
  * @return MotionResult
  */
-template<typename RefType, typename CurrType>
-MotionResult solveMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const FrontendParams& params, const CameraParams& camera_params);
+template<typename Result, typename RefType, typename CurrType>
+MotionSolverResult<Result> solveMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const FrontendParams& params, const CameraParams& camera_params);
 
 } //motion_solver_tools
 
 
 
 
-
-
-
-
-
-class MotionSolver {
+template<typename Result, typename RefType, typename CurrType>
+class MotionSolverBase {
 
 public:
-    MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
+    using ResultType = Result;
+    using ReferenceType = RefType;
+    using CurrentType = CurrType;
+    using MotionResult = MotionSolverResult<ResultType>;
 
-    template<typename RefType, typename CurrType>
-    MotionResult solveCameraPose(const GenericCorrespondences<RefType, CurrType>& correspondences) const {
-        return motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
-    }
+    MotionSolverBase(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
+    virtual ~MotionSolverBase() = default;
 
-    template<typename RefType, typename CurrType>
-    MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& T_world_camera) const {
-        const MotionResult result = motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
-        if(result.valid()) {
-            const gtsam::Pose3 G_w = result.get().inverse();
-            const gtsam::Pose3 H_w = T_world_camera * G_w;
-            return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
-        }
-
-        //if not valid, return motion result as is
-        return result;
-    }
-
-
-
+    virtual MotionResult solve(const GenericCorrespondences<RefType, CurrType>& correspondences) const = 0;
 
 protected:
     const FrontendParams params_;
     const CameraParams camera_params_;
 
 };
+
+
+template<typename Result, typename RefType, typename CurrType>
+class ObjectMotionSolverBase : public MotionSolverBase<Result, RefType, CurrType> {
+
+public:
+    using Base = MotionSolverBase<Result, RefType, CurrType>;
+    using MotionResult = typename Base::MotionResult;
+
+    ObjectMotionSolverBase(const FrontendParams& params, const CameraParams& camera_params,  const gtsam::Pose3& T_world_camera) : Base(params, camera_params), T_world_camera_(T_world_camera) {}
+
+protected:
+    const gtsam::Pose3 T_world_camera_;
+
+};
+
+
+class AbsoluteCameraMotionSolver : public MotionSolverBase<gtsam::Pose3, Landmark, Keypoint> {
+
+public:
+    using Base = MotionSolverBase<gtsam::Pose3, Landmark, Keypoint>;
+    using MotionResult = Base::MotionResult;
+
+    AbsoluteCameraMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
+
+    MotionResult solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const override;
+
+};
+
+
+template<typename RefType, typename CurrType>
+class AbsoluteObjectMotionSolver : public ObjectMotionSolverBase<gtsam::Pose3, RefType, CurrType> {
+
+public:
+    using This = AbsoluteObjectMotionSolver<RefType, CurrType>;
+    using Base = ObjectMotionSolverBase<gtsam::Pose3, RefType, CurrType>;
+    using MotionResult = typename Base::MotionResult;
+
+    AbsoluteObjectMotionSolver(const FrontendParams& params, const CameraParams& camera_params, const gtsam::Pose3& T_world_camera) : Base(params, camera_params, T_world_camera) {}
+
+    MotionResult solve(const GenericCorrespondences<RefType, CurrType>& correspondences) const override;
+
+};
+
+class RelativeCameraMotionSolver : public MotionSolverBase<gtsam::Pose3, Keypoint, Keypoint> {
+
+public:
+    using Base = MotionSolverBase<gtsam::Pose3, Keypoint, Keypoint>;
+    using MotionResult = Base::MotionResult;
+
+    RelativeCameraMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
+
+    MotionResult solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const override;
+
+};
+
+class EssentialDecompositionResult; //forward declare
+
+class RelativeObjectMotionSolver : public MotionSolverBase<EssentialDecompositionResult, Keypoint, Keypoint> {
+
+public:
+    using Base = MotionSolverBase<EssentialDecompositionResult, Keypoint, Keypoint>;
+    using MotionResult = Base::MotionResult;
+
+    RelativeObjectMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
+
+    MotionResult solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const override;
+
+};
+
+
+
+
+
+
+// class MotionSolver {
+
+// public:
+//     MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
+
+//     template<typename RefType, typename CurrType>
+//     MotionResult solveCameraPose(const GenericCorrespondences<RefType, CurrType>& correspondences) const {
+//         return motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
+//     }
+
+//     template<typename RefType, typename CurrType>
+//     MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& T_world_camera) const {
+//         const MotionResult result = motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
+//         if(result.valid()) {
+//             const gtsam::Pose3 G_w = result.get().inverse();
+//             const gtsam::Pose3 H_w = T_world_camera * G_w;
+//             return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
+//         }
+
+//         //if not valid, return motion result as is
+//         return result;
+//     }
+
+
+
+
+// protected:
+//     const FrontendParams params_;
+//     const CameraParams camera_params_;
+
+// };
 
 } //dyno

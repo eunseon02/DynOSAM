@@ -35,15 +35,14 @@ namespace dyno {
 
 MonoInstanceFrontendModule::MonoInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : FrontendModule(frontend_params, display_queue),
-      camera_(camera),
-      motion_solver_(frontend_params, camera->getParams())
-{
+      camera_(camera)
+    {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 }
 
-bool MonoInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const {
-    return image_container->hasMotionMask();
+FrontendModule::ImageValidationResult MonoInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+    return ImageValidationResult(image_container->hasMotionMask(), "Motion mask is required");
 }
 
 
@@ -90,16 +89,16 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
     LOG(INFO) << "Done 2D-2D correspondences";
 
-    MotionResult camera_pose_result;
+    RelativeCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
+    RelativeCameraMotionSolver::MotionResult camera_pose_result;
     {
         utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-        camera_pose_result = motion_solver_.solveCameraPose(correspondences);
+        camera_pose_result = camera_motion_solver.solve(correspondences);
     }
 
 
     if(camera_pose_result.valid()) {
         const gtsam::Pose3 T_world_camera = previous_frame->T_world_camera_ * camera_pose_result.get();
-        LOG(INFO) << T_world_camera;
         frame->T_world_camera_ = T_world_camera;
     }
     else {
@@ -113,9 +112,9 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
     frame->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
 
-
-    //2. recover object motion (rotation)
-    MotionEstimateMap motion_estimates;
+    RelativeObjectMotionSolver relative_object_motion_solver(base_params_, camera_->getParams());
+    DecompositionRotationEstimates motion_estimates;
+    // //2. recover object motion (rotation)
     for(const auto& [object_id, observations] : frame->object_observations_) {
         utils::TimingStatsCollector object_motion_timer("solve_object_motion");
         RelativePoseCorrespondences dynamic_correspondences;
@@ -134,23 +133,22 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
         LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
 
-        const MotionResult object_motion_result = motion_solver_.solveObjectMotion(
-            dynamic_correspondences,
-            frame->T_world_camera_);
+        const RelativeObjectMotionSolver::MotionResult object_motion_result = relative_object_motion_solver.solve(
+            dynamic_correspondences);
 
         if(object_motion_result.valid()) {
-            // frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
+            frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
 
 
-            //TODO: jesse - no idea whats going on but commenting the next line in stops the program from reaching the end of the function
-            //some weird reference doing something with the PC...?
-            // ReferenceFrameEstimate<Motion3> estimate(object_motion_result, ReferenceFrame::WORLD);
-            // motion_estimates.insert({object_id, estimate});
+            // TODO: jesse - no idea whats going on but commenting the next line in stops the program from reaching the end of the function
+            // some weird reference doing something with the PC...?
+            ReferenceFrameEstimate<EssentialDecompositionResult> estimate(object_motion_result.value(), ReferenceFrame::WORLD);
+            motion_estimates.insert({object_id, estimate});
 
-            // if(!input->optional_gt_.has_value()) {
-            //     LOG(WARNING) << "Cannot update object pose because no gt!";
-            //     continue;
-            // }
+            if(!input->optional_gt_.has_value()) {
+                LOG(WARNING) << "Cannot update object pose because no gt!";
+                continue;
+            }
 
             // const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
             // CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
@@ -162,7 +160,6 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
     auto output = constructOutput(*frame, motion_estimates, tracking_img, input->optional_gt_);
-    CHECK(output);
     return {State::Nominal, output};
 
 }
@@ -170,7 +167,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
 MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         const Frame& frame,
-        const MotionEstimateMap& estimated_motions,
+        const DecompositionRotationEstimates& estimated_motions,
         const cv::Mat& debug_image,
         const GroundTruthInputPacket::Optional& gt_packet)
 {

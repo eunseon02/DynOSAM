@@ -23,11 +23,37 @@
 
 #include "dynosam_ros/BackendDisplayRos.hpp"
 
+#include <glog/logging.h>
+#include "rclcpp/qos.hpp"
+
+#include <pcl_conversions/pcl_conversions.h>
+#include <sensor_msgs/msg/point_cloud2.hpp>
+
 namespace dyno {
 
-BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {}
+BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
+    const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
+    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
+
+}
 
 
-void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_output) {}
+void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_output) {
+
+    pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+    for(const auto& [tracklet_id, lmk] : backend_output->static_lmks_) {
+        // publish static lmk's as white
+        pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+        cloud.points.push_back(pt);
+    }
+
+
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pcl::toROSMsg(cloud, pc2_msg);
+    pc2_msg.header.frame_id = "world";
+    static_tracked_points_pub_->publish(pc2_msg);
+
+}
 
 } //dyno

@@ -35,11 +35,10 @@ FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* 
 void FrontendModule::validateInput(const FrontendInputPacketBase::ConstPtr& input) const {
     CHECK(input->image_container_);
 
-    std::string reason;
-    bool result = validateImageContainer(input->image_container_, reason);
+    const ImageValidationResult result = validateImageContainer(input->image_container_);
 
     //throw exception if result is false
-    checkAndThrow<InvalidImageContainerException>(result, *input->image_container_, reason);
+    checkAndThrow<InvalidImageContainerException>(result.valid_, *input->image_container_, result.requirement_);
 
 }
 

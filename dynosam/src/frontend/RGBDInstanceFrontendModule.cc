@@ -35,15 +35,14 @@ namespace dyno {
 
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : FrontendModule(frontend_params, display_queue),
-      camera_(camera),
-      motion_solver_(frontend_params, camera->getParams())
-{
+      camera_(camera)
+    {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 }
 
-bool RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const {
-    return image_container->hasDepth();
+FrontendModule::ImageValidationResult RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+    return ImageValidationResult(image_container->hasDepth(), "Depth is required");
 }
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
@@ -140,10 +139,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     LOG(INFO) << "Done correspondences";
 
-    MotionResult camera_pose_result;
+
+    AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
+    AbsoluteCameraMotionSolver::MotionResult camera_pose_result;
     {
         utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-        camera_pose_result = motion_solver_.solveCameraPose(correspondences);
+        camera_pose_result = camera_motion_solver.solve(correspondences);
     }
 
     // LOG(INFO) << "Done correspondences";
@@ -168,26 +169,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
 
+    AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame->T_world_camera_);
+
     MotionEstimateMap motion_estimates;
     std::map<ObjectId, gtsam::Pose3> per_frame_object_poses; //for viz
     for(const auto& [object_id, observations] : frame->object_observations_) {
         utils::TimingStatsCollector object_motion_timer("solve_object_motion");
         AbsolutePoseCorrespondences dynamic_correspondences;
-
-        // auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
-        //     const Frame& current_frame = *frame;
-
-        //     const Landmark&
-
-        //     return TrackletCorrespondance<Landmark, Landmark>()
-        // }
-
-        // GenericCorrespondences<Landmark, Landmark> dynamic_correspondences;
-        //   bool result = frame->getDynamicCorrespondences(
-        //     dynamic_correspondences,
-        //     *previous_frame_,
-        //     object_id,
-        //     [&]());
 
         // //get the corresponding feature pairs
         bool result = frame->getDynamicCorrespondences(
@@ -203,9 +191,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
         LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
 
-        const MotionResult object_motion_result = motion_solver_.solveObjectMotion(
-            dynamic_correspondences,
-            frame->T_world_camera_);
+        const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
+            dynamic_correspondences);
 
         if(object_motion_result.valid()) {
             frame->dynamic_features_.markOutliers(object_motion_result.outliers_);

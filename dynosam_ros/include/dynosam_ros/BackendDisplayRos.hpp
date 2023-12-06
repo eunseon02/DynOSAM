@@ -23,6 +23,12 @@
 
 #pragma once
 
+#include "rclcpp/rclcpp.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "nav_msgs/msg/odometry.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
+
 #include <dynosam/visualizer/Display.hpp>
 
 #include "rclcpp/rclcpp.hpp"
@@ -34,6 +40,9 @@ public:
     BackendDisplayRos(rclcpp::Node::SharedPtr node);
 
     void spinOnce(const BackendOutputPacket::ConstPtr& backend_output) override;
+
+private:
+    rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr static_tracked_points_pub_;
 
 };
 

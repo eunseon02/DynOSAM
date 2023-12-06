@@ -41,13 +41,13 @@ public:
 
 private:
     Camera::Ptr camera_;
-    MotionSolver motion_solver_;
+    // MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
     std::map<ObjectId, gtsam::Pose3> object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
 
 private:
 
-    bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const override;
+    ImageValidationResult validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 

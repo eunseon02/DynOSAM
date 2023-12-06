@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
 #include <eigen3/Eigen/Dense>
 #include <opencv4/opencv2/core/eigen.hpp>
@@ -58,7 +59,8 @@ namespace motion_solver_tools {
  * @return MotionResult
  */
 template<>
-MotionResult solveMotion(const GenericCorrespondences<Landmark, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Landmark, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+    using MotionResult = MotionSolverResult<gtsam::Pose3>;
     const size_t& n_matches = correspondences.size();
 
     if(n_matches < 5u) {
@@ -129,7 +131,7 @@ MotionResult solveMotion(const GenericCorrespondences<Landmark, Keypoint>& corre
     CHECK_EQ(inliers.size(), ransac.inliers_.size());
 
 
-    return MotionResult(opengv_transform, tracklets, inliers, outliers);
+    return MotionSolverResult<gtsam::Pose3>(opengv_transform, tracklets, inliers, outliers);
 }
 
 
@@ -144,7 +146,8 @@ MotionResult solveMotion(const GenericCorrespondences<Landmark, Keypoint>& corre
  * @return MotionResult
  */
 template<>
-MotionResult solveMotion(const GenericCorrespondences<Keypoint, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Keypoint, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
+    using MotionResult = MotionSolverResult<gtsam::Pose3>;
     const size_t& n_matches = correspondences.size();
 
     if(n_matches < 5u) {
@@ -290,15 +293,28 @@ MotionResult solveMotion(const GenericCorrespondences<Keypoint, Keypoint>& corre
 } // motion_solver_tools
 
 
-MotionSolver::MotionSolver(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
+AbsoluteCameraMotionSolver::MotionResult AbsoluteCameraMotionSolver::solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const {
+    return motion_solver_tools::solveMotion<ResultType, Landmark, Keypoint>(correspondences, params_, camera_params_);
+}
 
-
-//TODO: (jesse) secalisation of the object motion solver -> dont really like this solution as we're uisng the template types to dciate the behaviour. Would be prefer to do this properly with a policy dp
 template<>
-MotionResult MotionSolver::solveObjectMotion(const GenericCorrespondences<Keypoint, Keypoint>& correspondences, const gtsam::Pose3& T_world_camera) const {
+MotionSolverResult<gtsam::Pose3> AbsoluteObjectMotionSolver<Landmark, Keypoint>::solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const {
+    const MotionResult result = motion_solver_tools::solveMotion<ResultType, Landmark, Keypoint>(correspondences, params_, camera_params_);
+        if(result.valid()) {
+            const gtsam::Pose3 G_w = result.get().inverse();
+            const gtsam::Pose3 H_w = T_world_camera_ * G_w;
+            return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
+        }
 
+        //if not valid, return motion result as is
+        return result;
+}
 
-    const cv::Mat pose = utils::gtsamPose3ToCvMat(T_world_camera);
+RelativeCameraMotionSolver::MotionResult RelativeCameraMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
+    return motion_solver_tools::solveMotion<ResultType, Keypoint, Keypoint>(correspondences, params_, camera_params_);
+}
+
+RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
 
     const size_t& n_matches = correspondences.size();
 
@@ -320,13 +336,48 @@ MotionResult MotionSolver::solveObjectMotion(const GenericCorrespondences<Keypoi
         tracklets.push_back(corres.tracklet_id_);
     }
 
-    const cv::Mat E = cv::findEssentialMat(ref_kps, curr_kps, camera_params_.getCameraMatrix()); //ransac params?
+    constexpr int method = cv::RANSAC;
+    constexpr double  prob = 0.999;
+	constexpr double threshold = 1.0;
+    constexpr int max_iterations = 500;
+    const cv::Mat K = camera_params_.getCameraMatrix();
+
+    cv::Mat ransac_inliers;  // a [N x 1] vector
+
+    const cv::Mat E = cv::findEssentialMat(
+        ref_kps,
+        curr_kps,
+        K,
+        method,
+        prob,
+        threshold,
+        max_iterations,
+        ransac_inliers); //ransac params?
+
+    CHECK(ransac_inliers.rows == tracklets.size());
+
+    TrackletIds inliers, outliers;
+    for (int i = 0; i < ransac_inliers.rows; i++)
+    {
+        int inlier_idx = ransac_inliers.at<int>(i);
+        const auto& corres = correspondences.at(inlier_idx);
+        inliers.push_back(corres.tracklet_id_);
+    }
+
+    determineOutlierIds(inliers, tracklets, outliers);
+    CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
+    CHECK_EQ(inliers.size(), static_cast<size_t>(ransac_inliers.rows));
 
     cv::Mat R1, R2, t;
     cv::decomposeEssentialMat(E, R1, R2, t);
 
+    EssentialDecompositionResult result(
+        utils::cvMatToGtsamRot3(R1),
+        utils::cvMatToGtsamRot3(R2),
+        utils::cvMatToGtsamPoint3(t)
+    );
 
-    return MotionResult();
+    return MotionResult(result, tracklets, inliers, outliers);
 }
 
 } //dyno

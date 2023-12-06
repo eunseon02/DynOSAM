@@ -54,15 +54,41 @@ public:
     using Base = ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>;
     using Base::SpinReturn;
 
-
     FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
     ~FrontendModule() = default;
 
+protected:
+    /**
+     * @brief Defines the result of checking the image container which is a done polymorphically per module (as
+     * each module has its own requirements)
+     *
+     * The requirement string indicates what should be true about the ImageContainer for the function to return true;
+     *
+     */
+    struct ImageValidationResult {
+        const bool valid_;
+        const std::string requirement_; //printed if result is not valid. Set by the function call
+
+        ImageValidationResult(bool valid, const std::string& requirement) :
+            valid_(valid), requirement_(requirement) {}
+
+    };
 
 protected:
 
     void validateInput(const FrontendInputPacketBase::ConstPtr& input) const override;
-    virtual bool validateImageContainer(const ImageContainer::Ptr& image_container, std::string& reason) const = 0;
+
+    /**
+     * @brief Checks that the incoming ImageContainer meeets the minimum requirement for the derived module.
+     *
+     * This is specifically to check that the right image types are contained with the container.
+     * If the result is false, InvalidImageContainerException is thrown with the requirements specified by the
+     * returned ImageValidationResult.
+     *
+     * @param image_container const ImageContainer::Ptr&
+     * @return ImageValidationResult
+     */
+    virtual ImageValidationResult validateImageContainer(const ImageContainer::Ptr& image_container) const = 0;
 
 protected:
     const FrontendParams base_params_;

@@ -34,6 +34,25 @@ namespace dyno {
 
 
 /**
+ * @brief Contains the result of an SVD compoisition, including both rotations
+ *
+ * Holds the result of computing the object motion with 2D-2D correspondences via the essential matrix calculation.
+ *
+ */
+struct EssentialDecompositionResult {
+    const gtsam::Rot3 R1_;
+    const gtsam::Rot3 R2_;
+    const gtsam::Vector3 t_;
+
+    EssentialDecompositionResult(const gtsam::Rot3& R1, const gtsam::Rot3& R2, const gtsam::Vector3& t)
+        :   R1_(R1), R2_(R2), t_(t) {}
+
+};
+
+using DecompositionRotationEstimates = EstimateMap<ObjectId, EssentialDecompositionResult>;
+
+
+/**
  * @brief Should provide camera pose estimation (can be up to scale, TODO: how to indicate this?),
  * object motion estimation (may only be the rotation)
  * as well as the 2D observations (static and dynamic)
@@ -44,14 +63,15 @@ struct MonocularInstanceOutputPacket : public FrontendOutputPacketBase {
 public:
     DYNO_POINTER_TYPEDEFS(MonocularInstanceOutputPacket)
 
-    const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
+
+    const DecompositionRotationEstimates estimated_motions_; //! Estimated motions in the world frame
 
     MonocularInstanceOutputPacket(
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const gtsam::Pose3 T_world_camera,
         const Frame& frame,
-        const MotionEstimateMap& estimated_motions,
+        const DecompositionRotationEstimates& estimated_motions,
         const cv::Mat& debug_image = cv::Mat(),
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
     )
