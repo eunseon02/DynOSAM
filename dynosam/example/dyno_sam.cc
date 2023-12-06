@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     params.scene_type = "clone";
     params.mask_type = dyno::MaskType::MOTION;
 
-    dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
+    dyno::VirtualKittiDataLoader d("/root/data/vKITTI", params);
     d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {
         LOG(INFO) << "Frame " << frame << " ts " << timestamp;
 

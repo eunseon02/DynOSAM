@@ -40,7 +40,7 @@ namespace dyno {
  * @brief NOTE!!: In vitual kitti, the track id's start at 0 and then the ground truth instances in the
  * semantic instances are indexed from trackId+1 such that a pixel value of zero means not a vehicle.
  * In order to reduce confusion when we work with the semantic images and then associate with the ground truth labels,
- * we will index all tracks as trackID = virtualKittiTrackID + 1 so all tracks start from 0!
+ * we will index all tracks as trackID = virtualKittiTrackID + 1 so all tracks start from 1!
  *
  * @param split_string
  * @param idx
@@ -846,7 +846,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     const std::string depth_folder = path + "/" + v_depth_folder + "/" + scene + "/" + scene_type + "/frames/depth/Camera_0";
     const std::string forward_flow_folder = path + "/" + v_forward_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardFlow/Camera_0";
     const std::string backward_flow_folder = path + "/" + v_backward_flow_folder + "/" + scene + "/" + scene_type + "/frames/backwardFlow/Camera_0";
-    const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardsceneFlow/Camera_0";
+    const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardSceneFlow/Camera_0";
     const std::string instance_segmentation_folder = path + "/" + v_instance_segmentation_folder + "/" + scene + "/" + scene_type + "/frames/instanceSegmentation/Camera_0";
     const std::string rgb_folder = path + "/" + v_rgb_folder + "/" + scene + "/" + scene_type + "/frames/rgb/Camera_0";
     const std::string text_gt_folder = path + "/" + v_text_gt_folder + "/" + scene + "/" + scene_type;
