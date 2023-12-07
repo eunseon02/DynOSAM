@@ -60,6 +60,11 @@ gtsam::Point3Vector triangulatePoint3Vector(gtsam::Pose3 X_world_camera_prev, gt
   gtsam::Matrix3 project_inv_prev = X_world_camera_prev_rot*K_inv;
   gtsam::Matrix3 project_inv_curr = X_world_camera_curr_rot*K_inv;
 
+  // std::cout << observation_prev.size() << std::endl;
+  // for (int i = 0; i < observation_prev.size(); i++){
+  //   std::cout << "Obv prev " << i << "\n" << observation_prev[i] << std::endl;
+  // }
+
   gtsam::Point2 centroid_2d_prev = computeCentroid(observation_prev);
   gtsam::Point3 centroid_2d_homo(centroid_2d_prev.x(), centroid_2d_prev.y(), 1.0);
   gtsam::Point3 centroid_3d_prev = K_inv*centroid_2d_homo;
@@ -67,9 +72,13 @@ gtsam::Point3Vector triangulatePoint3Vector(gtsam::Pose3 X_world_camera_prev, gt
 
   gtsam::Point3 results_single = obj_rotation*X_world_camera_prev_trans - X_world_camera_curr_trans;
 
+  // std::cout << coeffs_scale << std::endl;
+  // std::cout << results_single << std::endl;
+
   int n_points = observation_prev.size();
-  Eigen::MatrixXd coeffs(3*n_points, 1+2*n_points);
+  Eigen::MatrixXd coeffs = Eigen::MatrixXd::Zero(3*n_points, 1+2*n_points);
   Eigen::VectorXd results(3*n_points);
+  // std::cout << "Coeffs initial\n" << coeffs << std::endl;
   for (int i_points = 0; i_points < n_points; i_points++){
     gtsam::Point3 this_obv_prev(observation_prev[i_points].x(), observation_prev[i_points].y(), 1.0);
     gtsam::Point3 this_obv_curr(observation_curr[i_points].x(), observation_curr[i_points].y(), 1.0);
@@ -88,8 +97,12 @@ gtsam::Point3Vector triangulatePoint3Vector(gtsam::Pose3 X_world_camera_prev, gt
     results.block<3, 1>(3*i_points, 0) = results_single;
   }
 
+  // std::cout << "Coeffs constructed\n" << coeffs << std::endl;
+
   gtsam::Point3Vector points_world;
   Eigen::VectorXd depths_lstsq = coeffs.colPivHouseholderQr().solve(results);
+
+  // std::cout << depths_lstsq << std::endl;
 
   for (int i_points = 0; i_points < n_points; i_points++){
     gtsam::Point3 this_obv_prev(observation_prev[i_points].x(), observation_prev[i_points].y(), 1.0);
@@ -102,6 +115,8 @@ gtsam::Point3Vector triangulatePoint3Vector(gtsam::Pose3 X_world_camera_prev, gt
     gtsam::Point3 this_point_world = X_world_camera_prev_rot*this_point_prev + X_world_camera_prev_trans;
     points_world.push_back(this_point_world);
   }
+
+
 
   return points_world;
 

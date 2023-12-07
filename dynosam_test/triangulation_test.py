@@ -36,6 +36,36 @@ def gen_random_points(number, centre, point_range):
 
   return points
 
+def gen_cubic_points(number, centre, point_range):
+  points = np.tile(centre[np.newaxis].T, (1, number))
+
+  points[0][0] -= point_range[0]/2
+  points[1][0] += point_range[1]/2
+  points[2][0] -= point_range[2]/2
+  points[0][1] += point_range[0]/2
+  points[1][1] += point_range[1]/2
+  points[2][1] -= point_range[2]/2
+  points[0][2] -= point_range[0]/2
+  points[1][2] += point_range[1]/2
+  points[2][2] += point_range[2]/2
+  points[0][3] += point_range[0]/2
+  points[1][3] += point_range[1]/2
+  points[2][3] += point_range[2]/2
+  points[0][4] -= point_range[0]/2
+  points[1][4] -= point_range[1]/2
+  points[2][4] -= point_range[2]/2
+  points[0][5] += point_range[0]/2
+  points[1][5] -= point_range[1]/2
+  points[2][5] -= point_range[2]/2
+  points[0][6] -= point_range[0]/2
+  points[1][6] -= point_range[1]/2
+  points[2][6] += point_range[2]/2
+  points[0][7] += point_range[0]/2
+  points[1][7] -= point_range[1]/2
+  points[2][7] += point_range[2]/2
+
+  return points
+
 def homogeneous_points(points):
   points_shape = np.shape(points)
   if points_shape[0] == 3:
@@ -151,9 +181,13 @@ def triangulate_with_rotation_expanded(cam_pose_origin, cam_pose_target, intrins
   centroid_2d_origin = np.append(np.mean(obv_origin, axis=1), 1)[np.newaxis].T
   centroid_3d_origin = np.matmul(K_inv, centroid_2d_origin)
   coeffs_scale = np.matmul((obj_rot - np.identity(3)), centroid_3d_origin)
+  print("Coeff scales")
+  print(coeffs_scale)
 
   # For every observation, the result of the 3 equations constructed are identical to each other (?)
   results_single = np.matmul(obj_rot, cam_tran_origin) - cam_tran_target
+  print("Results single")
+  print(results_single)
   results = results_single
 
   n_obv = len(obv_origin[0, :])
@@ -190,8 +224,9 @@ def triangulate_with_rotation_expanded(cam_pose_origin, cam_pose_target, intrins
     if i_obv > 0:
       results = np.concatenate((results, results_single), axis=0)
 
+  # print(coeffs)
   depths_lstsq, residuals, rank, singulars = np.linalg.lstsq(coeffs, results)
-  # print(depths_lstsq)
+  print(depths_lstsq)
 
   # lhs = coeffs[0:2, 0:2]
   # rhs = results[0:2][np.newaxis].T
@@ -212,8 +247,8 @@ def triangulate_with_rotation_expanded(cam_pose_origin, cam_pose_target, intrins
     this_point_world = transform_points(this_point_origin, cam_pose_origin)
     this_point_world_test = transform_points(this_point_target, cam_pose_target)
 
-    # print("Point in world from origin observation", i_obv, ": \n", this_point_world)
-    # print("Point in world from target observation", i_obv, ": \n", this_point_world_test)
+    print("Point in world from origin observation", i_obv, ": \n", this_point_world)
+    print("Point in world from target observation", i_obv, ": \n", this_point_world_test)
 
     points_world[0, i_obv] = this_point_world[0]
     points_world[1, i_obv] = this_point_world[1]
@@ -301,9 +336,9 @@ def main():
   cam_poses = []
   cam_poses.append(cam_pose_origin)
 
-  cam_mot_xyz_mean = np.array([0.1, 0.1, 5.0]) # in meter
-  cam_mot_rpy_mean = np.array([5., 15., 5.]) # in degree 
-  cam_mot_xyz_range = np.array([0.1, 0.1, 0.1]) # in meter
+  cam_mot_xyz_mean = np.array([0.1, 0.1, 2.0]) # in meter
+  cam_mot_rpy_mean = np.array([0., 15., 0.]) # in degree 
+  cam_mot_xyz_range = np.array([0.0, 0.0, 0.0]) # in meter
   cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
 
   for step in range(example_length-1):
@@ -316,19 +351,21 @@ def main():
 
   print()
 
-  number_points = 12
-  points_origin_centre = np.array([6., 0., 10.])
+  number_points = 8
+  points_origin_centre = np.array([6., 0., 6.])
   points_origin_range = np.array([2., 2., 2.])
-  points_origin = gen_random_points(number_points, points_origin_centre, points_origin_range)
+  # points_origin = gen_random_points(number_points, points_origin_centre, points_origin_range)
+  points_origin = gen_cubic_points(number_points, points_origin_centre, points_origin_range)
 
   points = []
   points.append(points_origin)
   for step in range(example_length-1):
-    points_mot_xyz_mean = np.array([5.0, 0.1, 0.1]) # in meter
+    points_mot_xyz_mean = np.array([2.0, 0.0, 0.0]) # in meter
     points_mot_rpy_mean = np.array([5., 10., 15.]) # in degree 
-    points_mot_xyz_range = np.array([0.1, 0.1, 0.1]) # in meter
-    points_mot_rpy_range = np.array([1., 1., 1.]) # in degree 
+    points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
+    points_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
     points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
+    print(points_motion)
     # points_motion = np.identity(4, dtype=float)
     points_target = transform_points(points[step], points_motion)
     points.append(points_target)
@@ -375,8 +412,10 @@ def main():
       for i in range(number_points):
         points_normalised[0:3, i] = np.array([points_triangulated[0, i]/points_triangulated[3, i], points_triangulated[1, i]/points_triangulated[3, i], points_triangulated[2, i]/points_triangulated[3, i]])
 
-      print("Triangulated points", step-1, "to", step, ": \n", points_normalised)
       print("Non-normalised points", step-1, "to", step, ": \n", points_triangulated)
+      print("Triangulated points", step-1, "to", step, ": \n", points_normalised)
+      print("Rotation compensated points", step-1, "to", step, ": \n", points_triangulated_test)
+      print("Expanded points", step-1, "to", step, ": \n", points_triangulated_expanded)
 
       # points_estimated.append(points_normalised)
       points_estimated.append(points_triangulated_test)
