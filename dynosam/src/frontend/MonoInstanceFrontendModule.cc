@@ -139,10 +139,6 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
         if(object_motion_result.valid()) {
             frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
 
-
-
-            // TODO: jesse - no idea whats going on but commenting the next line in stops the program from reaching the end of the function
-            // some weird reference doing something with the PC...?
             ReferenceFrameEstimate<EssentialDecompositionResult> estimate(object_motion_result.value(), ReferenceFrame::WORLD);
             motion_estimates.insert({object_id, estimate});
 

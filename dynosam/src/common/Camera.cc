@@ -95,7 +95,14 @@ Landmark Camera::cameraToWorldConvention(const Landmark& lmk) {
 
 bool Camera::isLandmarkContained(const Landmark& lmk, Keypoint* keypoint) const {
     Keypoint kp;
-    project(lmk, &kp);
+
+    try {
+      project(lmk, &kp);
+    }
+    catch(const gtsam::CheiralityException&) {
+      //if CheiralityException then point is behind camera
+      return false;
+    }
 
     const bool result = isKeypointContained(kp);
     if(keypoint) *keypoint = kp;

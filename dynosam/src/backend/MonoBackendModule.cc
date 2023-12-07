@@ -28,7 +28,10 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
+#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
+
 #include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/utils/Numerical.hpp"
 
 #include <glog/logging.h>
 #include <gflags/gflags.h>
@@ -144,24 +147,29 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
 
     LOG(ERROR) << "Estimated motions " <<  input->estimated_motions_.size();
 
+    StatusLandmarkEstimates all_dynamic_object_triangulation;
+
     for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
         const EssentialDecompositionResult& decomposition_result = ref_estimate;
 
-        gtsam::Point3Vector triangulated_values;
-        TrackletIds triangulated_tracklets;
+        StatusLandmarkEstimates dynamic_object_triangulation;
         gtsam::Rot3 R_motion;
 
-        attemptObjectTriangulation(
+        if(!attemptObjectTriangulation(
             current_frame_id,
             current_frame_id-1,
             object_id,
             decomposition_result,
             current_pose,
             previous_pose,
-            triangulated_values,
-            triangulated_tracklets,
-            R_motion
-            );
+            dynamic_object_triangulation,
+            R_motion)) { continue; }
+
+
+        // //copy to all dynamic triangulation
+        all_dynamic_object_triangulation.insert(
+            all_dynamic_object_triangulation.begin(), dynamic_object_triangulation.begin(), dynamic_object_triangulation.end());
+
     }
 
     LandmarkMap lmk_map;
@@ -177,6 +185,7 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->static_lmks_ = lmk_map;
+    backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
 
     return {State::Nominal, backend_output};
 }
@@ -413,12 +422,16 @@ bool MonoBackendModule::attemptObjectTriangulation(
         const EssentialDecompositionResult&  motion_estimate,
         const gtsam::Pose3& T_world_camera_curr,
         const gtsam::Pose3& T_world_camera_prev,
-        gtsam::Point3Vector& triangulated_values,
-        TrackletIds& triangulated_tracklets,
+        StatusLandmarkEstimates& triangulated_values,
         gtsam::Rot3& R_motion)
 {
 
     int count = 0;
+    triangulated_values.clear();
+
+    gtsam::Point3Vector lmks_world;
+    TrackletIds triangulated_tracklets;
+
 
     CHECK(do_tracklet_manager_.objectExists(object_id));
 
@@ -426,6 +439,10 @@ bool MonoBackendModule::attemptObjectTriangulation(
     gtsam::Point2Vector observation_curr, observation_prev;
     for(TrackletId tracklet_id : tracklet_ids) {
         CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
+
+        if(count > 100) {
+            break;
+        }
 
         DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracklet_id);
 
@@ -438,6 +455,10 @@ bool MonoBackendModule::attemptObjectTriangulation(
 
             const Keypoint& prev_measurement = tracklet.at(previous_frame);
             observation_prev.push_back(prev_measurement);
+
+            triangulated_tracklets.push_back(tracklet_id);
+
+            count++;
         }
     }
 
@@ -483,7 +504,111 @@ bool MonoBackendModule::attemptObjectTriangulation(
         );
 
 
+    const double sigma_R1 = calculateStandardDeviation(triangulated_points_R1);
+    const double sigma_R2 = calculateStandardDeviation(triangulated_points_R2);
+
+    int R1_points_visible = 0, R2_points_visible = 0;
+
+    for(const gtsam::Point3& pt : triangulated_points_R1) {
+        gtsam::Point3 pt_prev_camera = T_world_camera_prev.inverse() * pt;
+        if(camera_->isLandmarkContained(pt_prev_camera)) {
+            R1_points_visible++;
+        }
+    }
+
+     for(const gtsam::Point3& pt : triangulated_points_R2) {
+        gtsam::Point3 pt_prev_camera = T_world_camera_prev.inverse() * pt;
+        if(camera_->isLandmarkContained(pt_prev_camera)) {
+            R2_points_visible++;
+        }
+    }
+
+    LOG(INFO) << "sigmaR1 " << sigma_R1 << " sigma r2 " << sigma_R2;
+    LOG(INFO) << "R1_points_visible " << R1_points_visible << " R2_points_visible " << R2_points_visible;
+
+    // if(sigma_R1 < sigma_R2) {
+    //     lmks_world = triangulated_points_R1;
+    //     R_motion = gtsam::Rot3(world_H_R1);
+    // }
+    // else {
+    //     lmks_world = triangulated_points_R2;
+    //     R_motion = gtsam::Rot3(world_H_R2);
+    // }
+
+
+    if(R2_points_visible < R1_points_visible && R2_points_visible > 0) {
+        lmks_world = triangulated_points_R1;
+        R_motion = gtsam::Rot3(world_H_R1);
+    }
+    else if(R1_points_visible < R2_points_visible && R1_points_visible > 0) {
+        lmks_world = triangulated_points_R2;
+        R_motion = gtsam::Rot3(world_H_R2);
+    }
+    else if(R2_points_visible > 0 && R1_points_visible > 0) {
+        if(sigma_R1 < sigma_R2) {
+            lmks_world = triangulated_points_R1;
+            R_motion = gtsam::Rot3(world_H_R1);
+        }
+        else {
+            lmks_world = triangulated_points_R2;
+            R_motion = gtsam::Rot3(world_H_R2);
+        }
+    }
+    else {
+        return false;
+    }
+
+
+    CHECK(lmks_world.size() == triangulated_tracklets.size());
+    for(size_t i = 0; i < lmks_world.size(); i++) {
+        const TrackletId tracklet_id = triangulated_tracklets.at(i);
+        const Landmark lmk = lmks_world.at(i);
+        auto lmk_estimate = std::make_pair(tracklet_id, lmk);
+
+        LandmarkStatus status;
+        status.label_ = object_id;
+        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+        triangulated_values.push_back(std::make_pair(status, lmk_estimate));
+    }
+
+
     return true;
+}
+
+
+void MonoBackendModule::addInitalObjectValues(
+        FrameId current_frame_id,
+        ObjectId object_id,
+        const StatusLandmarkEstimates& triangulated_values,
+        const gtsam::Pose3& prev_H_world_current,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& factors)
+{
+    const gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, current_frame_id);
+
+    new_values.insert(motion_symbol, prev_H_world_current);
+
+    for(const StatusLandmarkEstimate& estimate : triangulated_values) {
+        const LandmarkStatus& status = estimate.first;
+        CHECK(status.object_id_ != background_label);
+
+        const TrackletId tracklet_id = estimate.first;
+        const LandmarkEstimate& le = estimate.second;
+
+        const Landmark lmk = le.second;
+
+        const gtsam::Symbol sym = DynamicLandmarkSymbol(tracklet_id);
+        new_values.insert(sym, lmk);
+
+        //add motion factor
+        factors.emplace_shared<LandmarkMotionTernaryFactor>(
+
+        )
+
+
+    }
+
 }
 
 

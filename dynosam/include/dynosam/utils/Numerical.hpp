@@ -52,6 +52,33 @@ inline bool equals_with_abs_tol(const std::vector<T>& vec1, const std::vector<T>
     return true;
 }
 
+template<typename T>
+inline T computeCentroid(const std::vector<T>& vec) {
+  T sum{};
+  for(const T& t : vec) { sum += t; }
+  return sum/static_cast<double>(vec.size());
+}
+
+template<typename T>
+inline T computeCentroid(const std::vector<T, Eigen::aligned_allocator<T>>& vec) {
+  T sum{};
+  for(const T& t : vec) { sum += t; }
+  return sum/static_cast<double>(vec.size());
+}
+
+template<typename T>
+inline double calculateStandardDeviation(const std::vector<T, Eigen::aligned_allocator<T>>& vec) {
+  const T mean = computeCentroid<T>(vec);
+
+  double sum = 0;
+  for(const T& t : vec) {
+    T sub = t.colwise() - mean;
+    sum += sub.norm();
+  }
+
+  return std::sqrt(sum/static_cast<double>(vec.size()));
+}
+
 
 inline bool saveMatrixAsUpperTriangular(std::ostream& os, const gtsam::Matrix& matrix)
 {

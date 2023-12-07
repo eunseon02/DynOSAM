@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
+#include "dynosam/backend/DynamicPointSymbol.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
@@ -43,10 +44,39 @@ static constexpr SymbolChar kObjectMotionSymbolChar = 'H';
 static constexpr SymbolChar kStaticLandmarkSymbolChar = 'l';
 static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
 
+inline gtsam::Key H(unsigned char label, std::uint64_t j) {return gtsam::LabeledSymbol(kObjectMotionSymbolChar, label, j);}
+
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
 inline gtsam::Symbol ObjectMotionSymbol(FrameId frame_id) { return gtsam::Symbol(kObjectMotionSymbolChar, frame_id); }
 inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
+inline gtsam::Symbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return gtsam::Symbol(kDynamicLandmarkSymbolChar, tracklet_id); }
 
+
+inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
+{
+  unsigned char label = object_label + '0';
+  return H(label, static_cast<std::uint64_t>(frame_id));
+}
+
+/**
+ * @brief Construct an object motion symbol with the current frame id.
+ *
+ * A motion takes us from k-1 to k so we index using the k-1 frame id.
+ * This function takes the current frame id (k) which is normally what we work with and constructs the motion symbol
+ * using k-1 as the index.
+ *
+ * This does assume that we're tracking the object frame to frame
+ *
+ * @param object_label
+ * @param current_frame_id
+ * @return gtsam::Key
+ */
+inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, FrameId current_frame_id) {
+    CHECK(current_frame_id > 0) << "Current frame Id must be at least 1 so that we can index from the previous frame!";
+    return ObjectMotionSymbol(object_label, current_frame_id - 1u);
+}
+
+std::string DynoLikeKeyFormatter(gtsam::Key);
 
 using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
@@ -59,6 +89,30 @@ using SmartProjectionFactor = gtsam::SmartProjectionPoseFactor<CalibrationType>;
 using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, CalibrationType>;
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
+
+/**
+ * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
+ *
+ * Label may be background at which point the KeyPointType should be background_label
+ * Also includes information on how the landamrk was estimated, age etc...
+ *
+ */
+struct LandmarkStatus {
+
+    enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
+
+    ObjectId label_; //! Will be 0 if background
+    Method method_; //! How the landmark was constructed
+
+};
+
+
+/// @brief A pair relating a tracklet ID with an estiamted landmark
+using LandmarkEstimate = std::pair<TrackletId, Landmark>;
+/// @brief A pair relating a Landmark estimate (TrackletId + Landmark) with a status - inidicating type and the object label
+using StatusLandmarkEstimate = std::pair<LandmarkStatus, LandmarkEstimate>;
+/// @brief A vector of StatusLandmarkEstimate
+using StatusLandmarkEstimates = std::vector<StatusLandmarkEstimate>;
 
 /**
  * @brief Definition of a tracklet - a tracket point seen at multiple frames.

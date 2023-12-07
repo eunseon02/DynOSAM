@@ -100,13 +100,20 @@ private:
     bool attemptObjectTriangulation(
         FrameId current_frame,
         FrameId previous_frame,
-        ObjectId id,
+        ObjectId object_id,
         const EssentialDecompositionResult&  motion_estimate,
         const gtsam::Pose3& T_world_camera_curr,
         const gtsam::Pose3& T_world_camera_prev,
-        gtsam::Point3Vector& triangulated_values,
-        TrackletIds& triangulated_tracklets,
+        StatusLandmarkEstimates& triangulated_values,
         gtsam::Rot3& R_motion);
+
+
+    void addInitalObjectValues(
+        FrameId current_frame_id,
+        ObjectId object_id,
+        const StatusLandmarkEstimates& triangulated_values,
+        const gtsam::Pose3& prev_H_world_current,
+        gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
 
 
 private:

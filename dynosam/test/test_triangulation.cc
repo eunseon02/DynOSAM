@@ -23,6 +23,7 @@
 #include "dynosam/backend/MonoBackendTools.hpp"
 #include "dynosam/common/Types.hpp"
 
+#include <gtsam/base/Vector.h>
 #include <gtest/gtest.h>
 
 using namespace dyno;
@@ -40,8 +41,8 @@ TEST(MonoBackendTools, triangulatePoint3Vector)
 
   gtsam::Matrix3 obj_rot = Eigen::Matrix3d::Identity();
   // Euler angle x = 5 degree, y = 10 degree, z = 15 degree, order XYZ
-  obj_rot <<  0.98106026, -0.08583165,  0.17364818, 
-              0.12895841,  0.95833311, -0.254887, 
+  obj_rot <<  0.98106026, -0.08583165,  0.17364818,
+              0.12895841,  0.95833311, -0.254887,
              -0.14453543,  0.2724529,   0.95125124;
 
   // std::cout << obj_rot << "\n";
@@ -73,15 +74,6 @@ TEST(MonoBackendTools, triangulatePoint3Vector)
     points_curr.push_back(H_prev_curr_world.transformFrom(points_prev[i]));
   }
 
-  // std::cout << points_prev.size() << std::endl;
-  // for (int i = 0; i < points_prev.size(); i++){
-  //   std::cout << "Points prev " << i << "\n" << points_prev[i] << std::endl;
-  // }
-
-  // std::cout << points_curr.size() << std::endl;
-  // for (int i = 0; i < points_curr.size(); i++){
-  //   std::cout << "Points curr " << i << "\n" << points_curr[i] << std::endl;
-  // }
 
   gtsam::Point2Vector observation_prev, observation_curr;
 
@@ -93,26 +85,25 @@ TEST(MonoBackendTools, triangulatePoint3Vector)
     observation_curr.push_back(Eigen::Vector2d(local_point_curr.x()/local_point_curr.z(), local_point_curr.y()/local_point_curr.z()));
   }
 
-  // std::cout << observation_prev.size() << std::endl;
-  // for (int i = 0; i < observation_prev.size(); i++){
-  //   std::cout << "Obv prev " << i << "\n" << observation_prev[i] << std::endl;
-  // }
-  // std::cout << observation_curr.size() << std::endl;
-  // for (int i = 0; i < observation_curr.size(); i++){
-  //   std::cout << "Obv curr " << i << "\n" << observation_curr[i] << std::endl;
-  // }
 
-  gtsam::Point3Vector points_world = dyno::mono_backend_tools::triangulatePoint3Vector(X_world_camera_prev, X_world_camera_curr, intrinsic, 
+  gtsam::Point3Vector points_world = dyno::mono_backend_tools::triangulatePoint3Vector(X_world_camera_prev, X_world_camera_curr, intrinsic,
                                                                                        observation_prev, observation_curr, obj_rot);
 
-  std::cout << points_world.size() << std::endl;
-
-  for (int i = 0; i < points_world.size(); i++){
-    std::cout << "Point in world " << i << "\n" << points_world[i] << std::endl;
-  }
-  // EXPECT_EQ(expected_outliers, outliers);
+  gtsam::Point3Vector expected_points_world;
   // [ 3.07637456  4.69454556  2.5236143   3.96822456  3.30434543  5.0268543   2.68667343  4.19481659]
   // [ 0.61527491  0.67064937  0.50472286  0.56688922 -0.66086909 -0.71812204 -0.53733469 -0.59925951]
   // [ 3.07637456  3.35324683  3.53306001  3.96822456  3.30434543  3.59061022  3.7613428   4.19481659]
-}
+  expected_points_world.push_back(gtsam::Point3(3.07637456, 0.61527491, 3.07637456));
+  expected_points_world.push_back(gtsam::Point3(4.69454556, 0.67064937, 3.35324683));
+  expected_points_world.push_back(gtsam::Point3(2.5236143 , 0.50472286 , 3.53306001));
+  expected_points_world.push_back(gtsam::Point3(3.96822456, 0.56688922, 3.96822456));
+  expected_points_world.push_back(gtsam::Point3(3.30434543, -0.66086909, 3.30434543));
+  expected_points_world.push_back(gtsam::Point3( 5.0268543, -0.71812204, 3.59061022));
+  expected_points_world.push_back(gtsam::Point3(2.68667343, -0.53733469, 3.7613428));
+  expected_points_world.push_back(gtsam::Point3(4.19481659, -0.59925951,4.19481659));
 
+  EXPECT_EQ(expected_points_world.size(), points_world.size());
+  for(size_t i = 0; i < expected_points_world.size(); i++) {
+    EXPECT_TRUE(gtsam::assert_equal(expected_points_world.at(i), points_world.at(i), 1.0e-5));
+  }
+}

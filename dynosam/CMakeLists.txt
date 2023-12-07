@@ -86,7 +86,10 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendModule.cc
   src/backend/FactorGraphTools.cc
   src/backend/MonoBackendModule.cc
+  src/backend/MonoBackendTools.cc
+  src/backend/DynamicPointSymbol.cc
 
+  src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
 
   src/pipeline/PipelineManager.cc

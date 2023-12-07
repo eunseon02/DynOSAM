@@ -82,6 +82,7 @@ enum KeyPointType {
     DYNAMIC
 };
 
+
 enum ReferenceFrame {
   WORLD,
   CAMERA,

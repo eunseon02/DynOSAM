@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 
 namespace dyno {
 
@@ -32,6 +33,7 @@ struct BackendOutputPacket {
 DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
     LandmarkMap static_lmks_;
+    StatusLandmarkEstimates dynamic_lmks_;
 
 };
 

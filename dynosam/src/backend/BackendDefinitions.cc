@@ -20,3 +20,45 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+
+
+#include "dynosam/backend/BackendDefinitions.hpp"
+
+#include <gtsam/inference/LabeledSymbol.h>
+#include <gtsam/inference/Symbol.h>
+
+namespace dyno {
+
+std::string DynoLikeKeyFormatter(gtsam::Key key)
+{
+  const gtsam::LabeledSymbol asLabeledSymbol(key);
+  if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0)
+  {
+    auto chr = asLabeledSymbol.chr();
+    if (chr == kObjectMotionKey || chr == kObjectPoseKey)
+    {
+      // convert label back to int
+      int object_id = asLabeledSymbol.label() - '0';
+      char buffer[100];
+      snprintf(buffer, 100, "%c%d-%llu", chr, object_id, static_cast<unsigned long long>(asLabeledSymbol.index()));
+      return std::string(buffer);
+    }
+    else
+    {
+      return (std::string)asLabeledSymbol;
+    }
+  }
+
+  const gtsam::Symbol asSymbol(key);
+  if (asLabeledSymbol.chr() > 0)
+  {
+    return (std::string)asSymbol;
+  }
+  else
+  {
+    return std::to_string(key);
+  }
+}
+
+
+}
