@@ -157,14 +157,15 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(const gtsam::Pose3& X_wor
     gtsam::Point3 coeffs_prev = obj_rotation*(project_inv_prev*this_obv_prev);
     gtsam::Point3 coeffs_curr = project_inv_curr*this_obv_curr;
 
+    Eigen::MatrixXd coeffs(3, 2);
     coeffs << coeffs_curr.x(), -coeffs_prev.x(),
               coeffs_curr.y(), -coeffs_prev.y(),
               coeffs_curr.z(), -coeffs_prev.z();
 
     Eigen::VectorXd depths_lstsq = coeffs.colPivHouseholderQr().solve(results);
 
-    gtsam::Point3 this_point_curr = K_inv*(depths(0)*this_obv_curr);
-    gtsam::Point3 this_point_prev = K_inv*(depths(1)*this_obv_prev);
+    gtsam::Point3 this_point_curr = K_inv*(depths_lstsq(0)*this_obv_curr);
+    gtsam::Point3 this_point_prev = K_inv*(depths_lstsq(1)*this_obv_prev);
 
     gtsam::Point3 this_point_world = X_world_camera_prev_rot*this_point_prev + X_world_camera_prev_trans;
     points_world.push_back(this_point_world);
