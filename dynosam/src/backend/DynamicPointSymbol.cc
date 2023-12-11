@@ -27,79 +27,79 @@
 namespace dyno
 {
 
-size_t DynamicPointSymbol::id_{ 0 };
-FrameTrackletSymbolMap DynamicPointSymbol::frame_tracklet_map_{};
-DynamicPointSymbol::KeyTrackletPair DynamicPointSymbol::key_tracklet_map_{};
 
-DynamicPointSymbol::DynamicPointSymbol() : gtsam::Symbol()
-{
+size_t CantorPairingFunction::pair(const Pair& input) {
+    const int k1 = static_cast<int>(input.first);
+    const int k2 = static_cast<int>(input.second);
+    return ((k1+k2)*(k1+k2+1)/2) + k2;
 }
 
-DynamicPointSymbol::DynamicPointSymbol(size_t frame_id, size_t tracklet_id, unsigned char c)
-  : gtsam::Symbol(), frame_id_(frame_id), tracklet_id_(tracklet_id)
-{
-  gtsam::Symbol sym = makeUniqueSymbolFromPair(FrameTrackletPair(frame_id, tracklet_id), c);
-  this->c_ = sym.chr();
-  this->j_ = sym.index();
+CantorPairingFunction::Pair CantorPairingFunction::unzip(const size_t z) {
+    int w = floor(((sqrt((z*8)+1))-1)/2);
+	int t = (w*(w+1))/2;
+
+    size_t k2 = static_cast<size_t>(z - t);
+    size_t k1 = static_cast<size_t>(w) - k2;
+    return std::make_pair(k1, k2);
 }
 
-DynamicPointSymbol::DynamicPointSymbol(gtsam::Symbol sym) : DynamicPointSymbol(gtsam::Key(sym))
+
+DynamicPointSymbol::DynamicPointSymbol(const DynamicPointSymbol& key)
+:   c_(key.c_), j_(key.j_), tracklet_id_(key.tracklet_id_), frame_id_(key.frame_id_) {}
+
+DynamicPointSymbol::DynamicPointSymbol(unsigned char c, TrackletId tracklet_id, FrameId frame_id)
+:   c_(c), j_(constructIndex(tracklet_id, frame_id)), tracklet_id_(tracklet_id), frame_id_(frame_id)
 {
+    //sanity check
+    const auto result = CantorPairingFunction::unzip(j_);
+    CHECK_EQ(result.first, tracklet_id_);
+    CHECK_EQ(result.second, frame_id_);
 }
 
-DynamicPointSymbol::DynamicPointSymbol(gtsam::Key key)
-{
-  FrameTrackletPair pair;
-  if (key_tracklet_map_.find(key) != key_tracklet_map_.end())
-  {
-    pair = key_tracklet_map_.at(key);
-  }
-  else
-  {
-    throw std::runtime_error("DynamicPointSymbol is being made from Symbol " + gtsam::DefaultKeyFormatter(key) +
-                             " but key has not appeared before."
-                             " Dynamic Symbol must be constructed with a frame and tracklet ID and then "
-                             "DynamicPointSymbol can be reconstructed via DynamicPointSymbol(gtsam::Key)");
-  }
-  gtsam::Symbol sym = makeUniqueSymbolFromPair(pair, gtsam::Symbol(key).chr());
-  this->c_ = sym.chr();
-  this->j_ = sym.index();
-  this->tracklet_id_ = pair.tracklet_id_;
-  this->frame_id_ = pair.frame_id_;
+DynamicPointSymbol::DynamicPointSymbol(gtsam::Key key) {
+    gtsam::Symbol sym(key);
+    const unsigned char c = sym.chr();
+    const std::uint64_t index = sym.index();
+
+    c_ = c;
+    j_ = index;
+
+    const auto result = CantorPairingFunction::unzip(j_);
+    tracklet_id_ = result.first;
+    frame_id_ = result.second;
 }
 
-gtsam::Symbol DynamicPointSymbol::makeUniqueSymbolFromPair(const FrameTrackletPair& pair, unsigned char c)
-{
-  // exists, therefore return key
-  gtsam::Symbol sym;
-  if (frame_tracklet_map_.find(pair) != frame_tracklet_map_.end())
-  {
-    sym = frame_tracklet_map_.at(pair);
-  }
-  else
-  {
-    // make new symbol
-    sym = gtsam::Symbol(c, DynamicPointSymbol::id_);
-    DynamicPointSymbol::id_++;
-    frame_tracklet_map_[pair] = sym;
-    key_tracklet_map_[sym] = pair;
-  }
-  return sym;
+gtsam::Key DynamicPointSymbol::key() const {
+    return (gtsam::Key)asSymbol();
 }
 
-size_t DynamicPointSymbol::frameID() const
-{
-  return frame_id_;
-}
-size_t DynamicPointSymbol::trackletID() const
-{
-  return tracklet_id_;
+
+void DynamicPointSymbol::print(const std::string& s) const {
+    std::cout << s << ": " << (std::string) (*this) << std::endl;
 }
 
-void DynamicPointSymbol::clear()
-{
-  id_ = 0;
-  frame_tracklet_map_.clear();
+bool DynamicPointSymbol::equals(const DynamicPointSymbol& expected, double) const {
+    return (*this) == expected; //lazy?
+}
+
+
+DynamicPointSymbol::operator std::string() const {
+    char buffer[20];
+    snprintf(buffer, 20, "%c%ld-%lu", c_, tracklet_id_, static_cast<unsigned long>(frame_id_));
+    return std::string(buffer);
+}
+
+
+gtsam::Symbol DynamicPointSymbol::asSymbol() const {
+    return gtsam::Symbol(c_, j_);
+}
+
+std::uint64_t DynamicPointSymbol::constructIndex(TrackletId tracklet_id, FrameId frame_id) {
+    if(tracklet_id == -1) {
+        throw std::invalid_argument("DynamicPointSymbol cannot be constructed from invalid tracklet id (-1)");
+    }
+
+    return static_cast<std::uint64_t>(CantorPairingFunction::pair({tracklet_id, frame_id}));
 }
 
 };  // namespace dyno

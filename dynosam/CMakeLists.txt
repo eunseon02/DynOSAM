@@ -211,6 +211,7 @@ if(BUILD_TESTING)
     test/test_code_concepts.cc
     test/test_camera_params.cc
     test/test_camera.cc
+    test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/test_tools.cc
     test/test_structured_containers.cc

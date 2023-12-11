@@ -33,6 +33,8 @@
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/Numerical.hpp"
 
+#include <gtsam/inference/Key.h>
+
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
@@ -51,6 +53,12 @@ MonoBackendModule::MonoBackendModule(const BackendParams& backend_params, Camera
 
     CHECK(gtsam_calibration_);
     setFactorParams(backend_params);
+
+    gtsam::ISAM2Params isam_params;
+    isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
+    isam_params.relinearizeThreshold = 0.01;
+
+    smoother_ = std::make_unique<gtsam::ISAM2>(isam_params);
 }
 
 MonoBackendModule::~MonoBackendModule() {
@@ -59,7 +67,8 @@ MonoBackendModule::~MonoBackendModule() {
     // graph_logger.open(FLAGS_backend_graph_file);
     // graph_logger << fg_ss_.str();
     // graph_logger.close();
-    state_graph_.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot");
+    // state_graph_.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot");
+    smoother_->saveGraph("/root/results/DynoSAM/mono_backend_isam_graph.dot");
 }
 
 
@@ -89,21 +98,28 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoBoostrapSpin(MonocularInsta
     StatusKeypointMeasurements new_projection_measurements;
 
     const gtsam::Pose3 T_world_camera_measured = input->T_world_camera_;
+    const gtsam::Pose3 T_world_camera_gt = input->gt_packet_->X_world_;
     const FrameId current_frame_id =  input->getFrameId();
 
+    gtsam::Values new_values;
+    gtsam::NonlinearFactorGraph new_factors;
+
     if(FLAGS_run_as_graph_file_only) {
-        saveAllToGraphFile(input);
-        return {State::Nominal, nullptr};
+        // saveAllToGraphFile(input);
+        // return {State::Nominal, nullptr};
+
+
+
     }
 
-    addInitialPose(T_world_camera_measured, current_frame_id, state_, state_graph_);
-    updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
-    addNewSmartStaticFactors(new_smart_factors, state_graph_);
+    // gtsam::Values new_values;
+    // gtsam::NonlinearFactorGraph new_factors;
 
-    updateDynamicObjectTrackletMap(input);
-    // updateStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_point_values, new_smart_factors, new_projection_factors, smart_factors_to_convert);
-    // convertAndDeleteSmartFactors(new_values, smart_factors_to_convert, new_factors);
-    // addToStatesStructures(new_values, new_factors, new_smart_factors);
+    // addInitialPose(T_world_camera_gt, current_frame_id, new_values, new_factors);
+    // updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
+
+    // optimize(current_frame_id, new_smart_factors, TrackletIds{}, TrackletIds{}, new_values, new_factors);
+
     return {State::Nominal, nullptr};
 }
 
@@ -126,51 +142,57 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
         return {State::Nominal, nullptr};
     }
 
-    addOdometry(T_world_camera_gt, current_frame_id, current_frame_id-1, state_, state_graph_);
-    //process should be
-    //1. make new smart factors for new measurements
-    //2. Iterate over smart factors and update or convert
-    //3. Update projection factors
+    gtsam::Values new_values;
+    gtsam::NonlinearFactorGraph new_factors;
+
+    addOdometry(T_world_camera_gt, current_frame_id, current_frame_id-1, new_values, new_factors);
     updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
-    addNewSmartStaticFactors(new_smart_factors, state_graph_);
 
     gtsam::Values new_and_current_values(state_);
-    auto tracklets_triangulated =  tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, state_, state_graph_);
-    addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, state_graph_);
+    new_and_current_values.insert(new_values);
+
+    TrackletIds tracklets_triangulated;
+    TrackletIds only_updated_smart_factors;
+
+    tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, tracklets_triangulated, only_updated_smart_factors, new_values, new_factors);
+    addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, new_factors);
 
     LOG(INFO) << "New smart factors " << new_smart_factors.size() << " updated smart factors " << updated_smart_factors.size() << " new projections " << new_projection_measurements.size() << " num triangulated " << tracklets_triangulated.size();
 
-    updateDynamicObjectTrackletMap(input);
+    optimize(current_frame_id, new_smart_factors, only_updated_smart_factors, tracklets_triangulated, new_values, new_factors);
+    // optimize(current_frame_id, new_smart_factors, updated_smart_factors, TrackletIds{}, new_values, new_factors);
 
-    const gtsam::Pose3 previous_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id-1));
-    const gtsam::Pose3 current_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
+    // updateDynamicObjectTrackletMap(input);
 
-    LOG(ERROR) << "Estimated motions " <<  input->estimated_motions_.size();
+    // const gtsam::Pose3 previous_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id-1));
+    // const gtsam::Pose3 current_pose = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
 
-    StatusLandmarkEstimates all_dynamic_object_triangulation;
+    // LOG(ERROR) << "Estimated motions " <<  input->estimated_motions_.size();
 
-    for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
-        const EssentialDecompositionResult& decomposition_result = ref_estimate;
+    // StatusLandmarkEstimates all_dynamic_object_triangulation;
 
-        StatusLandmarkEstimates dynamic_object_triangulation;
-        gtsam::Rot3 R_motion;
+    // for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
+    //     const EssentialDecompositionResult& decomposition_result = ref_estimate;
 
-        if(!attemptObjectTriangulation(
-            current_frame_id,
-            current_frame_id-1,
-            object_id,
-            decomposition_result,
-            current_pose,
-            previous_pose,
-            dynamic_object_triangulation,
-            R_motion)) { continue; }
+    //     StatusLandmarkEstimates dynamic_object_triangulation;
+    //     gtsam::Rot3 R_motion;
+
+    //     if(!attemptObjectTriangulation(
+    //         current_frame_id,
+    //         current_frame_id-1,
+    //         object_id,
+    //         decomposition_result,
+    //         current_pose,
+    //         previous_pose,
+    //         dynamic_object_triangulation,
+    //         R_motion)) { continue; }
 
 
-        // //copy to all dynamic triangulation
-        all_dynamic_object_triangulation.insert(
-            all_dynamic_object_triangulation.begin(), dynamic_object_triangulation.begin(), dynamic_object_triangulation.end());
+    //     // //copy to all dynamic triangulation
+    //     all_dynamic_object_triangulation.insert(
+    //         all_dynamic_object_triangulation.begin(), dynamic_object_triangulation.begin(), dynamic_object_triangulation.end());
 
-    }
+    // }
 
     LandmarkMap lmk_map;
     for(const auto&[tracklet_id, status] : tracklet_to_status_map_) {
@@ -184,8 +206,11 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     }
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
+    backend_output->timestamp_ = input->getTimestamp();
+    // backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     backend_output->static_lmks_ = lmk_map;
-    backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
+
+    // backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
 
     return {State::Nominal, backend_output};
 }
@@ -220,6 +245,9 @@ void MonoBackendModule::updateSmartStaticObservations(
         TrackletIds& updated_smart_factors,
         StatusKeypointMeasurements& new_projection_measurements)
 {
+
+    std::set<TrackletId> only_new_smart_factors;
+
     for(const StatusKeypointMeasurement& static_measurement : measurements) {
         const KeypointStatus& status = static_measurement.first;
         const KeyPointType kp_type = status.kp_type_;
@@ -250,6 +278,7 @@ void MonoBackendModule::updateSmartStaticObservations(
 
             smart_factor_map_.add(tracklet_id, smart_factor, UninitialisedSlot);
             new_smart_factors.push_back(tracklet_id);
+            only_new_smart_factors.insert(tracklet_id);
         }
         //this measurement is not new and is therefore a smart factor already in the map OR is a projection factor
         //sanity check that the object label is still the same for the tracked object
@@ -262,13 +291,16 @@ void MonoBackendModule::updateSmartStaticObservations(
             //sanity check that we dont have a point for this factor yet
             CHECK(!state_.exists(lmk_symbol)) << "Factor has been marked as smart a lmk value exists for it";
 
-            //update smart factor
+            //update smart factor. This may be a new one or an existing factor
             SmartProjectionFactor::shared_ptr smart_factor = smart_factor_map_.getSmartFactor(tracklet_id);
             factor_graph_tools::addSmartProjectionMeasurement(smart_factor, kp, frame_id);
-            //this will also include new factors
-            //this might be problematic when we get to isam2 -> we need this information to tell isam2 factors have new measurements
-            //but we dont want to do this with the new factors (as they will get added that iteration anyway)
-            updated_smart_factors.push_back(tracklet_id);
+
+            //append to list of updated smart factors only if this factor is also not new
+            //we want the list of updated_smart_factors to only contain the factors updated and not also the new ones
+            if(only_new_smart_factors.find(tracklet_id) == only_new_smart_factors.end()) {
+                updated_smart_factors.push_back(tracklet_id);
+            }
+
 
         }
         else if(factor_type == ProjectionFactorType::PROJECTION) {
@@ -282,25 +314,24 @@ void MonoBackendModule::updateSmartStaticObservations(
 }
 
 
-void MonoBackendModule::addNewSmartStaticFactors(const TrackletIds& new_smart_factors,  gtsam::NonlinearFactorGraph& factors) {
-    for(const TrackletId tracklet_id : new_smart_factors) {
-        CHECK(smart_factor_map_.exists(tracklet_id)) << "Smart factor with tracklet id " << tracklet_id
-                << " has been marked as a new factor but is not in the smart_factor_map";
-        SmartProjectionFactor::shared_ptr smart_factor = smart_factor_map_.getSmartFactor(tracklet_id);
+// void MonoBackendModule::addNewSmartStaticFactors(const TrackletIds& new_smart_factors,  gtsam::NonlinearFactorGraph& factors) {
+//     for(const TrackletId tracklet_id : new_smart_factors) {
+//         CHECK(smart_factor_map_.exists(tracklet_id)) << "Smart factor with tracklet id " << tracklet_id
+//                 << " has been marked as a new factor but is not in the smart_factor_map";
+//         SmartProjectionFactor::shared_ptr smart_factor = smart_factor_map_.getSmartFactor(tracklet_id);
 
-        Slot& slot = smart_factor_map_.getSlot(tracklet_id);
-        CHECK_EQ(slot, -1) << "Smart factor with tracklet id " << tracklet_id
-                << " has been marked as a new factor but slot is not -1";
+//         Slot& slot = smart_factor_map_.getSlot(tracklet_id);
+//         CHECK_EQ(slot, -1) << "Smart factor with tracklet id " << tracklet_id
+//                 << " has been marked as a new factor but slot is not -1";
 
-        size_t current_slot = factors.size();
-        factors.push_back(smart_factor);
+//         size_t current_slot = factors.size();
+//         factors.push_back(smart_factor);
 
-        slot = current_slot; //update slot
-    }
-}
+//         slot = current_slot; //update slot
+//     }
+// }
 
-TrackletIds MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) {
-    TrackletIds triangulated_tracklets;
+void MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, TrackletIds& triangulated_tracklets,  TrackletIds& only_updated_smart_factors, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_projection_factors) {
     for(const TrackletId tracklet_id : updated_smart_factors) {
         CHECK(smart_factor_map_.exists(tracklet_id)) << "Smart factor with tracklet id " << tracklet_id
                 << " has been updated but is not in the smart_factor_map";
@@ -310,22 +341,31 @@ TrackletIds MonoBackendModule::tryTriangulateExistingSmartStaticFactors(const Tr
 
 
         SmartProjectionFactor::shared_ptr smart_factor = smart_factor_map_.getSmartFactor(tracklet_id);
-        if(smart_factor->size() >= 2u) {
+        if(smart_factor->size() > 2u) {
             //try and triangulate the point using the new and current values. This should contain the current pose
           gtsam::TriangulationResult triangulation_result = smart_factor->point(new_and_current_state);
           if(triangulation_result) {
             CHECK(triangulation_result.valid());
+            CHECK(!smart_factor->isDegenerate());
+            CHECK(!smart_factor->isFarPoint());
+            CHECK(!smart_factor->isOutlier());
+            CHECK(!smart_factor->isPointBehindCamera());
             const gtsam::Point3 point = triangulation_result.value();
-            convertSmartToProjectionFactor(tracklet_id, point, new_values, factors);
+            convertSmartToProjectionFactor(tracklet_id, point, new_values, new_projection_factors);
 
             triangulated_tracklets.push_back(tracklet_id);
           }
+          else {
+            only_updated_smart_factors.push_back(tracklet_id);
+          }
+        }
+        else {
+            only_updated_smart_factors.push_back(tracklet_id);
         }
     }
-    return triangulated_tracklets;
 }
 
-bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) {
+bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_projection_factors) {
     const TrackletId tracklet_id = smart_factor_to_convert;
     SmartProjectionFactor::shared_ptr smart_factor = smart_factor_map_.getSmartFactor(tracklet_id);
     CHECK(smart_factor->point().valid());
@@ -336,20 +376,22 @@ bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_fa
     CHECK(slot != UninitialisedSlot) << "Trying to delete and convert smart factor with tracklet id " << tracklet_id << " but the slot is -1";
 
     {
-        SmartProjectionFactor::shared_ptr smart = boost::dynamic_pointer_cast<SmartProjectionFactor>(factors[slot]);
-        CHECK(smart);
-        CHECK(smart == smart_factor);
-        CHECK(smart->equals(*smart_factor));
+        // SmartProjectionFactor::shared_ptr smart = boost::dynamic_pointer_cast<SmartProjectionFactor>(factors[slot]);
+        // CHECK(smart);
+        // CHECK(smart == smart_factor);
+        // CHECK(smart->equals(*smart_factor));
     }
-    //TODO: this will NOT work with incremental as we need to actually remove by slot!!
-    factors.remove(slot);
 
+    std::stringstream ss;
+    ss << "Adding projection factor for lmk: " << gtsam::DefaultKeyFormatter(lmk_symbol) << " ";
     new_values.insert(lmk_symbol, lmk_world);
     for (size_t i = 0; i < smart_factor->keys().size(); i++) {
-        const gtsam::Symbol& pose_symbol = gtsam::Symbol(smart_factor->keys().at(i));
+        const gtsam::Symbol pose_symbol = gtsam::Symbol(smart_factor->keys().at(i));
         const auto& measured = smart_factor->measured().at(i);
 
-        factors.emplace_shared<GenericProjectionFactor>(
+        ss << " Pose Key: " << gtsam::DefaultKeyFormatter(pose_symbol) ;
+
+        new_projection_factors.emplace_shared<GenericProjectionFactor>(
             measured,
             static_smart_noise_,
             pose_symbol,
@@ -358,8 +400,7 @@ bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_fa
         );
     }
 
-    //remvoe from smart_factor_map_
-    smart_factor_map_.erase(tracklet_id);
+    LOG(INFO) << ss.str();
 
     //update status
     tracklet_to_status_map_.at(tracklet_id).pf_type_ = ProjectionFactorType::PROJECTION;
@@ -368,7 +409,7 @@ bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_fa
 }
 
 
-void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& factors) {
+void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& new_projection_factors) {
     for(const StatusKeypointMeasurement& static_measurement : new_projection_measurements) {
         const KeypointStatus& status = static_measurement.first;
         const KeyPointType kp_type = status.kp_type_;
@@ -383,7 +424,7 @@ void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, 
         CHECK(!smart_factor_map_.exists(tracklet_id)) << "Measurement with tracklet id " << tracklet_id
                     << " has been marked as a projection factor but is in the smart_factor_map";
         CHECK_EQ(tracklet_to_status_map_.at(tracklet_id).pf_type_, ProjectionFactorType::PROJECTION);
-        factors.emplace_shared<GenericProjectionFactor>(
+        new_projection_factors.emplace_shared<GenericProjectionFactor>(
                 kp,
                 static_smart_noise_,
                 CameraPoseSymbol(frame_id),
@@ -393,6 +434,79 @@ void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, 
 
     }
 }
+
+
+void MonoBackendModule::optimize(FrameId frame_id, const TrackletIds& new_smart_factors, const TrackletIds& updated_smart_factors, const TrackletIds& triangulated_tracklets, const gtsam::Values& new_values, const gtsam::NonlinearFactorGraph& new_factors) {
+
+
+    //guarantee that (static) smart factors will be at the start
+    gtsam::NonlinearFactorGraph factors_to_add;
+    for(TrackletId new_smart_factor_tracklet_ids : new_smart_factors) {
+        Slot slot = smart_factor_map_.getSlot(new_smart_factor_tracklet_ids);
+        CHECK(slot == UninitialisedSlot);
+        factors_to_add.push_back(smart_factor_map_.getSmartFactor(new_smart_factor_tracklet_ids));
+    }
+
+    CHECK_EQ(factors_to_add.size(), new_smart_factors.size());
+    factors_to_add.push_back(new_factors); //the other new factors
+
+    gtsam::ISAM2UpdateParams isam_update_params;
+
+    //for updated smart factors
+    //indicate which new affected keys have been made. We assume this is the pose at the current frame
+    gtsam::FastMap<gtsam::FactorIndex, gtsam::KeySet> new_affected_keys;
+    //this should be the only key affected
+    gtsam::Key pose_key = CameraPoseSymbol(frame_id);
+    //some sanity check - check key is in new_values
+    CHECK(new_values.exists(pose_key));
+    for(TrackletId updated_smart_factor_tracklet_ids : updated_smart_factors) {
+        Slot slot = smart_factor_map_.getSlot(updated_smart_factor_tracklet_ids);
+
+        {
+            //some sanity check - check key is in new_values
+            auto factor = smart_factor_map_.getSmartFactor(updated_smart_factor_tracklet_ids);
+            CHECK(factor->find(pose_key) != factor->end());
+        }
+
+        new_affected_keys.insert({slot, gtsam::KeySet{pose_key}});
+    }
+    isam_update_params.newAffectedKeys = new_affected_keys;
+
+    //the triangulated tracklets are now the factors that should be removed from the smoother
+    //we can them also remove the tracklet from the smart_factor_map_ as we no longer need to track the slot anymore
+    gtsam::FactorIndices factor_indicies_to_remove;
+    for(TrackletId triangulated_tracklet_ids : triangulated_tracklets) {
+        Slot slot = smart_factor_map_.getSlot(triangulated_tracklet_ids);
+        factor_indicies_to_remove.push_back(slot);
+        smart_factor_map_.erase(triangulated_tracklet_ids);
+    }
+    // isam_update_params.removeFactorIndices = factor_indicies_to_remove;
+
+    gtsam::ISAM2Result result;
+    // try {
+        result = smoother_->update(factors_to_add, new_values, isam_update_params);
+    // }
+    // catch(const std::exception& e) {
+    //     // smoother_->saveGraph("/root/results/DynoSAM/mono_backend_isam_graph.dot");
+    //     throw e;
+    // }
+
+    //recover slots for new smart factors
+    const gtsam::FactorIndices& new_factors_indices = result.newFactorsIndices;
+
+    //iterate over the first N new_factor_indices since we know this correspondes with new smatrt factors
+    for(size_t i = 0; i < new_smart_factors.size(); i++) {
+        Slot slot = new_factors_indices.at(i);
+        TrackletId tracklet_id = new_smart_factors.at(i);
+
+        //update slot
+        smart_factor_map_.getSlot(tracklet_id) = slot;
+    }
+
+    state_ = smoother_->calculateEstimate();
+
+}
+
 
 
 void MonoBackendModule::updateDynamicObjectTrackletMap(MonocularInstanceOutputPacket::ConstPtr input) {
@@ -591,20 +705,21 @@ void MonoBackendModule::addInitalObjectValues(
 
     for(const StatusLandmarkEstimate& estimate : triangulated_values) {
         const LandmarkStatus& status = estimate.first;
-        CHECK(status.object_id_ != background_label);
+        CHECK(status.label_ != background_label);
 
-        const TrackletId tracklet_id = estimate.first;
         const LandmarkEstimate& le = estimate.second;
 
         const Landmark lmk = le.second;
+        const TrackletId tracklet_id = le.first;
 
-        const gtsam::Symbol sym = DynamicLandmarkSymbol(tracklet_id);
-        new_values.insert(sym, lmk);
+
+        // const gtsam::Symbol sym = DynamicLandmarkSymbol(tracklet_id);
+        // new_values.insert(sym, lmk);
 
         //add motion factor
-        factors.emplace_shared<LandmarkMotionTernaryFactor>(
+        // factors.emplace_shared<LandmarkMotionTernaryFactor>(
 
-        )
+        // )
 
 
     }

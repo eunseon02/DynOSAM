@@ -23,6 +23,8 @@
 
 #include "dynosam_ros/BackendDisplayRos.hpp"
 
+#include "dynosam_ros/RosUtils.hpp"
+
 #include <glog/logging.h>
 #include "rclcpp/qos.hpp"
 
@@ -35,6 +37,7 @@ BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
     const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
+    odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
 
 }
 
@@ -80,6 +83,11 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         dynamic_tracked_points_pub_->publish(pc2_msg);
     }
 
+    {
+        nav_msgs::msg::Odometry odom_msg;
+        utils::convertWithHeader(backend_output->T_world_camera_, odom_msg, backend_output->timestamp_, "world", "camera");
+        odometry_pub_->publish(odom_msg);
+    }
 }
 
 } //dyno

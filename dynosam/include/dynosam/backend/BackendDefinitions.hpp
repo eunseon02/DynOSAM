@@ -32,6 +32,7 @@
 #include <gtsam/slam/ProjectionFactor.h>
 
 #include <gtsam/inference/Symbol.h>
+#include "gtsam/inference/LabeledSymbol.h"
 
 #include <variant>
 #include <unordered_map>
@@ -49,7 +50,7 @@ inline gtsam::Key H(unsigned char label, std::uint64_t j) {return gtsam::Labeled
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
 inline gtsam::Symbol ObjectMotionSymbol(FrameId frame_id) { return gtsam::Symbol(kObjectMotionSymbolChar, frame_id); }
 inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
-inline gtsam::Symbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return gtsam::Symbol(kDynamicLandmarkSymbolChar, tracklet_id); }
+inline DynamicPointSymbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return DynamicPointSymbol(kDynamicLandmarkSymbolChar, tracklet_id, frame_id); }
 
 
 inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)

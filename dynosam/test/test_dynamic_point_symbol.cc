@@ -21,46 +21,42 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/backend/DynamicPointSymbol.hpp"
 
-#include "dynosam/backend/BackendDefinitions.hpp"
 
-#include <gtsam/inference/LabeledSymbol.h>
-#include <gtsam/inference/Symbol.h>
+#include <glog/logging.h>
+#include <gtest/gtest.h>
+#include <exception>
 
-namespace dyno {
+using namespace dyno;
 
-std::string DynoLikeKeyFormatter(gtsam::Key key)
+TEST(CantorPairingFunction, basicPair)
 {
-  // const gtsam::LabeledSymbol asLabeledSymbol(key);
-  // if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0)
-  // {
-  //   auto chr = asLabeledSymbol.chr();
-  //   if (chr == kObjectMotionKey || chr == kObjectPoseKey)
-  //   {
-  //     // convert label back to int
-  //     int object_id = asLabeledSymbol.label() - '0';
-  //     char buffer[100];
-  //     snprintf(buffer, 100, "%c%d-%llu", chr, object_id, static_cast<unsigned long long>(asLabeledSymbol.index()));
-  //     return std::string(buffer);
-  //   }
-  //   else
-  //   {
-  //     return (std::string)asLabeledSymbol;
-  //   }
-  // }
+    //checking that examples provided on wikipedia are correct (ie imeplementation is good)
+    //https://en.wikipedia.org/wiki/Pairing_function#Examples
+    // EXPECT_EQ(CantorPairingFunction::pair({47, 32}), 3192);
 
-  // const gtsam::Symbol asSymbol(key);
-  // if (asLabeledSymbol.chr() > 0)
-  // {
-  //   return (std::string)asSymbol;
-  // }
-  // else
-  // {
-  //   return std::to_string(key);
-  // }
-  //TODO:
-  return std::string();
 }
 
+TEST(CantorPairingFunction, basicZip)
+{
+    //checking that examples provided on wikipedia are correct (ie imeplementation is good)
+    //https://en.wikipedia.org/wiki/Pairing_function#Examples
+
+    // const auto z = CantorPairingFunction::unzip(1432);
+    // EXPECT_EQ(z.first, 52);
+    // EXPECT_EQ(z.second, 1);
+
+}
+
+TEST(CantorPairingFunction, testAccess)
+{
+    const auto x = 15;
+    const auto y = 79;
+
+    const auto z = CantorPairingFunction::pair({x, y});
+    const auto result = CantorPairingFunction::unzip(z);
+    EXPECT_EQ(result.first, x);
+    EXPECT_EQ(result.second, y);
 
 }

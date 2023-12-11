@@ -30,7 +30,7 @@
 
 #include "dynosam/frontend/MonoInstance-Definitions.hpp" // for MonocularInstanceOutputPacket
 
-
+#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 
@@ -59,10 +59,26 @@ private:
     void addOdometry(const gtsam::Pose3& T_world_camera, FrameId curr_frame_id, FrameId prev_frame_id, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
 
-    // void handleStaticMeasurementsBoostrap(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
-    // void handleStaticMeasurementsNominal(MonocularInstanceOutputPacket::ConstPtr input, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-
+    /**
+     * @brief Takes the set of static measurements from the last frame and updates the internal
+     * smart_factor_map_ accordingly.
+     *
+     * The function will update smart factors within the smart_factor_map_, either by making a new smart factor
+     * for a new tracklet or by adding a measurement to an existing smart factor.
+     *
+     * TrackletIds of new smart factors will appear in new_smart_factors and TrackletId's of updates
+     * smart factors will appear in updated_smart_factors.
+     *
+     * Measurements assocaited with tracklets that have been converted from smart to projection factors
+     * will appear in new_projection_measurement and no changes to the current smoother or factors will occur.
+     *
+     * @param measurements
+     * @param frame_id
+     * @param new_smart_factors
+     * @param updated_smart_factors
+     * @param new_projection_measurements
+     */
     void updateSmartStaticObservations(
         const StatusKeypointMeasurements& measurements,
         const FrameId frame_id,
@@ -71,22 +87,73 @@ private:
         StatusKeypointMeasurements& new_projection_measurements);
 
 
-    //adds smart factors from smart factor map and updates slots according to thew NLFG passed in
-    void addNewSmartStaticFactors(const TrackletIds& new_smart_factors,  gtsam::NonlinearFactorGraph& factors);
+    //adds smart factors from smart factor map
+    // void addNewSmartStaticFactors(const TrackletIds& new_smart_factors,  gtsam::NonlinearFactorGraph& new_smart_factors);
 
     //try to triangualte on smart factor factors that have just been updated
     //if we can triangulate, update and convert existing factor to projection factor
     //new_and_current_state should be the most up to date values (including the most recent camera pose which may not be in state_)
     //that we want to use to triangulate the point
     //this will also add the projection factors to the graph so no need to run another "add projection measurements"
-    TrackletIds tryTriangulateExistingSmartStaticFactors(const TrackletIds& updated_smart_factors, const gtsam::Values& new_and_current_state, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
 
-    //the slot in the smart_factor_map should be associted with the factor in factors
-    //will be removed from the smart factor map but remain in the tracklet_to_status_map_ where the status will be updated to PROJECTION
-    bool convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors);
+    /**
+     * @brief Attempts to triangulate existing smart factors and convert them to projection factors.
+     *
+     * Using the new and current state (the new means just the latest camera pose as this will not be included in the smoother yet)
+     * updated_smart_factors are iterated over and checked for triangulation. If they can be converted, their tracklet ID will be added to
+     * triangulated_tracklets and the triangualted point will be added to new_values and ALL projection factors will be added to factors
+     *
+     * The existing smart factor must be deleted afterwards (using the list of triangulated_tracklets)
+     *
+     * The only_updated_smart_factors is a list of the smart factors that we updated (previously) but not triangulated after this function
+     * They are the set of actual (not new) smart factors that will remain in the smoother after update
+     * and are required to update the set of affected keys.
+     *
+     * @param updated_smart_factors
+     * @param new_and_current_state
+     * @param triangulated_tracklets
+     * @param only_updated_smart_factors
+     * @param new_values
+     * @param factors
+     */
+    void tryTriangulateExistingSmartStaticFactors(
+        const TrackletIds& updated_smart_factors,
+        const gtsam::Values& new_and_current_state,
+        TrackletIds& triangulated_tracklets,
+        TrackletIds& only_updated_smart_factors,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_projection_factors);
+
+    /**
+     * @brief Converts a smart projection factor at the ID specified to projection factors.
+     *
+     * All projection factors are added to the provided factors and the (triangulated) initial point is added to new_values. This does not remove the factor from the smoother
+     * and does not modify (ie delete) the factor from the smart_factor_map (which will happen in the optimization stage)
+     * The tracklet_to_status_map_ will be udpated such that the status of the tracklet id is ProjectionFactorType::PROJECTION
+     *
+     * @param smart_factor_to_convert
+     * @param lmk_world
+     * @param new_values
+     * @param factors
+     * @return true
+     * @return false
+     */
+    bool convertSmartToProjectionFactor(const TrackletId smart_factor_to_convert, const gtsam::Point3& lmk_world, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_projection_factors);
 
 
-    void addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& factors);
+    /**
+     * @brief Adds GenericProjectionFactors per new keypoint measurement.
+     * The associated measurement is expected to already be a projection factor within the system.
+     *
+     * @param frame_id
+     * @param new_projection_measurements
+     * @param factors
+     */
+    void addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& new_projection_factors);
+
+    //new factors should contain everything OTHER than new smart factors
+    //updated smart factors should only contain updated factors and not new ones (or ones about to bde deleted)
+    void optimize(FrameId frame_id, const TrackletIds& new_smart_factors, const TrackletIds& updated_smart_factors, const TrackletIds& triangulated_tracklets, const gtsam::Values& new_values, const gtsam::NonlinearFactorGraph& new_factors);
 
     void setFactorParams(const BackendParams& backend_params);
 
@@ -144,6 +211,8 @@ private:
     //!< current state of the system.
     gtsam::Values state_;
     gtsam::NonlinearFactorGraph state_graph_;
+
+    std::unique_ptr<gtsam::ISAM2> smoother_;
 
     MonocularInstanceOutputPacket::ConstPtr previous_input_;
     std::stringstream fg_ss_;

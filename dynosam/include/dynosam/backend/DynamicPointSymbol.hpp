@@ -33,74 +33,109 @@
 namespace dyno
 {
 
-struct FrameTrackletPair
-{
-  const FrameId frame_id_ = 0;
-  const TrackletId tracklet_id_ = 0;
+//implementation of Contor's pairing function: http://szudzik.com/ElegantPairing.pdf
+//When x and y are non−negative integers, pairing them outputs a single non−negative integer
+// that is uniquely associated with that pair.
+struct CantorPairingFunction {
+    using Pair = std::pair<size_t, size_t>;
 
-  FrameTrackletPair()
-  {
-  }
-
-  FrameTrackletPair(FrameId frame_id, TrackletId tracklet_id) : frame_id_(frame_id), tracklet_id_(tracklet_id)
-  {
-  }
-
-  bool operator==(const FrameTrackletPair& other) const
-  {
-    return (frame_id_ == other.frame_id_ && tracklet_id_ == other.tracklet_id_);
-  }
+    static size_t pair(const Pair& input);
+    static Pair unzip(const size_t z);
 };
 
-struct FrameTrackletHash
-{
-  /// number was arbitrarily chosen with no good justification
-  static constexpr size_t sl = 17191;
-  static constexpr size_t sl2 = sl * sl;
 
-  std::size_t operator()(const FrameTrackletPair& index) const
-  {
-    return static_cast<unsigned int>(index.frame_id_ * sl + index.tracklet_id_ * sl2);
-  }
-};
+class DynamicPointSymbol {
+protected:
+    unsigned char c_;
+    std::uint64_t j_;
 
-template <typename ValueType>
-struct FrameTrackletHashMapType
-{
-  typedef std::unordered_map<FrameTrackletPair, ValueType, FrameTrackletHash> type;
-};
+    TrackletId tracklet_id_;
+    FrameId frame_id_;
 
-using FrameTrackletSymbolMap = FrameTrackletHashMapType<gtsam::Symbol>::type;
-
-class DynamicPointSymbol : public gtsam::Symbol
-{
 public:
-  DynamicPointSymbol();
-  DynamicPointSymbol(FrameId frame_id, size_t tracklet_id, unsigned char c);
-  DynamicPointSymbol(gtsam::Symbol sym);
-  DynamicPointSymbol(gtsam::Key key);
 
-  FrameId frameID() const;
-  TrackletId trackletID() const;
+    /** Default constructor */
+    DynamicPointSymbol() :
+        c_(0), j_(0) {
+    }
 
-  /**
-   * @brief Resets the static trackletId to 0 and clears the frame_tracklet_map_. Only really used for testing.
-   *
-   */
-  static void clear();
+    /** Copy constructor */
+    DynamicPointSymbol(const DynamicPointSymbol& key);
+    /** Constructor */
+    DynamicPointSymbol(unsigned char c, TrackletId tracklet_id, FrameId frame_id);
+
+    /** Constructor that decodes an integer Key */
+    DynamicPointSymbol(gtsam::Key key);
+
+    /** return Key (integer) representation */
+    gtsam::Key key() const;
+
+    /** Cast to integer */
+    operator gtsam::Key() const { return key(); }
+
+    /// Print
+    void print(const std::string& s = "") const;
+
+    /// Check equality
+    bool equals(const DynamicPointSymbol& expected, double tol = 0.0) const;
+
+    /** Retrieve key character */
+    unsigned char chr() const {
+        return c_;
+    }
+
+    /** Retrieve key index */
+    std::uint64_t index() const {
+        return j_;
+    }
+
+    TrackletId trackletId() const {
+        return tracklet_id_;
+    }
+
+    FrameId frameId() const {
+        return frame_id_;
+    }
+
+
+
+    /** Create a string from the key */
+    operator std::string() const;
+
+    /// Return string representation of the key
+    std::string string() const { return std::string(*this); }
+
+    /** Comparison for use in maps */
+    bool operator<(const DynamicPointSymbol& comp) const {
+        return c_ < comp.c_ || (comp.c_ == c_ && j_ < comp.j_);
+    }
+
+    /** Comparison for use in maps */
+    bool operator==(const DynamicPointSymbol& comp) const {
+        return comp.c_ == c_ && comp.j_ == j_;
+    }
+
+    /** Comparison for use in maps */
+    bool operator==(gtsam::Key comp) const {
+        return comp == (gtsam::Key)(*this);
+    }
+
+    /** Comparison for use in maps */
+    bool operator!=(const DynamicPointSymbol& comp) const {
+        return comp.c_ != c_ || comp.j_ != j_;
+    }
+
+    /** Comparison for use in maps */
+    bool operator!=(gtsam::Key comp) const {
+        return comp != (gtsam::Key)(*this);
+    }
+
 
 private:
-  gtsam::Symbol makeUniqueSymbolFromPair(const FrameTrackletPair& pair, unsigned char c);
+    gtsam::Symbol asSymbol() const;
 
-private:
-  FrameId frame_id_;
-  TrackletId tracklet_id_;
+    static std::uint64_t constructIndex(TrackletId tracklet_id_, FrameId frame_id_);
 
-  static FrameTrackletSymbolMap frame_tracklet_map_;
-
-  using KeyTrackletPair = std::map<gtsam::Key, FrameTrackletPair>;
-  static KeyTrackletPair key_tracklet_map_;  // used for reverse look up
-  static size_t id_;
 };
 
 
