@@ -47,6 +47,13 @@ gtsam::Point3Vector triangulatePoint3Vector(
   const gtsam::Point2Vector& observation_curr,
   const gtsam::Matrix3& obj_rotation);
 
+gtsam::Point3Vector triangulatePoint3VectorNonExpanded(
+  const gtsam::Pose3& X_world_camera_prev,
+  const gtsam::Pose3& X_world_camera_curr,
+  const gtsam::Matrix3& intrinsic,
+  const gtsam::Point2Vector& observation_prev,
+  const gtsam::Point2Vector& observation_curr,
+  const gtsam::Matrix3& obj_rotation);
 
 
 } //mono_backend_tools
