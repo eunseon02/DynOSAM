@@ -158,7 +158,7 @@ private:
     void setFactorParams(const BackendParams& backend_params);
 
 
-    void saveAllToGraphFile(MonocularInstanceOutputPacket::ConstPtr input);
+    void buildGraphWithDepth(MonocularInstanceOutputPacket::ConstPtr input);
 
     //dynamic measuerement stuff
     void updateDynamicObjectTrackletMap(MonocularInstanceOutputPacket::ConstPtr input);
@@ -202,6 +202,7 @@ private:
     gtsam::SharedNoiseModel static_smart_noise_; //! Projection factor noise for static points
     gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
     gtsam::SharedNoiseModel initial_pose_prior_;
+    gtsam::SharedNoiseModel landmark_motion_noise_; //! Noise on the landmark tenrary factor
 
 
     DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;
@@ -214,8 +215,14 @@ private:
 
     std::unique_ptr<gtsam::ISAM2> smoother_;
 
-    MonocularInstanceOutputPacket::ConstPtr previous_input_;
-    std::stringstream fg_ss_;
+    // MonocularInstanceOutputPacket::ConstPtr previous_input_;
+    // std::stringstream fg_ss_;
+
+    gtsam::Values new_values_;
+    gtsam::NonlinearFactorGraph new_factors_;
+
+    gtsam::Values new_dynamic_values_;
+    gtsam::NonlinearFactorGraph new_dynamic_factors_;
 
 
 

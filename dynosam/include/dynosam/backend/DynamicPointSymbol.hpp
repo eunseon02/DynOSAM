@@ -56,7 +56,7 @@ public:
 
     /** Default constructor */
     DynamicPointSymbol() :
-        c_(0), j_(0) {
+        c_(0), j_(0), tracklet_id_(-1), frame_id_(0) {
     }
 
     /** Copy constructor */

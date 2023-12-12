@@ -905,7 +905,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
         ImageContainer::Ptr image_container = nullptr;
 
-        if(params.mask_type == MaskType::MOTION) {
+        if(params_.mask_type == MaskType::MOTION) {
             image_container = ImageContainer::Create(
                 timestamp,
                 frame_id,

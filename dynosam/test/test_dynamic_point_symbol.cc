@@ -60,3 +60,32 @@ TEST(CantorPairingFunction, testAccess)
     EXPECT_EQ(result.second, y);
 
 }
+
+
+TEST(DynamicPointSymbol, testReconstruction)
+{
+    const auto x = 15;
+    const auto y = 79;
+
+    DynamicPointSymbol dps('m', x, y);
+    gtsam::Symbol sym(dps);
+
+    gtsam::Key key(sym);
+    DynamicPointSymbol reconstructed_dps(key);
+    EXPECT_EQ(dps, reconstructed_dps);
+    EXPECT_EQ(x, reconstructed_dps.trackletId());
+    EXPECT_EQ(y, reconstructed_dps.frameId());
+
+}
+
+
+// TEST(DynamicPointSymbol, testConstructionFromSymbol)
+// {
+
+
+//     gtsam::Symbol sym('d', 2);
+//     DynamicPointSymbol reconstructed_dps(sym);
+//     EXPECT_EQ(-1, reconstructed_dps.trackletId());
+//     EXPECT_EQ(0, reconstructed_dps.frameId());
+
+// }

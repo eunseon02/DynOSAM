@@ -183,7 +183,12 @@ public:
         }
 
         auto& tracklet_ids = object_trackletid_map_.at(object_id);
-        tracklet_ids.push_back(tracklet_id);
+
+        //only add if not present
+        if(std::find(tracklet_ids.begin(), tracklet_ids.end(), tracklet_id) == tracklet_ids.end()) {
+            tracklet_ids.push_back(tracklet_id);
+        }
+
 
         CHECK(trackletExists(tracklet->getTrackletId()));
 
