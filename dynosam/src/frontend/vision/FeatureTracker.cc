@@ -345,21 +345,26 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
   if (previous_frame_)
   {
+    const cv::Mat& previous_motion_mask = previous_frame_->tracking_images_.get<ImageType::MotionMask>();
     utils::TimingStatsCollector tracked_dynamic_features("tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature : previous_frame_->usableDynamicFeaturesBegin())
     {
       const TrackletId tracklet_id = previous_dynamic_feature->tracklet_id_;
       const size_t age = previous_dynamic_feature->age_;
-      const Keypoint kp = previous_dynamic_feature->predicted_keypoint_;
 
+      const Keypoint kp = previous_dynamic_feature->predicted_keypoint_;
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
-
       ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
 
-      // previous_point.pt.x); bool same_propogated_label = previous_label == predicted_label;
-      // no need to check if usable since we already apply the filter
-      if(camera_->isKeypointContained(kp) && predicted_label != background_label) {
+
+      const Keypoint previous_kp = previous_dynamic_feature->keypoint_;
+      const int prev_x = functional_keypoint::u(previous_kp);
+      const int prev_y = functional_keypoint::v(previous_kp);
+      ObjectId previous_label = previous_motion_mask.at<ObjectId>(prev_y, prev_x);
+
+      //only include point if it is contained, it is not static and the previous label is the same as the predicted label
+      if(camera_->isKeypointContained(kp) && predicted_label != background_label && predicted_label == previous_label) {
         size_t new_age = age + 1;
         double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(y, x)[0]);
         double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(y, x)[1]);
@@ -378,10 +383,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->measured_flow_ = flow;
         feature->predicted_keypoint_ = Feature::CalculatePredictedKeypoint(kp, flow);
 
-        // propogate dynamic object label??
-        // feature->label_ = previous_dynamic_feature->label_;
 
-        // TODO: change to tracked
         dynamic_features.add(feature);
         tracked_feature_mask.at<uchar>(y, x) = 1;
         instance_labels.push_back(feature->instance_label_);

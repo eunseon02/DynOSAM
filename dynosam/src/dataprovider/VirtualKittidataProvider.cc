@@ -634,14 +634,22 @@ private:
 
             const auto& it = object_poses.find(frame_id);
             if(it != object_poses.end()) {
-                const auto& object_id_pose_map = it->second;
-                for(const auto& [object_id, object_pose_gt] : object_id_pose_map) {
+                auto& object_id_pose_map = it->second;
+                for(auto& [object_id, object_pose_gt] : object_id_pose_map) {
                     //query for moving
                     // if(isMoving(frame_id, object_id)) {
                         // LOG(INFO) << "Added moving object " << frame_id << " " << object_id;
-                        gt_packet.object_poses_.push_back(object_pose_gt);
+                        auto object_pose = object_pose_gt;
+                        object_pose.L_world_ = gt_packet.X_world_ * object_pose.L_camera_;
+                        gt_packet.object_poses_.push_back(object_pose);
                     // }
                 }
+            }
+
+            //set motions
+            if(frame_id > 0) {
+                const GroundTruthInputPacket& previous_gt_packet = gt_packets.at(frame_id - 1);
+                gt_packet.calculateAndSetMotions(previous_gt_packet);
             }
 
             gt_packets.push_back(gt_packet);

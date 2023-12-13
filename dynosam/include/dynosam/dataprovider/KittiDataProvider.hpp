@@ -90,28 +90,16 @@ public:
      */
     std::string getFolderName() const override { return "object_pose.txt"; }
     GroundTruthInputPacket getItem(size_t idx) override {
-        //no guarantee (by ordering) that camera_pose_loader has been inited correctly before the get item so we add the data here and not in the onPathInit
-        CHECK(camera_pose_loader_);
-        CHECK(camera_pose_loader_->isAbsolutePathSet());
+        GroundTruthInputPacket& gt_packet = constructGTPacketOnly(idx);
 
-        const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
-        const Timestamp timestamp = timestamp_loader_->getItem(idx);
-
-        //  frame_id < nTimes - 1??
-        GroundTruthInputPacket gt_packet;
-        gt_packet.timestamp_ = timestamp;
-        gt_packet.frame_id_ = idx;
-        // add ground truths for this fid
-        for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
-        {
-            gt_packet.object_poses_.push_back(object_poses_[object_ids_vector_[idx][i]]);
-        // sanity check
-        CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
+        //if frame idx > 0 calcualte motions
+        if(idx > 0) {
+            const GroundTruthInputPacket& prev_gt_packet = constructGTPacketOnly(idx - 1);
+            gt_packet.calculateAndSetMotions(prev_gt_packet);
         }
-        gt_packet.X_world_ = camera_pose;
 
-        //TODO: recalcualte every time?
         return gt_packet;
+
     }
 
 
@@ -160,6 +148,40 @@ private:
 
             object_ids_vector_[frame_id].push_back(i);
         }
+    }
+
+    //connstrict gt packet only - without calcuting the motions from a previous packet. This is used to ensure we dont do recursive getIdx calls
+    GroundTruthInputPacket& constructGTPacketOnly(size_t idx) {
+        //no guarantee (by ordering) that camera_pose_loader has been inited correctly before the get item so we add the data here and not in the onPathInit
+        CHECK(camera_pose_loader_);
+        CHECK(camera_pose_loader_->isAbsolutePathSet());
+
+        const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
+        const Timestamp timestamp = timestamp_loader_->getItem(idx);
+
+        //use cahce to avoid calculating every time
+        if(gt_packets_.exists(idx)) {
+            return gt_packets_.at(idx);
+        }
+
+        //  frame_id < nTimes - 1??
+        GroundTruthInputPacket gt_packet;
+        gt_packet.timestamp_ = timestamp;
+        gt_packet.frame_id_ = idx;
+        // add ground truths for this fid
+        for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
+        {
+            ObjectPoseGT object_pose_gt = object_poses_[object_ids_vector_[idx][i]];
+            object_pose_gt.L_world_ = camera_pose * object_pose_gt.L_camera_;
+            gt_packet.object_poses_.push_back(object_poses_[object_ids_vector_[idx][i]]);
+            // sanity check
+            CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
+        }
+        gt_packet.X_world_ = camera_pose;
+        gt_packets_.insert({idx, gt_packet});
+
+        //must return the actual stored one
+        return gt_packets_.at(idx);
     }
 
     ObjectPoseGT constructObjectPoseGT(const std::vector<double>& obj_pose_gt) const {
@@ -250,7 +272,7 @@ private:
     KittiCameraPoseFolder::Ptr camera_pose_loader_;
     std::vector<ObjectIds> object_ids_vector_;
     std::vector<ObjectPoseGT> object_poses_;
-    std::vector<GroundTruthInputPacket> gt_packets_; //unused?
+    gtsam::FastMap<FrameId, GroundTruthInputPacket> gt_packets_;
 };
 
 

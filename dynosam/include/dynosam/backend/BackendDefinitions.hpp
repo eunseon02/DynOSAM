@@ -60,11 +60,11 @@ inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
 }
 
 /**
- * @brief Construct an object motion symbol with the current frame id.
+ * @brief Construct an object motion symbol with the current frame id (k).
  *
  * A motion takes us from k-1 to k so we index using the k-1 frame id.
  * This function takes the current frame id (k) which is normally what we work with and constructs the motion symbol
- * using k-1 as the index.
+ * using k as the index such that the motion takes us from the k-1 to k.
  *
  * This does assume that we're tracking the object frame to frame
  *
@@ -74,7 +74,7 @@ inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
  */
 inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, FrameId current_frame_id) {
     CHECK(current_frame_id > 0) << "Current frame Id must be at least 1 so that we can index from the previous frame!";
-    return ObjectMotionSymbol(object_label, current_frame_id - 1u);
+    return ObjectMotionSymbol(object_label, current_frame_id);
 }
 
 std::string DynoLikeKeyFormatter(gtsam::Key);
@@ -154,6 +154,8 @@ public:
 
     using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;
 
+
+    using TrackletIdTObject = gtsam::FastMap<TrackletId, ObjectId>;
     /// @brief TrackletId to a DynamicObjectTracklet for quick access
     using TrackletMap = gtsam::FastMap<TrackletId, typename DynamicObjectTrackletM::Ptr>;
 
@@ -193,6 +195,16 @@ public:
         CHECK(trackletExists(tracklet->getTrackletId()));
 
         tracklet->add(frame_id, measurement);
+
+
+        //sanity check that tracklet Id only every appears on the same object
+        //assumes that the tracklet is correcrly associated with the first object label association
+        if(tracklet_to_object_map_.exists(tracklet_id)) {
+            CHECK_EQ(tracklet_to_object_map_.at(tracklet_id), object_id);
+        }
+        else {
+            tracklet_to_object_map_.insert({tracklet_id, object_id});
+        }
     }
 
 
@@ -218,6 +230,7 @@ private:
     ObjectToTrackletIdMap object_trackletid_map_; //!! object ids to tracklet ids
     TrackletMap tracklet_map_;
 
+    TrackletIdTObject tracklet_to_object_map_;
 };
 
 

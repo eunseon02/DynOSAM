@@ -989,9 +989,9 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     //static points
     for(const StatusKeypointMeasurement& static_measurement : input->static_keypoint_measurements_) {
 
-        if(static_count > 50) {
-            break;
-        }
+        // if(static_count > 50) {
+        //     break;
+        // }
         const KeypointStatus& status = static_measurement.first;
         const KeyPointType kp_type = status.kp_type_;
         const KeypointMeasurement& measurement = static_measurement.second;
@@ -1098,6 +1098,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
         do_tracklet_manager_.add(object_id, tracklet_id, current_frame_id, kp);
 
+        LOG_IF(INFO, tracklet_id < 5560 && tracklet_id > 5550) << "adding dynamic tracklet " << tracklet_id << " to object " << object_id;
+
         //TODO: check if missaocation happens in frontend or as part of the the do_tracklet_manager_
 
     }
@@ -1105,138 +1107,6 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     CHECK(set_tracklets.size() == dynamic_measurements.size());
 
     const size_t min_dynamic_obs = 3u;
-    // for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
-    //     //this will grow massively overtime?
-    //     const TrackletIds tracklet_ids = do_tracklet_manager_.getPerObjectTracklets(object_id);
-    //     //describes a motion from previous frame to current frame
-    //     gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, current_frame_id);
-
-    //     int dynamic_count = 0;
-
-    //     for(TrackletId tracklet_id : tracklet_ids) {
-    //         CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
-
-    //         if(dynamic_count > 30) {
-    //             break;
-    //         }
-
-    //         DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracklet_id);
-
-    //         if(tracklet.size() < 2u || !tracklet.exists(current_frame_id)) { continue; }
-
-    //         DynamicPointSymbol current_dynamic_point_symbol = DynamicLandmarkSymbol(current_frame_id, tracklet_id);
-    //         DynamicPointSymbol previous_dynamic_point_symbol = DynamicLandmarkSymbol(current_frame_id - 1u, tracklet_id);
-
-    //         const Landmark lmk_world = T_world_camera_gt * input->frame_.backProjectToCamera(tracklet_id);
-
-    //         const Keypoint& kp = tracklet.at(current_frame_id);
-    //         auto projection_factor = boost::make_shared<GenericProjectionFactor>(
-    //             kp,
-    //             //note: using static noise
-    //             static_smart_noise_,
-    //             pose_symbol,
-    //             current_dynamic_point_symbol,
-    //             gtsam_calibration_
-    //         );
-
-
-    //         LandmarkMotionTernaryFactor::shared_ptr motion_factor = nullptr;
-
-
-    //         if(!is_first) {
-    //             motion_factor = boost::make_shared<LandmarkMotionTernaryFactor>(
-    //                 previous_dynamic_point_symbol,
-    //                 current_dynamic_point_symbol,
-    //                 motion_symbol,
-    //                 landmark_motion_noise_
-    //             );
-
-    //             //add to object motion map
-    //             if(!dynamic_motion_factor_map.exists(object_id)) {
-    //                 dynamic_motion_factor_map.insert({object_id, std::vector<LandmarkMotionTernaryFactor::shared_ptr>{motion_factor}});
-    //             }
-    //             else {
-    //                 dynamic_motion_factor_map.at(object_id).push_back(motion_factor);
-    //             }
-
-    //         }
-
-
-
-    //         //new tracklet Id
-    //         if(!dynamic_in_graph_static_factor_map.exists(tracklet_id)) {
-    //             dynamic_in_graph_static_factor_map.insert({tracklet_id, false});
-    //         }
-
-
-    //         //tracklet not in map yet - just means we havent seen the point enough
-    //         if(!dynamic_in_graph_static_factor_map.at(tracklet_id)) {
-    //             //check if new factor
-    //             if(!dynamic_factor_map.exists(tracklet_id)) {
-    //                 dynamic_factor_map.insert({tracklet_id, std::vector<GenericProjectionFactor::shared_ptr>{projection_factor}});
-
-    //                 gtsam::Values values;
-    //                 values.insert(current_dynamic_point_symbol, lmk_world);
-    //                 dynamic_initial_points.insert({tracklet_id, values});
-    //             }
-    //             else {
-    //                 dynamic_factor_map.at(tracklet_id).push_back(projection_factor);
-    //                 dynamic_initial_points.at(tracklet_id).insert(current_dynamic_point_symbol, lmk_world);
-    //             }
-    //         }
-    //         else {
-    //             new_factors_.push_back(projection_factor);
-    //             new_values_.insert(current_dynamic_point_symbol, lmk_world);
-
-    //             //doesnt account for number of tracked points (we need at elast 3) or backtracking to add factors for the moment!
-    //             if(smoother_->valueExists(previous_dynamic_point_symbol) && motion_factor) {
-    //                 new_factors_.push_back(motion_factor);
-
-    //                 if(!new_values_.exists(motion_symbol)) {
-    //                     new_values_.insert(motion_symbol, gtsam::Pose3::Identity());
-    //                 }
-    //             }
-    //             //add motion
-    //         }
-
-    //         if(!dynamic_in_graph_static_factor_map.at(tracklet_id) && dynamic_factor_map.at(tracklet_id).size() >= min_dynamic_obs) {
-    //             dynamic_in_graph_static_factor_map.at(tracklet_id) = true;
-
-    //             new_factors_.push_back(projection_factor);
-    //             new_values_.insert(current_dynamic_point_symbol, lmk_world);
-
-    //             //for now dont go back and add!!
-
-    //             // CHECK_EQ(dynamic_factor_map.at(tracklet_id).size(), dynamic_initial_points.at(tracklet_id).size());
-
-    //             // for(auto f : dynamic_factor_map.at(tracklet_id)) {
-    //             //     new_factors_.push_back(f);
-    //             // }
-
-    //             // const gtsam::Values& dynamic_point_values = dynamic_initial_points.at(tracklet_id);
-
-    //             // new_values_.insert(dynamic_point_values);
-
-    //             // //for all dynamci points were adding, get all ones that have a previous point
-    //             // for (const gtsam::Values::Filtered<gtsam::Value>::ConstKeyValuePair& key_value :
-    //             //     dynamic_point_values.filter(gtsam::Symbol::ChrTest(current_dynamic_point_symbol.chr()))) {
-    //             //     DynamicPointSymbol sym(key_value.key);
-
-    //             //     CHECK_EQ(sym.trackletId(), tracklet_id);
-    //             //     const FrameId frame_id = sym.frameId();
-
-    //             //     if(tracklet.exists(previous_frame))
-
-    //             // }
-
-
-    //         }
-
-    //         dynamic_count++;
-
-    //     }
-
-    // }
 
     for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
         //this will grow massively overtime?
@@ -1286,7 +1156,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             }
 
             if(dynamic_in_graph_factor_map.at(tracklet_id)) {
-                LOG_IF(INFO, tracklet_id < 1630 && tracklet_id > 1620) << "Dynamic tracklet " << tracklet_id << " is in graph at frame " <<  current_frame_id;
+                LOG_IF(INFO, tracklet_id < 5560 && tracklet_id > 5550) << "Dynamic tracklet " << tracklet_id << " is in graph at frame " <<  current_frame_id;
                 //the previous point should be in the graph
                 CHECK(smoother_->valueExists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
                 existing_well_tracked_points.push_back(tracklet_id);
@@ -1300,7 +1170,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 }
 
                 if(is_well_tracked) {
-                    LOG_IF(INFO, tracklet_id < 1630 && tracklet_id > 1620) << "Dynamic tracklet " << tracklet_id << " is well tracked at frame " <<  current_frame_id;
+                    LOG_IF(INFO, tracklet_id < 5560 && tracklet_id > 5550) << "Dynamic tracklet " << tracklet_id << " is well tracked at frame " <<  current_frame_id;
                     new_well_tracked_points.push_back(tracklet_id);
                 }
 
@@ -1319,7 +1189,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             for(size_t frame = current_frame_id - min_dynamic_obs; frame <= current_frame_id; frame++) {
                 DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
 
-                LOG_IF(INFO, tracked_id < 1630 && tracked_id > 1620) << "Adding new tracks at frame " << frame << " tracklet id " << tracked_id << " " << DynoLikeKeyFormatter(dynamic_point_symbol);
+                LOG_IF(INFO, tracked_id < 5560 && tracked_id > 5550) << "Adding new tracks at frame " << frame << " tracklet id " << tracked_id << " " << DynoLikeKeyFormatter(dynamic_point_symbol);
                 CHECK(tracklet.exists(frame));
                 gtsam::Symbol cam_symbol = CameraPoseSymbol(frame);
 
@@ -1343,7 +1213,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
             //add motion -> start from first index + 1 so we can index from the current frame
             for(size_t frame = current_frame_id - min_dynamic_obs+1; frame <= current_frame_id; frame++) {
-                LOG_IF(INFO, tracked_id < 1630 && tracked_id > 1620) << "Adding new motion from at frame " << frame;
+                LOG_IF(INFO, tracked_id < 5560 && tracked_id > 5550) << "Adding new motion from at frame " << frame;
                 DynamicPointSymbol current_dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
                 DynamicPointSymbol previous_dynamic_point_symbol = DynamicLandmarkSymbol(frame - 1u, tracked_id);
 
