@@ -235,7 +235,7 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
         feature_container.beginUsable()
     );
 
-    LOG(INFO) << "Found " << correspondences.size() << " correspondences for object instance " << object_id << " " << (correspondences.size() > 0u);
+    // LOG(INFO) << "Found " << correspondences.size() << " correspondences for object instance " << object_id << " " << (correspondences.size() > 0u);
 
     return correspondences.size() > 0u;
 }

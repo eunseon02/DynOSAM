@@ -90,6 +90,18 @@ std::ostream& operator<<(std::ostream &os, const ObjectPoseGT& object_pose) {
     return os;
 }
 
+bool GroundTruthInputPacket::getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const {
+    auto it_this = std::find_if(object_poses_.begin(), object_poses_.end(),
+                [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
+    if(it_this == object_poses_.end()) {
+        return false;
+    }
+
+    object_pose_gt = *it_this;
+    return true;
+
+}
+
 
 bool GroundTruthInputPacket::findAssociatedObject(ObjectId label, GroundTruthInputPacket& other, ObjectPoseGT** obj, ObjectPoseGT** other_obj) {
     size_t obj_idx, other_obj_idx;

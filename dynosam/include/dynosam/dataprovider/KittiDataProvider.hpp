@@ -173,7 +173,7 @@ private:
         {
             ObjectPoseGT object_pose_gt = object_poses_[object_ids_vector_[idx][i]];
             object_pose_gt.L_world_ = camera_pose * object_pose_gt.L_camera_;
-            gt_packet.object_poses_.push_back(object_poses_[object_ids_vector_[idx][i]]);
+            gt_packet.object_poses_.push_back(object_pose_gt);
             // sanity check
             CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
         }

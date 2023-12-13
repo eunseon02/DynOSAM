@@ -82,6 +82,19 @@ void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_facto
 }
 
 
+std::vector<gtsam::NonlinearFactor::shared_ptr> getAssociatedFactors(const gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
+    std::vector<gtsam::NonlinearFactor::shared_ptr> associated_factors;
+
+    for(const auto& factor : graph) {
+        if(factor->find(query_key) != factor->end()) {
+            associated_factors.push_back(factor);
+        }
+    }
+
+    return associated_factors;
+}
+
+
 
 } //factor_graph_tools
 } //dyno

@@ -77,21 +77,21 @@ include_directories(include)
 # )
 
 #####exec test#########
-add_executable(kitti_semantic_to_motion src/KittiSemaniticToMotion.cc)
+# add_executable(kitti_semantic_to_motion src/KittiSemaniticToMotion.cc)
 
-ament_target_dependencies(kitti_semantic_to_motion
-  rclcpp
-  std_msgs
-  dynosam
-)
+# ament_target_dependencies(kitti_semantic_to_motion
+#   rclcpp
+#   std_msgs
+#   dynosam
+# )
 
-ament_target_dependencies(kitti_semantic_to_motion "rclcpp" "std_msgs"
-"dynosam"
-)
+# ament_target_dependencies(kitti_semantic_to_motion "rclcpp" "std_msgs"
+# "dynosam"
+# )
 
-install(TARGETS
-kitti_semantic_to_motion
-  DESTINATION lib/${PROJECT_NAME})
+# install(TARGETS
+# kitti_semantic_to_motion
+#   DESTINATION lib/${PROJECT_NAME})
 
 
 

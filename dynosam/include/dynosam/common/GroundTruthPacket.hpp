@@ -96,6 +96,8 @@ public:
     gtsam::Pose3 X_world_; //camera pose in world frame
     std::vector<ObjectPoseGT> object_poses_;
 
+    bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const;
+
     /**
      * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
      *

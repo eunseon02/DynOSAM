@@ -53,6 +53,8 @@ void addBetweenFactor(
 
 void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_factor, Keypoint measurement, FrameId frame_id);
 
+std::vector<gtsam::NonlinearFactor::shared_ptr> getAssociatedFactors(const gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key);
+
 
 
 } //factor_graph_tools

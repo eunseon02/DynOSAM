@@ -103,8 +103,8 @@ MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Landma
     // run ransac
     ransac.sac_model_ = absposeproblem_ptr;
     //https://github.com/laurentkneip/opengv/issues/121
-    // ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
     ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+    // ransac.threshold_ = .5*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
     // LOG(INFO) << "Solving ransac";
     ransac.max_iterations_ = 500;
     if(!ransac.computeModel(0)) {

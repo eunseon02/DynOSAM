@@ -150,7 +150,7 @@ ament_export_libraries(${PROJECT_NAME}
 )
 
 # ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
-ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV opengv GTSAM eigen3_cmake_module Eigen3 )
+ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV opengv GTSAM eigen3_cmake_module Eigen3)
 
 
 target_include_directories(${PROJECT_NAME}

@@ -33,23 +33,33 @@ namespace dyno {
 std::string DynoLikeKeyFormatter(gtsam::Key key)
 {
   const gtsam::LabeledSymbol asLabeledSymbol(key);
-    if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0)
+  if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
+    //if used as motion
+    if(asLabeledSymbol.chr() == kObjectMotionSymbolChar) {
+      const auto object_label = asLabeledSymbol.label();
+      const auto frame_id = asLabeledSymbol.index();
+
+      std::stringstream ss;
+      ss << " (label: " << object_label << " frames: " << frame_id - 1 << " -> " << frame_id << ")";
       return (std::string) asLabeledSymbol;
+    }
+    return (std::string) asLabeledSymbol;
+  }
 
-    const gtsam::Symbol asSymbol(key);
-    if (asLabeledSymbol.chr() > 0) {
-      if(asLabeledSymbol.chr() == kDynamicLandmarkSymbolChar) {
-        const DynamicPointSymbol asDynamicPointSymbol(key);
-        return (std::string) asDynamicPointSymbol;
-      }
-      else {
-        return (std::string) asSymbol;
-      }
-
+  const gtsam::Symbol asSymbol(key);
+  if (asLabeledSymbol.chr() > 0) {
+    if(asLabeledSymbol.chr() == kDynamicLandmarkSymbolChar) {
+      const DynamicPointSymbol asDynamicPointSymbol(key);
+      return (std::string) asDynamicPointSymbol;
     }
     else {
-      return std::to_string(key);
+      return (std::string) asSymbol;
     }
+
+  }
+  else {
+    return std::to_string(key);
+  }
 }
 
 
