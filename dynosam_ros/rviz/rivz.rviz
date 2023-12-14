@@ -15,8 +15,9 @@ Panels:
         - /Static Point Cloud1/Topic1
         - /Odometry (GT)1/Shape1
         - /MarkerArray1/Topic1
-        - /PointCloud21
-        - /PointCloud21/Status1
+        - /Static Point Cloud (Optimized)1
+        - /Static Point Cloud (Optimized)1/Status1
+        - /Dynamic Point Cloud (Optimized)1
       Splitter Ratio: 0.5
     Tree Height: 637
   - Class: rviz_common/Selection
@@ -36,7 +37,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Dynamic Point Cloud
+    SyncSource: PointCloud2
 Visualization Manager:
   Class: ""
   Displays:
@@ -44,7 +45,7 @@ Visualization Manager:
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: false
+      Enabled: true
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -57,12 +58,12 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Object Paths (Composed)
       Namespaces:
-        frontend_composed_object_path: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -74,7 +75,7 @@ Visualization Manager:
       Enabled: true
       Name: Object Poses (Composed)
       Namespaces:
-        frontend_composed_object_positions: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -328,12 +329,12 @@ Visualization Manager:
       Max Intensity: 4096
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: PointCloud2
+      Name: Static Point Cloud (Optimized)
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 1
-      Size (m): 0.009999999776482582
-      Style: Points
+      Size (m): 0.30000001192092896
+      Style: Spheres
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -341,6 +342,40 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/backend/static
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: RGB8
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: Dynamic Point Cloud (Optimized)
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.20000000298023224
+      Style: Spheres
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/backend/dynamic
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -390,25 +425,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 861709.1875
+      Distance: 64.63107299804688
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 118.34730529785156
-        Y: -27.729496002197266
-        Z: 97.32453155517578
+        X: -3.5726847648620605
+        Y: -7.26282262802124
+        Z: 16.247356414794922
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.4552017152309418
+      Pitch: -0.6596009731292725
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.3203911781311035
+      Yaw: 4.7054009437561035
     Saved: ~
 Window Geometry:
   Displays:

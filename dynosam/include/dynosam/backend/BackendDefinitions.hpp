@@ -140,6 +140,10 @@ public:
 
     inline TrackletId getTrackletId() const { return tracklet_id_; }
 
+    FrameId getFirstFrame() const {
+        return this->begin()->first;;
+    }
+
 private:
     TrackletId tracklet_id_;
 
@@ -153,6 +157,8 @@ public:
     using DynamicObjectTrackletM = DynamicObjectTracklet<MEASUREMENT>;
 
     using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;
+    using FrameToObjects = gtsam::FastMap<FrameId, ObjectIds>;
+    using FrameToTracklets = gtsam::FastMap<FrameId, TrackletIds>;
 
 
     using TrackletIdTObject = gtsam::FastMap<TrackletId, ObjectId>;
@@ -179,18 +185,10 @@ public:
             << object_id << " and tracklet_id " << tracklet_id
             << " to frame " << frame_id << " but an entry already exists at this frame";
 
-        //if new object
-        if(!object_trackletid_map_.exists(object_id)) {
-            object_trackletid_map_.insert({object_id, TrackletIds{}});
-        }
 
-        auto& tracklet_ids = object_trackletid_map_.at(object_id);
-
-        //only add if not present
-        if(std::find(tracklet_ids.begin(), tracklet_ids.end(), tracklet_id) == tracklet_ids.end()) {
-            tracklet_ids.push_back(tracklet_id);
-        }
-
+        addToStructure(object_trackletid_map_, object_id, tracklet_id);
+        addToStructure(frame_to_objects_map_, frame_id, object_id);
+        addToStructure(frame_to_tracklets_map_, frame_id, tracklet_id);
 
         CHECK(trackletExists(tracklet->getTrackletId()));
 
@@ -207,6 +205,10 @@ public:
         }
     }
 
+    ObjectIds getPerFrameObjects(const FrameId frame_id) const {
+        checkAndThrow(frameExists(frame_id), "getPerFrameObjects query failed as frame id id does not exist. Offedning Id " + std::to_string(frame_id));
+        return frame_to_objects_map_.at(frame_id);
+    }
 
     TrackletIds getPerObjectTracklets(const ObjectId object_id) {
         checkAndThrow(objectExists(object_id), "getPerObjectTracklets query failed as object id id does not exist. Offedning Id " + std::to_string(object_id));
@@ -218,6 +220,10 @@ public:
         return *tracklet_map_.at(tracklet_id);
     }
 
+    inline bool frameExists(const FrameId frame_id) const {
+        return frame_to_objects_map_.exists(frame_id);
+    }
+
     inline bool objectExists(const ObjectId object_id) {
         return object_trackletid_map_.exists(object_id);
     }
@@ -226,10 +232,56 @@ public:
         return tracklet_map_.exists(tracklet_id);
     }
 
+    //slow as we do an actual saerch through map
+    //output will be sorted lowest to highest
+    FrameIds getFramesPerObject(const ObjectId object_id) const {
+        std::set<FrameId, std::less<FrameId>> all_frames;
+        for(const auto&[frame_id, object_ids] : frame_to_objects_map_) {
+            if(std::find(object_ids.begin(), object_ids.end(), object_id) != object_ids.end()) {
+                all_frames.insert(frame_id);
+            }
+        }
+
+        //frame_to_objects_map_ should be sorted becasue gtsam::FasMap uses std::less (as does std::set)
+        return FrameIds(all_frames.begin(), all_frames.end());
+    }
+
+private:
+    /**
+     * @brief Add to map of key to some vector of values.
+     *
+     * If key does not exist, a new value vector will be created and value added to it.
+     * Value is only added to the vector in the map if it is not already present, such that all values are unique
+     * and the vector acts like a set (why not use a set then, silly?)
+     *
+     * @tparam Key
+     * @tparam Value
+     * @tparam Allocator
+     * @param map
+     * @param key
+     * @param value
+     */
+    template<typename Key, typename Value, typename Allocator>
+    void addToStructure(gtsam::FastMap<Key, std::vector<Value, Allocator>>& map, Key key, Value value) {
+        using VectorValue = std::vector<Value, Allocator>;
+        //if new
+        if(!map.exists(key)) {
+            map.insert({key, VectorValue{}});
+        }
+        auto& vector_values = map.at(key);
+
+        //only add if value already not present
+        if(std::find(vector_values.begin(), vector_values.end(), value) == vector_values.end()) {
+            vector_values.push_back(value);
+        }
+    }
+
+
 private:
     ObjectToTrackletIdMap object_trackletid_map_; //!! object ids to tracklet ids
     TrackletMap tracklet_map_;
-
+    FrameToObjects frame_to_objects_map_;
+    FrameToTracklets frame_to_tracklets_map_;
     TrackletIdTObject tracklet_to_object_map_;
 };
 

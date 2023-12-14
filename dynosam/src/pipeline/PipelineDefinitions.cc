@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,46 +21,16 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 
-#include "dynosam/common/Types.hpp"
-
-#include <functional>
+#include "dynosam/common/Types.hpp" //for to_string
 
 namespace dyno {
 
 
-struct PipelineReturnStatus {
-    enum Code {
-        SUCCESS,
-        IS_SHUTDOWN,
-        OUTPUT_PUSH_FAILURE,
-        PROCESSING_FAILURE,
-        GET_PACKET_FAILURE
-    };
-
-    Code code_;
-
-    PipelineReturnStatus() {}
-    PipelineReturnStatus(Code code) : code_(code) {}
-    explicit PipelineReturnStatus(int val) : code_(static_cast<Code>(val)) {}
-
-    PipelineReturnStatus& operator=(Code code) {
-        this->code_ = code;
-        return *this;
-    }
-
-    operator Code() const { return code_; }
-
-    //TODO:
-    // operator std::string() const;
-
-    // friend std::ostream &operator<<(std::ostream &os, const PipelineReturnStatus& status);
-
-};
+// template<>
+//TODO: tostring
 
 
-using OnPipelineFailureCallback = std::function<void(PipelineReturnStatus)>;
 
-
-}
+} //dyno

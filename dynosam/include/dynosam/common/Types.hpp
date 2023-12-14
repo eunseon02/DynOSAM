@@ -39,6 +39,9 @@
 namespace dyno
 {
 
+template<typename T>
+struct traits;
+
 static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 
 using Timestamp = double;
@@ -48,6 +51,8 @@ using ObjectId = int;
 using ObjectIds = std::vector<ObjectId>;
 
 using FrameId = size_t;
+using FrameIds = std::vector<FrameId>;
+
 using Depth = double;
 using Depths = std::vector<double>;
 
@@ -161,6 +166,7 @@ std::string demangle(const char* name);
 template<typename T>
 std::string to_string(const T& t);
 
+
 template<typename Input, typename Output>
 bool convert(const Input&, Output&);
 
@@ -199,6 +205,27 @@ inline std::string container_to_string(const Container& container) {
   }
   return ss.str();
 }
+
+
+// template<typename T>
+// struct conversion_traits {
+
+//   static std::string ToString(const T& t) {
+//     using std::to_string;
+//     // This calls std::to_string if std::to_string is defined;
+//     // Otherwise it uses ADL to find the correct to_string function
+//     return to_string(t);
+//   }
+
+//   static void Print(const T& t) {
+//     const std::string str = ToString(t);
+//     std::cout << str << std::endl;
+//   }
+
+// };
+
+// template<typename T>
+// struct traits : public conversion_traits<T> {};
 
 
 

@@ -38,7 +38,10 @@
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-DEFINE_bool(run_as_graph_file_only, false, "If true values will be saved to a graph file to for unit testing.");
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/LevenbergMarquardtParams.h>
+
+DEFINE_bool(run_as_graph_file_only, true, "If true values will be saved to a graph file to for unit testing.");
 DEFINE_string(backend_graph_file, "/root/results/DynoSAM/mono_backend_graph.g2o", "Path to write graph file to");
 
 namespace dyno {
@@ -109,13 +112,13 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoBoostrapSpin(MonocularInsta
 
     }
 
-    gtsam::Values new_values;
-    gtsam::NonlinearFactorGraph new_factors;
+    // gtsam::Values new_values;
+    // gtsam::NonlinearFactorGraph new_factors;
 
-    addInitialPose(T_world_camera_gt, current_frame_id, new_values, new_factors);
-    updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
+    // addInitialPose(T_world_camera_gt, current_frame_id, new_values, new_factors);
+    // updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
 
-    optimize(current_frame_id, new_smart_factors, TrackletIds{}, TrackletIds{}, new_values, new_factors);
+    // optimize(current_frame_id, new_smart_factors, TrackletIds{}, TrackletIds{}, new_values, new_factors);
 
     return {State::Nominal, nullptr};
 }
@@ -139,24 +142,24 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
         // return {State::Nominal, nullptr};
     }
 
-    gtsam::Values new_values;
-    gtsam::NonlinearFactorGraph new_factors;
+    // gtsam::Values new_values;
+    // gtsam::NonlinearFactorGraph new_factors;
 
-    addOdometry(T_world_camera_gt, current_frame_id, current_frame_id-1, new_values, new_factors);
-    updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
+    // addOdometry(T_world_camera_gt, current_frame_id, current_frame_id-1, new_values, new_factors);
+    // updateSmartStaticObservations(input->static_keypoint_measurements_, current_frame_id, new_smart_factors, updated_smart_factors, new_projection_measurements);
 
-    gtsam::Values new_and_current_values(state_);
-    new_and_current_values.insert(new_values);
+    // gtsam::Values new_and_current_values(state_);
+    // new_and_current_values.insert(new_values);
 
-    TrackletIds tracklets_triangulated;
-    TrackletIds only_updated_smart_factors;
+    // TrackletIds tracklets_triangulated;
+    // TrackletIds only_updated_smart_factors;
 
-    tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, tracklets_triangulated, only_updated_smart_factors, new_values, new_factors);
-    addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, new_factors);
+    // tryTriangulateExistingSmartStaticFactors(updated_smart_factors, new_and_current_values, tracklets_triangulated, only_updated_smart_factors, new_values, new_factors);
+    // addStaticProjectionMeasurements(current_frame_id, new_projection_measurements, new_factors);
 
-    LOG(INFO) << "New smart factors " << new_smart_factors.size() << " updated smart factors " << updated_smart_factors.size() << " new projections " << new_projection_measurements.size() << " num triangulated " << tracklets_triangulated.size();
+    // LOG(INFO) << "New smart factors " << new_smart_factors.size() << " updated smart factors " << updated_smart_factors.size() << " new projections " << new_projection_measurements.size() << " num triangulated " << tracklets_triangulated.size();
 
-    optimize(current_frame_id, new_smart_factors, only_updated_smart_factors, tracklets_triangulated, new_values, new_factors);
+    // optimize(current_frame_id, new_smart_factors, only_updated_smart_factors, tracklets_triangulated, new_values, new_factors);
     // optimize(current_frame_id, new_smart_factors, updated_smart_factors, TrackletIds{}, new_values, new_factors);
 
     // updateDynamicObjectTrackletMap(input);
@@ -206,16 +209,78 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
         }
     }
 
+    StatusLandmarkEstimates all_dynamic_object_triangulation;
+    gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+    for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
+        object_poses_composed_.insert({object_id, gtsam::Pose3Vector{}});
+
+        FrameIds all_frames = do_tracklet_manager_.getFramesPerObject(object_id);
+        for(size_t i = 1; i < all_frames.size(); i++) {
+            FrameId frame_id = all_frames.at(i);
+            gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
+
+            if(!state_.exists(motion_symbol)) {
+                continue;
+            }
+
+            if(i == 1) {
+                ObjectPoseGT object_pose_gt;
+                auto gt_frame_packet = gt_packet_map_.at(frame_id-1);
+                if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                    LOG(FATAL) << "Coudl not find gt object at frame " << frame_id-1 << " for object Id" << object_id;
+                }
+                CHECK_EQ(object_poses_composed_.at(object_id).size(), 0u);
+                object_poses_composed_.at(object_id).push_back(object_pose_gt.L_world_);
+            }
+            else {
+                gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
+                gtsam::Pose3 object_pose = motion * (object_poses_composed_.at(object_id).back()); //object pose at the current frame, composed from the previous motion
+                object_poses_composed_.at(object_id).push_back(object_pose);
+            }
+        }
+
+        LOG(INFO) << "Added " <<  object_poses_composed_.at(object_id).size() << " composed poses for object " << object_id;
+
+        //this is a lot of iteration for what should be a straighforward lookup
+        const TrackletIds tracklet_ids = do_tracklet_manager_.getPerObjectTracklets(object_id);
+
+        for(TrackletId tracklet_id : tracklet_ids) {
+            CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
+
+            const DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracklet_id);
+
+            for(const auto& [frame_id, measurement] : tracklet) {
+                (void)measurement;
+                DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame_id, tracklet_id);
+
+                if(state_.exists(dynamic_point_symbol)) {
+                    const Landmark lmk = state_.at<Landmark>(dynamic_point_symbol);
+                    auto lmk_estimate = std::make_pair(tracklet_id, lmk);
+
+                    LandmarkStatus status;
+                    status.label_ = object_id;
+                    status.method_ = LandmarkStatus::Method::OPTIMIZED;
+
+                    all_dynamic_object_triangulation.push_back(std::make_pair(status, lmk_estimate));
+                }
+
+            }
+
+        }
+
+    }
+
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
     // backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     backend_output->static_lmks_ = lmk_map;
+    backend_output->object_poses_composed_ = object_poses_composed_;
 
     if(state_.exists(CameraPoseSymbol(current_frame_id))) {
         backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     }
 
-    // backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
+    backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
 
     return {State::Nominal, backend_output};
 }
@@ -993,6 +1058,9 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
     CHECK(input->gt_packet_);
     const GroundTruthInputPacket gt_packet = input->gt_packet_.value();
+
+    gt_packet_map_.insert({current_frame_id, gt_packet});
+
     gtsam::Pose3 T_world_camera_gt = gt_packet.X_world_;
 
     gtsam::Key pose_symbol = CameraPoseSymbol(current_frame_id);
@@ -1062,10 +1130,16 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             lmk_symbol_to_set_prior = lmk_symbol;
         }
 
-
-        // const Landmark lmk_world = cam_pose * input->frame_.backProjectToCamera(tracklet_id);
+        const Landmark lmk_cam =  input->frame_.backProjectToCamera(tracklet_id);
         //only works when T_world_camera in the frame is correct (ie, monocular will have a lot of drift)
-        const Landmark lmk_world = input->frame_.backProjectToWorld(tracklet_id);
+        // const Landmark lmk_world = input->frame_.backProjectToWorld(tracklet_id);
+
+        //check that in front of camera?
+        if(!camera_->isLandmarkContained(lmk_cam)) {
+            continue;
+        }
+
+        const Landmark lmk_world = cam_pose * lmk_cam;
 
 
 
@@ -1110,7 +1184,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
         }
         //if factor is in map add to new factors as we will add to map
         else {
-            CHECK(smoother_->valueExists(lmk_symbol));
+            // CHECK(smoother_->valueExists(lmk_symbol));
+            CHECK(new_values_.exists(lmk_symbol));
             new_factors_.push_back(projection_factor);
         }
 
@@ -1118,7 +1193,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
         //check if we can now add factor and value to map
         //add all the collected projection factors and the initial value
         CHECK(static_initial_points.exists(lmk_symbol));
-        if(!static_in_graph_static_factor_map.at(tracklet_id) && static_factor_map.at(tracklet_id).size() >= 6u) {
+        if(!static_in_graph_static_factor_map.at(tracklet_id) && static_factor_map.at(tracklet_id).size() >= 2u) {
             static_in_graph_static_factor_map.at(tracklet_id) = true;
 
             for(auto f : static_factor_map.at(tracklet_id)) {
@@ -1129,9 +1204,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
             // if(lmk_symbol_to_set_prior == lmk_symbol) {
             //      // Add a prior on landmark l0
-            //     static auto kPointPrior = gtsam::noiseModel::Isotropic::Sigma(3, 0.1);
-            //     new_factors_.addPrior(lmk_symbol_to_set_prior, lmk_world, kPointPrior);
-            // }
+            static auto kPointPrior = gtsam::noiseModel::Isotropic::Sigma(3, 0.3);
+            new_factors_.addPrior(lmk_symbol, lmk_world, kPointPrior);
         }
 
         static_count++;
@@ -1176,7 +1250,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
     CHECK(set_tracklets.size() == dynamic_measurements.size());
 
-    const size_t min_dynamic_obs = 100u;
+    const size_t min_dynamic_obs = 3u;
 
     for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
         //this will grow massively overtime?
@@ -1228,10 +1302,12 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             if(dynamic_in_graph_factor_map.at(tracklet_id)) {
                 // LOG_IF(INFO, tracklet_id < 5560 && tracklet_id > 5550) << "Dynamic tracklet " << tracklet_id << " is in graph at frame " <<  current_frame_id;
                 //the previous point should be in the graph
-                CHECK(smoother_->valueExists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
+                // CHECK(smoother_->valueExists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
+                CHECK(new_values_.exists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
                 existing_well_tracked_points.push_back(tracklet_id);
             }
             else {
+                CHECK(!new_values_.exists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
                 //not in graph so lets see if well tracked
                 bool is_well_tracked = true;
                 for(size_t i = current_frame_id - min_dynamic_obs; i <= current_frame_id; i++) {
@@ -1255,17 +1331,45 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracked_id);
 
 
+            const size_t starting_frame_points = current_frame_id - min_dynamic_obs;
+            const size_t starting_frame_motion = starting_frame_points + 1;
         //     //up to and including the current frame
-            for(size_t frame = current_frame_id - min_dynamic_obs; frame <= current_frame_id; frame++) {
+            for(size_t frame = starting_frame_points; frame <= current_frame_id; frame++) {
                 DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
 
                 // LOG_IF(INFO, tracked_id < 5560 && tracked_id > 5550) << "Adding new tracks at frame " << frame << " tracklet id " << tracked_id << " " << DynoLikeKeyFormatter(dynamic_point_symbol);
                 CHECK(tracklet.exists(frame));
                 gtsam::Symbol cam_symbol = CameraPoseSymbol(frame);
 
-                const Landmark lmk_world = cam_pose * input->frame_.backProjectToCamera(tracked_id);
+                auto gt_frame_packet = gt_packet_map_.at(frame);
 
-                CHECK(!smoother_->valueExists(dynamic_point_symbol));
+                Landmark lmk_world;
+
+                //if first point then use gt
+                if(frame == starting_frame_points) {
+                    lmk_world = cam_pose * input->frame_.backProjectToCamera(tracked_id);
+                }
+                else {
+                    //propoate from gt motion
+                    ObjectPoseGT object_pose_gt;
+                    auto gt_frame_packet = gt_packet_map_.at(frame);
+                    if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                        LOG(FATAL) << "Coudl not find gt object at frame " << frame << " for object Id" << object_id;
+                    }
+
+                    const auto prev_dynamic_point_symbol = DynamicLandmarkSymbol(frame-1u, tracked_id);
+                    CHECK(object_pose_gt.prev_H_current_world_);
+                    CHECK(new_values_.exists(prev_dynamic_point_symbol));
+
+                    gtsam::Pose3 prev_H_current_world_ = object_pose_gt.prev_H_current_world_.value(); //TODO: perterb?
+
+                    Landmark lmk_world_prev = new_values_.at<Landmark>(prev_dynamic_point_symbol);
+                    lmk_world = prev_H_current_world_ * lmk_world_prev;
+                }
+
+
+                // CHECK(!smoother_->valueExists(dynamic_point_symbol));
+                CHECK(!new_values_.exists(dynamic_point_symbol));
                 new_values_.insert(dynamic_point_symbol, lmk_world);
 
                 const Keypoint& kp = tracklet.at(frame);
@@ -1282,7 +1386,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             }
 
             //add motion -> start from first index + 1 so we can index from the current frame
-            for(size_t frame = current_frame_id - min_dynamic_obs+1; frame <= current_frame_id; frame++) {
+            for(size_t frame = starting_frame_motion; frame <= current_frame_id; frame++) {
                 // LOG_IF(INFO, tracked_id < 5560 && tracked_id > 5550) << "Adding new motion from at frame " << frame;
                 DynamicPointSymbol current_dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
                 DynamicPointSymbol previous_dynamic_point_symbol = DynamicLandmarkSymbol(frame - 1u, tracked_id);
@@ -1290,14 +1394,25 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 CHECK(new_values_.exists(current_dynamic_point_symbol));
                 CHECK(new_values_.exists(previous_dynamic_point_symbol));
 
-                CHECK(!smoother_->valueExists(current_dynamic_point_symbol));
-                CHECK(!smoother_->valueExists(previous_dynamic_point_symbol));
+                // CHECK(!smoother_->valueExists(current_dynamic_point_symbol));
+                // CHECK(!smoother_->valueExists(previous_dynamic_point_symbol));
 
                 //motion that takes us from previous to current
                 gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame);
-                CHECK(!smoother_->valueExists(motion_symbol));
-
+                // // CHECK(!smoother_->valueExists(motion_symbol));
+                // CHECK(!new_values_.exists(motion_symbol));
                 if(!new_values_.exists(motion_symbol)) {
+
+                    ObjectPoseGT object_pose_gt;
+                    auto gt_frame_packet = gt_packet_map_.at(frame);
+                    if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                        LOG(FATAL) << "Coudl not find gt object at frame " << frame << " for object Id" << object_id;
+                    }
+
+                    CHECK(object_pose_gt.prev_H_current_world_);
+
+
+                    // new_values_.insert(motion_symbol, object_pose_gt.prev_H_current_world_.value());
                     new_values_.insert(motion_symbol, gtsam::Pose3::Identity());
                 }
 
@@ -1309,7 +1424,6 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 );
 
                 new_factors_.push_back(motion_factor);
-
             }
 
             dynamic_in_graph_factor_map.at(tracked_id) = true;
@@ -1324,8 +1438,10 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
             const Landmark lmk_world = cam_pose * input->frame_.backProjectToCamera(tracked_id);
 
-            CHECK(!smoother_->valueExists(current_dynamic_point_symbol));
-            CHECK(smoother_->valueExists(previous_dynamic_point_symbol));
+            CHECK(!new_values_.exists(current_dynamic_point_symbol));
+            CHECK(new_values_.exists(previous_dynamic_point_symbol));
+            // CHECK(!smoother_->valueExists(current_dynamic_point_symbol));
+            // CHECK(smoother_->valueExists(previous_dynamic_point_symbol));
             new_values_.insert(current_dynamic_point_symbol, lmk_world);
 
             const Keypoint& kp = tracklet.at(current_frame_id);
@@ -1342,7 +1458,10 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
             //motion that takes us from previous to current
             gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, current_frame_id);
-            CHECK(!smoother_->valueExists(motion_symbol));
+            // CHECK(!new_values_.exists(motion_symbol));
+            // CHECK(!smoother_->valueExists(motion_symbol));
+
+            CHECK(new_values_.exists(ObjectMotionSymbolFromCurrentFrame(object_id, current_frame_id-1u)));
 
             if(!new_values_.exists(motion_symbol)) {
 
@@ -1354,7 +1473,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 CHECK(object_pose_gt.prev_H_current_world_);
 
 
-                new_values_.insert(motion_symbol, object_pose_gt.prev_H_current_world_.value());
+                // new_values_.insert(motion_symbol, object_pose_gt.prev_H_current_world_.value());
+                new_values_.insert(motion_symbol, gtsam::Pose3::Identity());
             }
 
             auto motion_factor = boost::make_shared<LandmarkMotionTernaryFactor>(
@@ -1371,41 +1491,61 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
 
 
-    if(!is_first) {
-        LOG(INFO) << "Updating smoother";
-        gtsam::ISAM2Result result;
-        try {
-            result = smoother_->update(new_factors_, new_values_);
-        }
-        catch(const gtsam::IndeterminantLinearSystemException& e) {
-            auto factors = smoother_->getFactorsUnsafe();
-            factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
+    // if(!is_first) {
+    //     LOG(INFO) << "Updating smoother";
+    //     gtsam::ISAM2Result result;
+    //     try {
+    //         result = smoother_->update(new_factors_, new_values_);
+    //     }
+    //     catch(const gtsam::IndeterminantLinearSystemException& e) {
+    //         auto factors = smoother_->getFactorsUnsafe();
+    //         factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
 
-            auto associated_factors = factor_graph_tools::getAssociatedFactors(factors, e.nearbyVariable());
-            gtsam::NonlinearFactorGraph associated_graph(associated_factors);
+    //         auto associated_factors = factor_graph_tools::getAssociatedFactors(factors, e.nearbyVariable());
+    //         gtsam::NonlinearFactorGraph associated_graph(associated_factors);
 
-            std::stringstream ss;
-            ss << "/root/results/DynoSAM/mono_backend_graph_failure_" << DynoLikeKeyFormatter(e.nearbyVariable()) << ".dot";
-            associated_graph.saveGraph(ss.str());
-            LOG(ERROR) << "Num associated factors " << associated_graph.size();
-            LOG(FATAL) << "called after throwing an instance of 'gtsam::IndeterminantLinearSystemException', variable " << DynoLikeKeyFormatter(e.nearbyVariable());
+    //         std::stringstream ss;
+    //         ss << "/root/results/DynoSAM/mono_backend_graph_failure_" << DynoLikeKeyFormatter(e.nearbyVariable()) << ".dot";
+    //         associated_graph.saveGraph(ss.str());
+    //         LOG(ERROR) << "Num associated factors " << associated_graph.size();
+    //         LOG(FATAL) << "called after throwing an instance of 'gtsam::IndeterminantLinearSystemException', variable " << DynoLikeKeyFormatter(e.nearbyVariable());
 
-        }
-        catch(const gtsam::ValuesKeyAlreadyExists& e) {
-            auto factors = smoother_->getFactorsUnsafe();
-            factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
-            LOG(FATAL) << "called after throwing an instance of 'gtsam::ValuesKeyAlreadyExists', key already exists " << DynoLikeKeyFormatter(e.key());
+    //     }
+    //     catch(const gtsam::ValuesKeyAlreadyExists& e) {
+    //         auto factors = smoother_->getFactorsUnsafe();
+    //         factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
+    //         LOG(FATAL) << "called after throwing an instance of 'gtsam::ValuesKeyAlreadyExists', key already exists " << DynoLikeKeyFormatter(e.key());
 
-        }
-        state_ = smoother_->calculateEstimate();
+    //     }
+    //     state_ = smoother_->calculateEstimate();
 
-        for(const auto&[key, value] : new_values_) {
-            CHECK(smoother_->valueExists(key)) << "Key missing " << DynoLikeKeyFormatter(key);
-        }
+    //     for(const auto&[key, value] : new_values_) {
+    //         CHECK(smoother_->valueExists(key)) << "Key missing " << DynoLikeKeyFormatter(key);
+    //     }
 
 
-        new_values_.clear();
-        new_factors_.resize(0);
+    //     new_values_.clear();
+    //     new_factors_.resize(0);
+    // }
+
+    if(current_frame_id % 30 == 0) {
+        LOG(INFO) << "Running graph optimziation with values " << new_values_.size() << " and factors " << new_factors_.size();
+
+        double error_before = new_factors_.error(new_values_);
+        LOG(INFO) << "Error before" << error_before;
+        gtsam::LevenbergMarquardtParams lm_params;
+        lm_params.setMaxIterations(100);
+        lm_params.verbosityLM = gtsam::LevenbergMarquardtParams::VerbosityLM::SUMMARY;
+
+        lm_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+        // // // params.setRelativeErrorTol(-std::numeric_limits<double>::max());
+        // // // params.setAbsoluteErrorTol(-std::numeric_limits<double>::max());
+        // gtsam::LevenbergMarquardtOptimizer opt(graph, initial, params);
+        gtsam::LevenbergMarquardtOptimizer opt(new_factors_, new_values_, lm_params);
+
+        state_ = opt.optimize();
+        double error_after = new_factors_.error(state_);
+        LOG(INFO) << "Error after " << error_after;
     }
 
 

@@ -222,6 +222,8 @@ private:
     gtsam::Values new_values_;
     gtsam::NonlinearFactorGraph new_factors_;
 
+
+    gtsam::FastMap<FrameId,GroundTruthInputPacket> gt_packet_map_;
     gtsam::Values new_dynamic_values_;
     gtsam::NonlinearFactorGraph new_dynamic_factors_;
 

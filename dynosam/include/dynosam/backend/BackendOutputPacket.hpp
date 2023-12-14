@@ -38,6 +38,8 @@ DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
     gtsam::Pose3 T_world_camera_;
     Timestamp timestamp_;
 
+    gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+
 };
 
 } //dyno

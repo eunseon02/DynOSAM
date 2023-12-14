@@ -40,6 +40,7 @@ BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
+    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_poses", 1);
 
 }
 
@@ -83,6 +84,76 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         pcl::toROSMsg(cloud, pc2_msg);
         pc2_msg.header.frame_id = "world";
         dynamic_tracked_points_pub_->publish(pc2_msg);
+    }
+
+    {
+        visualization_msgs::msg::MarkerArray object_pose_marker_array;
+        // static visualization_msgs::msg::Marker delete_marker;
+        // delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+
+        // object_pose_marker_array.markers.push_back(delete_marker);
+
+        for(const auto&[object_id, poses] : backend_output->object_poses_composed_) {
+            //object centroid per frame
+            visualization_msgs::msg::Marker marker;
+            marker.header.frame_id = "world";
+            marker.ns = "backend_composed_object_positions";
+            marker.id = object_id;
+            marker.type = visualization_msgs::msg::Marker::POINTS;
+            marker.action = visualization_msgs::msg::Marker::ADD;
+            // marker.header.stamp = node_->now();
+
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            std_msgs::msg::ColorRGBA marker_colour;
+            marker_colour.r = colour(0)/255.0;
+            marker_colour.g = colour(1)/255.0;
+            marker_colour.b = colour(2)/255.0;
+            marker_colour.a = 1;
+
+
+            marker.scale.x = 0.3;
+            marker.scale.y = 0.3;
+            marker.scale.z = 0.3;
+
+            marker.pose.orientation.x = 0;
+            marker.pose.orientation.y = 0;
+            marker.pose.orientation.z = 0;
+            marker.pose.orientation.w = 1;
+
+            for(const gtsam::Pose3& object_pose : poses) {
+
+                LOG(INFO) << object_pose;
+                geometry_msgs::msg::Point p;
+                p.x = object_pose.x();
+                p.y = object_pose.y();
+                p.z = object_pose.z();
+
+                marker.points.push_back(p);
+                marker.colors.push_back(marker_colour);
+            }
+            // marker.header.stamp = node_->now();
+            // marker.pose.position.x = pose.x();
+            // marker.pose.position.y = pose.y();
+            // marker.pose.position.z = pose.z();
+            // marker.pose.orientation.x = pose.rotation().toQuaternion().x();
+            // marker.pose.orientation.y = pose.rotation().toQuaternion().y();
+            // marker.pose.orientation.z = pose.rotation().toQuaternion().z();
+            // marker.pose.orientation.w = pose.rotation().toQuaternion().w();
+            // marker.scale.x = 1;
+            // marker.scale.y = 1;
+            // marker.scale.z = 1;
+            // marker.color.a = 1.0; // Don't forget to set the alpha!
+
+            // const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            // marker.color.r = colour(0)/255.0;
+            // marker.color.g = colour(1)/255.0;
+            // marker.color.b = colour(2)/255.0;
+
+            object_pose_marker_array.markers.push_back(marker);
+
+        }
+
+        object_pose_pub_->publish(object_pose_marker_array);
     }
 
     {

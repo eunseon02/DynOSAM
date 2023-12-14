@@ -46,6 +46,8 @@ private:
     rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr dynamic_tracked_points_pub_;
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_pub_;
 
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
+
 };
 
 } //dyno

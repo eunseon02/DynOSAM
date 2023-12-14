@@ -94,7 +94,9 @@ add_library(${PROJECT_NAME} SHARED
   src/factors/Pose3FlowProjectionFactor.cc
 
   src/pipeline/PipelineManager.cc
-  src/pipeline/PIpelineParams.cc
+  src/pipeline/PipelineDefinitions.cc
+  src/pipeline/PipelineParams.cc
+  src/pipeline/PipelineBase.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
@@ -217,6 +219,7 @@ if(BUILD_TESTING)
     test/test_tools.cc
     test/test_structured_containers.cc
     test/test_triangulation.cc
+    test/test_backend_structures.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

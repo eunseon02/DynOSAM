@@ -6,8 +6,6 @@
 
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
-#include "dynosam/utils/Timing.hpp"
-#include "dynosam/utils/TimingStats.hpp"
 
 #include <atomic>
 #include <functional>  // for function
@@ -21,8 +19,10 @@
 
 #include <glog/logging.h>
 
+#include "dynosam/utils/Timing.hpp"
+#include "dynosam/utils/TimingStats.hpp" //TODO: remove
+
 #include <memory>
-#include <thread>
 
 namespace dyno
 {
@@ -35,63 +35,85 @@ public:
   }
 
   virtual ~AbstractPipelineModuleBase() = default;
+  /**
+   * @brief Spins the pipeline via continuous calls to spinOnce until the pipeline is shutdown.
+   *
+   * Blocking call
+   *
+   * @return true
+   * @return false
+   */
+  bool spin();
 
-  virtual bool spin() = 0;
+  /**
+   * @brief Returns true if the pipeline is currently processing data or if these is still data to process.
+   * Checks is_thread_working_ and the overwritten hasWork() function
+   *
+   * @return true
+   * @return false
+   */
+  bool isWorking() const;
+
+  /**
+   * @brief Returns true if the pipeline has been shutdown by shutdown().
+   *
+   * @return true
+   * @return false
+   */
+  inline bool isShutdown() const { return is_shutdown_; }
+
+  /**
+   * @brief Returns the given module name (for identifcation and debug printing)
+   *
+   * @return std::string
+   */
+  inline std::string getModuleName() const {return module_name_;}
+
+  virtual void shutdown();
+
+  /**
+   * @brief Registers a callback to be triggered if spinOnce returns an invalid return code
+   *
+   * @param callback_ const OnPipelineFailureCallback&
+   */
+  void registerOnFailureCallback(const OnPipelineFailureCallback& callback_);
+
+  /**
+   * @brief Virtual function that should shutdown all associated queues. Generally this should shutdown input queues
+   *
+   */
   virtual void shutdownQueues() = 0;
+
+  /**
+   * @brief Virtual function that should check if (any of the) input queues have work to do
+   *
+   * @return true
+   * @return false
+   */
   virtual bool hasWork() const = 0;
-
-  virtual inline void shutdown()
-  {
-    LOG(INFO) << "Shutting down module " << module_name_;
-    is_shutdown = true;
-    shutdownQueues();
-  }
-
-  bool isShutdown() const
-  {
-    return is_shutdown;
-  }
-
-  inline bool isWorking() const
-  {
-    return is_thread_working || hasWork();
-  }
-
-  inline std::string getModuleName() const
-  {
-    return module_name_;
-  }
-
-  void notifyFailures(PipelineReturnCode result)
-  {
-    for (const auto& failure_callbacks : on_failure_callbacks)
-    {
-      if (failure_callbacks)
-      {
-        failure_callbacks(result);
-      }
-      else
-      {
-        LOG(ERROR) << "Invalid OnFailureCallback for module: " << module_name_;
-      }
-    }
-  }
-
-  virtual void registerOnFailureCallback(const OnPipelineFailureCallback& callback_)
-  {
-    CHECK(callback_);
-    on_failure_callbacks.push_back(callback_);
-  }
 
 
 protected:
+  /**
+   * @brief Processes for one iteration of the pipeline.
+   *
+   * Pulls data from registetered input queues and sends the data to some output queues. Called by spin().
+   *
+   * @return PipelineReturnStatus
+   */
+  virtual PipelineReturnStatus spinOnce() = 0;
+
+protected:
   const std::string module_name_;
-  std::atomic_bool is_thread_working{ false };
+  std::atomic_bool is_thread_working_{ false };
 
 private:
-  std::vector<OnPipelineFailureCallback> on_failure_callbacks;
+  void notifyFailures(PipelineReturnStatus result);
+
+private:
+  std::vector<OnPipelineFailureCallback> on_failure_callbacks_;
   //! Thread related members.
-  std::atomic_bool is_shutdown{ false };
+  std::atomic_bool is_shutdown_{ false };
 };
 
 template <typename INPUT, typename OUTPUT>
@@ -103,6 +125,9 @@ public:
   // using OutputConstUniquePtr = std::unique_ptr<const OUTPUT>;
   using OutputConstSharedPtr = std::shared_ptr<const OUTPUT>;
 
+  using OutputQueue = ThreadsafeQueue<OutputConstSharedPtr>;
+  using InputQueue = ThreadsafeQueue<InputConstSharedPtr>;
+
   using OnProcessCallback = std::function<void(const InputConstSharedPtr&, const OutputConstSharedPtr&)>;
 
   AbstractPipelineModule(const std::string& module_name) : AbstractPipelineModuleBase(module_name)
@@ -110,114 +135,24 @@ public:
   }
 
   virtual ~AbstractPipelineModule() = default;
-
-  bool spin() override
-  {
-    LOG(INFO) << "Starting module " << module_name_;
-    while (!isShutdown())
-    {
-      spinOnce();
-      using namespace std::chrono_literals;
-      std::this_thread::sleep_for(1ms);  // give CPU thread some sleep time...
-    }
-    return true;
-  }
-
-  PipelineReturnCode spinOnce()
-  {
-    if (isShutdown())
-    {
-      return PipelineReturnCode::IS_SHUTDOWN;
-    }
-
-    PipelineReturnCode return_code;
-    utils::TimingStatsCollector timing_stats(module_name_);
-
-    InputConstSharedPtr input = nullptr;
-    is_thread_working = false;
-    // try
-    // {
-      input = getInputPacket();
-    // }
-    // catch (const std::exception& e)
-    // {
-    //   // context::shutdown("Exception raised in pipeline " + module_name_ +
-    //   //                   " on getInputPacket(): " + std::string(e.what()));
-    // }
-    is_thread_working = true;
-    // this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
-
-    if (input)
-    {
-      // Transfer the ownership of input to the actual pipeline module.
-      // From this point on, you cannot use input, since process owns it.
-      auto tic_process = utils::Timer::tic();
-      OutputConstSharedPtr output = nullptr;
-      // try
-      // {
-        output = process(input);
-        // this->logTiming("process", utils::Timer::toc(tic_process));
-      // }
-      // catch (const std::exception& e)
-      // {
-      //   // context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
-      // }
-
-      if (output)
-      {
-        // Received a valid output, send to output queue
-        if (!pushOutputPacket(output))
-        {
-          LOG_EVERY_N(WARNING, 2) << "Module: " << module_name_ << " - Output push failed.";
-          is_thread_working = false;
-          return_code = PipelineReturnCode::OUTPUT_PUSH_FAILURE;
-        }
-        else
-        {
-          emitProcessCallbacks(input, output);
-          is_thread_working = false;
-          return_code = PipelineReturnCode::SUCCESS;
-        }
-      }
-      else
-      {
-        return_code = PipelineReturnCode::PROCESSING_FAILURE;
-        notifyFailures(return_code);
-        is_thread_working = false;
-      }
-    }
-    else
-    {
-      is_thread_working = false;
-      return_code = PipelineReturnCode::GET_PACKET_FAILURE;
-    }
-
-    return return_code;
-  }
+  PipelineReturnStatus spinOnce() override;
 
   // these happen in the same thread as the module they are attached to so should happen quickly
-  virtual void registerOnProcessCallback(const OnProcessCallback& callback_)
-  {
-    CHECK(callback_);
-    on_process_callbacks.push_back(callback_);
-  }
+  void registerOnProcessCallback(const OnProcessCallback& callback);
+
 
 protected:
   virtual InputConstSharedPtr getInputPacket() = 0;
   virtual OutputConstSharedPtr process(const InputConstSharedPtr& input) = 0;
   virtual bool pushOutputPacket(const OutputConstSharedPtr& output_packet) const = 0;
 
-private:
-  void emitProcessCallbacks(const InputConstSharedPtr& input_packet, const OutputConstSharedPtr& output_packet)
-  {
-    for (OnProcessCallback callbacks : on_process_callbacks)
-    {
-      callbacks(input_packet, output_packet);
-    }
-  }
 
 private:
-  std::vector<OnProcessCallback> on_process_callbacks;
+  //could be const?
+  void emitProcessCallbacks(const InputConstSharedPtr& input_packet, const OutputConstSharedPtr& output_packet);
+
+private:
+  std::vector<OnProcessCallback> on_process_callbacks_;
 };
 
 // MultiInputMultiOutput -> abstract class and user must implement the getInputPacket
@@ -225,48 +160,31 @@ template <typename INPUT, typename OUTPUT>
 class MIMOPipelineModule : public AbstractPipelineModule<INPUT, OUTPUT>
 {
 public:
-  using APM = AbstractPipelineModule<INPUT, OUTPUT>;
-  using OutputQueue = ThreadsafeQueue<typename APM::OutputConstSharedPtr>;
+  using APM = AbstractPipelineModule<INPUT, OUTPUT>; //Base
+
+  using typename APM::OutputConstSharedPtr;
+  using typename APM::InputConstSharedPtr;
+  using typename APM::InputQueue;
+  using typename APM::OutputQueue;
 
   //! Callback used to send data to other pipeline modules, makes use of
   //! shared pointer since the data may be shared between several modules.
-  using OutputCallback = std::function<void(const typename APM::OutputConstSharedPtr& output)>;
+  using OutputCallback = std::function<void(const OutputConstSharedPtr& output)>;
 
 
   MIMOPipelineModule(const std::string& module_name) : AbstractPipelineModule<INPUT, OUTPUT>(module_name)
   {
   }
 
-  virtual void registerOutputQueue(OutputQueue* output_queue_)
-  {
-    CHECK(output_queue_);
-    output_queues.push_back(output_queue_);
-  }
+  void registerOutputQueue(OutputQueue* output_queue);
 
 protected:
-  bool pushOutputPacket(const typename APM::OutputConstSharedPtr& output_packet) const override
-  {
-    auto tic_callbacks = utils::Timer::tic();
-    //! We need to make our packet shared in order to send it to multiple
-    //! other modules.
-    //! Call all callbacks
-    for (OutputQueue* queue : output_queues)
-    {
-      CHECK(queue);
-      queue->push(output_packet);
-    }
-    static constexpr auto kTimeLimitCallbacks = std::chrono::milliseconds(10);
-    auto callbacks_duration = utils::Timer::toc(tic_callbacks);
-    LOG_IF(WARNING, callbacks_duration > kTimeLimitCallbacks)
-        << "Pushing output packet to queues for module: " << this->module_name_
-        << " are taking very long! Current latency: " << callbacks_duration.count() << " ms.";
-    return true;
-  }
+  bool pushOutputPacket(const OutputConstSharedPtr& output_packet) const override;
 
 private:
   //! Output callbacks that will be called on each spinOnce if
   //! an output is present.
-  std::vector<OutputQueue*> output_queues;
+  std::vector<OutputQueue*> output_queues_;
 };
 
 /** @brief SIMOPipelineModule Single Input Multiple Output (SIMO) pipeline
@@ -280,55 +198,41 @@ template <typename INPUT, typename OUTPUT>
 class SIMOPipelineModule : public MIMOPipelineModule<INPUT, OUTPUT>
 {
 public:
+  using This = SIMOPipelineModule<INPUT, OUTPUT>;
   using Base = MIMOPipelineModule<INPUT, OUTPUT>;
-  using InputQueue = ThreadsafeQueue<typename Base::InputConstSharedPtr>;
-  using OutputQueue = typename Base::OutputQueue;
+
+  using typename Base::InputConstSharedPtr;
+  using typename Base::OutputConstSharedPtr;
+  using typename Base::OutputQueue;
+  using typename Base::InputQueue;
+
+  using Base::isShutdown;
+  using Base::module_name_;
 
   SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_, bool parallel_run = true)
     : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_)), parallel_run_(parallel_run)
   {
   }
 
+  This& parallelRun(bool parallel_run) {
+    parallel_run_ = parallel_run;
+    return *this;
+  }
+
 protected:
-  typename Base::InputConstSharedPtr getInputPacket() override
-  {
-    typename Base::InputConstSharedPtr input = nullptr;
+  InputConstSharedPtr getInputPacket() override;
 
-    bool queue_state;
-    if(parallel_run_) {
-      queue_state = input_queue->popBlocking(input);
-    }
-    else {
-      queue_state = input_queue->pop(input);
-    }
-
-    // bool queue_state = input_queue->pop(input);
-    if (queue_state)
-    {
-      return input;
-    }
-    else
-    {
-      LOG_IF(WARNING, !Base::isShutdown() && !hasWork())
-          << "Module: " << Base::module_name_ << " - didn't return an output.";
-      return nullptr;
-    }
-  }
-
-  void shutdownQueues() override
-  {
-    input_queue->shutdown();
-  }
+  void shutdownQueues() override;
 
   //! Checks if the module has work to do (should check input queues are empty)
-  bool hasWork() const override
-  {
-    return !input_queue->isShutdown() && !input_queue->empty();
-  }
+  bool hasWork() const override;
 
 private:
   InputQueue* input_queue;
-  bool parallel_run_;
+  std::atomic_bool parallel_run_;
 };
 
 }  // namespace dyno
+
+
+#include "dynosam/pipeline/PipelineBase-inl.hpp"

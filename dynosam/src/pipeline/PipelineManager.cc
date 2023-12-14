@@ -89,9 +89,11 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
     frontend_pipeline_ = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend);
     frontend_pipeline_->registerOutputQueue(&frontend_viz_input_queue_);
+    frontend_pipeline_->parallelRun(params.parallel_run_);
 
     if(backend) {
         backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
+        backend_pipeline_->parallelRun(params.parallel_run_);
         //also register connection between front and back
         frontend_pipeline_->registerOutputQueue(&backend_input_queue_);
 
@@ -142,10 +144,16 @@ bool DynoPipelineManager::spin() {
 
     utils::TimingStatsCollector timer("pipeline_spin");
     if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
+        if(!params_.parallel_run_) {
+            frontend_pipeline_->spinOnce();
+            if(backend_pipeline_) backend_pipeline_->spinOnce();
+        }
         spinViz(); //for now
         //a later problem!
         return true;
     }
+
+
     return false;
 
 }
@@ -158,12 +166,17 @@ bool DynoPipelineManager::spinViz() {
 
 
 void DynoPipelineManager::launchSpinners() {
-    LOG(INFO) << "Running PipelineManager with parallel_run=true";
-    frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
-    data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataInterfacePipeline::spin, data_interface_.get()), "data-interface-spinner");
+    LOG(INFO) << "Running PipelineManager with parallel_run=" << params_.parallel_run_;
 
-    if(backend_pipeline_)
-        backend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::BackendPipeline::spin, backend_pipeline_.get()), "backend-pipeline-spinner");
+    if(params_.parallel_run_) {
+        frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
+
+        if(backend_pipeline_)
+            backend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::BackendPipeline::spin, backend_pipeline_.get()), "backend-pipeline-spinner");
+
+    }
+
+    data_provider_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::DataInterfacePipeline::spin, data_interface_.get()), "data-interface-spinner");
 
     if(frontend_viz_pipeline_)
         frontend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendVizPipeline::spin, frontend_viz_pipeline_.get()), "frontend-display-spinner");

@@ -25,13 +25,27 @@
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 
+
 using namespace dyno;
 
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+//custom type with dyno::to_string defined
 
+struct CustomToString;
+
+// template<>
+// std::string dyno::to_string(const CustomToString&) {
+//     return "custom_to_string";
+// }
+
+// TEST(ConversionTraits, testToString) {
+
+//     EXPECT_EQ(traits<decltype(4)>::ToString(4), "4");
+//     EXPECT_EQ(traits<CustomToString>::ToString(CustomToString{}), "custom_to_string");
+// }
 
 TEST(ImageType, testRGBMonoValidation) {
 
