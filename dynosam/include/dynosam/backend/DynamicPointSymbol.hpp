@@ -37,10 +37,10 @@ namespace dyno
 //When x and y are non−negative integers, pairing them outputs a single non−negative integer
 // that is uniquely associated with that pair.
 struct CantorPairingFunction {
-    using Pair = std::pair<size_t, size_t>;
+    using Pair = std::pair<std::uint64_t, std::uint64_t>;
 
-    static size_t pair(const Pair& input);
-    static Pair unzip(const size_t z);
+    static std::uint64_t pair(const Pair& input);
+    static Pair depair(const std::uint64_t z);
 };
 
 
@@ -134,7 +134,8 @@ public:
 private:
     gtsam::Symbol asSymbol() const;
 
-    static std::uint64_t constructIndex(TrackletId tracklet_id_, FrameId frame_id_);
+    static std::uint64_t constructIndex(TrackletId tracklet_id, FrameId frame_id);
+    static void recover(std::uint64_t z, TrackletId& tracklet_id, FrameId& frame_id);
 
 };
 

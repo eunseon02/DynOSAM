@@ -590,7 +590,9 @@ void MonoBackendModule::optimize(FrameId frame_id, const TrackletIds& new_smart_
         auto factors = smoother_->getFactorsUnsafe();
         factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
 
-        auto associated_factors = factor_graph_tools::getAssociatedFactors(factors, e.nearbyVariable());
+
+        std::vector<gtsam::NonlinearFactor::shared_ptr> associated_factors;
+        factor_graph_tools::getAssociatedFactors(associated_factors, factors, e.nearbyVariable());
         gtsam::NonlinearFactorGraph associated_graph(associated_factors);
 
         std::stringstream ss;
@@ -611,7 +613,8 @@ void MonoBackendModule::optimize(FrameId frame_id, const TrackletIds& new_smart_
         // factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
         // LOG(FATAL) << "called after throwing an instance of 'gtsam::CheiralityException', variable " << DynoLikeKeyFormatter(e.nearbyVariable());
 
-        auto associated_factors = factor_graph_tools::getAssociatedFactors(factors, e.nearbyVariable());
+        std::vector<gtsam::NonlinearFactor::shared_ptr> associated_factors;
+        factor_graph_tools::getAssociatedFactors(associated_factors, factors, e.nearbyVariable());
 
         //laziest thing possible but try and find the factors -> smart factors might still be here?
 
@@ -1106,8 +1109,10 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     static gtsam::FastMap<TrackletId, bool> static_in_graph_static_factor_map;
     static gtsam::FastMap<gtsam::Symbol, gtsam::Point3> static_initial_points;
 
+    static gtsam::FastMap<TrackletId, bool> marked_for_cherality;
+
+
     int static_count = 0;
-    gtsam::Symbol lmk_symbol_to_set_prior;
     //static points
     for(const StatusKeypointMeasurement& static_measurement : input->static_keypoint_measurements_) {
 
@@ -1125,10 +1130,12 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
         const gtsam::Symbol lmk_symbol = StaticLandmarkSymbol(tracklet_id);
 
-        //set prior on the first lmk to set scale
-        if(is_first && static_count == 0) {
-            lmk_symbol_to_set_prior = lmk_symbol;
+        //if tracklet has been marked as bad lmk stop tracking it (not ideal as we would actually want to keep tracking it
+        //to try and triangulate later. )
+        if(marked_for_cherality.exists(tracklet_id)) {
+            continue;
         }
+
 
         const Landmark lmk_cam =  input->frame_.backProjectToCamera(tracklet_id);
         //only works when T_world_camera in the frame is correct (ie, monocular will have a lot of drift)
@@ -1202,10 +1209,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
             new_values_.insert(lmk_symbol, lmk_world);
 
-            // if(lmk_symbol_to_set_prior == lmk_symbol) {
-            //      // Add a prior on landmark l0
             static auto kPointPrior = gtsam::noiseModel::Isotropic::Sigma(3, 0.3);
-            new_factors_.addPrior(lmk_symbol, lmk_world, kPointPrior);
+            // new_factors_.addPrior(lmk_symbol, lmk_world, kPointPrior);
         }
 
         static_count++;
@@ -1354,7 +1359,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                     ObjectPoseGT object_pose_gt;
                     auto gt_frame_packet = gt_packet_map_.at(frame);
                     if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                        LOG(FATAL) << "Coudl not find gt object at frame " << frame << " for object Id" << object_id;
+                        LOG(FATAL) << "Coudl not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
                     }
 
                     const auto prev_dynamic_point_symbol = DynamicLandmarkSymbol(frame-1u, tracked_id);
@@ -1489,50 +1494,22 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     }
 
 
+    int num_opt_attemts = 0;
+    const int max_opt_attempts = 100;
+    gtsam::Values initial_values = new_values_;
+    bool solved = false;
+    std::function<void()> handle_cheriality_optimize = [&]() -> void {
+        LOG(INFO) << "Running graph optimziation with values " << new_values_.size() << " and factors " << new_factors_.size() << ". Opt attempts=" << num_opt_attemts;
 
+        if(solved) {
+            return;
+        }
 
-    // if(!is_first) {
-    //     LOG(INFO) << "Updating smoother";
-    //     gtsam::ISAM2Result result;
-    //     try {
-    //         result = smoother_->update(new_factors_, new_values_);
-    //     }
-    //     catch(const gtsam::IndeterminantLinearSystemException& e) {
-    //         auto factors = smoother_->getFactorsUnsafe();
-    //         factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
+        num_opt_attemts++;
+        if(num_opt_attemts >= max_opt_attempts) {
+            LOG(FATAL) << "Max opt attempts reached";
+        }
 
-    //         auto associated_factors = factor_graph_tools::getAssociatedFactors(factors, e.nearbyVariable());
-    //         gtsam::NonlinearFactorGraph associated_graph(associated_factors);
-
-    //         std::stringstream ss;
-    //         ss << "/root/results/DynoSAM/mono_backend_graph_failure_" << DynoLikeKeyFormatter(e.nearbyVariable()) << ".dot";
-    //         associated_graph.saveGraph(ss.str());
-    //         LOG(ERROR) << "Num associated factors " << associated_graph.size();
-    //         LOG(FATAL) << "called after throwing an instance of 'gtsam::IndeterminantLinearSystemException', variable " << DynoLikeKeyFormatter(e.nearbyVariable());
-
-    //     }
-    //     catch(const gtsam::ValuesKeyAlreadyExists& e) {
-    //         auto factors = smoother_->getFactorsUnsafe();
-    //         factors.saveGraph("/root/results/DynoSAM/mono_backend_graph.dot", DynoLikeKeyFormatter);
-    //         LOG(FATAL) << "called after throwing an instance of 'gtsam::ValuesKeyAlreadyExists', key already exists " << DynoLikeKeyFormatter(e.key());
-
-    //     }
-    //     state_ = smoother_->calculateEstimate();
-
-    //     for(const auto&[key, value] : new_values_) {
-    //         CHECK(smoother_->valueExists(key)) << "Key missing " << DynoLikeKeyFormatter(key);
-    //     }
-
-
-    //     new_values_.clear();
-    //     new_factors_.resize(0);
-    // }
-
-    if(current_frame_id % 30 == 0) {
-        LOG(INFO) << "Running graph optimziation with values " << new_values_.size() << " and factors " << new_factors_.size();
-
-        double error_before = new_factors_.error(new_values_);
-        LOG(INFO) << "Error before" << error_before;
         gtsam::LevenbergMarquardtParams lm_params;
         lm_params.setMaxIterations(100);
         lm_params.verbosityLM = gtsam::LevenbergMarquardtParams::VerbosityLM::SUMMARY;
@@ -1541,11 +1518,68 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
         // // // params.setRelativeErrorTol(-std::numeric_limits<double>::max());
         // // // params.setAbsoluteErrorTol(-std::numeric_limits<double>::max());
         // gtsam::LevenbergMarquardtOptimizer opt(graph, initial, params);
-        gtsam::LevenbergMarquardtOptimizer opt(new_factors_, new_values_, lm_params);
 
-        state_ = opt.optimize();
-        double error_after = new_factors_.error(state_);
-        LOG(INFO) << "Error after " << error_after;
+
+        try {
+
+            double error_before = new_factors_.error(initial_values);
+            LOG(INFO) << "Error before: " << error_before;
+
+            gtsam::LevenbergMarquardtOptimizer::shared_ptr opt(new_factors_, initial_values, lm_params);
+
+            state_ = opt.optimize();
+            new_values_ = initial_values; //update the new_values to be ther ones that were used as the initial values for the optimziation that solved
+
+            double error_after = new_factors_.error(state_);
+            LOG(INFO) << "Error after " << error_after;
+
+            solved = true;
+            return;
+
+        }
+        catch(const gtsam::CheiralityException& e) {
+            const gtsam::Key nearby_variable = e.nearbyVariable();
+            gtsam::FactorIndices associated_factors; //use idnex's as using the iterators will rearrange the graph everytime, therefore making the other iterators incorrect
+            factor_graph_tools::getAssociatedFactors(associated_factors, new_factors_, nearby_variable);
+
+            gtsam::Symbol static_symbol(nearby_variable);
+            CHECK(static_symbol.chr() == kStaticLandmarkSymbolChar);
+
+            TrackletId nearby_tracklet = (TrackletId)static_symbol.index();
+            marked_for_cherality.insert2(nearby_tracklet, true);
+
+
+            LOG(WARNING) << "gtsam::CheiralityException throw at variable " << DynoLikeKeyFormatter(nearby_variable) << ". Removing factors: " << associated_factors.size();
+
+            for(gtsam::FactorIndex index: associated_factors) {
+                //do not erase (this will reannrange the factors)
+                new_factors_.remove(index);
+            }
+
+            //even if failure update the current set of values as these should be closer to the optimal so hopefully less recursive iterations
+            // initial_values = opt.values();
+            //Apparently also removing the variable results in a ValueKeyNotExists exception, even though all the factors have been
+            //removed. Maybe the factor graph/Values keeps a cache of variables?
+            initial_values.erase(nearby_variable);
+
+            //make new graph with no non-null factors in it
+            //graph.error will segfault with null values in it!
+            gtsam::NonlinearFactorGraph replacemenent_graph;
+            for(auto f : new_factors_) {
+                if(f) replacemenent_graph.push_back(f);
+            }
+
+            // new_factors_.clear();
+            new_factors_ = replacemenent_graph;
+
+            handle_cheriality_optimize();
+            return;
+
+        }
+    };
+
+    if(current_frame_id % 30 == 0) {
+        handle_cheriality_optimize();
     }
 
 

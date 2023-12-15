@@ -78,55 +78,28 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     CHECK(previous_frame);
 
-    // //1. camera pose estimation (2D-2D)
-    // RelativePoseCorrespondences correspondences;
-    // //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
-    // //bearing vectors are also not undistorted atm!!
-    // {
-    //     utils::TimingStatsCollector track_dynamic_timer("mono_frame_correspondences");
-    //     frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->imageKeypointCorrespondance());
-    // }
-
-    // LOG(INFO) << "Done 2D-2D correspondences";
-
-    // RelativeCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
-    // RelativeCameraMotionSolver::MotionResult camera_pose_result;
-    // {
-    //     utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-    //     camera_pose_result = camera_motion_solver.solve(correspondences);
-    // }
-
-
-    // if(camera_pose_result.valid()) {
-    //     const gtsam::Pose3 T_world_camera = previous_frame->T_world_camera_ * camera_pose_result.get();
-    //     frame->T_world_camera_ = T_world_camera;
-    // }
-    // else {
-    //     LOG(ERROR) << "Unable to solve camera pose for frame " << frame->frame_id_;
-    //     frame->T_world_camera_ = gtsam::Pose3::Identity();
-
-    // }
-
-    AbsolutePoseCorrespondences correspondences;
+    //1. camera pose estimation (2D-2D)
+    RelativePoseCorrespondences correspondences;
+    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
+    //bearing vectors are also not undistorted atm!!
     {
-        utils::TimingStatsCollector track_dynamic_timer("frame_correspondences");
-        frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
+        utils::TimingStatsCollector track_dynamic_timer("mono_frame_correspondences");
+        frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->imageKeypointCorrespondance());
     }
 
-    LOG(INFO) << "Done correspondences";
+    LOG(INFO) << "Done 2D-2D correspondences";
 
-
-    AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
-    AbsoluteCameraMotionSolver::MotionResult camera_pose_result;
+    RelativeCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
+    RelativeCameraMotionSolver::MotionResult camera_pose_result;
     {
         utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
         camera_pose_result = camera_motion_solver.solve(correspondences);
     }
 
-    // LOG(INFO) << "Done correspondences";
 
     if(camera_pose_result.valid()) {
-        frame->T_world_camera_ = camera_pose_result.get();
+        const gtsam::Pose3 T_world_camera = previous_frame->T_world_camera_ * camera_pose_result.get();
+        frame->T_world_camera_ = T_world_camera;
     }
     else {
         LOG(ERROR) << "Unable to solve camera pose for frame " << frame->frame_id_;
@@ -134,72 +107,20 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
     }
 
-    TrackletIds tracklets = frame->static_features_.collectTracklets();
-    CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
-    frame->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
-
-    // RelativeObjectMotionSolver relative_object_motion_solver(base_params_, camera_->getParams());
-    // DecompositionRotationEstimates motion_estimates;
-    // // //2. recover object motion (rotation)
-    // for(const auto& [object_id, observations] : frame->object_observations_) {
-    //     utils::TimingStatsCollector object_motion_timer("solve_object_motion");
-    //     RelativePoseCorrespondences dynamic_correspondences;
-
-    //     // //get the corresponding feature pairs
-    //     bool result = frame->getDynamicCorrespondences(
-    //         dynamic_correspondences,
-    //         *previous_frame,
-    //         object_id,
-    //         frame->imageKeypointCorrespondance());
-
-    //     if(!result) {
-    //         continue;
-    //     }
-
-
-    //     LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
-
-    //     const RelativeObjectMotionSolver::MotionResult object_motion_result = relative_object_motion_solver.solve(
-    //         dynamic_correspondences);
-
-    //     if(object_motion_result.valid()) {
-    //         // frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
-
-    //         ReferenceFrameEstimate<EssentialDecompositionResult> estimate(object_motion_result.value(), ReferenceFrame::WORLD);
-    //         motion_estimates.insert({object_id, estimate});
-
-    //         if(!input->optional_gt_.has_value()) {
-    //             LOG(WARNING) << "Cannot update object pose because no gt!";
-    //             continue;
-    //         }
-
-    //         // const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
-    //         // CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
-    //         // logAndPropogateObjectPoses(per_frame_object_poses, gt_packet, object_motion_result.get(), object_id);
-    //     }
-    // }
-
-
-
-    {
-        utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        vision_tools::trackDynamic(base_params_,*previous_frame, frame);
-    }
-
-    AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame->T_world_camera_);
-
+    RelativeObjectMotionSolver relative_object_motion_solver(base_params_, camera_->getParams());
     DecompositionRotationEstimates motion_estimates;
+    // //2. recover object motion (rotation)
     for(const auto& [object_id, observations] : frame->object_observations_) {
         utils::TimingStatsCollector object_motion_timer("solve_object_motion");
-        AbsolutePoseCorrespondences dynamic_correspondences;
+        RelativePoseCorrespondences dynamic_correspondences;
 
-        // //get the corresponding feature pairs
+        //get the corresponding feature pairs
         bool result = frame->getDynamicCorrespondences(
             dynamic_correspondences,
             *previous_frame,
             object_id,
-            frame->landmarkWorldKeypointCorrespondance());
+            frame->imageKeypointCorrespondance());
 
         if(!result) {
             continue;
@@ -208,22 +129,28 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
         LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
 
-        const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
+        const RelativeObjectMotionSolver::MotionResult object_motion_result = relative_object_motion_solver.solve(
             dynamic_correspondences);
 
         if(object_motion_result.valid()) {
             frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
 
-            EssentialDecompositionResult fake_result(gtsam::Rot3::Identity(), gtsam::Rot3::Identity(), gtsam::Vector3{});
-            ReferenceFrameEstimate<EssentialDecompositionResult> estimate(fake_result, ReferenceFrame::WORLD);
+            ReferenceFrameEstimate<EssentialDecompositionResult> estimate(object_motion_result.value(), ReferenceFrame::WORLD);
             motion_estimates.insert({object_id, estimate});
 
             if(!input->optional_gt_.has_value()) {
                 LOG(WARNING) << "Cannot update object pose because no gt!";
                 continue;
             }
+
+            // const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
+            // CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
+            // logAndPropogateObjectPoses(per_frame_object_poses, gt_packet, object_motion_result.get(), object_id);
         }
     }
+
+
+
 
     LOG(INFO) << motion_estimates.size();
 

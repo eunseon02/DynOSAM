@@ -171,6 +171,17 @@ template<typename Input, typename Output>
 bool convert(const Input&, Output&);
 
 
+template<class Container>
+inline std::string container_to_string(const Container& container) {
+  std::stringstream ss;
+  for(const auto& c : container) {
+    ss << c << " ";
+  }
+  return ss.str();
+}
+
+
+
 /**
  * @brief Get demangled class name of type T from an instance
  * @tparam T
@@ -197,36 +208,31 @@ std::string type_name()
 }
 
 
-template<class Container>
-inline std::string container_to_string(const Container& container) {
-  std::stringstream ss;
-  for(const auto& c : container) {
-    ss << c << " ";
-  }
-  return ss.str();
-}
-
 
 // template<typename T>
-// struct conversion_traits {
+// struct io_traits {
 
-//   static std::string ToString(const T& t) {
+//   //T must be inside dyno namespace to work
+//   static std::string ToString(const T& t, const std::string& s = "") {
 //     using std::to_string;
 //     // This calls std::to_string if std::to_string is defined;
 //     // Otherwise it uses ADL to find the correct to_string function
-//     return to_string(t);
+//     const std::string repr = to_string(t);
+
+//     if(s.empty()) return repr;
+//     else return s + " " + repr;
 //   }
 
-//   static void Print(const T& t) {
-//     const std::string str = ToString(t);
+//   static void Print(const T& t, const std::string& s = "") {
+//     const std::string str = ToString(t, s);
 //     std::cout << str << std::endl;
 //   }
 
 // };
 
-// template<typename T>
-// struct traits : public conversion_traits<T> {};
 
+// template<typename T>
+// struct traits : public io_traits<T> {};
 
 
 

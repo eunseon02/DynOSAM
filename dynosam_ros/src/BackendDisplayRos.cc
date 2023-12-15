@@ -131,23 +131,6 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
                 marker.points.push_back(p);
                 marker.colors.push_back(marker_colour);
             }
-            // marker.header.stamp = node_->now();
-            // marker.pose.position.x = pose.x();
-            // marker.pose.position.y = pose.y();
-            // marker.pose.position.z = pose.z();
-            // marker.pose.orientation.x = pose.rotation().toQuaternion().x();
-            // marker.pose.orientation.y = pose.rotation().toQuaternion().y();
-            // marker.pose.orientation.z = pose.rotation().toQuaternion().z();
-            // marker.pose.orientation.w = pose.rotation().toQuaternion().w();
-            // marker.scale.x = 1;
-            // marker.scale.y = 1;
-            // marker.scale.z = 1;
-            // marker.color.a = 1.0; // Don't forget to set the alpha!
-
-            // const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-            // marker.color.r = colour(0)/255.0;
-            // marker.color.g = colour(1)/255.0;
-            // marker.color.b = colour(2)/255.0;
 
             object_pose_marker_array.markers.push_back(marker);
 

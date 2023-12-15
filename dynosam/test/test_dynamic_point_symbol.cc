@@ -55,9 +55,20 @@ TEST(CantorPairingFunction, testAccess)
     const auto y = 79;
 
     const auto z = CantorPairingFunction::pair({x, y});
-    const auto result = CantorPairingFunction::unzip(z);
+    const auto result = CantorPairingFunction::depair(z);
     EXPECT_EQ(result.first, x);
     EXPECT_EQ(result.second, y);
+
+}
+
+TEST(CantorPairingFunction, testReconstructionSpecialCase)
+{
+    const auto x = 46528; //tracklet fails at runtime. Special test for this case
+
+    const auto z = CantorPairingFunction::pair({x, 1});
+    const auto result = CantorPairingFunction::depair(z);
+    EXPECT_EQ(result.first, x);
+    EXPECT_EQ(result.second, 1);
 
 }
 
@@ -78,14 +89,17 @@ TEST(DynamicPointSymbol, testReconstruction)
 
 }
 
+TEST(DynamicPointSymbol, testReconstructionSpecialCase)
+{
+    const TrackletId bad_id = 46528; //tracklet fails at runtime. Special test for this case
+    // const TrackletId bad_id = 46000; //tracklet fails at runtime. Special test for this case
 
-// TEST(DynamicPointSymbol, testConstructionFromSymbol)
-// {
+    DynamicPointSymbol dps('m', bad_id, 0);
+    gtsam::Symbol sym(dps);
 
+    gtsam::Key key(sym);
+    DynamicPointSymbol reconstructed_dps(key);
+    EXPECT_EQ(dps, reconstructed_dps);
+    EXPECT_EQ(bad_id, reconstructed_dps.trackletId());
 
-//     gtsam::Symbol sym('d', 2);
-//     DynamicPointSymbol reconstructed_dps(sym);
-//     EXPECT_EQ(-1, reconstructed_dps.trackletId());
-//     EXPECT_EQ(0, reconstructed_dps.frameId());
-
-// }
+}

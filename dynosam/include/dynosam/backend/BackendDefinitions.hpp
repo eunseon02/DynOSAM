@@ -81,7 +81,6 @@ std::string DynoLikeKeyFormatter(gtsam::Key);
 
 using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
-
 using Slot = long int;
 
 constexpr static Slot UninitialisedSlot = -1; //! Inidicates that a factor is not in the graph or uninitialised

@@ -102,6 +102,14 @@ bool GroundTruthInputPacket::getObject(ObjectId object_id, ObjectPoseGT& object_
 
 }
 
+ObjectIds GroundTruthInputPacket::getObjectIds() const {
+    ObjectIds object_ids;
+    for(const ObjectPoseGT& objects : object_poses_) {
+        object_ids.push_back(objects.object_id_);
+    }
+    return object_ids;
+}
+
 
 bool GroundTruthInputPacket::findAssociatedObject(ObjectId label, GroundTruthInputPacket& other, ObjectPoseGT** obj, ObjectPoseGT** other_obj) {
     size_t obj_idx, other_obj_idx;
@@ -178,4 +186,17 @@ size_t GroundTruthInputPacket::calculateAndSetMotions(const GroundTruthInputPack
     return calculateAndSetMotions(previous_object_packet, motion_set);
 }
 
+GroundTruthInputPacket::operator std::string() const {
+    std::stringstream ss;
+    ss << "FrameId: " << frame_id_
+        << " objects: " << container_to_string(getObjectIds());
+    return ss.str();
 }
+
+
+std::ostream& operator<<(std::ostream &os, const GroundTruthInputPacket& gt_packet) {
+    os << (std::string)gt_packet;
+    return os;
+}
+
+} // dyno

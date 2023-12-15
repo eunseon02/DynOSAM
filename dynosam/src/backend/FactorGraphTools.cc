@@ -82,16 +82,40 @@ void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_facto
 }
 
 
-std::vector<gtsam::NonlinearFactor::shared_ptr> getAssociatedFactors(const gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
-    std::vector<gtsam::NonlinearFactor::shared_ptr> associated_factors;
+size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactorGraph::iterator>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
+    associated_factors.clear();
 
-    for(const auto& factor : graph) {
+    for(auto it = graph.begin(); it != graph.end(); it++) {
+        auto factor = *it;
         if(factor->find(query_key) != factor->end()) {
-            associated_factors.push_back(factor);
+            associated_factors.push_back(it);
         }
     }
 
-    return associated_factors;
+    return associated_factors.size();
+}
+
+size_t getAssociatedFactors(gtsam::FactorIndices& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
+    associated_factors.clear();
+    std::vector<gtsam::NonlinearFactorGraph::iterator> associated_factor_iters;
+    size_t result = getAssociatedFactors(associated_factor_iters, graph, query_key);
+
+    for(const gtsam::NonlinearFactorGraph::iterator& iter : associated_factor_iters) {
+        //index in graph
+        associated_factors.push_back(std::distance(graph.begin(), iter));
+    }
+    return result;
+}
+
+size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactor::shared_ptr>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
+    associated_factors.clear();
+    std::vector<gtsam::NonlinearFactorGraph::iterator> associated_factor_iters;
+    size_t result = getAssociatedFactors(associated_factor_iters, graph, query_key);
+
+    for(const gtsam::NonlinearFactorGraph::iterator& iter : associated_factor_iters) {
+        associated_factors.push_back(*iter);
+    }
+    return result;
 }
 
 

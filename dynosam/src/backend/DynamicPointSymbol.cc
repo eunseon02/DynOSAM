@@ -28,18 +28,18 @@ namespace dyno
 {
 
 
-size_t CantorPairingFunction::pair(const Pair& input) {
-    const int k1 = static_cast<int>(input.first);
-    const int k2 = static_cast<int>(input.second);
+std::uint64_t CantorPairingFunction::pair(const Pair& input) {
+    const auto k1 = (input.first);
+    const auto k2 = (input.second);
     return ((k1+k2)*(k1+k2+1)/2) + k2;
 }
 
-CantorPairingFunction::Pair CantorPairingFunction::unzip(const size_t z) {
-    int w = floor(((sqrt((z*8)+1))-1)/2);
-	int t = (w*(w+1))/2;
+CantorPairingFunction::Pair CantorPairingFunction::depair(const std::uint64_t z) {
+    std::uint64_t w = static_cast<std::uint64_t>(floor(((sqrt((z*8)+1))-1)/2));
+	std::uint64_t t = static_cast<std::uint64_t>((w*(w+1))/2);
 
-    size_t k2 = static_cast<size_t>(z - t);
-    size_t k1 = static_cast<size_t>(w) - k2;
+    std::uint64_t k2 = z - t;
+    std::uint64_t k1 = w - k2;
     return std::make_pair(k1, k2);
 }
 
@@ -51,7 +51,7 @@ DynamicPointSymbol::DynamicPointSymbol(unsigned char c, TrackletId tracklet_id, 
 :   c_(c), j_(constructIndex(tracklet_id, frame_id)), tracklet_id_(tracklet_id), frame_id_(frame_id)
 {
     //sanity check
-    const auto result = CantorPairingFunction::unzip(j_);
+    const auto result = CantorPairingFunction::depair(j_);
     CHECK_EQ(result.first, tracklet_id_);
     CHECK_EQ(result.second, frame_id_);
 }
@@ -64,9 +64,7 @@ DynamicPointSymbol::DynamicPointSymbol(gtsam::Key key) {
     c_ = c;
     j_ = index;
 
-    const auto result = CantorPairingFunction::unzip(j_);
-    tracklet_id_ = result.first;
-    frame_id_ = result.second;
+    recover(j_, tracklet_id_, frame_id_);
 }
 
 gtsam::Key DynamicPointSymbol::key() const {
@@ -99,7 +97,13 @@ std::uint64_t DynamicPointSymbol::constructIndex(TrackletId tracklet_id, FrameId
         throw std::invalid_argument("DynamicPointSymbol cannot be constructed from invalid tracklet id (-1)");
     }
 
-    return static_cast<std::uint64_t>(CantorPairingFunction::pair({tracklet_id, frame_id}));
+    return CantorPairingFunction::pair({tracklet_id, frame_id});
+}
+
+void DynamicPointSymbol::recover(std::uint64_t z, TrackletId& tracklet_id, FrameId& frame_id) {
+    const auto result = CantorPairingFunction::depair(z);
+    tracklet_id = static_cast<TrackletId>(result.first);
+    frame_id = static_cast<FrameId>(result.second);
 }
 
 };  // namespace dyno

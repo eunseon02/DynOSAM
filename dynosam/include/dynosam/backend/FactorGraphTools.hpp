@@ -53,7 +53,13 @@ void addBetweenFactor(
 
 void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_factor, Keypoint measurement, FrameId frame_id);
 
-std::vector<gtsam::NonlinearFactor::shared_ptr> getAssociatedFactors(const gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key);
+//TODO: should be templated on DERIVDFACTOR
+//needs to be parse by ref so that we can return iterator (not const_iterator) which allows us to remove factors if necessary
+//could do const and non const versions
+//should not try and remove factors by iterator as graph.erase(itr) will reaarrange the graph but graph.remove(index) will not
+size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactorGraph::iterator>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key);
+size_t getAssociatedFactors(gtsam::FactorIndices& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key);
+size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactor::shared_ptr>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key);
 
 
 

@@ -43,6 +43,7 @@ if (DYNO_VERIFY_GTSAM_CONFIG)
 endif()
 
 
+
 # setup targets
 include_directories(
   include
@@ -151,8 +152,19 @@ ament_export_libraries(${PROJECT_NAME}
   ${OpenCV_LIBRARIES}
 )
 
-# ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
-ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV opengv GTSAM eigen3_cmake_module Eigen3)
+
+set(DYNO_EXPORT_DEPS
+  rclcpp
+  std_msgs
+  sensor_msgs
+  OpenCV opengv
+  GTSAM
+  eigen3_cmake_module
+  Eigen3
+)
+
+
+ament_export_dependencies(${DYNO_EXPORT_DEPS})
 
 
 target_include_directories(${PROJECT_NAME}

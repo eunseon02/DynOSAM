@@ -98,6 +98,8 @@ public:
 
     bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const;
 
+    ObjectIds getObjectIds() const;
+
     /**
      * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
      *
@@ -145,6 +147,10 @@ public:
      */
     size_t calculateAndSetMotions(const GroundTruthInputPacket& previous_object_packet, ObjectIds& motions_set);
     size_t calculateAndSetMotions(const GroundTruthInputPacket& previous_object_packet);
+
+    operator std::string() const;
+
+    friend std::ostream &operator<<(std::ostream &os, const GroundTruthInputPacket& gt_packet);
 
 private:
 
