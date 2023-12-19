@@ -30,7 +30,7 @@
 namespace dyno {
 
 template <typename INPUT, typename OUTPUT>
-PipelineReturnStatus AbstractPipelineModule<INPUT, OUTPUT>::spinOnce() {
+PipelineReturnStatus PipelineModule<INPUT, OUTPUT>::spinOnce() {
     if (isShutdown())
     {
       return PipelineReturnStatus::IS_SHUTDOWN;
@@ -102,14 +102,14 @@ PipelineReturnStatus AbstractPipelineModule<INPUT, OUTPUT>::spinOnce() {
 }
 
 template <typename INPUT, typename OUTPUT>
-void AbstractPipelineModule<INPUT, OUTPUT>::registerOnProcessCallback(const OnProcessCallback& callback)
+void PipelineModule<INPUT, OUTPUT>::registerOnProcessCallback(const OnProcessCallback& callback)
 {
   CHECK(callback);
   on_process_callbacks_.push_back(callback);
 }
 
 template <typename INPUT, typename OUTPUT>
-void AbstractPipelineModule<INPUT, OUTPUT>::emitProcessCallbacks(const InputConstSharedPtr& input_packet, const OutputConstSharedPtr& output_packet)
+void PipelineModule<INPUT, OUTPUT>::emitProcessCallbacks(const InputConstSharedPtr& input_packet, const OutputConstSharedPtr& output_packet)
 {
   for (OnProcessCallback callbacks : on_process_callbacks_)
   {
@@ -129,7 +129,7 @@ void MIMOPipelineModule<INPUT, OUTPUT>::registerOutputQueue(OutputQueue* output_
 
 
 template <typename INPUT, typename OUTPUT>
-bool MIMOPipelineModule<INPUT, OUTPUT>::pushOutputPacket(const typename APM::OutputConstSharedPtr& output_packet) const
+bool MIMOPipelineModule<INPUT, OUTPUT>::pushOutputPacket(const typename Base::OutputConstSharedPtr& output_packet) const
 {
   auto tic_callbacks = utils::Timer::tic();
   //! We need to make our packet shared in order to send it to multiple

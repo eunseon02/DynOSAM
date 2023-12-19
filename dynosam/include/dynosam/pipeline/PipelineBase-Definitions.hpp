@@ -51,6 +51,7 @@ struct PipelineReturnStatus {
     }
 
     operator Code() const { return code_; }
+    operator bool() const { return code_ == Code::SUCCESS; }
 
     //TODO:
     // operator std::string() const;

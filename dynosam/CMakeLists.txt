@@ -98,6 +98,7 @@ add_library(${PROJECT_NAME} SHARED
   src/pipeline/PipelineDefinitions.cc
   src/pipeline/PipelineParams.cc
   src/pipeline/PipelineBase.cc
+  src/pipeline/PipelineSpinner.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc

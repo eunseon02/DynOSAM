@@ -34,7 +34,7 @@
 
 namespace dyno {
 
-bool AbstractPipelineModuleBase::spin()
+bool PipelineBase::spin()
   {
     LOG(INFO) << "Starting module " << module_name_;
     while (!isShutdown())
@@ -46,20 +46,20 @@ bool AbstractPipelineModuleBase::spin()
     return true;
   }
 
-void AbstractPipelineModuleBase::shutdown()
+void PipelineBase::shutdown()
 {
     LOG(INFO) << "Shutting down module " << module_name_;
     is_shutdown_ = true;
     shutdownQueues();
 }
 
-bool AbstractPipelineModuleBase::isWorking() const
+bool PipelineBase::isWorking() const
 {
     return is_thread_working_ || hasWork();
 }
 
 
-void AbstractPipelineModuleBase::notifyFailures(PipelineReturnStatus result)
+void PipelineBase::notifyFailures(PipelineReturnStatus result)
 {
     for (const auto& failure_callbacks : on_failure_callbacks_)
     {
@@ -74,7 +74,7 @@ void AbstractPipelineModuleBase::notifyFailures(PipelineReturnStatus result)
     }
 }
 
-void AbstractPipelineModuleBase::registerOnFailureCallback(const OnPipelineFailureCallback& callback_)
+void PipelineBase::registerOnFailureCallback(const OnPipelineFailureCallback& callback_)
 {
     CHECK(callback_);
     on_failure_callbacks_.push_back(callback_);

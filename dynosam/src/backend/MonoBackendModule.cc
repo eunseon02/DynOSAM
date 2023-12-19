@@ -1525,7 +1525,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
             double error_before = new_factors_.error(initial_values);
             LOG(INFO) << "Error before: " << error_before;
 
-            gtsam::LevenbergMarquardtOptimizer::shared_ptr opt(new_factors_, initial_values, lm_params);
+            gtsam::LevenbergMarquardtOptimizer opt(new_factors_, initial_values, lm_params);
 
             state_ = opt.optimize();
             new_values_ = initial_values; //update the new_values to be ther ones that were used as the initial values for the optimziation that solved

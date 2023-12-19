@@ -4,6 +4,7 @@
  */
 #pragma once
 
+#include "dynosam/utils/Macros.hpp"
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 
@@ -19,22 +20,22 @@
 
 #include <glog/logging.h>
 
-#include "dynosam/utils/Timing.hpp"
-#include "dynosam/utils/TimingStats.hpp" //TODO: remove
 
 #include <memory>
 
 namespace dyno
 {
 
-class AbstractPipelineModuleBase
+class PipelineBase
 {
 public:
-  AbstractPipelineModuleBase(const std::string& module_name) : module_name_(module_name)
+  DYNO_POINTER_TYPEDEFS(PipelineBase)
+
+  PipelineBase(const std::string& module_name) : module_name_(module_name)
   {
   }
 
-  virtual ~AbstractPipelineModuleBase() = default;
+  virtual ~PipelineBase() = default;
   /**
    * @brief Spins the pipeline via continuous calls to spinOnce until the pipeline is shutdown.
    *
@@ -92,8 +93,6 @@ public:
    */
   virtual bool hasWork() const = 0;
 
-
-protected:
   /**
    * @brief Processes for one iteration of the pipeline.
    *
@@ -116,8 +115,21 @@ private:
   std::atomic_bool is_shutdown_{ false };
 };
 
+
+/**
+ * @brief A PipelineModule is responsible for taking data from an input (or input queues) processing it, and sending it to an output queue (or queues)
+ *
+ * The PipelineModule has several virtual functions used for processing which are called when spinOnce() is called which should process one iteration of the input data
+ * The call order is:
+ *  input = getInputPacket()
+ *  output = process(input)
+ *  pushOutputPacket(output)
+ *
+ * @tparam INPUT
+ * @tparam OUTPUT
+ */
 template <typename INPUT, typename OUTPUT>
-class AbstractPipelineModule : public AbstractPipelineModuleBase
+class PipelineModule : public PipelineBase
 {
 public:
   using InputConstSharedPtr = std::shared_ptr<const INPUT>;
@@ -130,14 +142,26 @@ public:
 
   using OnProcessCallback = std::function<void(const InputConstSharedPtr&, const OutputConstSharedPtr&)>;
 
-  AbstractPipelineModule(const std::string& module_name) : AbstractPipelineModuleBase(module_name)
+  PipelineModule(const std::string& module_name) : PipelineBase(module_name)
   {
   }
 
-  virtual ~AbstractPipelineModule() = default;
+  virtual ~PipelineModule() = default;
+
+  /**
+   * @brief Spin the pipeline once
+   *
+   * @return PipelineReturnStatus
+   */
   PipelineReturnStatus spinOnce() override;
 
-  // these happen in the same thread as the module they are attached to so should happen quickly
+  /**
+   * @brief Registers a function that will be called with the input and output data packets generated from a spinOnce() call.
+   *
+   * These callbacks happen in the same thread as the module they are attached to so should happen quickly
+   *
+   * @param callback const OnProcessCallback&
+   */
   void registerOnProcessCallback(const OnProcessCallback& callback);
 
 
@@ -157,22 +181,22 @@ private:
 
 // MultiInputMultiOutput -> abstract class and user must implement the getInputPacket
 template <typename INPUT, typename OUTPUT>
-class MIMOPipelineModule : public AbstractPipelineModule<INPUT, OUTPUT>
+class MIMOPipelineModule : public PipelineModule<INPUT, OUTPUT>
 {
 public:
-  using APM = AbstractPipelineModule<INPUT, OUTPUT>; //Base
+  using Base = PipelineModule<INPUT, OUTPUT>; //Base
 
-  using typename APM::OutputConstSharedPtr;
-  using typename APM::InputConstSharedPtr;
-  using typename APM::InputQueue;
-  using typename APM::OutputQueue;
+  using typename Base::OutputConstSharedPtr;
+  using typename Base::InputConstSharedPtr;
+  using typename Base::InputQueue;
+  using typename Base::OutputQueue;
 
   //! Callback used to send data to other pipeline modules, makes use of
   //! shared pointer since the data may be shared between several modules.
   using OutputCallback = std::function<void(const OutputConstSharedPtr& output)>;
 
 
-  MIMOPipelineModule(const std::string& module_name) : AbstractPipelineModule<INPUT, OUTPUT>(module_name)
+  MIMOPipelineModule(const std::string& module_name) : Base(module_name)
   {
   }
 
