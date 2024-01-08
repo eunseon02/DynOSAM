@@ -14,10 +14,13 @@ Panels:
         - /Static Point Cloud1/Status1
         - /Static Point Cloud1/Topic1
         - /Odometry (GT)1/Shape1
-        - /MarkerArray1/Topic1
-        - /Static Point Cloud (Optimized)1
         - /Static Point Cloud (Optimized)1/Status1
-        - /Dynamic Point Cloud (Optimized)1
+        - /Composed object poses (opt)1/Status1
+        - /Composed object poses (opt)1/Topic1
+        - /MarkerArray1
+        - /MarkerArray1/Status1
+        - /MarkerArray1/Topic1
+        - /MarkerArray2
       Splitter Ratio: 0.5
     Tree Height: 637
   - Class: rviz_common/Selection
@@ -37,7 +40,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: PointCloud2
+    SyncSource: Static Point Cloud (Optimized)
 Visualization Manager:
   Class: ""
   Displays:
@@ -285,18 +288,6 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/odom_path
       Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: MarkerArray
-      Namespaces:
-        {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /dynosam/ground_truth/object_poses
-      Value: false
     - Class: rviz_default_plugins/Image
       Enabled: false
       Max Value: 1
@@ -323,7 +314,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -344,7 +335,7 @@ Visualization Manager:
         Value: /dynosam/backend/static
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -357,7 +348,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -367,7 +358,7 @@ Visualization Manager:
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.20000000298023224
+      Size (m): 0.30000001192092896
       Style: Spheres
       Topic:
         Depth: 5
@@ -378,6 +369,43 @@ Visualization Manager:
         Value: /dynosam/backend/dynamic
       Use Fixed Frame: true
       Use rainbow: true
+      Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Composed object poses (opt)
+      Namespaces:
+        backend_composed_object_positions: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/backend/composed_object_poses
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        ground_truth_object_labels: true
+        ground_truth_object_poses: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: System Default
+        Reliability Policy: System Default
+        Value: /dynosam/ground_truth/object_poses
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        gt_frontend_composed_object_path: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/ground_truth/object_paths
       Value: true
   Enabled: true
   Global Options:
@@ -425,25 +453,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 64.63107299804688
+      Distance: 40.66206359863281
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -3.5726847648620605
-        Y: -7.26282262802124
-        Z: 16.247356414794922
+        X: 0.4382035732269287
+        Y: -0.4972841739654541
+        Z: 16.804136276245117
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.6596009731292725
+      Pitch: -1.2146005630493164
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.7054009437561035
+      Yaw: 4.7704057693481445
     Saved: ~
 Window Geometry:
   Displays:
@@ -463,5 +491,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1717
-  X: 56
-  Y: 67
+  X: 89
+  Y: 71

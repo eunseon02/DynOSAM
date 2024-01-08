@@ -419,7 +419,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
       // we are within the image bounds?
       if (j + flow_xe < rgb.cols && j + flow_xe > 0 && i + flow_ye < rgb.rows && i + flow_ye > 0)
       {
-        // // save correspondences
+        // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
 
         feature->instance_label_ = motion_mask.at<ObjectId>(i, j);

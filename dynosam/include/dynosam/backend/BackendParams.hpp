@@ -34,7 +34,10 @@ struct BackendParams {
     double odometry_rotation_sigma_ = 0.2; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = 0.1; //! sigma used to construct the noise model on the translation component of the odomety (between factor)
 
-    double motion_ternary_factor_noise_sigma_ = 2.0;
+    double constant_object_motion_rotation_sigma_ = 0.1;
+    double constant_object_motion_translation_sigma_ = 0.1;
+
+    double motion_ternary_factor_noise_sigma_ = 0.01;
 
     static BackendParams fromYaml(const std::string& file_path);
 

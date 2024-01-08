@@ -104,6 +104,7 @@ private:
 
     //ground truth publishers
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_pose_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_path_pub_; //! Path of objects with gt
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr gt_odometry_pub_;
 
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr gt_odom_path_pub_;
