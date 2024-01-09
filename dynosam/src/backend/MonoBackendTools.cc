@@ -181,5 +181,69 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(const gtsam::Pose3& X_wor
 }
 
 
+gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd depths, const gtsam::Point2Vector observations){
+  CHECK_EQ(depths.size(), observations.size());
+
+  gtsam::Matrix3 K_inv = intrinsic.inverse();
+
+  int n_points = depths.size();
+  gtsam::Point3Vector points_camera;
+  for (int i_points = 0; i_points < n_points; i_points++){
+    gtsam::Point3 this_obv_homo(observations[i_points].x(), observations[i_points].y(), 1.0);
+    gtsam::Point3 this_point = K_inv*(depths(i_points)*this_obv_homo);
+    points_camera.push_back(this_point);
+  }
+
+  return points_camera;
+}
+
+
+/**
+ * @brief Compute point depths in the camera frame using camera intrinsics
+ * points - 3D point coordinates in the camera frame
+ *
+ */
+
+Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector points){
+  int n_points = points.size();
+  Eigen::VectorXd depths(n_points);
+
+  for (int i_points = 0; i_points < n_points; i_points++){
+    gtsam::Point3 this_obv_nonnorm = intrinsic*points[i_points];
+    depths[i_points] = this_obv_nonnorm.z();
+  }
+
+  return depths;
+}
+
+
+/**
+ * @brief Use the standard deviation of the depths of a point cluster to check whether this cluster is reasonable
+ * std_thres - a tune-able threshold for the standard deviation
+ *
+ */
+
+bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths){
+  int n_depths = depths.size();
+  double standard_deviation = 1000.0;
+  double sum = 0.0;
+  for (int i_depths = 0; i_depths < n_depths; i_depths++){
+    sum += depths[i_depths];
+  }
+
+  double mean = sum / n_depths;
+
+  for (int i_depths = 0; i_depths < n_depths; i_depths++){
+    standard_deviation += pow(depths[i_depths] - mean, 2);
+  }
+
+  standard_deviation = sqrt(standard_deviation / n_depths);
+
+  return (standard_deviation <= std_thres);
+}
+
+
+
+
 } //mono_backend_tools
 } //dyno
