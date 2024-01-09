@@ -35,6 +35,7 @@
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Key.h>
 #include <gtsam/nonlinear/NonlinearFactor.h>
+#include <gtsam/linear/Sampler.h>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -71,7 +72,20 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
 
+template<typename T>
+T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
+  CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());
+  gtsam::Sampler sample(sigmas, seed);
 
+  gtsam::Vector delta(sample.sample()); //delta should be the tangent vector
+  return gtsam::traits<T>::Retract(t, delta);
+}
+
+template<typename T>
+T perturbWithNoise(const T& t, double sigma, int32_t seed = 42) {
+  gtsam::Vector sigmas = gtsam::Vector::Constant(gtsam::traits<T>::dimension, sigma);
+  return perturbWithNoise<T>(t, sigmas, seed);
+}
 
 
 template <typename T=double>

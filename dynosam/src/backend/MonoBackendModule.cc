@@ -215,6 +215,8 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
         object_poses_composed_.insert({object_id, gtsam::Pose3Vector{}});
 
         FrameIds all_frames = do_tracklet_manager_.getFramesPerObject(object_id);
+        LOG(INFO) << "Adding output for object " << object_id << " appearing at frame " << container_to_string(all_frames);
+
         for(size_t i = 1; i < all_frames.size(); i++) {
             FrameId frame_id = all_frames.at(i);
             gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
@@ -269,7 +271,10 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
 
         }
 
+        LOG(INFO) << "Done adding points";
+
     }
+    LOG(INFO) << "here";
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
@@ -277,11 +282,11 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
     backend_output->static_lmks_ = lmk_map;
     backend_output->object_poses_composed_ = object_poses_composed_;
 
-    if(new_values_.exists(CameraPoseSymbol(current_frame_id))) {
-        backend_output->T_world_camera_ = new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
+    if(state_.exists(CameraPoseSymbol(current_frame_id))) {
+        backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     }
-
     backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
+    LOG(INFO) << "here";
 
     return {State::Nominal, backend_output};
 }
@@ -1189,9 +1194,9 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
                 double rank_tolerance = 1.0;
                 //! max distance to triangulate point in meters
-                double landmark_distance_threshold = 20.0;
+                double landmark_distance_threshold = 10.0;
                 //! max acceptable reprojection error // before tuning: 3
-                double outlier_rejection = 8.0;
+                double outlier_rejection = 2;
                 double retriangulation_threshold = 1.0e-3;
 
                 static_projection_params_.setRankTolerance(rank_tolerance);
@@ -1203,8 +1208,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 static_projection_params_.setEnableEPI(true);
                 static_projection_params_.setLinearizationMode(gtsam::HESSIAN);
                 static_projection_params_.setDegeneracyMode(gtsam::ZERO_ON_DEGENERACY);
-                static_projection_params_.throwCheirality = true;
-                static_projection_params_.verboseCheirality = true;
+                static_projection_params_.throwCheirality = false;
+                static_projection_params_.verboseCheirality = false;
 
                 // if the TrackletIdToProjectionStatus does not have this tracklet, then it should be the first time we have seen
                 // it and therefore, should not be in any of the other data structures
@@ -1253,7 +1258,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                             const auto& measured = smart_factor->measured().at(i);
 
                             new_factors_.emplace_shared<GenericProjectionFactor>(
-                                kp,
+                                measured,
                                 static_smart_noise_,
                                 pose_symbol,
                                 lmk_symbol,
@@ -1274,7 +1279,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                     pose_symbol,
                     lmk_symbol,
                     gtsam_calibration_,
-                    true, true
+                    false, false
                 );
                 new_factors_.push_back(projection_factor); //do we need to check the chariality of this?
             }
@@ -1417,8 +1422,8 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
                         lmk_world = new_values_.at<gtsam::Pose3>(cam_symbol) * input->frame_.backProjectToCamera(tracked_id);
 
-                        // static auto kPointPrior = gtsam::noiseModel::Isotropic::Sigma(3, 0.3);
-                        // new_factors_.addPrior(dynamic_point_symbol, lmk_world, kPointPrior);
+                        static auto kPointPrior = gtsam::noiseModel::Isotropic::Sigma(3, 0.3);
+                        new_factors_.addPrior(dynamic_point_symbol, lmk_world, kPointPrior);
 
 
                         // lmk_world = new_values_.at<gtsam::Pose3>(cam_symbol) * gtsam::Point3(0, 0, 1);
@@ -1435,11 +1440,17 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                         CHECK(object_pose_gt.prev_H_current_world_);
                         CHECK(new_values_.exists(prev_dynamic_point_symbol));
 
-                        gtsam::Pose3 prev_H_current_world_ = object_pose_gt.prev_H_current_world_.value(); //TODO: perterb?
+                        gtsam::Pose3 prev_H_current_world = object_pose_gt.prev_H_current_world_.value(); //TODO: perterb?
 
                         Landmark lmk_world_prev = new_values_.at<Landmark>(prev_dynamic_point_symbol);
-                        // lmk_world = prev_H_current_world_ * lmk_world_prev;
-                        lmk_world = new_values_.at<gtsam::Pose3>(cam_symbol) * input->frame_.backProjectToCamera(tracked_id);
+
+                        gtsam::Vector6 perturb_noise;
+                        perturb_noise << 0.1, 0.1, 0.1, 0.2, 0.2, 0.2;
+                        gtsam::Pose3 prev_H_current_world_perturbed = utils::perturbWithNoise(prev_H_current_world, perturb_noise);
+
+
+                        lmk_world = prev_H_current_world_perturbed * lmk_world_prev;
+                        // lmk_world = new_values_.at<gtsam::Pose3>(cam_symbol) * input->frame_.backProjectToCamera(tracked_id);
                     }
 
 
@@ -1571,7 +1582,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     run_dynamic_update();
 
     int num_opt_attemts = 0;
-    const int max_opt_attempts = 100;
+    const int max_opt_attempts = 300;
     gtsam::Values initial_values = new_values_;
     bool solved = false;
     std::function<void()> handle_cheriality_optimize = [&]() -> void {

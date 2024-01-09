@@ -95,6 +95,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       static_features,
       dynamic_features);
 
+    LOG(INFO) << "Tracked on frame " << frame_id << " t= " << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
+
     previous_frame_ = new_frame;
     return new_frame;
 
@@ -461,6 +463,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   CHECK_EQ(instance_labels.size(), previous_frame_->numDynamicUsableFeatures());
   std::sort(instance_labels.begin(), instance_labels.end());
   instance_labels.erase(std::unique(instance_labels.begin(), instance_labels.end()), instance_labels.end());
+  //each row is correlated with a specific instance label and each column is the tracklet id associated with that label
   std::vector<TrackletIds> object_features(instance_labels.size());
 
   // collect the predicted labels and semantic labels in vector
@@ -482,9 +485,10 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   }
 
    // check each object label distribution in the coming frame
-  int updated_mask_points = 0;
   for (size_t i = 0; i < object_features.size(); i++)
   {
+    //labels at the current mask using the predicted keypoint from the previous frame
+    //each iteration is per label so temp_label should correspond to features within the same object
     ObjectIds temp_label;
     for (size_t j = 0; j < object_features[i].size(); j++)
     {
@@ -503,7 +507,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
 
     if (temp_label.size() < 100)
     {
-      LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " points size - "
+      LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
       //TODO:mark has static!!
       continue;
@@ -512,6 +516,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     // find label that appears most in LabTmp()
     // (1) count duplicates
     std::map<int, int> label_duplicates;
+    //k is object label
     for (int k : temp_label)
     {
       if (label_duplicates.find(k) == label_duplicates.end())
@@ -536,7 +541,16 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     std::sort(sorted.begin(), sorted.end(), sort_pair_int);
 
     // recover the missing mask (time consuming!)
+    // LOG(INFO) << sorted[0].first << " " << sorted[0].second << " " << instance_labels[i];
+    //  if (sorted[0].second < 30)
+    // {
+    //   LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
+    //                << sorted[0].second;
+    //   //TODO:mark has static!!
+    //   continue;
+    // }
     if (sorted[0].first == 0)  //?
+    // if (sorted[0].first == instance_labels[i])  //?
     {
       for (int j = 0; j < previous_rgb.rows; j++)
       {
@@ -550,7 +564,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
             if (k + flow_x < previous_rgb.cols && k + flow_x > 0 && j + flow_y < previous_rgb.rows && j + flow_y > 0)
             {
               current_mask.at<ObjectId>(j + flow_y, k + flow_x) = instance_labels[i];
-              updated_mask_points++;
+              // updated_mask_points++;
             }
           }
         }

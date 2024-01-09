@@ -58,6 +58,7 @@ public:
     static ObjectId global_object_id;
 
     //semantic instance label to object observation (by the actual observations in the image)
+    //set in constructor
     std::map<ObjectId, DynamicObjectObservation> object_observations_;
 
     Frame(
@@ -172,6 +173,14 @@ public:
      * @return Camera::CameraImpl
      */
     Camera::CameraImpl getFrameCamera() const;
+
+    inline ObjectIds getObjectIds() const {
+        ObjectIds object_ids;
+        for(const auto& kv : object_observations_) {
+            object_ids.push_back(kv.first);
+        }
+        return object_ids;
+    }
 
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
 
