@@ -65,7 +65,7 @@ public:
 };
 
 
-//! Original code from: https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
+// ! Original code from: https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
 // /**
 //  * @brief The PipelineParams base class
 //  * Sets a common base class for parameters of the pipeline

@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,39 +23,21 @@
 
 #pragma once
 
+#include <vector>
 #include <string>
 
 namespace dyno {
 
-struct FrontendParams {
-
-  // tracking points params
-  int max_tracking_points_bg = 800;
-  int max_tracking_points_obj = 800;
-
-  /// @brief  Maximum one feature per bucked with cell_size width and height (used for 2D occupancy grid for static features)
-  int cell_size = 15;
-
-  // scene flow thresholds
-  double scene_flow_magnitude = 0.12;
-  double scene_flow_percentage = 0.5;
-
-  // depth thresholds
-  double depth_background_thresh = 40.0;
-  double depth_obj_thresh = 25.0;
-
-  // ORB detector params
-  int n_features = 1200;
-  double scale_factor = 1.2;
-  int n_levels = 8;
-  int init_threshold_fast = 20;
-  int min_threshold_fast = 7;
+/**
+ * @brief Initalises ROS, gflags and glog
+ *
+ * Returns a vector of non-ROS arguments
+ *
+ * @param argc
+ * @param argv
+ * @return std::vector<std::string>
+ */
+std::vector<std::string> initRosAndLogging(int argc, char* argv[]);
 
 
-  //PnP outlier rejection options
-
-  static FrontendParams fromYaml(const std::string& file_path);
-
-};
-
-}
+} //dyno

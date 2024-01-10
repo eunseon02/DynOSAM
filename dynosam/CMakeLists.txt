@@ -192,6 +192,12 @@ install(
   RUNTIME DESTINATION bin
 )
 
+## This is VERY IMPORTANT so that dynosam_ros can find the params folder using ament indexing!!
+install(DIRECTORY
+  params
+  DESTINATION share/${PROJECT_NAME}
+)
+
 
 #####exec test#########
 add_executable(dyno_sam example/dyno_sam.cc)

@@ -48,6 +48,7 @@ add_library(${PROJECT_NAME} SHARED
   src/FrontendDisplayRos.cc
   src/BackendDisplayRos.cc
   src/RosUtils.cc
+  src/Utils.cc
 )
 
 ament_target_dependencies(${PROJECT_NAME}
