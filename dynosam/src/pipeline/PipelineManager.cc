@@ -24,6 +24,7 @@
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
+#include "dynosam/backend/MonoBatchBackendModule.hpp"
 #include "dynosam/backend/MonoBackendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -78,7 +79,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
             LOG(INFO) << "Making MonoInstance frontend";
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<MonoInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            backend = std::make_shared<MonoBackendModule>(params.backend_params_, camera);
+            backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera);
         }   break;
 
         default: {

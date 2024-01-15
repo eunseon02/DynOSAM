@@ -88,6 +88,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendModule.cc
   src/backend/FactorGraphTools.cc
   src/backend/MonoBackendModule.cc
+  src/backend/MonoBatchBackendModule.cc
   src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
 

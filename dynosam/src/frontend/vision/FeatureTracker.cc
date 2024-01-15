@@ -96,7 +96,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       dynamic_features);
 
     LOG(INFO) << "Tracked on frame " << frame_id << " t= " << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
-
     previous_frame_ = new_frame;
     return new_frame;
 

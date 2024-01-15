@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/common/Exceptions.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
@@ -47,16 +48,32 @@ public:
     using Base::SpinReturn;
 
 
-    BackendModule(const BackendParams& params);
+    BackendModule(const BackendParams& params, Camera::Ptr camera);
     ~BackendModule() = default;
 
 
 protected:
-
     void validateInput(const BackendInputPacket::ConstPtr& input) const override;
+    void setFactorParams(const BackendParams& backend_params);
+
 
 protected:
     const BackendParams base_params_;
+
+    //! Camera related parameters
+    Camera::Ptr camera_;
+    boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
+
+    //params for factors
+    SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
+    gtsam::SharedNoiseModel static_smart_noise_; //! Smart  factor noise for static points when they are smart factors
+    gtsam::SharedNoiseModel static_projection_noise_; //! Projection factor noise for static points
+    gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
+    gtsam::SharedNoiseModel initial_pose_prior_;
+    gtsam::SharedNoiseModel landmark_motion_noise_; //! Noise on the landmark tenrary factor
+    gtsam::SharedNoiseModel object_smoothing_noise_; //! Contant velocity noise model between motions
+
+
 
 };
 

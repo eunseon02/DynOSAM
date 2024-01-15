@@ -75,7 +75,9 @@ gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 template<typename T>
 T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());
-  gtsam::Sampler sample(sigmas, seed);
+  //! Make static so that the generator (internal to the sampler) remains in memory during calls
+  //! and that we actually get a random distribution
+  static gtsam::Sampler sample(sigmas, seed);
 
   gtsam::Vector delta(sample.sample()); //delta should be the tangent vector
   return gtsam::traits<T>::Retract(t, delta);

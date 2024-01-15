@@ -58,7 +58,7 @@ public:
 
     using SpinReturn = std::pair<State, OutputConstPtr>;
 
-    ModuleBase(const std::string& name) : name_(name), state_(State::Boostrap) {}
+    ModuleBase(const std::string& name) : name_(name), module_state_(State::Boostrap) {}
     virtual ~ModuleBase() = default;
 
     OutputConstPtr spinOnce(InputConstPtr input) {
@@ -67,7 +67,7 @@ public:
 
         SpinReturn spin_return{State::Boostrap, nullptr};
 
-        switch (state_)
+        switch (module_state_)
             {
             case State::Boostrap: {
                 spin_return = boostrapSpin(input);
@@ -81,7 +81,7 @@ public:
             }
         }
 
-        state_ = spin_return.first;
+        module_state_ = spin_return.first;
         return spin_return.second;
     }
 
@@ -102,7 +102,7 @@ protected:
 
 private:
     const std::string name_;
-    std::atomic<State> state_;
+    std::atomic<State> module_state_;
 
 };
 

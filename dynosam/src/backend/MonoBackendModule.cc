@@ -47,15 +47,8 @@ DEFINE_string(backend_graph_file, "/root/results/DynoSAM/mono_backend_graph.g2o"
 namespace dyno {
 
 MonoBackendModule::MonoBackendModule(const BackendParams& backend_params, Camera::Ptr camera)
-    :   BackendModule(backend_params),
-        camera_(CHECK_NOTNULL(camera))
+    :   BackendModule(backend_params, camera)
 {
-
-    const auto& camera_params = camera_->getParams();
-    gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(camera_params.constructGtsamCalibration<Camera::CalibrationType>());
-
-    CHECK(gtsam_calibration_);
-    setFactorParams(backend_params);
 
     gtsam::ISAM2Params isam_params;
     isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
@@ -1057,37 +1050,6 @@ bool MonoBackendModule::safeAddConstantObjectVelocityFactor(FrameId current_fram
     }
 }
 
-
-void MonoBackendModule::setFactorParams(const BackendParams& backend_params) {
-    //set static projection smart noise
-    static_smart_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.smart_projection_noise_sigma_);
-    auto huber =
-        gtsam::noiseModel::mEstimator::Huber::Create(0.00001, gtsam::noiseModel::mEstimator::Base::ReweightScheme::Block);
-    static_projection_noise_ = gtsam::noiseModel::Robust::Create(huber, static_smart_noise_);
-
-    CHECK(static_smart_noise_);
-
-    gtsam::Vector6 odom_sigmas;
-    odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);
-    odom_sigmas.tail<3>().setConstant(
-        backend_params.odometry_translation_sigma_);
-    odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
-    CHECK(odometry_noise_);
-
-    initial_pose_prior_ =  gtsam::noiseModel::Isotropic::Sigma(6u, 0.0001);
-    CHECK(initial_pose_prior_);
-
-    landmark_motion_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
-    CHECK(landmark_motion_noise_);
-
-    gtsam::Vector6 object_constant_vel_sigmas;
-    object_constant_vel_sigmas.head<3>().setConstant(backend_params.constant_object_motion_rotation_sigma_);
-    object_constant_vel_sigmas.tail<3>().setConstant(
-        backend_params.constant_object_motion_translation_sigma_);
-    object_smoothing_noise_ = gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
-    CHECK(object_smoothing_noise_);
-
-}
 
 
 void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::ConstPtr input) {

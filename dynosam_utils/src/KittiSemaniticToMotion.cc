@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     cv::Mat rgb_cur;
 
 
-    const std::string path = "/root/data/vdo_slam/kitti/kitti/0003";
+    const std::string path = "/root/data/vdo_slam/kitti/kitti/0006";
     //becuase this uses the KittiDataLoader, this will use whatever semantic/instance laoder is in
     KittiDataLoader::Params params;
     params.base_line = 0; //dont care

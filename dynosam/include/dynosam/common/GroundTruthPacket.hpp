@@ -134,7 +134,8 @@ public:
 
     /**
      * @brief Calcualtes and sets the object motion ground truth variables of this GroundTruthInputPacket using the previous object motions.
-     * This packet is considered to be time k and the previous object packet is k-1.
+     * This packet is considered to be time k and the previous object packet is k-1. This should only be used in some derived
+     * DataProvider/Loader when constructing the GroundTruthPacket.
      *
      * If the previous obejct packet is not at the right frame (k-1), false will be returned.
      * Each object in the current packet will be queried in the previous packet, and, if exists, the motion will be calcuted at set.

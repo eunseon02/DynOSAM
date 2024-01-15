@@ -34,9 +34,11 @@ struct BackendOutputPacket {
 DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
     LandmarkMap static_lmks_;
-    StatusLandmarkEstimates dynamic_lmks_;
+    StatusLandmarkEstimates dynamic_lmks_; //optimizsed
+    StatusLandmarkEstimates initial_dynamic_lmks_;
     gtsam::Pose3 T_world_camera_;
     Timestamp timestamp_;
+    gtsam::Pose3Vector optimized_poses_;
 
     gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
 

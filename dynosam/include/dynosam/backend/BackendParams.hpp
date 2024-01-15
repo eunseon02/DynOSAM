@@ -29,10 +29,11 @@ namespace dyno {
 
 struct BackendParams {
 
-    double smart_projection_noise_sigma_ = 3; //! Isotropic noise used for the smart projection factor (mono) on static points
+    //TODO: static and dynamic points should not have same sigma (dynamic higher!!)
+    double smart_projection_noise_sigma_ = 2; //! Isotropic noise used for the smart projection factor (mono) on static points
 
-    double odometry_rotation_sigma_ = 0.2; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
-    double odometry_translation_sigma_ = 0.1; //! sigma used to construct the noise model on the translation component of the odomety (between factor)
+    double odometry_rotation_sigma_ = 0.02; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
+    double odometry_translation_sigma_ = 0.01; //! sigma used to construct the noise model on the translation component of the odomety (between factor)
 
     double constant_object_motion_rotation_sigma_ = 0.1;
     double constant_object_motion_translation_sigma_ = 0.1;

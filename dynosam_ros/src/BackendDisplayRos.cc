@@ -39,8 +39,13 @@ BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
     const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
+    dynamic_initial_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_initial", 1);
+
+
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_poses", 1);
+    odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/backend/odom_path", 2);
+
 
 }
 
@@ -84,6 +89,29 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         pcl::toROSMsg(cloud, pc2_msg);
         pc2_msg.header.frame_id = "world";
         dynamic_tracked_points_pub_->publish(pc2_msg);
+    }
+
+    {
+        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+        const size_t num_measurements = backend_output->initial_dynamic_lmks_.size();
+
+        for(size_t i = 0; i < num_measurements; i++) {
+            const StatusLandmarkEstimate& sle = backend_output->initial_dynamic_lmks_.at(i);
+            const LandmarkStatus& status = sle.first;
+            const LandmarkEstimate& le = sle.second;
+
+            const Landmark lmk = le.second;
+
+            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+            cloud.points.push_back(pt);
+        }
+
+        sensor_msgs::msg::PointCloud2 pc2_msg;
+        pcl::toROSMsg(cloud, pc2_msg);
+        pc2_msg.header.frame_id = "world";
+        dynamic_initial_points_pub_->publish(pc2_msg);
     }
 
     {
@@ -143,6 +171,24 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         nav_msgs::msg::Odometry odom_msg;
         utils::convertWithHeader(backend_output->T_world_camera_, odom_msg, backend_output->timestamp_, "world", "camera");
         odometry_pub_->publish(odom_msg);
+    }
+
+    {
+        nav_msgs::msg::Path odom_path_msg;
+
+        for(const gtsam::Pose3& T_world_camera : backend_output->optimized_poses_) {
+            //optimized camera traj
+            geometry_msgs::msg::PoseStamped pose_stamped;
+            utils::convertWithHeader(T_world_camera, pose_stamped, backend_output->timestamp_, "world");
+
+            static std_msgs::msg::Header header;
+            header.stamp = utils::toRosTime(backend_output->timestamp_);
+            header.frame_id = "world";
+            odom_path_msg.header = header;
+            odom_path_msg.poses.push_back(pose_stamped);
+        }
+
+        odometry_path_pub_->publish(odom_path_msg);
     }
 }
 

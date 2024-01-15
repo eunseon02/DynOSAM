@@ -62,7 +62,7 @@ inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
 /**
  * @brief Construct an object motion symbol with the current frame id (k).
  *
- * A motion takes us from k-1 to k so we index using the k-1 frame id.
+ * A motion takes us from k-1 to k so we index using the k frame id.
  * This function takes the current frame id (k) which is normally what we work with and constructs the motion symbol
  * using k as the index such that the motion takes us from the k-1 to k.
  *
@@ -229,6 +229,11 @@ public:
 
     inline bool trackletExists(const TrackletId tracklet_id) const {
         return tracklet_map_.exists(tracklet_id);
+    }
+
+    inline ObjectId getObjectIdByTracklet(const TrackletId tracklet_id) const {
+        checkAndThrow(tracklet_to_object_map_.exists(tracklet_id), "getObjectIdByTracklet query failed as tracklet id does not exist. Offedning Id " + std::to_string(tracklet_id));
+        return tracklet_to_object_map_.at(tracklet_id);
     }
 
     //slow as we do an actual saerch through map

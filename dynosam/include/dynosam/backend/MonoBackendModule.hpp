@@ -187,9 +187,6 @@ private:
     //checks if pervious motion and current motions are in the provided values (expects motion to be in world frame)
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
-    Camera::Ptr camera_;
-    boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
-
     // //data structures to hold measurements and landmarks
     // TrackletIdSmartFactorMap tracklet_smart_factor_map_;
     // TrackletIdLabelMap tracklet_to_label_map_;
@@ -198,16 +195,6 @@ private:
     // ProjectionFactorStatusMap projection_factor_map_;
     TrackletIdToProjectionStatus tracklet_to_status_map_;
     SmartProjectionFactorMap smart_factor_map_;
-
-
-    //params for factors
-    SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
-    gtsam::SharedNoiseModel static_smart_noise_; //! Smart  factor noise for static points when they are smart factors
-    gtsam::SharedNoiseModel static_projection_noise_; //! Projection factor noise for static points
-    gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
-    gtsam::SharedNoiseModel initial_pose_prior_;
-    gtsam::SharedNoiseModel landmark_motion_noise_; //! Noise on the landmark tenrary factor
-    gtsam::SharedNoiseModel object_smoothing_noise_; //! Contant velocity noise model between motions
 
 
     DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;
