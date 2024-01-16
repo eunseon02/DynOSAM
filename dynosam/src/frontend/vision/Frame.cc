@@ -262,15 +262,15 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
 
 
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
-    const cv::Mat& depth_mat = depth;
     auto iter = container.beginUsable();
 
     for(Feature::Ptr feature : iter) {
         CHECK(feature->usable());
         // const Feature::Ptr& feature = *iter;
-        const int x = functional_keypoint::u(feature->keypoint_);
-        const int y = functional_keypoint::v(feature->keypoint_);
-        const Depth d = depth_mat.at<Depth>(y, x);
+        // const int x = functional_keypoint::u(feature->keypoint_);
+        // const int y = functional_keypoint::v(feature->keypoint_);
+        // const Depth d = depth_mat.at<Depth>(y, x);
+        const Depth d = functional_keypoint::at<Depth>(feature->keypoint_, depth);
 
         if(d > max_depth || d <= 0) {
             feature->markInvalid();

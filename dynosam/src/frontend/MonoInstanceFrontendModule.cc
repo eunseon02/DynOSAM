@@ -186,6 +186,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
     auto output = constructOutput(*frame, motion_estimates, tracking_img, input->optional_gt_);
+    output->image_container_ = image_container;
     return {State::Nominal, output};
 
     // //1. camera pose estimation (2D-2D)

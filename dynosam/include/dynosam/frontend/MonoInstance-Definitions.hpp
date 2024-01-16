@@ -65,6 +65,7 @@ public:
 
 
     const DecompositionRotationEstimates estimated_motions_; //! Estimated motions in the world frame
+    ImageContainer::Ptr image_container_; //! Unchanged image input;
 
     MonocularInstanceOutputPacket(
         const StatusKeypointMeasurements& static_keypoint_measurements,

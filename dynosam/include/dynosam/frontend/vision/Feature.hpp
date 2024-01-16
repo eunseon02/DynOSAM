@@ -24,6 +24,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/StructuredContainers.hpp"
+#include "dynosam/common/ImageContainer.hpp"
 #include "dynosam/utils/Numerical.hpp"
 
 #include <map>
@@ -42,6 +43,19 @@ struct functional_keypoint {
     template<typename T = int>
     static inline int v(const Keypoint& kp) {
         return static_cast<T>(kp(1));
+    }
+
+    //ImageWrapperType should be a ImageType, eg ImageType::RGBMono etc...
+    template<typename ImageWrapperType, typename AccessType = typename ImageWrapperType::OpenCVType>
+    static AccessType at(const Keypoint& kp, const ImageWrapper<ImageWrapperType>& image_wrapper) {
+        return at<AccessType>(kp, static_cast<const cv::Mat&>(image_wrapper));
+    }
+
+    template<typename AccessType>
+    static AccessType at(const Keypoint& kp, const cv::Mat& img) {
+        const int x = functional_keypoint::u(kp);
+        const int y = functional_keypoint::v(kp);
+        return img.at<AccessType>(y, x);
     }
 };
 

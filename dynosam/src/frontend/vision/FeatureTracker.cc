@@ -354,15 +354,14 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
       const size_t age = previous_dynamic_feature->age_;
 
       const Keypoint kp = previous_dynamic_feature->predicted_keypoint_;
+      ObjectId predicted_label = functional_keypoint::at<ObjectId>(kp, motion_mask);
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
-      ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
+      // ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
 
 
       const Keypoint previous_kp = previous_dynamic_feature->keypoint_;
-      const int prev_x = functional_keypoint::u(previous_kp);
-      const int prev_y = functional_keypoint::v(previous_kp);
-      ObjectId previous_label = previous_motion_mask.at<ObjectId>(prev_y, prev_x);
+      ObjectId previous_label = functional_keypoint::at<ObjectId>(previous_kp, previous_motion_mask);
 
       //only include point if it is contained, it is not static and the previous label is the same as the predicted label
       if(camera_->isKeypointContained(kp) && predicted_label != background_label && predicted_label == previous_label) {

@@ -36,6 +36,19 @@
 DEFINE_bool(use_gt_camera_pose, true, "If true gt camera pose (with noise) will be used as initalisation.");
 DEFINE_double(dp_init_sigma_perturb, 0.1, "Amount of noise to add to each dynamic point when initalising it.");
 
+DEFINE_bool(use_first_seen_dynamic_point_prior, true,
+    "If true, a prior will be added to the set of points representing the first time the object is seen, using the initalisation values");
+DEFINE_double(first_seen_dynamic_point_sigma, 10,
+    "The sigma used on the prior for the initials set of dynamic point observations. Used if use_first_seen_dynamic_point_prior==true");
+
+DEFINE_int32(dynamic_point_init_func_type, 0,
+    "Which function to use when initalising the dynamic 3d points. "
+    "0: Initalise from perturbed gt pose, "
+    "1: Initalise from gt depth with modified scale.");
+
+DEFINE_double(min_depth_scale, 0.4, "Min value when generating a uniform distribution to scale depth by when dynamic_point_init_func_type==1");
+DEFINE_double(max_depth_scale, 1.4, "Max value when generating a uniform distribution to scale depth by when dynamic_point_init_func_type==1");
+
 
 namespace dyno {
 
@@ -55,40 +68,72 @@ MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_para
     };
 
 
-    dynamic_point_init_func_ = [=](
-        FrameId frame_id, TrackletId tracklet_id, ObjectId object_id, const Keypoint& measurement, const GroundTruthInputPacket& gt_packet) {
+    //Initalise from perturbed gt pose
+    if(FLAGS_dynamic_point_init_func_type == 0) {
+        dynamic_point_init_func_ = [=](
+            FrameId, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3&, const GroundTruthInputPacket& gt_packet) {
 
-        const auto& camera_params = camera_->getParams();
+            const auto& camera_params = camera_->getParams();
 
-        ObjectPoseGT object_pose_gt;
-        CHECK(gt_packet.getObject(object_id, object_pose_gt));
+            ObjectPoseGT object_pose_gt;
+            CHECK(gt_packet.getObject(object_id, object_pose_gt));
 
-        //for now, just perturb with noise from gt pose
-        auto gt_pose_camera = utils::perturbWithNoise(
-            object_pose_gt.L_camera_,
-            FLAGS_dp_init_sigma_perturb);
+            //for now, just perturb with noise from gt pose
+            auto gt_pose_camera = utils::perturbWithNoise(
+                object_pose_gt.L_camera_,
+                FLAGS_dp_init_sigma_perturb);
 
-        static std::random_device rd;  // a seed source for the random number engine
-        static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
-        std::uniform_real_distribution distrib(-0.5, 0.5);
+            static std::random_device rd;  // a seed source for the random number engine
+            static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+            std::uniform_real_distribution distrib(-0.5, 0.5);
 
-        //Z coordinate in camera frame
-        double Z = gt_pose_camera.z();
-        Z += distrib(gen);
+            //Z coordinate in camera frame
+            double Z = gt_pose_camera.z();
+            Z += distrib(gen);
 
+            //Convert (distorted) image coordinates uv to intrinsic coordinates xy
+            gtsam::Point2 pc = gtsam_calibration_->calibrate(measurement);
+            //projection equation x = f(X/Z) and we have normalized coordinates, x, and now Z
+            //rearranging for X (and then also Y) -> X = x/f * Z
+            const double X = pc(0) * Z;
+            const double Y = pc(1) * Z;
 
+            //gt for camera pose?
+            return gt_packet.X_world_ * gtsam::Vector3(X, Y, Z); //back into world frame
 
-        //Convert (distorted) image coordinates uv to intrinsic coordinates xy
-        gtsam::Point2 pc = gtsam_calibration_->calibrate(measurement);
-        //projection equation x = f(X/Z) and we have normalized coordinates, x, and now Z
-        //rearranging for X (and then also Y) -> X = x/f * Z
-        const double X = pc(0) * Z;
-        const double Y = pc(1) * Z;
+        };
+    }
+    // Initalise from gt depth with modified scale.
+    else if(FLAGS_dynamic_point_init_func_type == 1) {
+        dynamic_point_init_func_ = [=](
+            FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {
+                const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+                const auto& image_container = input->image_container_;
+                CHECK(image_container);
+                CHECK(image_container->hasDepth());
 
-        //gt for camera pose?
-        return gt_packet.X_world_ * gtsam::Vector3(X, Y, Z); //back into world frame
+                const Depth d = functional_keypoint::at<Depth>(
+                    measurement,
+                    image_container->getImageWrapper<ImageType::Depth>());
 
-    };
+                //make seed that is consistent for the same object at a frame
+                //this allows us to change the scale for every object at each frame and be consistent between runs
+                auto seed = CantorPairingFunction::pair(std::make_pair(frame_id, object_id));
+                std::mt19937 gen(seed);
+
+                CHECK(FLAGS_min_depth_scale < FLAGS_max_depth_scale);
+                std::uniform_real_distribution distrib(FLAGS_min_depth_scale, FLAGS_max_depth_scale);
+                // const Depth scaled_depth = FLAGS_depth_scale * d;
+                const Depth scaled_depth = distrib(gen) * d;
+
+                Landmark lmk_world;
+                camera_->backProject(measurement, scaled_depth, &lmk_world, cam_pose);
+                return lmk_world;
+            };
+    }
+    else {
+        LOG(FATAL) << "Unknown dynamic point initalisation fun requested " << FLAGS_dynamic_point_init_func_type;
+    }
 
     motion_init_func_ = [=](
         FrameId frame_id, ObjectId object_id, const GroundTruthInputPacket& gt_packet
@@ -130,6 +175,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoBoostrapSpin(Mono
     CHECK(input->gt_packet_);
     const GroundTruthInputPacket gt_packet = input->gt_packet_.value();
     gt_packet_map_.insert({current_frame_id, gt_packet});
+    input_packet_map_.insert({current_frame_id, input});
 
     const gtsam::Pose3 T_world_camera = pose_init_func_(current_frame_id, input->T_world_camera_, gt_packet);
     gtsam::Key current_pose_symbol = CameraPoseSymbol(current_frame_id);
@@ -149,6 +195,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     CHECK(input->gt_packet_);
     const GroundTruthInputPacket gt_packet = input->gt_packet_.value();
     gt_packet_map_.insert({current_frame_id, gt_packet});
+    input_packet_map_.insert({current_frame_id, input});
 
     const gtsam::Pose3 T_world_camera = pose_init_func_(current_frame_id, input->T_world_camera_, gt_packet);
     gtsam::Key current_pose_symbol = CameraPoseSymbol(current_frame_id);
@@ -693,6 +740,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
                 CHECK(tracklet.exists(frame));
                 gtsam::Symbol cam_symbol = CameraPoseSymbol(frame);
+                const gtsam::Pose3& cam_pose = new_values_.at<gtsam::Pose3>(cam_symbol);
 
                 //get object gt for the current frame
                 ObjectPoseGT object_pose_gt;
@@ -706,12 +754,20 @@ void MonoBatchBackendModule::runDynamicUpdate(
                     tracked_id,
                     object_id,
                     kp,
+                    cam_pose,
                     gt_frame_packet
                 );
 
-                if(frame == starting_frame_points) {
-                    //add prior on first time this point is seen? This will add a prior on every (new) point which we dont want
-                    new_factors_.addPrior(dynamic_point_symbol, lmk_world, gtsam::noiseModel::Isotropic::Sigma(3, 10));
+
+                //starting frame means this is the first observation of this tracklet
+                //and if the object does not exist in the graph yet it means this should be the first
+                //time weve seen this object as we update object_in_graph_ at the end of this function
+                if(FLAGS_use_first_seen_dynamic_point_prior &&
+                    frame == starting_frame_points &&
+                    object_in_graph_.exists(object_id)) {
+                    //add prior on first time this point is seen
+                    new_factors_.addPrior(dynamic_point_symbol, lmk_world,
+                        gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_first_seen_dynamic_point_sigma));
                 }
 
                 // CHECK(!smoother_->valueExists(dynamic_point_symbol));
@@ -749,6 +805,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
                     new_values_.insert(motion_symbol, motion_init_func_(
                         frame, object_id, gt_frame_packet
                     ));
+
                     safeAddConstantObjectVelocityFactor(frame, object_id, new_values_, new_factors_);
                     LOG(INFO) << "Added motion symbol " << DynoLikeKeyFormatter(motion_symbol);
 
@@ -777,12 +834,16 @@ void MonoBatchBackendModule::runDynamicUpdate(
             const DynamicPointSymbol current_dynamic_point_symbol = DynamicLandmarkSymbol(current_frame_id, tracked_id);
             const DynamicPointSymbol previous_dynamic_point_symbol = DynamicLandmarkSymbol(current_frame_id - 1u, tracked_id);
 
+            gtsam::Symbol cam_symbol = CameraPoseSymbol(current_frame_id);
+            const gtsam::Pose3& cam_pose = new_values_.at<gtsam::Pose3>(cam_symbol);
+
             auto gt_frame_packet = gt_packet_map_.at(current_frame_id);
             const Landmark lmk_world = dynamic_point_init_func_(
                     current_frame_id,
                     tracked_id,
                     object_id,
                     kp,
+                    cam_pose,
                     gt_frame_packet
             );
 
@@ -820,6 +881,11 @@ void MonoBatchBackendModule::runDynamicUpdate(
             );
 
             new_factors_.push_back(motion_factor);
+        }
+
+        //after all that check if some motion symbol for this object has been added to the graph for this frame
+        if(new_values_.exists(ObjectMotionSymbolFromCurrentFrame(object_id, current_frame_id))) {
+            object_in_graph_.insert2(object_id, current_frame_id);
         }
     }
 

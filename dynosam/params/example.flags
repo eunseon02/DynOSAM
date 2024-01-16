@@ -7,4 +7,15 @@
 --static_point_sigma=2.0
 --dynamic_point_sigma=4.0
 --use_gt_camera_pose=true
---dp_init_sigma_perturb=3
+
+# 0: Initalise from perturbed gt pose 1: Initalise from gt depth with modified scale.
+--dynamic_point_init_func_type=1
+# Used when dynamic_point_init_func_type==1
+# A uniform distribution is used (with these being a, b) to generate a scale value within this range
+# which is used to scale (multiply) the depth of the point directly
+--min_depth_scale=0.4
+--mmax_depth_scale=1.4
+
+# Sigma to use on the gt object pose when initalising dynamic points near the pose.
+# Used when Used when dynamic_point_init_func_type==0
+--dp_init_sigma_perturb=1.0

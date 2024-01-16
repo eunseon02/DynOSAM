@@ -47,7 +47,9 @@ public:
 
     //arg 2 is measurement from frontend
     using PoseInitFunc = std::function<gtsam::Pose3(FrameId, const gtsam::Pose3&, const GroundTruthInputPacket&)>;
-    using DynamicPointInitFunc = std::function<gtsam::Point3(FrameId, TrackletId, ObjectId, const Keypoint&, const GroundTruthInputPacket&)>;
+    //pose3 is the camera pose being initalised in the graph at this frame id
+    using DynamicPointInitFunc = std::function<gtsam::Point3(
+        FrameId, TrackletId, ObjectId, const Keypoint&, const gtsam::Pose3&, const GroundTruthInputPacket&)>;
     //frame is is k so the motion should go from k-1 to k
     using MotionInitFunc = std::function<gtsam::Pose3(FrameId, ObjectId, const GroundTruthInputPacket&)>;
 
@@ -85,6 +87,7 @@ private:
 
     gtsam::Values state_;
     gtsam::FastMap<FrameId,GroundTruthInputPacket> gt_packet_map_;
+    gtsam::FastMap<FrameId,MonocularInstanceOutputPacket::ConstPtr> input_packet_map_;
 
     gtsam::SharedNoiseModel robust_static_pixel_noise_; //! Robust 2d isotropic pixel noise on static points (for projection factors)
     gtsam::SharedNoiseModel robust_dynamic_pixel_noise_; //! Robust 2d isotropic pixel noise on dynamic points (for projection factors)
@@ -101,6 +104,8 @@ private:
     gtsam::FastMap<TrackletId, std::vector<GenericProjectionFactor::shared_ptr>> dynamic_factor_map;
     gtsam::FastMap<ObjectId, std::vector<LandmarkMotionTernaryFactor::shared_ptr>> dynamic_motion_factor_map;
     gtsam::FastMap<TrackletId, bool> dynamic_in_graph_factor_map;
+    //updated when a motion variable is added and we update the last time a motion was added for this object
+    gtsam::FastMap<ObjectId, FrameId> object_in_graph_;
     gtsam::FastMap<TrackletId, gtsam::Values> dynamic_initial_points;
 
 
