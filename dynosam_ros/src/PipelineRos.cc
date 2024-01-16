@@ -64,7 +64,7 @@ DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& option
 
 
 std::string DynoPipelineManagerRos::getParamsPath() {
-     return searchForPathWithParams("params_folder_path", "dynosam/params",
+     return searchForPathWithParams("params_folder_path", "dynosam/params/",
         "Path to the folder containing the yaml files with the DynoVIO parameters.");
 }
 

@@ -24,13 +24,19 @@
 #pragma once
 
 #include <string>
+#include <gflags/gflags.h>
+
+//defined in BackendParamd.cc
+DECLARE_double(static_point_sigma);
+DECLARE_double(dynamic_point_sigma);
 
 namespace dyno {
 
+
 struct BackendParams {
 
-    //TODO: static and dynamic points should not have same sigma (dynamic higher!!)
-    double smart_projection_noise_sigma_ = 2; //! Isotropic noise used for the smart projection factor (mono) on static points
+    double static_smart_projection_noise_sigma_ = FLAGS_static_point_sigma; //! Isotropic noise used for the smart projection factor (mono) on static points
+    double dynamic_smart_projection_noise_sigma_ = FLAGS_dynamic_point_sigma; //! Isotropic noise used for the smart projection factor (mono) on dynamic points
 
     double odometry_rotation_sigma_ = 0.02; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = 0.01; //! sigma used to construct the noise model on the translation component of the odomety (between factor)

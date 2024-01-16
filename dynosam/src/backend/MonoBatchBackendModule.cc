@@ -28,6 +28,8 @@
 
 #include "dynosam/utils/GtsamUtils.hpp"
 
+#include <random>
+
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/LevenbergMarquardtParams.h>
 
@@ -66,8 +68,15 @@ MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_para
             object_pose_gt.L_camera_,
             FLAGS_dp_init_sigma_perturb);
 
+        static std::random_device rd;  // a seed source for the random number engine
+        static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+        std::uniform_real_distribution distrib(-0.5, 0.5);
+
         //Z coordinate in camera frame
-        const double Z = gt_pose_camera.z();
+        double Z = gt_pose_camera.z();
+        Z += distrib(gen);
+
+
 
         //Convert (distorted) image coordinates uv to intrinsic coordinates xy
         gtsam::Point2 pc = gtsam_calibration_->calibrate(measurement);
@@ -87,6 +96,14 @@ MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_para
     {
         return gtsam::Pose3::Identity();
     };
+
+    auto huber_static =
+        gtsam::noiseModel::mEstimator::Huber::Create(0.00001, gtsam::noiseModel::mEstimator::Base::ReweightScheme::Block);
+
+    //used for projection factor while static_pixel_noise_ (while is not mEstimator, is used for smart factors)
+    robust_static_pixel_noise_ = gtsam::noiseModel::Robust::Create(huber_static, static_pixel_noise_);
+    //dont use robust noise model for dynamic points -> this stops the reconstruction of the dynamic objects
+    robust_dynamic_pixel_noise_ = dynamic_pixel_noise_;
 
 
 }
@@ -176,8 +193,8 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         }
 
         gtsam::LevenbergMarquardtParams lm_params;
-        lm_params.setMaxIterations(100);
-        lm_params.verbosityLM = gtsam::LevenbergMarquardtParams::VerbosityLM::SUMMARY;
+        lm_params.setMaxIterations(300);
+        // lm_params.verbosityLM = gtsam::LevenbergMarquardtParams::VerbosityLM::SUMMARY;
 
         lm_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
         // // // params.setRelativeErrorTol(-std::numeric_limits<double>::max());
@@ -492,7 +509,7 @@ void MonoBatchBackendModule::runStaticUpdate(
             // it and therefore, should not be in any of the other data structures
             SmartProjectionFactor::shared_ptr smart_factor =
                 factor_graph_tools::constructSmartProjectionFactor(
-                    static_smart_noise_,
+                    static_pixel_noise_,
                     gtsam_calibration_,
                     static_projection_params_
                 );
@@ -536,7 +553,7 @@ void MonoBatchBackendModule::runStaticUpdate(
 
                         new_factors_.emplace_shared<GenericProjectionFactor>(
                             measured,
-                            static_smart_noise_,
+                            robust_static_pixel_noise_,
                             pose_symbol,
                             lmk_symbol,
                             gtsam_calibration_
@@ -552,7 +569,7 @@ void MonoBatchBackendModule::runStaticUpdate(
             //already in graph
             auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                 kp,
-                static_smart_noise_,
+                robust_static_pixel_noise_,
                 pose_key,
                 lmk_symbol,
                 gtsam_calibration_,
@@ -703,8 +720,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
                 auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                     kp,
-                    //note: using static noise
-                    static_smart_noise_,
+                    robust_dynamic_pixel_noise_,
                     cam_symbol,
                     dynamic_point_symbol,
                     gtsam_calibration_
@@ -776,8 +792,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
             auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                 kp,
-                //note: using static noise
-                static_smart_noise_,
+                robust_dynamic_pixel_noise_,
                 pose_key,
                 current_dynamic_point_symbol,
                 gtsam_calibration_

@@ -42,13 +42,13 @@ BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera)
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {
-    //set static projection smart noise
-    static_smart_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.smart_projection_noise_sigma_);
-    auto huber =
-        gtsam::noiseModel::mEstimator::Huber::Create(0.00001, gtsam::noiseModel::mEstimator::Base::ReweightScheme::Block);
-    static_projection_noise_ = gtsam::noiseModel::Robust::Create(huber, static_smart_noise_);
+    //set static noise
+    static_pixel_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.static_smart_projection_noise_sigma_);
+    CHECK(static_pixel_noise_);
 
-    CHECK(static_smart_noise_);
+    //set dynamic noise
+    dynamic_pixel_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.dynamic_smart_projection_noise_sigma_);
+    CHECK(dynamic_pixel_noise_);
 
     gtsam::Vector6 odom_sigmas;
     odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);

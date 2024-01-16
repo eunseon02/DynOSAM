@@ -2,4 +2,9 @@
 
 --test_flag=11
 
+
+# backend parameters
+--static_point_sigma=2.0
+--dynamic_point_sigma=4.0
+--use_gt_camera_pose=true
 --dp_init_sigma_perturb=3

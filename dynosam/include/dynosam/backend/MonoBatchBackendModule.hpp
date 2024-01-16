@@ -86,6 +86,10 @@ private:
     gtsam::Values state_;
     gtsam::FastMap<FrameId,GroundTruthInputPacket> gt_packet_map_;
 
+    gtsam::SharedNoiseModel robust_static_pixel_noise_; //! Robust 2d isotropic pixel noise on static points (for projection factors)
+    gtsam::SharedNoiseModel robust_dynamic_pixel_noise_; //! Robust 2d isotropic pixel noise on dynamic points (for projection factors)
+
+
 
     TrackletIdToProjectionStatus tracklet_to_status_map_; //only used for static points currently
     SmartProjectionFactorMap smart_factor_map_;

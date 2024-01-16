@@ -66,7 +66,8 @@ protected:
 
     //params for factors
     SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
-    gtsam::SharedNoiseModel static_smart_noise_; //! Smart  factor noise for static points when they are smart factors
+    gtsam::SharedNoiseModel static_pixel_noise_; //! 2d isotropic pixel noise on static points
+    gtsam::SharedNoiseModel dynamic_pixel_noise_; //! 2d isotropic pixel noise on dynamic points
     gtsam::SharedNoiseModel static_projection_noise_; //! Projection factor noise for static points
     gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
     gtsam::SharedNoiseModel initial_pose_prior_;

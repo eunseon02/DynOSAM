@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,38 +21,7 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/backend/BackendParams.hpp"
 
-#include "dynosam_ros/PipelineRos.hpp"
-#include "dynosam_ros/Utils.hpp"
-
-#include "rclcpp/rclcpp.hpp"
-#include "rclcpp/executor.hpp"
-
-#include <glog/logging.h>
-#include <gflags/gflags.h>
-
-DEFINE_int32(test_flag, 10, "A test flag");
-
-
-int main(int argc, char* argv[]) {
-    auto non_ros_args = dyno::initRosAndLogging(argc, argv);
-
-    rclcpp::NodeOptions options;
-    options.arguments(non_ros_args);
-    options.use_intra_process_comms(true);
-
-    rclcpp::executors::SingleThreadedExecutor exec;
-    auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
-
-    exec.add_node(ros_pipeline);
-    while(rclcpp::ok()) {
-        if(!ros_pipeline->spinOnce()) {
-            break;
-        }
-        exec.spin_some();
-    }
-
-    ros_pipeline.reset();
-
-
-}
+DEFINE_double(static_point_sigma, 2.0, "Isotropic pixel noise used on static points");
+DEFINE_double(dynamic_point_sigma, 8,"Isotropic pixel noise used on dynamic points");

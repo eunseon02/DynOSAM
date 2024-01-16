@@ -55,6 +55,7 @@ MonoBackendModule::MonoBackendModule(const BackendParams& backend_params, Camera
     isam_params.relinearizeThreshold = 0.01;
 
     smoother_ = std::make_unique<gtsam::ISAM2>(isam_params);
+
 }
 
 MonoBackendModule::~MonoBackendModule() {
@@ -355,7 +356,7 @@ void MonoBackendModule::updateSmartStaticObservations(
             // it and therefore, should not be in any of the other data structures
             SmartProjectionFactor::shared_ptr smart_factor =
                 factor_graph_tools::constructSmartProjectionFactor(
-                    static_smart_noise_,
+                    static_pixel_noise_,
                     gtsam_calibration_,
                     static_projection_params_
                 );
@@ -522,7 +523,7 @@ void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, 
         CHECK_EQ(tracklet_to_status_map_.at(tracklet_id).pf_type_, ProjectionFactorType::PROJECTION);
         new_projection_factors.emplace_shared<GenericProjectionFactor>(
                 kp,
-                static_smart_noise_,
+                static_pixel_noise_,
                 CameraPoseSymbol(frame_id),
                 StaticLandmarkSymbol(tracklet_id),
                 gtsam_calibration_
@@ -894,7 +895,7 @@ void MonoBackendModule::addInitalObjectValues(
 
 //             SmartProjectionFactor::shared_ptr smart_factor =
 //                 factor_graph_tools::constructSmartProjectionFactor(
-//                     static_smart_noise_,
+//                     static_pixel_noise_,
 //                     gtsam_calibration_,
 //                     static_projection_params_
 //                 );
@@ -958,7 +959,7 @@ void MonoBackendModule::addInitalObjectValues(
 
 //             new_factors.emplace_shared<GenericProjectionFactor>(
 //                 kp,
-//                 static_smart_noise_,
+//                 static_pixel_noise_,
 //                 pose_symbol,
 //                 lmk_symbol,
 //                 gtsam_calibration_
@@ -1000,7 +1001,7 @@ void MonoBackendModule::addInitalObjectValues(
 
 //             new_factors.emplace_shared<GenericProjectionFactor>(
 //                 measured,
-//                 static_smart_noise_,
+//                 static_pixel_noise_,
 //                 pose_symbol,
 //                 lmk_symbol,
 //                 gtsam_calibration_
@@ -1177,7 +1178,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 // it and therefore, should not be in any of the other data structures
                 SmartProjectionFactor::shared_ptr smart_factor =
                     factor_graph_tools::constructSmartProjectionFactor(
-                        static_smart_noise_,
+                        static_pixel_noise_,
                         gtsam_calibration_,
                         static_projection_params_
                     );
@@ -1221,7 +1222,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
 
                             new_factors_.emplace_shared<GenericProjectionFactor>(
                                 measured,
-                                static_smart_noise_,
+                                static_pixel_noise_,
                                 pose_symbol,
                                 lmk_symbol,
                                 gtsam_calibration_
@@ -1237,7 +1238,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 //already in graph
                 auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                     kp,
-                    static_smart_noise_,
+                    static_pixel_noise_,
                     pose_symbol,
                     lmk_symbol,
                     gtsam_calibration_,
@@ -1424,7 +1425,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                     auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                         kp,
                         //note: using static noise
-                        static_smart_noise_,
+                        static_pixel_noise_,
                         cam_symbol,
                         dynamic_point_symbol,
                         gtsam_calibration_
@@ -1499,7 +1500,7 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
                 auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                     kp,
                     //note: using static noise
-                    static_smart_noise_,
+                    static_pixel_noise_,
                     pose_symbol,
                     current_dynamic_point_symbol,
                     gtsam_calibration_
