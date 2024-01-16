@@ -23,6 +23,10 @@
 
 #include "dynosam/backend/MonoBackendTools.hpp"
 #include "dynosam/utils/Numerical.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/common/Camera.hpp"
+#include <gtsam/geometry/triangulation.h>
+#include <opencv2/core/eigen.hpp>
 
 namespace dyno {
 
@@ -181,6 +185,11 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(const gtsam::Pose3& X_wor
 }
 
 
+/**
+ * @brief Compute point coorindates in the camera frame from their depths and pixels
+ *
+ */
+
 gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd depths, const gtsam::Point2Vector observations){
   CHECK_EQ(depths.size(), observations.size());
 
@@ -242,8 +251,77 @@ bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths){
   return (standard_deviation <= std_thres);
 }
 
+/**
+ * @brief Estimate the depth of the object using the background pixels below the object
+ *
+ */
+
+double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
+  const gtsam::Pose3& X_world_camera_curr,
+  const Camera::Ptr camera, 
+  const Frame& prev_frame, 
+  const cv::Mat& prev_optical_flow, 
+  const ObjectId obj_id){
 
 
+  TrackletIds obj_tracklets = prev_frame.object_observations_.at(obj_id).object_features_;
+  cv::Mat curr_semantic_mask = prev_frame.tracking_images_.get<ImageType::MotionMask>();
+
+  int n_points = obj_tracklets.size();
+  std::vector<Keypoint> ground_pixels_prev;
+  std::vector<Keypoint> ground_pixels_curr;
+  for (int i_points = 0; i_points < n_points; i_points++){
+    Feature::Ptr this_obj_feature = prev_frame.at(obj_tracklets[i_points]);
+    Keypoint this_pixel = this_obj_feature->keypoint_;
+
+    int u = functional_keypoint::u(this_pixel);
+    cv::Mat this_semantic_col = curr_semantic_mask.col(u);
+    int i_row = 0;
+    for (i_row = functional_keypoint::v(this_pixel); i_row < curr_semantic_mask.rows; i_row++){
+      if (this_semantic_col.at<ObjectId>(i_row) == 0){ // 0 is Background
+        break;
+      }
+    }
+
+    if (i_row < curr_semantic_mask.rows - 1){
+      ground_pixels_prev.push_back(Keypoint(u, i_row));
+      int v = i_row;
+      double flow_xe = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[0]);
+      double flow_ye = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[1]);
+
+      OpticalFlow flow(flow_xe, flow_ye);
+      ground_pixels_curr.push_back(Feature::CalculatePredictedKeypoint(this_pixel, flow));
+    }
+  }
+
+  int n_ground_pixels = ground_pixels_prev.size();
+  std::vector<gtsam::Point3> ground_points;
+  std::vector<gtsam::Pose3> cam_poses({X_world_camera_prev, X_world_camera_curr});
+
+  const auto& camera_params = camera->getParams();
+  auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
+      camera_params.constructGtsamCalibration<Camera::CalibrationType>());
+
+  gtsam::Matrix3 intrinsic;
+  cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
+
+  double depth_sum = 0.0;
+
+  for (int i_ground_pixels = 0; i_ground_pixels < n_ground_pixels; i_ground_pixels++){
+    gtsam::Point2Vector measurments({ground_pixels_prev[i_ground_pixels], ground_pixels_curr[i_ground_pixels]});
+    gtsam::Point3 this_point = gtsam::triangulatePoint3(cam_poses, gtsam_calibration, measurments);
+    ground_points.push_back(this_point);
+
+    // TODO: Filter these points/depths and reject outliers
+    gtsam::Point3 this_point_camera_curr = intrinsic*X_world_camera_curr.transformTo(this_point);
+    depth_sum += this_point_camera_curr.z();
+
+  }
+
+  double obj_depth =depth_sum / n_ground_pixels;
+
+  return obj_depth;
+}
 
 } //mono_backend_tools
 } //dyno
