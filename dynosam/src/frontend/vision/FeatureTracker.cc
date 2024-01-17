@@ -327,6 +327,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features) {
   // first dectect dynamic points
   const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
+  //flow is going to take us from THIS frame to the next frame (which does not make sense for a realtime system)
   const cv::Mat& flow = tracking_images.get<ImageType::OpticalFlow>();
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 

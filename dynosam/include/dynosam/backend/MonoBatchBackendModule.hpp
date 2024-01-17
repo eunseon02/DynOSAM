@@ -78,6 +78,10 @@ private:
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const DecompositionRotationEstimates& estimated_motions);
 
+    void checkForScalePriors(
+        FrameId current_frame_id,
+        const DecompositionRotationEstimates& estimated_motions);
+
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
     DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;

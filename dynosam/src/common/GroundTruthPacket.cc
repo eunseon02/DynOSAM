@@ -33,6 +33,14 @@
 
 namespace dyno {
 
+//copied from KittiSemanticToMotion.cc but not linked so might mismatch with semantic image?
+bool isMoving(const gtsam::Pose3& prev_L_world, const gtsam::Pose3& curr_L_world, double tol_m = 0.4) {
+    gtsam::Vector3 t_diff = curr_L_world.translation() - prev_L_world.translation();
+    // L2 norm - ie. magnitude
+    double t_error = t_diff.norm();
+    return t_error > tol_m;
+}
+
 void ObjectPoseGT::setMotions(const ObjectPoseGT& previous_object_gt, const gtsam::Pose3& prev_X_world, const gtsam::Pose3& curr_X_world) {
     checkAndThrow(previous_object_gt.frame_id_ == frame_id_ - 1, "Previous object gt frame is not at k-1. Current frame = " + std::to_string(frame_id_) + " and previous frame =" + std::to_string(previous_object_gt.frame_id_));
     checkAndThrow(previous_object_gt.object_id_ == object_id_, "Previous object gt does not have the same object id");

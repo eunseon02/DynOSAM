@@ -129,11 +129,6 @@ private:
         cv::Mat channels[2];
         //now only take g and r channels
         cv::split(unscaled_out_flow, channels);
-        // cv::Mat& g = channels[1];
-        // cv::Mat& r = channels[2];
-        // g *= w -1.0;
-        // r *= h -1.0;
-
         // g,r == flow_y,x normalized by height,width
         cv::Mat& flow_y = channels[1];
         cv::Mat& flow_x = channels[2];

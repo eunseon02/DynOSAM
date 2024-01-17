@@ -76,15 +76,31 @@ void Camera::backProject(const Keypoints& kps, const Depths& depths, Landmarks* 
 }
 void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk) const {
     CHECK(lmk);
-    *lmk = camera_impl_->backproject(kp, depth);
+    backProject(kp, depth, lmk, gtsam::Pose3::Identity());
 }
 
 //TODO: no tests
 void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, const gtsam::Pose3& X_world) const {
   CHECK(lmk);
-  Landmark lmk_c;
-  backProject(kp, depth, &lmk_c);
-  *lmk = X_world * lmk_c;
+  *lmk = X_world * camera_impl_->backproject(kp, depth);
+}
+
+void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk) const {
+  CHECK(lmk);
+  backProjectFromZ(kp, Z, lmk, gtsam::Pose3::Identity());
+}
+
+void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world) const {
+  CHECK(lmk);
+  const auto calibration = camera_impl_->calibration();
+  //Convert (distorted) image coordinates uv to intrinsic coordinates xy
+  gtsam::Point2 pc = calibration.calibrate(kp);
+  // projection equation x = f(X/Z). The f is used to normalize the image cooridinates and since we already have
+  // normalized cordinates xy, we can omit the f
+  const double X = pc(0) * Z;
+  const double Y = pc(1) * Z;
+
+  *lmk = X_world * gtsam::Vector3(X, Y, Z);
 }
 
 

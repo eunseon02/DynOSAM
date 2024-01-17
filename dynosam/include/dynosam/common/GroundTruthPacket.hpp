@@ -32,9 +32,13 @@
 
 namespace dyno {
 
-
+//should only be included if visible??
 struct ObjectPoseGT {
     DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
+
+    // struct MotionInfo {
+    //     bool is_moving{}
+    // };
 
     FrameId frame_id_; //k
     ObjectId object_id_;
@@ -64,6 +68,7 @@ struct ObjectPoseGT {
 
     /**
      * @brief Calculates and sets prev_*_current_world_ using ground truth object in the previous frame.
+     * Shoudl be used when constructed the gt packets in the various DataProviders
      *
      * This object is epxected to be at frame k, and the previous motion should be at frame k-1. The previous_object_gt
      * should have the same object ID and an exception will be thrown if either of these checks fail.
@@ -94,6 +99,7 @@ public:
 
     FrameId frame_id_;
     gtsam::Pose3 X_world_; //camera pose in world frame
+    //! Vector of GT objects. This should contain all the objects in the sequence
     std::vector<ObjectPoseGT> object_poses_;
 
     bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const;

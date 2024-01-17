@@ -95,14 +95,37 @@ public:
 
   /**
    * @brief Back projects a single keypoint from the image frame and into the
-   * camera frame given a depth in z.
+   * camera frame given a depth.
    *
-   * @param kp Keypoint to back project
-   * @param depth Depth value to project along
-   * @param lmk  3D landmark to set.
+   * @param kp const Keypoint& Keypoint to back project
+   * @param depth const Depth& Depth value to project along
+   * @param lmk Landmark* 3D landmark to set.
    */
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk) const;
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, const gtsam::Pose3& X_world) const;
+
+  /**
+   * @brief Projects a point using a keypoint measurement and a Z measurement, rather than depth
+   *
+   * Depth is the depth along a projected ray while Z is the distance the point is from the camera frame along the Z
+   * axis
+   *
+   *                  * (P)
+   *          |      /
+   *          |     /
+   *          |    /
+   *        Z |   / d (depth)
+   *          |  /
+   *          | /
+   *          |/
+   *      --------- (Camera Plane)
+   *
+   * @param kp const Keypoint&
+   * @param Z const double Z distance of the point along the Z axis
+   * @param lmk Landmark* 3D landmark to set.
+   */
+  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk) const;
+  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world) const;
 
   static Landmark cameraToWorldConvention(const Landmark& lmk);
 

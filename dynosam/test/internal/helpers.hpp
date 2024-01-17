@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/common/Camera.hpp"
 
 #include <gtest/gtest.h>
 #include <ament_index_cpp/get_package_prefix.hpp>
@@ -67,4 +68,18 @@ inline void compareKeypoints(const Keypoints& lmks_1,
   }
 
 
+inline CameraParams makeDefaultCameraParams() {
+  CameraParams::IntrinsicsCoeffs intrinsics(4);
+  CameraParams::DistortionCoeffs distortion(4);
+  intrinsics.at(0) = 721.5377;  // fx
+  intrinsics.at(1) = 721.5377;  // fy
+  intrinsics.at(2) = 609.5593;  // u0
+  intrinsics.at(3) = 172.8540;  // v0
+  return CameraParams(intrinsics, distortion, cv::Size(640, 480), "radtan");
 }
+
+inline Camera makeDefaultCamera() {
+  return Camera(makeDefaultCameraParams());
+}
+
+} //dyno_testing

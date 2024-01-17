@@ -28,6 +28,8 @@
 #include <gtsam/base/Matrix.h>
 #include <gtsam/geometry/Pose3.h>
 
+#include <gtsam/base/FastMap.h>
+
 #include <opencv4/opencv2/opencv.hpp>
 #include <vector>
 #include <optional>
@@ -141,7 +143,7 @@ struct ReferenceFrameEstimate {
  * @tparam Estimate
  */
 template<typename Key, typename Estimate>
-using EstimateMap = std::unordered_map<Key, ReferenceFrameEstimate<Estimate>>;
+using EstimateMap = gtsam::FastMap<Key, ReferenceFrameEstimate<Estimate>>;
 
 /// @brief Map of object ids to ReferenceFrameEstimate's of motions
 using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;

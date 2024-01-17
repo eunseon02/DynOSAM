@@ -149,50 +149,18 @@ private:
 };
 
 
-template<typename MEASUREMENT>
-class DynamicObjectTrackletManager {
 
+class DynamicObjectManager {
 public:
-    using DynamicObjectTrackletM = DynamicObjectTracklet<MEASUREMENT>;
-
     using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;
     using FrameToObjects = gtsam::FastMap<FrameId, ObjectIds>;
     using FrameToTracklets = gtsam::FastMap<FrameId, TrackletIds>;
-
-
     using TrackletIdTObject = gtsam::FastMap<TrackletId, ObjectId>;
-    /// @brief TrackletId to a DynamicObjectTracklet for quick access
-    using TrackletMap = gtsam::FastMap<TrackletId, typename DynamicObjectTrackletM::Ptr>;
 
-    DynamicObjectTrackletManager() {}
-
-    void add(ObjectId object_id, const TrackletId tracklet_id, const FrameId frame_id, const MEASUREMENT& measurement) {
-        typename DynamicObjectTrackletM::Ptr tracklet = nullptr;
-        if(trackletExists(tracklet_id)) {
-            tracklet = tracklet_map_.at(tracklet_id);
-        }
-        else {
-            //must be a completely new tracklet as we dont have an tracklet associated with it
-            tracklet = std::make_shared<DynamicObjectTrackletM>(tracklet_id);
-            CHECK(tracklet);
-
-            tracklet_map_.insert({tracklet_id, tracklet});
-        }
-
-        CHECK(tracklet);
-        CHECK(!tracklet->exists(frame_id)) << "Attempting to add tracklet measurement with object id "
-            << object_id << " and tracklet_id " << tracklet_id
-            << " to frame " << frame_id << " but an entry already exists at this frame";
-
-
-        addToStructure(object_trackletid_map_, object_id, tracklet_id);
+    virtual void add(ObjectId object_id, const TrackletId tracklet_id, const FrameId frame_id) {
+        addToStructure(object_tracklet_map_, object_id, tracklet_id);
         addToStructure(frame_to_objects_map_, frame_id, object_id);
         addToStructure(frame_to_tracklets_map_, frame_id, tracklet_id);
-
-        CHECK(trackletExists(tracklet->getTrackletId()));
-
-        tracklet->add(frame_id, measurement);
-
 
         //sanity check that tracklet Id only every appears on the same object
         //assumes that the tracklet is correcrly associated with the first object label association
@@ -211,12 +179,7 @@ public:
 
     TrackletIds getPerObjectTracklets(const ObjectId object_id) {
         checkAndThrow(objectExists(object_id), "getPerObjectTracklets query failed as object id id does not exist. Offedning Id " + std::to_string(object_id));
-        return object_trackletid_map_.at(object_id);
-    }
-
-    DynamicObjectTrackletM& getByTrackletId(const TrackletId tracklet_id) {
-        checkAndThrow(trackletExists(tracklet_id), "DynamicObjectTracklet query failed as tracklet id does not exist. Offedning Id " + std::to_string(tracklet_id));
-        return *tracklet_map_.at(tracklet_id);
+        return object_tracklet_map_.at(object_id);
     }
 
     inline bool frameExists(const FrameId frame_id) const {
@@ -224,11 +187,11 @@ public:
     }
 
     inline bool objectExists(const ObjectId object_id) {
-        return object_trackletid_map_.exists(object_id);
+        return object_tracklet_map_.exists(object_id);
     }
 
     inline bool trackletExists(const TrackletId tracklet_id) const {
-        return tracklet_map_.exists(tracklet_id);
+        return tracklet_to_object_map_.exists(tracklet_id);
     }
 
     inline ObjectId getObjectIdByTracklet(const TrackletId tracklet_id) const {
@@ -250,7 +213,7 @@ public:
         return FrameIds(all_frames.begin(), all_frames.end());
     }
 
-private:
+protected:
     /**
      * @brief Add to map of key to some vector of values.
      *
@@ -280,13 +243,75 @@ private:
         }
     }
 
-
-private:
-    ObjectToTrackletIdMap object_trackletid_map_; //!! object ids to tracklet ids
-    TrackletMap tracklet_map_;
+protected:
+    ObjectToTrackletIdMap object_tracklet_map_; //! object ids to tracklet ids
     FrameToObjects frame_to_objects_map_;
     FrameToTracklets frame_to_tracklets_map_;
     TrackletIdTObject tracklet_to_object_map_;
+
+
+
+};
+
+
+template<typename MEASUREMENT>
+class DynamicObjectTrackletManager : public DynamicObjectManager {
+
+public:
+    using DynamicObjectTrackletM = DynamicObjectTracklet<MEASUREMENT>;
+
+    /// @brief TrackletId to a DynamicObjectTracklet for quick access
+    using TrackletMap = gtsam::FastMap<TrackletId, typename DynamicObjectTrackletM::Ptr>;
+
+    DynamicObjectTrackletManager() {}
+
+    void add(ObjectId object_id, const TrackletId tracklet_id, const FrameId frame_id, const MEASUREMENT& measurement) {
+        DynamicObjectManager::add(object_id, tracklet_id, frame_id);
+        typename DynamicObjectTrackletM::Ptr tracklet = nullptr;
+        if(trackletExists(tracklet_id)) {
+            tracklet = tracklet_map_.at(tracklet_id);
+        }
+        else {
+            //must be a completely new tracklet as we dont have an tracklet associated with it
+            tracklet = std::make_shared<DynamicObjectTrackletM>(tracklet_id);
+            CHECK(tracklet);
+
+            tracklet_map_.insert({tracklet_id, tracklet});
+        }
+
+        CHECK(tracklet);
+        CHECK(!tracklet->exists(frame_id)) << "Attempting to add tracklet measurement with object id "
+            << object_id << " and tracklet_id " << tracklet_id
+            << " to frame " << frame_id << " but an entry already exists at this frame";
+
+
+
+        CHECK(trackletExists(tracklet->getTrackletId()));
+
+        tracklet->add(frame_id, measurement);
+
+
+        //sanity check that tracklet Id only every appears on the same object
+        //assumes that the tracklet is correcrly associated with the first object label association
+        if(tracklet_to_object_map_.exists(tracklet_id)) {
+            CHECK_EQ(tracklet_to_object_map_.at(tracklet_id), object_id);
+        }
+        else {
+            tracklet_to_object_map_.insert({tracklet_id, object_id});
+        }
+    }
+
+    DynamicObjectTrackletM& getByTrackletId(const TrackletId tracklet_id) {
+        checkAndThrow(trackletExists(tracklet_id), "DynamicObjectTracklet query failed as tracklet id does not exist. Offedning Id " + std::to_string(tracklet_id));
+        return *tracklet_map_.at(tracklet_id);
+    }
+
+    inline bool trackletExists(const TrackletId tracklet_id) const {
+        return tracklet_map_.exists(tracklet_id);
+    }
+
+private:
+    TrackletMap tracklet_map_;
 };
 
 
