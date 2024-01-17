@@ -23,8 +23,6 @@
 
 #include "dynosam/backend/MonoBackendTools.hpp"
 #include "dynosam/utils/Numerical.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
-#include "dynosam/common/Camera.hpp"
 #include <gtsam/geometry/triangulation.h>
 #include <opencv2/core/eigen.hpp>
 

@@ -24,6 +24,8 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/common/Camera.hpp"
 
 #include <gtsam/geometry/triangulation.h>
 
@@ -54,6 +56,19 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(
   const gtsam::Point2Vector& observation_prev,
   const gtsam::Point2Vector& observation_curr,
   const gtsam::Matrix3& obj_rotation);
+
+gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd depths, const gtsam::Point2Vector observations);
+
+Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector points);
+
+bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths);
+
+double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
+  const gtsam::Pose3& X_world_camera_curr,
+  const Camera::Ptr camera, 
+  const Frame& prev_frame, 
+  const cv::Mat& prev_optical_flow, 
+  const ObjectId obj_id);
 
 
 } //mono_backend_tools
