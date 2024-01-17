@@ -66,7 +66,8 @@ bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths);
 double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
   const Camera::Ptr camera, 
-  const Frame& prev_frame, 
+  const cv::Mat& prev_semantic_mask, 
+  const cv::Mat& curr_semantic_mask, 
   const cv::Mat& prev_optical_flow, 
   const ObjectId obj_id);
 

@@ -252,45 +252,93 @@ bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths){
 /**
  * @brief Estimate the depth of the object using the background pixels below the object
  *
+ * returns 0.0 when the object is not found on this frame
  */
 
 double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
   const Camera::Ptr camera, 
-  const Frame& prev_frame, 
+  const cv::Mat& prev_semantic_mask, 
+  const cv::Mat& curr_semantic_mask, 
   const cv::Mat& prev_optical_flow, 
   const ObjectId obj_id){
 
 
-  TrackletIds obj_tracklets = prev_frame.object_observations_.at(obj_id).object_features_;
-  cv::Mat curr_semantic_mask = prev_frame.tracking_images_.get<ImageType::MotionMask>();
+  // TrackletIds obj_tracklets = prev_frame.object_observations_.at(obj_id).object_features_;
+  // cv::Mat curr_semantic_mask = prev_frame.tracking_images_.get<ImageType::MotionMask>();
 
-  int n_points = obj_tracklets.size();
+  cv::Mat obj_mask = (prev_semantic_mask == obj_id);
+  cv::imshow("Object Mask", obj_mask);
+
+  cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
+  cv::imshow("Object Mask Current", obj_mask_curr);
+
+  cv::Mat dilated_obj_mask;
+  cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT, 
+                                                    cv::Size(1, 11)); // a rectangle of 1*5
+  cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+  cv::imshow("Object Mask Dilated", dilated_obj_mask);
+
+  std::vector<std::vector<cv::Point> > contours;
+  cv::findContours(dilated_obj_mask, contours, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+  std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
+
+  if (contours.size() < 1){
+    return 0.0;
+  }
+
+  cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+    for (int i_point = 0; i_point < contours[i_contour].size(); i_point++){
+      // std::cout << "Contour point at " << contours[i_contour][i_point].x << ", " << contours[i_contour][i_point].y << std::endl;
+      contours_viz.at<uchar>(contours[i_contour][i_point].y, contours[i_contour][i_point].x) = 255;
+    }
+  }
+  cv::imshow("Contours", contours_viz);
+
+  cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+
+  // TODO: Check if there are more than 1 contour per object per frame
+  int n_points = contours[0].size();
   std::vector<Keypoint> ground_pixels_prev;
   std::vector<Keypoint> ground_pixels_curr;
   for (int i_points = 0; i_points < n_points; i_points++){
-    Feature::Ptr this_obj_feature = prev_frame.at(obj_tracklets[i_points]);
-    Keypoint this_pixel = this_obj_feature->keypoint_;
+    // Feature::Ptr this_obj_feature = prev_frame.at(obj_tracklets[i_points]);
+    // Keypoint this_pixel = this_obj_feature->keypoint_;
+    Keypoint this_pixel = gtsam::Point2(contours[0][i_points].x, contours[0][i_points].y);
 
     int u = functional_keypoint::u(this_pixel);
-    cv::Mat this_semantic_col = curr_semantic_mask.col(u);
+    cv::Mat this_semantic_col = prev_semantic_mask.col(u);
     int i_row = 0;
-    for (i_row = functional_keypoint::v(this_pixel); i_row < curr_semantic_mask.rows; i_row++){
-      if (this_semantic_col.at<ObjectId>(i_row) == 0){ // 0 is Background
+    // Search upwards up to the contour until we hit the descired object patch
+    for (i_row = prev_semantic_mask.rows-1; i_row >= functional_keypoint::v(this_pixel); i_row--){
+      if (this_semantic_col.at<ObjectId>(i_row) == obj_id){
         break;
       }
     }
 
-    if (i_row < curr_semantic_mask.rows - 1){
-      ground_pixels_prev.push_back(Keypoint(u, i_row));
-      int v = i_row;
+    // Verify that the previous pixel is a background pixel - in the case of an object being blocked by another one below it
+    if (this_semantic_col.at<ObjectId>(i_row+1) == 0){
+      int v = i_row+1;
       double flow_xe = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[0]);
       double flow_ye = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[1]);
 
       OpticalFlow flow(flow_xe, flow_ye);
-      ground_pixels_curr.push_back(Feature::CalculatePredictedKeypoint(this_pixel, flow));
+      Keypoint ground_pixel_curr = Feature::CalculatePredictedKeypoint(Keypoint(u, v), flow);
+      if (curr_semantic_mask.at<ObjectId>(ground_pixel_curr.y(), ground_pixel_curr.x()) == 0){
+        ground_pixels_prev.push_back(Keypoint(u, v));
+        ground_pixel_prev_viz.at<uchar>(v, u) = 255;
+        ground_pixels_curr.push_back(ground_pixel_curr);
+
+        ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
+      }
     }
   }
+
+  cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  cv::imshow("Ground pixels", ground_pixel_viz);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
@@ -307,7 +355,13 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
 
   for (int i_ground_pixels = 0; i_ground_pixels < n_ground_pixels; i_ground_pixels++){
     gtsam::Point2Vector measurments({ground_pixels_prev[i_ground_pixels], ground_pixels_curr[i_ground_pixels]});
-    gtsam::Point3 this_point = gtsam::triangulatePoint3(cam_poses, gtsam_calibration, measurments);
+    gtsam::Point3 this_point;
+    try {
+       this_point = gtsam::triangulatePoint3(cam_poses, gtsam_calibration, measurments);
+    }
+    catch(const gtsam::TriangulationCheiralityException& e) {
+       continue; 
+    }
     ground_points.push_back(this_point);
 
     // TODO: Filter these points/depths and reject outliers
