@@ -268,16 +268,16 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   // cv::Mat curr_semantic_mask = prev_frame.tracking_images_.get<ImageType::MotionMask>();
 
   cv::Mat obj_mask = (prev_semantic_mask == obj_id);
-  cv::imshow("Object Mask", obj_mask);
+  // cv::imshow("Object Mask", obj_mask);
 
   cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
-  cv::imshow("Object Mask Current", obj_mask_curr);
+  // cv::imshow("Object Mask Current", obj_mask_curr);
 
   cv::Mat dilated_obj_mask;
   cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT, 
                                                     cv::Size(1, 11)); // a rectangle of 1*5
   cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
-  cv::imshow("Object Mask Dilated", dilated_obj_mask);
+  // cv::imshow("Object Mask Dilated", dilated_obj_mask);
 
   std::vector<std::vector<cv::Point> > contours;
   cv::findContours(dilated_obj_mask, contours, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
@@ -288,14 +288,14 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     return 0.0;
   }
 
-  cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
-  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
-    for (int i_point = 0; i_point < contours[i_contour].size(); i_point++){
-      // std::cout << "Contour point at " << contours[i_contour][i_point].x << ", " << contours[i_contour][i_point].y << std::endl;
-      contours_viz.at<uchar>(contours[i_contour][i_point].y, contours[i_contour][i_point].x) = 255;
-    }
-  }
-  cv::imshow("Contours", contours_viz);
+  // cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  // for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+  //   for (int i_point = 0; i_point < contours[i_contour].size(); i_point++){
+  //     // std::cout << "Contour point at " << contours[i_contour][i_point].x << ", " << contours[i_contour][i_point].y << std::endl;
+  //     contours_viz.at<uchar>(contours[i_contour][i_point].y, contours[i_contour][i_point].x) = 255;
+  //   }
+  // }
+  // cv::imshow("Contours", contours_viz);
 
   cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
   cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
@@ -320,7 +320,8 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     }
 
     // Verify that the previous pixel is a background pixel - in the case of an object being blocked by another one below it
-    if (this_semantic_col.at<ObjectId>(i_row+1) == 0){
+    // Also make sure the pixel is not already at the bottom of the image - does not have a previous pixel
+    if (i_row < prev_semantic_mask.rows-1 && this_semantic_col.at<ObjectId>(i_row+1) == 0){
       int v = i_row+1;
       double flow_xe = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[0]);
       double flow_ye = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[1]);
@@ -329,16 +330,18 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
       Keypoint ground_pixel_curr = Feature::CalculatePredictedKeypoint(Keypoint(u, v), flow);
       if (curr_semantic_mask.at<ObjectId>(ground_pixel_curr.y(), ground_pixel_curr.x()) == 0){
         ground_pixels_prev.push_back(Keypoint(u, v));
-        ground_pixel_prev_viz.at<uchar>(v, u) = 255;
+        // ground_pixel_prev_viz.at<uchar>(v, u) = 255;
         ground_pixels_curr.push_back(ground_pixel_curr);
 
-        ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
+        // ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
       }
     }
   }
 
-  cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
-  cv::imshow("Ground pixels", ground_pixel_viz);
+  std::cout << "Passed ground pixel search.\n";
+
+  // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  // cv::imshow("Ground pixels", ground_pixel_viz);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
@@ -369,6 +372,8 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     depth_sum += this_point_camera_curr.z();
 
   }
+
+  std::cout << "Passed averaging depth.\n";
 
   double obj_depth =depth_sum / n_ground_pixels;
 
