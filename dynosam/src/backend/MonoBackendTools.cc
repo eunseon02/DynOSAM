@@ -282,7 +282,9 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   std::vector<std::vector<cv::Point> > contours;
   cv::findContours(dilated_obj_mask, contours, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
-  std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
+  if (contours.size()>0){
+    std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
+  }
 
   if (contours.size() < 1){
     return 0.0;
@@ -297,17 +299,26 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   // }
   // cv::imshow("Contours", contours_viz);
 
-  cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
-  cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  // cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  // cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
 
-  // TODO: Check if there are more than 1 contour per object per frame
-  int n_points = contours[0].size();
+
+  int n_points = 0;
+  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+    n_points += contours[i_contour].size();
+  }
+  std::vector<cv::Point> full_contour;
+  full_contour.reserve(n_points);
+  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+    full_contour.insert(full_contour.end(), contours[i_contour].begin(), contours[i_contour].end());
+  }
+  // n_points = full_contour.size();
   std::vector<Keypoint> ground_pixels_prev;
   std::vector<Keypoint> ground_pixels_curr;
   for (int i_points = 0; i_points < n_points; i_points++){
     // Feature::Ptr this_obj_feature = prev_frame.at(obj_tracklets[i_points]);
     // Keypoint this_pixel = this_obj_feature->keypoint_;
-    Keypoint this_pixel = gtsam::Point2(contours[0][i_points].x, contours[0][i_points].y);
+    Keypoint this_pixel = gtsam::Point2(full_contour[i_points].x, full_contour[i_points].y);
 
     int u = functional_keypoint::u(this_pixel);
     cv::Mat this_semantic_col = prev_semantic_mask.col(u);
@@ -375,7 +386,9 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
 
   std::cout << "Passed averaging depth.\n";
 
-  double obj_depth =depth_sum / n_ground_pixels;
+  double obj_depth = depth_sum / n_ground_pixels;
+
+  std::cout << "Estimated depth: " << obj_depth << std::endl;
 
   return obj_depth;
 }
