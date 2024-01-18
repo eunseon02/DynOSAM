@@ -150,7 +150,6 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
 
             for(const gtsam::Pose3& object_pose : poses) {
 
-                LOG(INFO) << object_pose;
                 geometry_msgs::msg::Point p;
                 p.x = object_pose.x();
                 p.y = object_pose.y();

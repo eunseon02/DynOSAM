@@ -4,13 +4,14 @@
 
 
 # backend parameters
---max_opt_iterations=100
+--max_opt_iterations=30
+--optimize_n_frame=40
 --static_point_sigma=2.0
 --dynamic_point_sigma=4.0
 --use_gt_camera_pose=true
 
 #if a sigma on the first set of object points should be added
---use_first_seen_dynamic_point_prior=false
+--use_first_seen_dynamic_point_prior=true
 # if use_first_seen_dynamic_point_prior==true, this will be the sigma used on the 3x3 noise model
 --first_seen_dynamic_point_sigma=4.0
 
@@ -25,3 +26,5 @@
 # which is used to scale (multiply) the depth of the point directly
 --min_depth_scale=0.4
 --mmax_depth_scale=1.4
+
+--scale_prior_sigma=0.2

@@ -51,6 +51,9 @@ DEFINE_double(max_depth_scale, 1.4, "Max value when generating a uniform distrib
 
 
 DEFINE_int32(max_opt_iterations, 300, "Max iteration of the LM solver");
+DEFINE_double(scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
+
+DEFINE_int32(optimize_n_frame, 15, "Runs the (full batch) optimziation every N frames");
 
 namespace dyno {
 
@@ -174,6 +177,9 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoBoostrapSpin(Mono
     gt_packet_map_.insert({current_frame_id, gt_packet});
     input_packet_map_.insert({current_frame_id, input});
 
+    DebugInfo debug_info;
+    debug_info.frame_id = current_frame_id;
+
     const gtsam::Pose3 T_world_camera = pose_init_func_(current_frame_id, input->T_world_camera_, gt_packet);
     gtsam::Key current_pose_symbol = CameraPoseSymbol(current_frame_id);
     gtsam::Key previous_pose_symbol = CameraPoseSymbol(current_frame_id - 1u);
@@ -181,6 +187,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoBoostrapSpin(Mono
     //add state
     new_values_.insert(current_pose_symbol, T_world_camera);
     new_factors_.addPrior(current_pose_symbol, T_world_camera, initial_pose_prior_);
+    debug_infos_.insert2(current_frame_id, debug_info);
 
     return {State::Nominal, nullptr};
 }
@@ -193,6 +200,10 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     const GroundTruthInputPacket gt_packet = input->gt_packet_.value();
     gt_packet_map_.insert({current_frame_id, gt_packet});
     input_packet_map_.insert({current_frame_id, input});
+
+    DebugInfo debug_info;
+    debug_info.frame_id = current_frame_id;
+    debug_infos_.insert2(current_frame_id, debug_info);
 
     const gtsam::Pose3 T_world_camera = pose_init_func_(current_frame_id, input->T_world_camera_, gt_packet);
     gtsam::Key current_pose_symbol = CameraPoseSymbol(current_frame_id);
@@ -305,7 +316,14 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         }
     };
 
-    if(current_frame_id % 15 == 0) {
+    std::stringstream ss;
+    for(const auto& debug_pair : debug_infos_) {
+        ss << debug_pair.second << "\n";
+    }
+
+    LOG(INFO) << ss.str();
+
+    if(current_frame_id % FLAGS_optimize_n_frame == 0) {
         handle_cheriality_optimize();
     }
 
@@ -414,7 +432,13 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
                 if(frame_ids.size() > 0) {
                     //check in order
                     auto prev_frame_id = frame_ids.back();
-                    CHECK_EQ(prev_frame_id + 1, frame_id);
+                    //they can be not in order when the object reappears and we use gt to relabal the object (but its now been seen out of order)
+                    // CHECK_EQ(prev_frame_id + 1, frame_id);
+                    //instead of running the CHECK, we do if statement and just stop trackin the object
+                    //TODO: HACK!
+                    if(prev_frame_id + 1 != frame_id) {
+                        break;
+                    }
                 }
 
                 frame_ids.push_back(frame_id);
@@ -744,7 +768,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
                 ObjectPoseGT object_pose_gt;
                 auto gt_frame_packet = gt_packet_map_.at(frame);
                 if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                    LOG(FATAL) << "Coudl not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
+                    LOG(FATAL) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
                 }
 
                 Landmark lmk_world = dynamic_point_init_func_(
@@ -757,6 +781,11 @@ void MonoBatchBackendModule::runDynamicUpdate(
                 );
 
 
+                CHECK(debug_infos_.exists(frame)) << "Debug info does not exist at frame " << frame;
+                DebugInfo& debug_info = debug_infos_.at(frame);
+                CHECK_EQ(debug_info.frame_id, frame);
+                debug_info.incrementNewlyTrackedObjectPoints(object_id);
+
                 //starting frame means this is the first observation of this tracklet
                 //and if the object does not exist in the graph yet it means this should be the first
                 //time weve seen this object as we update object_in_graph_ at the end of this function
@@ -766,11 +795,14 @@ void MonoBatchBackendModule::runDynamicUpdate(
                     //add prior on first time this point is seen
                     new_factors_.addPrior(dynamic_point_symbol, lmk_world,
                         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_first_seen_dynamic_point_sigma));
+                    debug_info.incrementInitialPriors(object_id);
                 }
 
                 // CHECK(!smoother_->valueExists(dynamic_point_symbol));
                 CHECK(!new_values_.exists(dynamic_point_symbol));
                 new_values_.insert(dynamic_point_symbol, lmk_world);
+
+
 
                 auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                     kp,
@@ -793,6 +825,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
                 CHECK(new_values_.exists(previous_dynamic_point_symbol));
 
                 auto gt_frame_packet = gt_packet_map_.at(frame);
+                DebugInfo& debug_info = debug_infos_.at(frame);
 
                 //motion that takes us from previous to current
                 gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame);
@@ -803,6 +836,9 @@ void MonoBatchBackendModule::runDynamicUpdate(
                     new_values_.insert(motion_symbol, motion_init_func_(
                         frame, object_id, gt_frame_packet
                     ));
+
+                    debug_info.objects_motions_added.insert(object_id);
+                    CHECK_EQ(debug_info.frame_id, frame);
 
                     safeAddConstantObjectVelocityFactor(frame, object_id, new_values_, new_factors_);
                     LOG(INFO) << "Added motion symbol " << DynoLikeKeyFormatter(motion_symbol);
@@ -836,6 +872,9 @@ void MonoBatchBackendModule::runDynamicUpdate(
             const gtsam::Pose3& cam_pose = new_values_.at<gtsam::Pose3>(cam_symbol);
 
             auto gt_frame_packet = gt_packet_map_.at(current_frame_id);
+            DebugInfo& debug_info = debug_infos_.at(current_frame_id);
+            CHECK_EQ(debug_info.frame_id, current_frame_id);
+
             const Landmark lmk_world = dynamic_point_init_func_(
                     current_frame_id,
                     tracked_id,
@@ -848,6 +887,7 @@ void MonoBatchBackendModule::runDynamicUpdate(
             CHECK(!new_values_.exists(current_dynamic_point_symbol));
             CHECK(new_values_.exists(previous_dynamic_point_symbol));
             new_values_.insert(current_dynamic_point_symbol, lmk_world);
+            debug_info.incrementExistingTrackedObjectPoints(object_id);
 
             auto projection_factor = boost::make_shared<GenericProjectionFactor>(
                 kp,
@@ -869,6 +909,8 @@ void MonoBatchBackendModule::runDynamicUpdate(
                         current_frame_id, object_id, gt_frame_packet
                 ));
                 safeAddConstantObjectVelocityFactor(current_frame_id, object_id, new_values_, new_factors_);
+                debug_info.objects_motions_added.insert(object_id);
+                CHECK_EQ(debug_info.frame_id, current_frame_id);
             }
 
             auto motion_factor = boost::make_shared<LandmarkMotionTernaryFactor>(
@@ -895,24 +937,30 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
     }
 
     const auto previous_frame_id = current_frame_id-1u;
+    DebugInfo& debug_info = debug_infos_.at(previous_frame_id);
+    CHECK_EQ(debug_info.frame_id, previous_frame_id);
     //get objects in last frame and compare to this frame
     const ObjectIds objects_in_last_frame = do_tracklet_manager_.getPerFrameObjects(previous_frame_id);
     for(ObjectId prev_object_id : objects_in_last_frame) {
         const auto object_id = prev_object_id;
+        LOG(INFO) << prev_object_id << " " << estimated_motions.exists(prev_object_id);
         //object is not in the current frame
         //this SHOULD (if all our tracking is correct) indicate that the object has disappeared
         //motion to take us from k-2 to k-1
         const auto prev_object_motion_key = ObjectMotionSymbol(prev_object_id, previous_frame_id);
+        const auto curr_object_motion_key = ObjectMotionSymbol(prev_object_id, current_frame_id);
+
         //we also need to check if the associated object motion is actually in the graph (as we need a certain number of observations before we add)
-        if(!estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key)) {
+        // if(!estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key)) {
+        //logic should be !estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key) but seems to be
+        //some discrepancy between motions observed and motions added (not sure why....)
+        if(new_values_.exists(prev_object_motion_key) && !new_values_.exists(curr_object_motion_key)) {
 
             //sanity check to see if the values reflect this
-            const auto curr_object_motion_key = ObjectMotionSymbol(prev_object_id, current_frame_id);
-            CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(prev_object_motion_key);
+            // CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(curr_object_motion_key);
 
             //get all points
             auto extracted_dynamic_points = new_values_.extract<gtsam::Point3>(gtsam::Symbol::ChrTest(kDynamicLandmarkSymbolChar));
-            int priors_added = 0;
             for(const auto&[key, point] : extracted_dynamic_points) {
                 DynamicPointSymbol dps(key);
                 const TrackletId tracklet_id = dps.trackletId();
@@ -926,13 +974,12 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                     Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
 
                     new_factors_.addPrior(key, gt_lmk,
-                        gtsam::noiseModel::Isotropic::Sigma(3, 0.01));
+                        gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
 
-                    priors_added++;
+                    debug_info.incrementNumScalePriors(object_id);
                 }
             }
 
-            LOG(ERROR) << "Adding dynamic point scale priors for object id " <<  object_id << " at frame " << previous_frame_id << " for " << priors_added << " points";
         }
     }
 
