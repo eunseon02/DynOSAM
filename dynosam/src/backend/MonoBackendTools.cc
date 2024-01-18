@@ -280,7 +280,8 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   // cv::imshow("Object Mask Dilated", dilated_obj_mask);
 
   std::vector<std::vector<cv::Point> > contours;
-  cv::findContours(dilated_obj_mask, contours, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+  std::vector<cv::Vec4i> hierarchy;
+  cv::findContours(dilated_obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
   if (contours.size()>0){
     std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
@@ -290,17 +291,21 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     return 0.0;
   }
 
-  // cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8UC3);
   // for (int i_contour = 0; i_contour < contours.size(); i_contour++){
   //   for (int i_point = 0; i_point < contours[i_contour].size(); i_point++){
   //     // std::cout << "Contour point at " << contours[i_contour][i_point].x << ", " << contours[i_contour][i_point].y << std::endl;
   //     contours_viz.at<uchar>(contours[i_contour][i_point].y, contours[i_contour][i_point].x) = 255;
   //   }
   // }
-  // cv::imshow("Contours", contours_viz);
+  for( size_t i = 0; i< contours.size(); i++ ){
+    cv::Scalar color = cv::Scalar(0, 0, 255);
+    drawContours( contours_viz, contours, (int)i, color, 1, cv::LINE_8, hierarchy, 0 );
+  }
+  cv::imshow("Contours", contours_viz);
 
-  // cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
-  // cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
+  cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
 
 
   int n_points = 0;
@@ -341,48 +346,61 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
       Keypoint ground_pixel_curr = Feature::CalculatePredictedKeypoint(Keypoint(u, v), flow);
       if (curr_semantic_mask.at<ObjectId>(ground_pixel_curr.y(), ground_pixel_curr.x()) == 0){
         ground_pixels_prev.push_back(Keypoint(u, v));
-        // ground_pixel_prev_viz.at<uchar>(v, u) = 255;
+        ground_pixel_prev_viz.at<uchar>(v, u) = 255;
         ground_pixels_curr.push_back(ground_pixel_curr);
 
-        // ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
+        ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
       }
     }
   }
 
   std::cout << "Passed ground pixel search.\n";
 
-  // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
-  // cv::imshow("Ground pixels", ground_pixel_viz);
+  cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  cv::imshow("Ground pixels", ground_pixel_viz);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
   std::vector<gtsam::Pose3> cam_poses({X_world_camera_prev, X_world_camera_curr});
 
   const auto& camera_params = camera->getParams();
-  auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
-      camera_params.constructGtsamCalibration<Camera::CalibrationType>());
+  auto gtsam_calibration = camera_params.constructGtsamCalibration<Camera::CalibrationType>();
 
-  gtsam::Matrix3 intrinsic;
-  cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
+  gtsam::CameraSet<Camera::CameraImpl> cameras = {
+    Camera::CameraImpl(X_world_camera_prev, gtsam_calibration),
+    Camera::CameraImpl(X_world_camera_curr, gtsam_calibration)
+  };
+
+
+  // gtsam::Matrix3 intrinsic;
+  // cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
 
   double depth_sum = 0.0;
 
   for (int i_ground_pixels = 0; i_ground_pixels < n_ground_pixels; i_ground_pixels++){
     gtsam::Point2Vector measurments({ground_pixels_prev[i_ground_pixels], ground_pixels_curr[i_ground_pixels]});
-    gtsam::Point3 this_point;
+    gtsam::TriangulationResult this_point_result;
     try {
-       this_point = gtsam::triangulatePoint3(cam_poses, gtsam_calibration, measurments);
+       this_point_result = gtsam::triangulateSafe(cameras, measurments, gtsam::TriangulationParameters{});
     }
     catch(const gtsam::TriangulationCheiralityException& e) {
        continue; 
     }
+
+    if(!this_point_result) {continue; }
+
+    gtsam::Point3 this_point = *this_point_result;
     ground_points.push_back(this_point);
 
     // TODO: Filter these points/depths and reject outliers
-    gtsam::Point3 this_point_camera_curr = intrinsic*X_world_camera_curr.transformTo(this_point);
+    gtsam::Point3 this_point_camera_curr = X_world_camera_curr.transformTo(this_point);
+
+    std::cout << this_point_camera_curr.z() << " ";
+
     depth_sum += this_point_camera_curr.z();
 
   }
+  std::cout << std::endl;
 
   std::cout << "Passed averaging depth.\n";
 
