@@ -71,6 +71,10 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   const cv::Mat& prev_optical_flow, 
   const ObjectId obj_id);
 
+double estimateDepthFromDimension(const cv::Mat semantic_mask, 
+                                  const Camera::Ptr camera, 
+                                  const ObjectId obj_id, 
+                                  const double obj_width);
 
 } //mono_backend_tools
 } //dyno

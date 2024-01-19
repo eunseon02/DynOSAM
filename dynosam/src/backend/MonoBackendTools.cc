@@ -270,7 +270,7 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   cv::Mat obj_mask = (prev_semantic_mask == obj_id);
   // cv::imshow("Object Mask", obj_mask);
 
-  cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
+  // cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
   // cv::imshow("Object Mask Current", obj_mask_curr);
 
   cv::Mat dilated_obj_mask;
@@ -407,6 +407,55 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   double obj_depth = depth_sum / n_ground_pixels;
 
   std::cout << "Estimated depth: " << obj_depth << std::endl;
+
+  return obj_depth;
+}
+
+/**
+ * @brief Estimate the depth of the object using an approximate dimension of the object
+ * Assuming the object is flat/facing the camera with a surface normal to the camera optical axis
+ * 
+ */
+
+double estimateDepthFromDimension(const cv::Mat semantic_mask, 
+                                  const Camera::Ptr camera, 
+                                  const ObjectId obj_id, 
+                                  const double obj_width){
+
+  cv::Mat obj_mask = (semantic_mask == obj_id);
+  cv::Mat close_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, 
+                                                    cv::Size(11, 11)); // a circle with diameter 11
+  cv::Mat closed_mask;
+  cv::morphologyEx(obj_mask, closed_mask, cv::MORPH_CLOSE, close_element);
+
+  std::vector<std::vector<cv::Point> > contours;
+  std::vector<cv::Vec4i> hierarchy;
+  cv::findContours(closed_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+  if (contours.size() < 1){
+    return 0.0;
+  }
+
+  int n_points = 0;
+  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+    n_points += contours[i_contour].size();
+  }
+  std::vector<cv::Point> full_contour;
+  full_contour.reserve(n_points);
+  for (int i_contour = 0; i_contour < contours.size(); i_contour++){
+    full_contour.insert(full_contour.end(), contours[i_contour].begin(), contours[i_contour].end());
+  }
+  std::vector<cv::Point> contours_poly;
+  cv::approxPolyDP(full_contour, contours_poly, 3.0, true); // epsilon = 3
+  cv::Rect boundingbox = boundingRect(contours_poly);
+  double obj_pixel_width = boundingbox.width;
+
+  const auto& camera_params = camera->getParams();
+  gtsam::Matrix3 intrinsic;
+  cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
+
+  double fx = intrinsic(0, 0);
+  double obj_depth = obj_width*fx/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis 
 
   return obj_depth;
 }
