@@ -236,85 +236,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     const int max_opt_attempts = 300;
     gtsam::Values initial_values = new_values_;
     bool solved = false;
-    std::function<void()> handle_cheriality_optimize = [&]() -> void {
-        LOG(INFO) << "Running graph optimziation with values " << new_values_.size() << " and factors " << new_factors_.size() << ". Opt attempts=" << num_opt_attemts;
 
-        if(solved) {
-            return;
-        }
-
-        num_opt_attemts++;
-        if(num_opt_attemts >= max_opt_attempts) {
-            LOG(FATAL) << "Max opt attempts reached";
-        }
-
-        gtsam::LevenbergMarquardtParams lm_params;
-        lm_params.setMaxIterations(FLAGS_max_opt_iterations);
-        // lm_params.verbosityLM = gtsam::LevenbergMarquardtParams::VerbosityLM::SUMMARY;
-
-        lm_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-        // // // params.setRelativeErrorTol(-std::numeric_limits<double>::max());
-        // // // params.setAbsoluteErrorTol(-std::numeric_limits<double>::max());
-        // gtsam::LevenbergMarquardtOptimizer opt(graph, initial, params);
-
-
-        try {
-
-            double error_before = new_factors_.error(initial_values);
-            LOG(INFO) << "Error before: " << error_before;
-
-            gtsam::LevenbergMarquardtOptimizer opt(new_factors_, initial_values, lm_params);
-
-            state_ = opt.optimize();
-            new_values_ = initial_values; //update the new_values to be ther ones that were used as the initial values for the optimziation that solved
-
-            double error_after = new_factors_.error(state_);
-            LOG(INFO) << "Error after " << error_after;
-
-            solved = true;
-            return;
-
-        }
-        catch(const gtsam::CheiralityException& e) {
-            const gtsam::Key nearby_variable = e.nearbyVariable();
-            gtsam::FactorIndices associated_factors; //use idnex's as using the iterators will rearrange the graph everytime, therefore making the other iterators incorrect
-            factor_graph_tools::getAssociatedFactors(associated_factors, new_factors_, nearby_variable);
-
-            gtsam::Symbol static_symbol(nearby_variable);
-            CHECK(static_symbol.chr() == kStaticLandmarkSymbolChar);
-
-            TrackletId nearby_tracklet = (TrackletId)static_symbol.index();
-            // marked_for_cherality.insert2(nearby_tracklet, true);
-
-
-            LOG(WARNING) << "gtsam::CheiralityException throw at variable " << DynoLikeKeyFormatter(nearby_variable) << ". Removing factors: " << associated_factors.size();
-
-            for(gtsam::FactorIndex index: associated_factors) {
-                //do not erase (this will reannrange the factors)
-                new_factors_.remove(index);
-            }
-
-            //even if failure update the current set of values as these should be closer to the optimal so hopefully less recursive iterations
-            // initial_values = opt.values();
-            //Apparently also removing the variable results in a ValueKeyNotExists exception, even though all the factors have been
-            //removed. Maybe the factor graph/Values keeps a cache of variables?
-            initial_values.erase(nearby_variable);
-
-            //make new graph with no non-null factors in it
-            //graph.error will segfault with null values in it!
-            gtsam::NonlinearFactorGraph replacemenent_graph;
-            for(auto f : new_factors_) {
-                if(f) replacemenent_graph.push_back(f);
-            }
-
-            // new_factors_.clear();
-            new_factors_ = replacemenent_graph;
-
-            handle_cheriality_optimize();
-            return;
-
-        }
-    };
 
     std::stringstream ss;
     for(const auto& debug_pair : debug_infos_) {
@@ -324,7 +246,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     LOG(INFO) << ss.str();
 
     if(current_frame_id % FLAGS_optimize_n_frame == 0) {
-        handle_cheriality_optimize();
+        fullBatchOptimize(new_values_, new_factors_);
     }
 
 
@@ -817,7 +739,6 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
             //add motion -> start from first index + 1 so we can index from the current frame
             for(size_t frame = starting_frame_motion; frame <= current_frame_id; frame++) {
-                // LOG_IF(INFO, tracked_id < 5560 && tracked_id > 5550) << "Adding new motion from at frame " << frame;
                 DynamicPointSymbol current_dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
                 DynamicPointSymbol previous_dynamic_point_symbol = DynamicLandmarkSymbol(frame - 1u, tracked_id);
 
@@ -829,8 +750,6 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
                 //motion that takes us from previous to current
                 gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame);
-                // // CHECK(!smoother_->valueExists(motion_symbol));
-                // CHECK(!new_values_.exists(motion_symbol));
                 if(!new_values_.exists(motion_symbol)) {
 
                     new_values_.insert(motion_symbol, motion_init_func_(
@@ -930,6 +849,87 @@ void MonoBatchBackendModule::runDynamicUpdate(
     }
 
 }
+
+void MonoBatchBackendModule::fullBatchOptimize(gtsam::Values& values, gtsam::NonlinearFactorGraph& graph) {
+    int num_opt_attemts = 0;
+    const int max_opt_attempts = 300;
+    gtsam::Values initial_values = values;
+    bool solved = false;
+
+    std::function<void()> handle_cheriality_optimize = [&]() -> void {
+        LOG(INFO) << "Running graph optimziation with values " << initial_values.size() << " and factors " << graph.size() << ". Opt attempts=" << num_opt_attemts;
+
+        if(solved) {
+            return;
+        }
+
+        num_opt_attemts++;
+        if(num_opt_attemts >= max_opt_attempts) {
+            LOG(FATAL) << "Max opt attempts reached";
+        }
+
+        gtsam::LevenbergMarquardtParams lm_params;
+        lm_params.setMaxIterations(FLAGS_max_opt_iterations);
+        lm_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+        try {
+
+            double error_before = graph.error(initial_values);
+            LOG(INFO) << "Error before: " << error_before;
+
+            gtsam::LevenbergMarquardtOptimizer opt(graph, initial_values, lm_params);
+
+            state_ = opt.optimize();
+            values = initial_values; //update the new_values to be ther ones that were used as the initial values for the optimziation that solved
+
+            double error_after = graph.error(state_);
+            LOG(INFO) << "Error after: " << error_after;
+
+            solved = true;
+            return;
+
+        }
+        catch(const gtsam::CheiralityException& e) {
+            const gtsam::Key nearby_variable = e.nearbyVariable();
+            gtsam::FactorIndices associated_factors; //use idnex's as using the iterators will rearrange the graph everytime, therefore making the other iterators incorrect
+            factor_graph_tools::getAssociatedFactors(associated_factors, graph, nearby_variable);
+
+            gtsam::Symbol static_symbol(nearby_variable);
+            CHECK(static_symbol.chr() == kStaticLandmarkSymbolChar);
+
+            TrackletId nearby_tracklet = (TrackletId)static_symbol.index();
+            LOG(WARNING) << "gtsam::CheiralityException throw at variable " << DynoLikeKeyFormatter(nearby_variable) << ". Removing factors: " << associated_factors.size();
+
+            for(gtsam::FactorIndex index: associated_factors) {
+                //do not erase (this will reannrange the factors)
+                graph.remove(index);
+            }
+
+            //even if failure update the current set of values as these should be closer to the optimal so hopefully less recursive iterations
+            // initial_values = opt.values();
+            //Apparently also removing the variable results in a ValueKeyNotExists exception, even though all the factors have been
+            //removed. Maybe the factor graph/Values keeps a cache of variables?
+            initial_values.erase(nearby_variable);
+
+            //make new graph with no non-null factors in it
+            //graph.error will segfault with null values in it!
+            gtsam::NonlinearFactorGraph replacemenent_graph;
+            for(auto f : graph) {
+                if(f) replacemenent_graph.push_back(f);
+            }
+
+            graph = replacemenent_graph;
+
+            handle_cheriality_optimize();
+            return;
+
+        }
+    };
+    handle_cheriality_optimize();
+
+
+}
+
 
 void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const DecompositionRotationEstimates& estimated_motions) {
     if(current_frame_id <= 2) {

@@ -131,6 +131,8 @@ private:
         FrameId current_frame_id,
         const DecompositionRotationEstimates& estimated_motions);
 
+    void fullBatchOptimize(gtsam::Values& values, gtsam::NonlinearFactorGraph& graph);
+
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
     DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;
