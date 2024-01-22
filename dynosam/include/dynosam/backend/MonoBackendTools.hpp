@@ -59,11 +59,11 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(
   const gtsam::Point2Vector& observation_curr,
   const gtsam::Matrix3& obj_rotation);
 
-gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd depths, const gtsam::Point2Vector observations);
+gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd& depths, const gtsam::Point2Vector& observations);
 
-Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector points);
+Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector& points);
 
-bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths);
+bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd& depths);
 
 std::optional<double> estimateDepthFromRoad(
   const gtsam::Pose3& X_world_camera_prev,
@@ -74,10 +74,15 @@ std::optional<double> estimateDepthFromRoad(
   const cv::Mat& prev_optical_flow,
   const ObjectId obj_id);
 
-double estimateDepthFromDimension(const cv::Mat semantic_mask,
+
+double estimateDepthFromDimension(const cv::Mat& semantic_mask,
                                   const Camera::Ptr camera,
                                   const ObjectId obj_id,
                                   const double obj_width);
+
+bool validateScaleConsistency(const gtsam::Point3Vector& prev_points,
+                              const gtsam::Point3Vector& curr_points,
+                              double scale_ratio_thres);
 
 } //mono_backend_tools
 } //dyno
