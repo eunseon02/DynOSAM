@@ -5,7 +5,7 @@
 
 # backend parameters
 --max_opt_iterations=30
---optimize_n_frame=15
+--optimize_n_frame=20
 --static_point_sigma=2.0
 --dynamic_point_sigma=4.0
 --use_gt_camera_pose=true

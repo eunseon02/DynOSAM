@@ -216,21 +216,19 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         checkForScalePriors(current_frame_id, input->estimated_motions_);
     }
 
-    int num_opt_attemts = 0;
-    const int max_opt_attempts = 300;
-    gtsam::Values initial_values = new_values_;
-    bool solved = false;
-
-
     std::stringstream ss;
     for(const auto& debug_pair : debug_infos_) {
         ss << debug_pair.second << "\n";
     }
-
     LOG(INFO) << ss.str();
 
     if(current_frame_id % FLAGS_optimize_n_frame == 0) {
         fullBatchOptimize(new_values_, new_factors_);
+
+        new_scaled_estimates_.clear();
+        checkStateForScaleEstimation(state_, current_frame_id, new_scaled_estimates_);
+        // LOG(FATAL) << "Done";
+
     }
 
 
@@ -427,6 +425,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     if(state_.exists(CameraPoseSymbol(current_frame_id))) {
         backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     }
+    backend_output->scaled_dynamic_lmk_estimate_ = new_scaled_estimates_;
     backend_output->dynamic_lmks_ = all_dynamic_object_triangulation;
     backend_output->optimized_poses_ = optimized_poses;
 
@@ -920,6 +919,126 @@ void MonoBatchBackendModule::fullBatchOptimize(gtsam::Values& values, gtsam::Non
 }
 
 
+void MonoBatchBackendModule::checkStateForScaleEstimation(const gtsam::Values& values, FrameId last_optimized_frame_id, StatusLandmarkEstimates& new_estimates) {
+    const auto& camera_params = camera_->getParams();
+    const gtsam::Matrix3 K = camera_params.getCameraMatrixEigen();
+    for(FrameId current_frame_id = 2; current_frame_id <= last_optimized_frame_id; current_frame_id++) {
+        //get all objects in this frame
+        //sometimes the observations in do_tracklet_manager_ do not match those in the graph (unsure always why!)
+        //we need to index the motion at k-1 (taking the object from k-2 to k-1)
+        const FrameId previous_frame_id_motion = current_frame_id - 1u;
+        //index the object values (points/poses) at k-2 since this is where the observation took place
+        const FrameId previous_frame_id = previous_frame_id_motion - 1u;
+        ObjectIds objects_per_frame = do_tracklet_manager_.getPerFrameObjects(current_frame_id);
+
+        for(ObjectId object_id : objects_per_frame) {
+            const auto prev_object_motion_key = ObjectMotionSymbol(object_id, previous_frame_id_motion);
+            const auto curr_object_motion_key = ObjectMotionSymbol(object_id, current_frame_id);
+
+            gtsam::Pose3 k_2_H_k_1_world;
+            gtsam::Pose3 k_1_H_k_world;
+
+            //if we have motion in the values that takes us from k-2 -> k-1 and k-1 -> k
+            if(utils::getEstimateOfKey(values, prev_object_motion_key, &k_2_H_k_1_world) &&
+               utils::getEstimateOfKey(values, curr_object_motion_key, &k_1_H_k_world)) {
+
+                //Motion from k-2 to k = {k-1}_H_{k} * {k-2}_H_{k-1}
+                const gtsam::Pose3 k_2_H_k_world = k_1_H_k_world * k_2_H_k_1_world;
+                //Rotation component of the k-2 -> k object motion
+                const gtsam::Rot3 k_2_RH_k_world = k_2_H_k_world.rotation();
+                //Translation component of the k-2 -> k object motion
+                const gtsam::Vector3 k_2_tH_k_world = k_2_H_k_world.translation();
+
+                // gtsam::Unit3 RH_axis;
+                // double RH_angle;
+                // std::tie(RH_axis, RH_angle) = k_2_RH_k_world.axisAngle();
+
+                const auto camera_key_k_2 = CameraPoseSymbol(previous_frame_id);
+                const auto camera_key_k = CameraPoseSymbol(current_frame_id);
+
+                gtsam::Pose3 X_k_2_world;
+                gtsam::Pose3 X_k_world;
+
+                CHECK(utils::getEstimateOfKey(values, camera_key_k_2, &X_k_2_world)) << "Missing key at " << DynoLikeKeyFormatter(camera_key_k_2);
+                CHECK(utils::getEstimateOfKey(values, camera_key_k, &X_k_world)) << "Missing key at " << DynoLikeKeyFormatter(camera_key_k_2);
+
+                //motion of the camera from k-2 to k in the world frame (so same form as k_2_H_k_world)
+                const gtsam::Pose3 k_2_T_k_world = X_k_2_world * X_k_world.inverse();
+                // //Rotation component of the k-2 -> k camera motion
+                // const gtsam::Rot3 k_2_RT_k_world = k_2_T_k_world.rotation();
+                //Translation component of the k-2 -> k camera motion
+                const gtsam::Vector3 k_2_tT_k_world = k_2_T_k_world.translation();
+
+                double cossine_angle =  gtsam::Unit3(k_2_tT_k_world).dot(gtsam::Unit3(k_2_tH_k_world));
+                LOG(INFO) << gtsam::Unit3(k_2_tT_k_world);
+                LOG(INFO) << gtsam::Unit3(k_2_tH_k_world);
+
+                //cossine_angle is between -1 and 1 (if 0, vectors are perpendicular)
+                if(std::abs(cossine_angle) < std::cos(deg2Rads(80))) {
+                    gtsam::Point2Vector observation_prev;
+                    gtsam::Point2Vector observation_curr;
+                    //triangulatePoint3Vector solves for point in the previous timestep
+                    gtsam::KeyVector tracklet_keys;
+
+                    //TODO:getting the measurement is very very slow as we have to search over the data-structures many times!!
+                    TrackletIds all_object_tracklets = do_tracklet_manager_.getPerObjectTracklets(object_id);
+                    for(TrackletId object_tracklet : all_object_tracklets) {
+                        CHECK(do_tracklet_manager_.trackletExists(object_tracklet));
+                        const auto& tracklet = do_tracklet_manager_.getByTrackletId(object_tracklet);
+
+                        //point seen in all necessary frames
+                        if(tracklet.exists(previous_frame_id) && tracklet.exists(current_frame_id)) {
+                            observation_prev.push_back(tracklet.at(previous_frame_id));
+                            observation_curr.push_back(tracklet.at(current_frame_id));
+                            //triangulatePoint3Vector solves for point in the previous timestep
+                            tracklet_keys.push_back(DynamicLandmarkSymbol(previous_frame_id, object_tracklet));
+                        }
+                    }
+
+                    LOG(INFO) << "Adding " << observation_curr.size() << " measurements for triangulation of perpendicularish object " << object_id
+                        << " at frame " << current_frame_id;
+
+                    gtsam::Point3Vector triangulated_points =
+                        mono_backend_tools::triangulatePoint3VectorNonExpanded(
+                            X_k_2_world,
+                            X_k_world,
+                            K,
+                            observation_prev,
+                            observation_curr,
+                            k_2_RH_k_world.matrix()
+                        );
+
+                    CHECK_EQ(triangulated_points.size(), tracklet_keys.size());
+                    for(size_t i = 0; i < triangulated_points.size(); i++) {
+                        const DynamicPointSymbol dps = tracklet_keys.at(i);
+                        const Landmark lmk = triangulated_points.at(i);
+                        const TrackletId tracklet_id = dps.trackletId();
+                        //sanity check
+                        CHECK_EQ(
+                            do_tracklet_manager_.getObjectIdByTracklet(tracklet_id),
+                            object_id
+                        );
+
+                        auto estimate = std::make_pair(tracklet_id, lmk);
+
+                        LandmarkStatus status;
+                        status.label_ = object_id;
+                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+                        new_estimates.push_back(std::make_pair(status, estimate));
+                    }
+                }
+
+                LOG(INFO) << "Diff angle for object " << object_id << " is " <<  cossine_angle << " at frame " << current_frame_id;
+                // LOG(INFO) << "Camera angle " << rads2Deg(RT_angle) << " object rotation angle " << rads2Deg(RH_angle);
+
+
+            }
+
+        }
+
+    }
+}
+
 void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const DecompositionRotationEstimates& estimated_motions) {
     if(current_frame_id <= 2) {
         return;
@@ -1056,13 +1175,13 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
 
     using ObjectFramePair = std::pair<FrameId, ObjectId>;
     //std::hash function for this map is defined in StructuredContainers.hpp
-    static gtsam::FastMap<ObjectFramePair, Depth> cache;
+    static gtsam::FastMap<ObjectFramePair, Depth> depth_from_road_cache;
 
     double depth;
     //first check cache
     const auto cache_key = std::make_pair(frame_id, object_id);
-    if(cache.exists(cache_key)) {
-        depth = cache.at(cache_key);
+    if(depth_from_road_cache.exists(cache_key)) {
+        depth = depth_from_road_cache.at(cache_key);
     }
     else {
         const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
@@ -1094,7 +1213,7 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
         depth = *depth_opt;
 
         //add to cache
-        cache.insert2(cache_key, depth);
+        depth_from_road_cache.insert2(cache_key, depth);
     }
 
     Landmark lmk;

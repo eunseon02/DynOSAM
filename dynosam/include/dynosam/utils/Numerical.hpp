@@ -62,6 +62,28 @@ inline bool is_zero(double a) {
     return fpEqual(a, 0.0);
 }
 
+
+/**
+ * @brief Converts radians to degrees
+ *
+ * @param rads
+ * @return double
+ */
+inline double rads2Deg(double rads) {
+    return rads * 180.0/M_PI;
+}
+
+/**
+ * @brief Converts degrees to radians
+ *
+ * @param degrees
+ * @return double
+ */
+inline double deg2Rads(double degrees) {
+    return degrees * M_PI/180.0;
+}
+
+
 //Jesse: make iterator T so we can work on any iterable type? I think this will also make Eigen compatable
 template<typename T>
 inline bool equals_with_abs_tol(const std::vector<T>& vec1, const std::vector<T>& vec2, double tol = 1e-9) {

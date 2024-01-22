@@ -75,7 +75,7 @@ std::optional<double> estimateDepthFromRoad(
   const ObjectId obj_id);
 
 
-double estimateDepthFromDimension(const cv::Mat& semantic_mask,
+std::optional<double> estimateDepthFromDimension(const cv::Mat& semantic_mask,
                                   const Camera::Ptr camera,
                                   const ObjectId obj_id,
                                   const double obj_width);

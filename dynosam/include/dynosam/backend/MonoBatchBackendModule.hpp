@@ -133,6 +133,8 @@ private:
 
     void fullBatchOptimize(gtsam::Values& values, gtsam::NonlinearFactorGraph& graph);
 
+    void checkStateForScaleEstimation(const gtsam::Values& values, FrameId last_optimized_frame_id, StatusLandmarkEstimates& new_estimates);
+
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
 
@@ -157,7 +159,9 @@ private:
     gtsam::SharedNoiseModel robust_static_pixel_noise_; //! Robust 2d isotropic pixel noise on static points (for projection factors)
     gtsam::SharedNoiseModel robust_dynamic_pixel_noise_; //! Robust 2d isotropic pixel noise on dynamic points (for projection factors)
 
-
+    //we keep this as variable so that we can re-draw it everytime
+    //is cleatred when we re-run the checkStateForScaleEstimation
+    StatusLandmarkEstimates new_scaled_estimates_;
 
     TrackletIdToProjectionStatus tracklet_to_status_map_; //only used for static points currently
     SmartProjectionFactorMap smart_factor_map_;

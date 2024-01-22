@@ -37,7 +37,8 @@ namespace mono_backend_tools {
  *
  */
 
-gtsam::Point3Vector triangulatePoint3Vector(const gtsam::Pose3& X_world_camera_prev,
+gtsam::Point3Vector triangulatePoint3Vector(
+  const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
   const gtsam::Matrix3& intrinsic,
   const gtsam::Point2Vector& observation_prev,
@@ -123,7 +124,8 @@ gtsam::Point3Vector triangulatePoint3Vector(const gtsam::Pose3& X_world_camera_p
  *
  */
 
-gtsam::Point3Vector triangulatePoint3VectorNonExpanded(const gtsam::Pose3& X_world_camera_prev,
+gtsam::Point3Vector triangulatePoint3VectorNonExpanded(
+  const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
   const gtsam::Matrix3& intrinsic,
   const gtsam::Point2Vector& observation_prev,
@@ -421,12 +423,22 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
  * @brief Estimate the depth of the object using an approximate dimension of the object
  * Assuming the object is flat/facing the camera with a surface normal to the camera optical axis
  *
+ * //TODO: Jesse - should be tracked object points not mask?
+ *
  */
 
-double estimateDepthFromDimension(const cv::Mat& semantic_mask,
+std::optional<double> estimateDepthFromDimension(const cv::Mat& semantic_mask,
                                   const Camera::Ptr camera,
                                   const ObjectId obj_id,
                                   const double obj_width){
+
+  ObjectIds object_ids = vision_tools::getObjectLabels(semantic_mask);
+
+  //check if object id is in the previous semantic mask
+  if(std::find(object_ids.begin(), object_ids.end(), obj_id) == object_ids.end()) {
+    LOG(WARNING) << "Could not find object id " << obj_id << " in semantic mask";
+    return std::optional<double>{};
+  }
 
   cv::Mat obj_mask = (semantic_mask == obj_id);
   cv::Mat close_element = cv::getStructuringElement(cv::MORPH_ELLIPSE,
@@ -439,7 +451,7 @@ double estimateDepthFromDimension(const cv::Mat& semantic_mask,
   cv::findContours(closed_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
   if (contours.size() < 1){
-    return 0.0;
+    return std::optional<double>{};
   }
 
   int n_points = 0;
@@ -457,13 +469,9 @@ double estimateDepthFromDimension(const cv::Mat& semantic_mask,
   double obj_pixel_width = boundingbox.width;
 
   const auto& camera_params = camera->getParams();
-  gtsam::Matrix3 intrinsic;
-  cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
+  double obj_depth = obj_width*camera_params.fx()/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis
 
-  double fx = intrinsic(0, 0);
-  double obj_depth = obj_width*fx/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis
-
-  return obj_depth;
+  return std::optional<double>(obj_depth);
 }
 
 

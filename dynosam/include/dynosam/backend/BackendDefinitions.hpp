@@ -185,6 +185,17 @@ public:
         return object_tracklet_map_.at(object_id);
     }
 
+    // TrackletIds getPerFrameObjectTracklets(const FrameId frame_id, const ObjectId object_id) const {
+    //     //All the tracklets for this object (over multiple frames)
+    //     TrackletIds all_object_tracklets = getPerObjectTracklets(object_id);
+    //     //all the tracklets in this frame (all objects inclusive)
+    //     TrackletIds per_frame_tracklets = frame_to_tracklets_map_.at(frame_id);
+
+    //     //we want the tracklets for this object that appear in the current frame
+
+
+    // }
+
     inline bool frameExists(const FrameId frame_id) const {
         return frame_to_objects_map_.exists(frame_id);
     }

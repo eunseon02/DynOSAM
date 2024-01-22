@@ -36,6 +36,7 @@ DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
     LandmarkMap static_lmks_;
     StatusLandmarkEstimates dynamic_lmks_; //optimizsed
     StatusLandmarkEstimates initial_dynamic_lmks_;
+    StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
     gtsam::Pose3 T_world_camera_;
     Timestamp timestamp_;
     gtsam::Pose3Vector optimized_poses_;

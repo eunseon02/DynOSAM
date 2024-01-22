@@ -36,17 +36,16 @@
 namespace dyno {
 
 BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
-    const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
+    // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
     dynamic_initial_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_initial", 1);
+    new_scaled_dynamic_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_newly_scaled", 1);
 
 
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_poses", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/backend/odom_path", 2);
-
-
 }
 
 
@@ -112,6 +111,28 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         pcl::toROSMsg(cloud, pc2_msg);
         pc2_msg.header.frame_id = "world";
         dynamic_initial_points_pub_->publish(pc2_msg);
+    }
+
+    {
+        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+        const size_t num_measurements = backend_output->scaled_dynamic_lmk_estimate_.size();
+
+        for(size_t i = 0; i < num_measurements; i++) {
+            const StatusLandmarkEstimate& sle = backend_output->scaled_dynamic_lmk_estimate_.at(i);
+            const LandmarkStatus& status = sle.first;
+            const LandmarkEstimate& le = sle.second;
+
+            const Landmark lmk = le.second;
+
+            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+            cloud.points.push_back(pt);
+        }
+
+        sensor_msgs::msg::PointCloud2 pc2_msg;
+        pcl::toROSMsg(cloud, pc2_msg);
+        pc2_msg.header.frame_id = "world";
+        new_scaled_dynamic_points_pub_->publish(pc2_msg);
     }
 
     {
