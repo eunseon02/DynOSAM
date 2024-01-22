@@ -497,7 +497,7 @@ bool validateScaleConsistency(const gtsam::Point3Vector& prev_points,
   if (scale_ratio_thres > 1){
     scale_ratio_thres = 1/scale_ratio_thres;
   }
-  if(scale_ratio >= scale_ratio_thres || scale_ratio <= 1/scale_ratio){
+  if(scale_ratio >= scale_ratio_thres || scale_ratio <= 1/scale_ratio_thres){
     return true;
   } else {
     return false;
