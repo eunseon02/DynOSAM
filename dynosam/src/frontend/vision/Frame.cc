@@ -24,7 +24,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
-
+#include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 namespace dyno {
@@ -146,6 +146,44 @@ Camera::CameraImpl Frame::getFrameCamera() const {
 void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth) {
     updateDepthsFeatureContainer(static_features_, depth, max_static_depth);
     updateDepthsFeatureContainer(dynamic_features_, depth, max_dynamic_depth);
+}
+
+
+cv::Mat Frame::drawDetectedObjectBoxes() const {
+    cv::Mat rgb_objects;
+    tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+
+    cv::Mat mask;
+    tracking_images_.cloneImage<ImageType::MotionMask>(mask);
+
+    const ObjectIds tracked_object_ids = this->getObjectIds();
+    // For each tracked object, find its id in the mask
+    // and draw it.
+    // We apply some eroding/dilation on it to make the resulting submask smoother
+    // so that we can more easily fit an rectangle to it
+    for(const ObjectId object_id : tracked_object_ids) {
+        cv::Mat obj_mask = (mask == object_id);
+        cv::Mat dilated_obj_mask;
+        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+                                                            cv::Size(1, 11)); // a rectangle of 1*5
+        cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+
+        std::vector<std::vector<cv::Point>> contours;
+        std::vector<cv::Vec4i> hierarchy;
+        cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+        if(contours.empty()) {continue;}
+
+        for(auto it : contours) {
+            cv::Rect bb = cv::boundingRect(it);
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+            const std::string label = "Object: " + std::to_string(object_id);
+            utils::drawLabeledBoundingBox(rgb_objects, label, colour, bb);
+
+        }
+    }
+
+    return rgb_objects;
 }
 
 

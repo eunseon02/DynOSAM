@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/backend/MonoBatchBackendModule.hpp"
+#include "dynosam/backend/MonoBackendTools.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
@@ -51,9 +52,12 @@ DEFINE_double(max_depth_scale, 1.4, "Max value when generating a uniform distrib
 
 
 DEFINE_int32(max_opt_iterations, 300, "Max iteration of the LM solver");
-DEFINE_double(scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
 
 DEFINE_int32(optimize_n_frame, 15, "Runs the (full batch) optimziation every N frames");
+
+DEFINE_bool(use_last_seen_dynamic_point_prior, false, "Will add a prior using perturbed gt on the last observed frame of an object");
+DEFINE_double(scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
+
 
 namespace dyno {
 
@@ -75,61 +79,38 @@ MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_para
 
     //Initalise from perturbed gt pose
     if(FLAGS_dynamic_point_init_func_type == 0) {
-        dynamic_point_init_func_ = [=](
-            FrameId, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3&, const GroundTruthInputPacket& gt_packet) {
-
-            const auto& camera_params = camera_->getParams();
-
-            ObjectPoseGT object_pose_gt;
-            CHECK(gt_packet.getObject(object_id, object_pose_gt));
-
-            //for now, just perturb with noise from gt pose
-            auto gt_pose_camera = utils::perturbWithNoise(
-                object_pose_gt.L_camera_,
-                FLAGS_dp_init_sigma_perturb);
-
-            static std::random_device rd;  // a seed source for the random number engine
-            static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
-            std::uniform_real_distribution distrib(-0.5, 0.5);
-
-            //Z coordinate in camera frame
-            double Z = gt_pose_camera.z();
-            Z += distrib(gen);
-
-            Landmark lmk;
-            //gt for camera pose?
-            camera_->backProjectFromZ(measurement, Z, &lmk, gt_packet.X_world_);
-            return lmk;
-
-        };
+        dynamic_point_init_func_ = std::bind(
+            &MonoBatchBackendModule::initaliseFromPerturbedGtPose, this,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3,
+            std::placeholders::_4,
+            std::placeholders::_5,
+            std::placeholders::_6
+        );
     }
     // Initalise from gt depth with modified scale.
     else if(FLAGS_dynamic_point_init_func_type == 1) {
-        dynamic_point_init_func_ = [=](
-            FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {
-                const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
-                const auto& image_container = input->image_container_;
-                CHECK(image_container);
-                CHECK(image_container->hasDepth());
-
-                const Depth d = functional_keypoint::at<Depth>(
-                    measurement,
-                    image_container->getImageWrapper<ImageType::Depth>());
-
-                //make seed that is consistent for the same object at a frame
-                //this allows us to change the scale for every object at each frame and be consistent between runs
-                auto seed = CantorPairingFunction::pair(std::make_pair(frame_id, object_id));
-                std::mt19937 gen(seed);
-
-                CHECK(FLAGS_min_depth_scale < FLAGS_max_depth_scale);
-                std::uniform_real_distribution distrib(FLAGS_min_depth_scale, FLAGS_max_depth_scale);
-                // const Depth scaled_depth = FLAGS_depth_scale * d;
-                const Depth scaled_depth = distrib(gen) * d;
-
-                Landmark lmk_world;
-                camera_->backProject(measurement, scaled_depth, &lmk_world, cam_pose);
-                return lmk_world;
-            };
+        dynamic_point_init_func_ = std::bind(
+            &MonoBatchBackendModule::initaliseFromScaledGtDepth, this,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3,
+            std::placeholders::_4,
+            std::placeholders::_5,
+            std::placeholders::_6
+        );
+    }
+    else if(FLAGS_dynamic_point_init_func_type == 2) {
+        dynamic_point_init_func_ = std::bind(
+            &MonoBatchBackendModule::initaliseFromNearbyRoad, this,
+            std::placeholders::_1,
+            std::placeholders::_2,
+            std::placeholders::_3,
+            std::placeholders::_4,
+            std::placeholders::_5,
+            std::placeholders::_6
+        );
     }
     else {
         LOG(FATAL) << "Unknown dynamic point initalisation fun requested " << FLAGS_dynamic_point_init_func_type;
@@ -230,7 +211,10 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
 
     runStaticUpdate(current_frame_id, current_pose_symbol, input->static_keypoint_measurements_);
     runDynamicUpdate(current_frame_id, current_pose_symbol, input->dynamic_keypoint_measurements_, input->estimated_motions_);
-    checkForScalePriors(current_frame_id, input->estimated_motions_);
+
+    if(FLAGS_use_last_seen_dynamic_point_prior) {
+        checkForScalePriors(current_frame_id, input->estimated_motions_);
+    }
 
     int num_opt_attemts = 0;
     const int max_opt_attempts = 300;
@@ -669,12 +653,16 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
         }
 
-        LOG(INFO) << new_well_tracked_points.size() << " newly tracked for dynamic object and " << existing_well_tracked_points.size() << " existing tracks " << object_id;
+        LOG(INFO) << new_well_tracked_points.size() << " newly tracked for dynamic object and " << existing_well_tracked_points.size() << " existing tracks for object id " << object_id;
         for(TrackletId tracked_id : new_well_tracked_points) {
             DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracked_id);
 
-
-            const size_t starting_frame_points = current_frame_id - min_dynamic_obs;
+            //(current_frame_id - min_dynamic_obs) +1!! needed for when initaliseFromNearbyRoad function
+            //is used as sometimes when a new object appears it will not be in the previous frame (unsure why this doesnt happen
+            //all the time)
+            //we need to start it at the second (hence +1) frame so that we always have the object in the prior frame!!
+            //this only needs to happen for new_well_tracked_points
+            const size_t starting_frame_points = current_frame_id - min_dynamic_obs+1;
             const size_t starting_frame_motion = starting_frame_points + 1;
             //up to and including the current frame
             for(size_t frame = starting_frame_points; frame <= current_frame_id; frame++) {
@@ -690,7 +678,8 @@ void MonoBatchBackendModule::runDynamicUpdate(
                 ObjectPoseGT object_pose_gt;
                 auto gt_frame_packet = gt_packet_map_.at(frame);
                 if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                    LOG(FATAL) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
+                    LOG(ERROR) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
+                    // continue;
                 }
 
                 Landmark lmk_world = dynamic_point_init_func_(
@@ -1007,6 +996,111 @@ bool MonoBatchBackendModule::safeAddConstantObjectVelocityFactor(FrameId current
     else {
         return false;
     }
+}
+
+Landmark MonoBatchBackendModule::initaliseFromPerturbedGtPose(FrameId, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3&, const GroundTruthInputPacket& gt_packet) {
+    const auto& camera_params = camera_->getParams();
+
+    ObjectPoseGT object_pose_gt;
+    CHECK(gt_packet.getObject(object_id, object_pose_gt));
+
+    //for now, just perturb with noise from gt pose
+    auto gt_pose_camera = utils::perturbWithNoise(
+        object_pose_gt.L_camera_,
+        FLAGS_dp_init_sigma_perturb);
+
+    static std::random_device rd;  // a seed source for the random number engine
+    static std::mt19937 gen(rd()); // mersenne_twister_engine seeded with rd()
+    std::uniform_real_distribution distrib(-0.5, 0.5);
+
+    //Z coordinate in camera frame
+    double Z = gt_pose_camera.z();
+    Z += distrib(gen);
+
+    Landmark lmk;
+    //gt for camera pose?
+    camera_->backProjectFromZ(measurement, Z, &lmk, gt_packet.X_world_);
+    return lmk;
+}
+
+Landmark MonoBatchBackendModule::initaliseFromScaledGtDepth(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {
+    const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+    const auto& image_container = input->image_container_;
+    CHECK(image_container);
+    CHECK(image_container->hasDepth());
+
+    const Depth d = functional_keypoint::at<Depth>(
+        measurement,
+        image_container->getImageWrapper<ImageType::Depth>());
+
+    //make seed that is consistent for the same object at a frame
+    //this allows us to change the scale for every object at each frame and be consistent between runs
+    auto seed = CantorPairingFunction::pair(std::make_pair(frame_id, object_id));
+    std::mt19937 gen(seed);
+
+    CHECK(FLAGS_min_depth_scale < FLAGS_max_depth_scale);
+    std::uniform_real_distribution distrib(FLAGS_min_depth_scale, FLAGS_max_depth_scale);
+    // const Depth scaled_depth = FLAGS_depth_scale * d;
+    const Depth scaled_depth = distrib(gen) * d;
+
+    Landmark lmk_world;
+    camera_->backProject(measurement, scaled_depth, &lmk_world, cam_pose);
+    return lmk_world;
+}
+
+Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {
+    gtsam::Pose3 X_world_camera_curr;
+    gtsam::Key curr_camera_key = CameraPoseSymbol(frame_id);
+    CHECK(utils::getEstimateOfKey(new_values_, curr_camera_key, &X_world_camera_curr)) << "Key: " << DynoLikeKeyFormatter(curr_camera_key) << " should be in the values";
+
+
+    using ObjectFramePair = std::pair<FrameId, ObjectId>;
+    //std::hash function for this map is defined in StructuredContainers.hpp
+    static gtsam::FastMap<ObjectFramePair, Depth> cache;
+
+    double depth;
+    //first check cache
+    const auto cache_key = std::make_pair(frame_id, object_id);
+    if(cache.exists(cache_key)) {
+        depth = cache.at(cache_key);
+    }
+    else {
+        const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+        const auto& curr_image_container = input->image_container_;
+        const cv::Mat& curr_semantic_mask = curr_image_container->get<ImageType::MotionMask>();
+        //eventually should be in frontend
+        const MonocularInstanceOutputPacket::ConstPtr prev_input = input_packet_map_.at(frame_id-1);
+        const auto& prev_image_container = prev_input->image_container_;
+        const cv::Mat& prev_semantic_mask = prev_image_container->get<ImageType::MotionMask>();
+        //takes you from k-1 to k
+        const cv::Mat& prev_optical_flow = prev_image_container->get<ImageType::OpticalFlow>();
+
+        gtsam::Pose3 X_world_camera_prev;
+        gtsam::Key prev_camera_key = CameraPoseSymbol(frame_id-1);
+        CHECK(utils::getEstimateOfKey(new_values_, prev_camera_key, &X_world_camera_prev)) << "Key: " << DynoLikeKeyFormatter(prev_camera_key) << " should be in the values";
+
+        std::optional<double> depth_opt = mono_backend_tools::estimateDepthFromRoad(
+            X_world_camera_prev,
+            X_world_camera_curr,
+            camera_,
+            prev_semantic_mask,
+            curr_semantic_mask,
+            prev_optical_flow,
+            object_id
+        );
+
+        if(!depth_opt) {LOG(FATAL) << "Could not initalise object depth using estimateDepthFromRoad"; }
+
+        depth = *depth_opt;
+
+        //add to cache
+        cache.insert2(cache_key, depth);
+    }
+
+    Landmark lmk;
+    camera_->backProject(measurement, depth, &lmk, X_world_camera_curr);
+    return lmk;
+
 }
 
 

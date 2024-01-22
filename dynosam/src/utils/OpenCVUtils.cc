@@ -201,7 +201,7 @@ void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_vi
   }
 }
 
-void drawLabel(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
+void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
   constexpr static double kFontScale = 0.5;
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 2;

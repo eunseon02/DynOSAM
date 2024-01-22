@@ -184,6 +184,16 @@ public:
 
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
 
+    /**
+     * @brief From the detected list of objects (in Frame::object_observations_) draw the object masks
+     * as labelled bounding boxes.
+     *
+     * The function uses the MotionMask and RGBMono image types contained witin Frame::tracking_images_;
+     *
+     * @return cv::Mat RGB image with drawn bounding boxes and labels
+     */
+    cv::Mat drawDetectedObjectBoxes() const;
+
 
     //TODO: this really needs testing
     void moveObjectToStatic(ObjectId instance_label);

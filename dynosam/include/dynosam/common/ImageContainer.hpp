@@ -162,7 +162,7 @@ public:
     {
          //this is (not-pure) virtual function could be overloaded. This means that we're calling an overloaded function
          //in the base constructor which leads to undefined behaviour...?
-        validateSetup();
+        // validateSetup();
     }
     virtual ~ImageContainerSubset() = default;
 
@@ -393,6 +393,17 @@ public:
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask);
 
+    /**
+     * @brief Construct an image container equivalent to RGBD + Motion Mask input
+     *
+     * @param timestamp
+     * @param frame_id
+     * @param img
+     * @param depth
+     * @param optical_flow
+     * @param motion_mask
+     * @return ImageContainer::Ptr
+     */
     static ImageContainer::Ptr Create(
         const Timestamp timestamp,
         const FrameId frame_id,
@@ -402,6 +413,30 @@ public:
         const ImageWrapper<ImageType::MotionMask>& motion_mask);
 
 protected:
+    /**
+     * @brief Static construction of a full image container and calls validateSetup on the resulting object.
+     *
+     * Used by each public Create function to construct the underlying ImageContainer. validateSetup must called after construction
+     * as it is a virtual function.
+     *
+     * @param timestamp
+     * @param frame_id
+     * @param img
+     * @param depth
+     * @param optical_flow
+     * @param semantic_mask
+     * @param motion_mask
+     * @return ImageContainer::Ptr
+     */
+    static ImageContainer::Ptr Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+
     explicit ImageContainer(
         const Timestamp timestamp,
         const FrameId frame_id,

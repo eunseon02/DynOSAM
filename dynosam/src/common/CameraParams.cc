@@ -74,6 +74,7 @@ CameraParams::CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionC
   CameraParams::convertDistortionVectorToMatrix(distortion_coeff_, &D_);
   CameraParams::convertIntrinsicsVectorToMatrix(intrinsics_, &K_);
 
+  cv::cv2eigen(K_, K_eigen_);
   K_.copyTo(P_);
 }
 
@@ -261,7 +262,7 @@ void CameraParams::parseCameraDistortion(const YamlParser& yaml_parser, Distorti
 
 template<>
 gtsam::Cal3DS2 CameraParams::constructGtsamCalibration<gtsam::Cal3DS2>() const {
-  const std::string requested_calibration_name = type_name<gtsam::Cal3DS2>(); //only used for debug so seems waste to allocate everytime
+  static const auto requested_calibration_name = type_name<gtsam::Cal3DS2>(); //only used for debug so seems waste to allocate everytime
 
 
   if(distortion_model_ != DistortionModel::RADTAN) {
@@ -281,7 +282,7 @@ gtsam::Cal3DS2 CameraParams::constructGtsamCalibration<gtsam::Cal3DS2>() const {
 
 template<>
 gtsam::Cal3Fisheye CameraParams::constructGtsamCalibration<gtsam::Cal3Fisheye>() const {
-  const std::string requested_calibration_name = type_name<gtsam::Cal3Fisheye>(); //only used for debug so seems waste to allocate everytime
+  static const auto requested_calibration_name = type_name<gtsam::Cal3Fisheye>(); //only used for debug so seems waste to allocate everytime
 
 
   //jesse: not sure if gtsam well supports equidistant models!

@@ -36,6 +36,7 @@
 
 #include <glog/logging.h>
 #include <type_traits>
+#include <string_view>
 
 
 namespace dyno
@@ -204,7 +205,7 @@ std::string type_name(const T& t)
  * @return std::string
  */
 template <class T>
-std::string type_name()
+constexpr std::string type_name()
 {
   return demangle(typeid(T).name());
 }

@@ -80,6 +80,28 @@ void ImageType::MotionMask::validate(const cv::Mat& input) {
 }
 
 
+ImageContainer::Ptr ImageContainer::Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask)
+{
+    std::shared_ptr<ImageContainer> container(
+        new ImageContainer(
+            timestamp,
+            frame_id,
+            img,
+            depth,
+            optical_flow,
+            semantic_mask,
+            motion_mask)
+        );
+    container->validateSetup();
+    return container;
+}
 
 
 ImageContainer::ImageContainer(
@@ -93,7 +115,7 @@ ImageContainer::ImageContainer(
     :  Base(img, depth, optical_flow, semantic_mask, motion_mask),
        timestamp_(timestamp),
        frame_id_(frame_id)
-    { validateSetup(); }
+    { }
 
 
 std::string ImageContainer::toString() const {
@@ -118,7 +140,7 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask) {
 
-    return std::shared_ptr<ImageContainer>(new ImageContainer(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>()));
+    return Create(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>());
 
 }
 
@@ -130,7 +152,7 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::MotionMask>& motion_mask) {
 
-    return std::shared_ptr<ImageContainer>(new ImageContainer(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask));
+    return Create(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask);
 }
 
 

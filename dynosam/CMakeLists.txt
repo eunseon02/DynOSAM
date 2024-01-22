@@ -61,6 +61,7 @@ add_library(${PROJECT_NAME} SHARED
   src/common/Camera.cc
   src/common/GroundTruthPacket.cc
   src/common/ImageContainer.cc
+  src/common/StructuredContainers.cc
 
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc

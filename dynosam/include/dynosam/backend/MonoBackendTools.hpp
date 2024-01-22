@@ -26,7 +26,9 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/common/Camera.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
 
+#include <optional>
 #include <gtsam/geometry/triangulation.h>
 
 
@@ -63,17 +65,18 @@ Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Poi
 
 bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths);
 
-double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
+std::optional<double> estimateDepthFromRoad(
+  const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
-  const Camera::Ptr camera, 
-  const cv::Mat& prev_semantic_mask, 
-  const cv::Mat& curr_semantic_mask, 
-  const cv::Mat& prev_optical_flow, 
+  const Camera::Ptr camera,
+  const cv::Mat& prev_semantic_mask,
+  const cv::Mat& curr_semantic_mask,
+  const cv::Mat& prev_optical_flow,
   const ObjectId obj_id);
 
-double estimateDepthFromDimension(const cv::Mat semantic_mask, 
-                                  const Camera::Ptr camera, 
-                                  const ObjectId obj_id, 
+double estimateDepthFromDimension(const cv::Mat semantic_mask,
+                                  const Camera::Ptr camera,
+                                  const ObjectId obj_id,
                                   const double obj_width);
 
 } //mono_backend_tools

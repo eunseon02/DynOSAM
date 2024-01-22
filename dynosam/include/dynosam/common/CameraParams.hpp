@@ -31,6 +31,7 @@
 #include <gtsam/geometry/Cal3DS2.h>
 #include <gtsam/geometry/Cal3Fisheye.h>
 #include <eigen3/Eigen/Core>
+#include <opencv2/core/eigen.hpp> //for cv::cv2eigen
 #include <exception>
 
 namespace dyno
@@ -126,6 +127,11 @@ public:
     return K_;
   }
 
+  inline gtsam::Matrix3 getCameraMatrixEigen() const
+  {
+    return K_eigen_;
+  }
+
   inline cv::Mat getDistortionCoeffs() const
   {
     return D_;
@@ -193,6 +199,7 @@ private:
   //! 3x3 camera matrix K (last row is {0,0,1})
   //! stored as a CV_64F (double)
   cv::Mat K_;
+  gtsam::Matrix3 K_eigen_;
 
   //! New camera matrix constructed from
   //! estimateNewCameraMatrixForUndistortRectify

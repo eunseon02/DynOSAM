@@ -135,6 +135,16 @@ private:
 
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
+
+    //Dynamic point Initalisation methods
+    //0
+    Landmark initaliseFromPerturbedGtPose(FrameId, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3&, const GroundTruthInputPacket& gt_packet);
+    //1
+    Landmark initaliseFromScaledGtDepth(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&);
+    //2
+    Landmark initaliseFromNearbyRoad(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&);
+
+
     DynamicObjectTrackletManager<Keypoint> do_tracklet_manager_;
 
     gtsam::Values new_values_;

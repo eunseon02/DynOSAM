@@ -93,6 +93,17 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
         camera_pose_result = camera_motion_solver.solve(correspondences);
     }
 
+    cv::Mat rgb_gt_objects;
+    tracking_images.cloneImage<ImageType::RGBMono>(rgb_gt_objects);
+    const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
+    for(const ObjectPoseGT& gt_objects : gt_packet.object_poses_) {
+        gt_objects.drawBoundingBox(rgb_gt_objects);
+    }
+
+    if(display_queue_) display_queue_->push(ImageToDisplay("GT Object BB", rgb_gt_objects));
+     if(display_queue_) display_queue_->push(ImageToDisplay("Object BB", frame->drawDetectedObjectBoxes()));
+
+
     if(camera_pose_result.valid()) {
         frame->T_world_camera_ = camera_pose_result.get();
     }

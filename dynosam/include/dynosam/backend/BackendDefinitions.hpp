@@ -173,7 +173,10 @@ public:
     }
 
     ObjectIds getPerFrameObjects(const FrameId frame_id) const {
-        checkAndThrow(frameExists(frame_id), "getPerFrameObjects query failed as frame id id does not exist. Offedning Id " + std::to_string(frame_id));
+        // checkAndThrow(frameExists(frame_id), "getPerFrameObjects query failed as frame id id does not exist. Offedning Id " + std::to_string(frame_id));
+        if(!frameExists(frame_id)) {
+            return ObjectIds{};
+        }
         return frame_to_objects_map_.at(frame_id);
     }
 
@@ -313,6 +316,8 @@ public:
 private:
     TrackletMap tracklet_map_;
 };
+
+
 
 
 

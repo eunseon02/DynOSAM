@@ -252,29 +252,35 @@ bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths){
 /**
  * @brief Estimate the depth of the object using the background pixels below the object
  *
- * returns 0.0 when the object is not found on this frame
+ * returns std::nullopt when the object is not found on this frame
  */
 
-double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
+std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   const gtsam::Pose3& X_world_camera_curr,
-  const Camera::Ptr camera, 
-  const cv::Mat& prev_semantic_mask, 
-  const cv::Mat& curr_semantic_mask, 
-  const cv::Mat& prev_optical_flow, 
+  const Camera::Ptr camera,
+  const cv::Mat& prev_semantic_mask,
+  const cv::Mat& curr_semantic_mask,
+  const cv::Mat& prev_optical_flow,
   const ObjectId obj_id){
 
 
-  // TrackletIds obj_tracklets = prev_frame.object_observations_.at(obj_id).object_features_;
-  // cv::Mat curr_semantic_mask = prev_frame.tracking_images_.get<ImageType::MotionMask>();
+  ObjectIds prev_object_ids = vision_tools::getObjectLabels(prev_semantic_mask);
+
+  //check if object id is in the previous semantic mask
+  if(std::find(prev_object_ids.begin(), prev_object_ids.end(), obj_id) == prev_object_ids.end()) {
+    LOG(WARNING) << "Could not find object id " << obj_id << " in previous semantic mask";
+    return std::optional<double>{};
+  }
 
   cv::Mat obj_mask = (prev_semantic_mask == obj_id);
+
   // cv::imshow("Object Mask", obj_mask);
 
   // cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
   // cv::imshow("Object Mask Current", obj_mask_curr);
 
   cv::Mat dilated_obj_mask;
-  cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT, 
+  cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
                                                     cv::Size(1, 11)); // a rectangle of 1*5
   cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
   // cv::imshow("Object Mask Dilated", dilated_obj_mask);
@@ -284,11 +290,11 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   cv::findContours(dilated_obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
   if (contours.size()>0){
-    std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
+    // std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
   }
 
   if (contours.size() < 1){
-    return 0.0;
+    return std::optional<double>{};
   }
 
   cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8UC3);
@@ -298,11 +304,11 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
   //     contours_viz.at<uchar>(contours[i_contour][i_point].y, contours[i_contour][i_point].x) = 255;
   //   }
   // }
-  for( size_t i = 0; i< contours.size(); i++ ){
-    cv::Scalar color = cv::Scalar(0, 0, 255);
-    drawContours( contours_viz, contours, (int)i, color, 1, cv::LINE_8, hierarchy, 0 );
-  }
-  cv::imshow("Contours", contours_viz);
+  // for( size_t i = 0; i< contours.size(); i++ ){
+  //   cv::Scalar color = cv::Scalar(0, 0, 255);
+  //   drawContours( contours_viz, contours, (int)i, color, 1, cv::LINE_8, hierarchy, 0 );
+  // }
+  // cv::imshow("Contours", contours_viz);
 
   cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
   cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
@@ -354,10 +360,10 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     }
   }
 
-  std::cout << "Passed ground pixel search.\n";
+  // std::cout << "Passed ground pixel search.\n";
 
-  cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
-  cv::imshow("Ground pixels", ground_pixel_viz);
+  // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  // cv::imshow("Ground pixels", ground_pixel_viz);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
@@ -384,7 +390,7 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
        this_point_result = gtsam::triangulateSafe(cameras, measurments, gtsam::TriangulationParameters{});
     }
     catch(const gtsam::TriangulationCheiralityException& e) {
-       continue; 
+       continue;
     }
 
     if(!this_point_result) {continue; }
@@ -395,35 +401,35 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
     // TODO: Filter these points/depths and reject outliers
     gtsam::Point3 this_point_camera_curr = X_world_camera_curr.transformTo(this_point);
 
-    std::cout << this_point_camera_curr.z() << " ";
+    // std::cout << this_point_camera_curr.z() << " ";
 
     depth_sum += this_point_camera_curr.z();
 
   }
-  std::cout << std::endl;
+  // std::cout << std::endl;
 
-  std::cout << "Passed averaging depth.\n";
+  // std::cout << "Passed averaging depth.\n";
 
   double obj_depth = depth_sum / n_ground_pixels;
 
-  std::cout << "Estimated depth: " << obj_depth << std::endl;
+  // std::cout << "Estimated depth: " << obj_depth << std::endl;
 
-  return obj_depth;
+  return std::optional<double>(obj_depth);
 }
 
 /**
  * @brief Estimate the depth of the object using an approximate dimension of the object
  * Assuming the object is flat/facing the camera with a surface normal to the camera optical axis
- * 
+ *
  */
 
-double estimateDepthFromDimension(const cv::Mat semantic_mask, 
-                                  const Camera::Ptr camera, 
-                                  const ObjectId obj_id, 
+double estimateDepthFromDimension(const cv::Mat semantic_mask,
+                                  const Camera::Ptr camera,
+                                  const ObjectId obj_id,
                                   const double obj_width){
 
   cv::Mat obj_mask = (semantic_mask == obj_id);
-  cv::Mat close_element = cv::getStructuringElement(cv::MORPH_ELLIPSE, 
+  cv::Mat close_element = cv::getStructuringElement(cv::MORPH_ELLIPSE,
                                                     cv::Size(11, 11)); // a circle with diameter 11
   cv::Mat closed_mask;
   cv::morphologyEx(obj_mask, closed_mask, cv::MORPH_CLOSE, close_element);
@@ -455,7 +461,7 @@ double estimateDepthFromDimension(const cv::Mat semantic_mask,
   cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
 
   double fx = intrinsic(0, 0);
-  double obj_depth = obj_width*fx/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis 
+  double obj_depth = obj_width*fx/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis
 
   return obj_depth;
 }

@@ -36,7 +36,7 @@ namespace dyno {
 DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display)
     :   params_(params),
         data_loader_(std::move(data_loader)),
-        displayer_(&display_queue_, false)
+        displayer_(&display_queue_, params.parallel_run_)
 
 {
     LOG(INFO) << "Starting DynoPipelineManager";
