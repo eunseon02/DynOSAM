@@ -188,7 +188,7 @@ gtsam::Point3Vector triangulatePoint3VectorNonExpanded(const gtsam::Pose3& X_wor
  *
  */
 
-gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd depths, const gtsam::Point2Vector observations){
+gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen::VectorXd& depths, const gtsam::Point2Vector& observations){
   CHECK_EQ(depths.size(), observations.size());
 
   gtsam::Matrix3 K_inv = intrinsic.inverse();
@@ -211,7 +211,7 @@ gtsam::Point3Vector depthsToPoints(const gtsam::Matrix3& intrinsic, const Eigen:
  *
  */
 
-Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector points){
+Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Point3Vector& points){
   int n_points = points.size();
   Eigen::VectorXd depths(n_points);
 
@@ -230,7 +230,7 @@ Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Poi
  *
  */
 
-bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd depths){
+bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd& depths){
   int n_depths = depths.size();
   double standard_deviation = 1000.0;
   double sum = 0.0;
@@ -417,7 +417,7 @@ double estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_prev,
  * 
  */
 
-double estimateDepthFromDimension(const cv::Mat semantic_mask, 
+double estimateDepthFromDimension(const cv::Mat& semantic_mask, 
                                   const Camera::Ptr camera, 
                                   const ObjectId obj_id, 
                                   const double obj_width){
@@ -458,6 +458,50 @@ double estimateDepthFromDimension(const cv::Mat semantic_mask,
   double obj_depth = obj_width*fx/obj_pixel_width; // assuming the object is normal to the optical axis, and aligned with x axis 
 
   return obj_depth;
+}
+
+
+/**
+ * @brief Check the ratio between the estimated scale of the object between frames
+ * prev_points and curr_points are expected to be the same size and same order in point correspondences
+ * 
+ */
+
+bool validateScaleConsistency(const gtsam::Point3Vector& prev_points, 
+                              const gtsam::Point3Vector& curr_points, 
+                              double scale_ratio_thres){
+  CHECK_EQ(prev_points.size(), curr_points.size());
+
+  int n_points = prev_points.size();
+  int n_pair = 0;
+  double prev_distance_sum = 0.0;
+  double curr_distance_sum = 0.0;
+
+  for (int i = 0; i < n_points; i++){
+    for (int j = i+1; j < n_points; j++){
+      gtsam::Point3 prev_this_pair = prev_points[i] - prev_points[j];
+      gtsam::Point3 curr_this_pair = curr_points[i] - curr_points[j];
+      prev_distance_sum += prev_this_pair.norm();
+      curr_distance_sum += curr_this_pair.norm();
+      n_pair++;
+    }
+  }
+
+  double prev_distance_average = prev_distance_sum/(double) n_pair;
+  double curr_distance_average = curr_distance_sum/(double) n_pair;
+
+  double scale_ratio = curr_distance_average / prev_distance_average;
+  // We should allow the thres to be bi-directional. 
+  // i.e. prev can be bigger or smaller than curr scale, within a ratio thres
+  // Now we expect scale ratio thres to be the lower bound
+  if (scale_ratio_thres > 1){
+    scale_ratio_thres = 1/scale_ratio_thres;
+  }
+  if(scale_ratio >= scale_ratio_thres || scale_ratio <= 1/scale_ratio){
+    return true;
+  } else {
+    return false;
+  }
 }
 
 } //mono_backend_tools
