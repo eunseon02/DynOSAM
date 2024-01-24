@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,39 +21,9 @@
  *   SOFTWARE.
  */
 
-#pragma once
-
-#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
-#include "dynosam/pipeline/ThreadSafeQueue.hpp"
-
-#include <opencv4/opencv2/opencv.hpp>
-#include <optional>
+#include "dynosam/common/DynamicObjects.hpp"
 
 namespace dyno {
 
 
-struct ImageToDisplay {
-  ImageToDisplay() = default;
-  ImageToDisplay(const std::string& name, const cv::Mat& image)
-    //clone necessary?
-      : name_(name), image_(image.clone()) {}
-
-  std::string name_;
-  cv::Mat image_;
-};
-
-using ImageDisplayQueue = ThreadsafeQueue<ImageToDisplay>;
-
-class OpenCVImageDisplayQueue {
-
-public:
-    OpenCVImageDisplayQueue(ImageDisplayQueue* display_queue, bool parallel_run);
-
-    void process();
-
-private:
-    ImageDisplayQueue* display_queue_;
-    bool parallel_run_;
-};
-
-} //dyno
+}

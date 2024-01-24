@@ -58,11 +58,19 @@ DEFINE_int32(optimize_n_frame, 15, "Runs the (full batch) optimziation every N f
 DEFINE_bool(use_last_seen_dynamic_point_prior, false, "Will add a prior using perturbed gt on the last observed frame of an object");
 DEFINE_double(scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
 
+//object too small degeneracy cases!!
+//right now we dont have semantic segmentation so assume everythign is a car?
+DEFINE_double(min_object_distance_away, 20, "Used when detected degeneracy cases if an object is too small");
+DEFINE_double(expected_metric_width, 3, "Defines the expected metric width of an object to determine if it is too small");
+DEFINE_double(expected_metric_height, 2, "Defines the expected metric height of an object to determine if it is too small");
+DEFINE_double(allowable_object_size_thresh, 1.5, "Maximum ration between the real projected area of an object and the allowable projection of an object"
+    " when we assume we know something about its size. If ratio < this, object is degenerate");
+
 
 namespace dyno {
 
-MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_params, Camera::Ptr camera)
-    :   BackendModule(backend_params, camera) {
+MonoBatchBackendModule::MonoBatchBackendModule(const BackendParams& backend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+    :   BackendModule(backend_params, camera, display_queue) {
 
 
     pose_init_func_ = [=](FrameId frame_id, const gtsam::Pose3& measurement, const GroundTruthInputPacket& gt_packet) {
@@ -226,7 +234,8 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         fullBatchOptimize(new_values_, new_factors_);
 
         new_scaled_estimates_.clear();
-        checkStateForScaleEstimation(state_, current_frame_id, new_scaled_estimates_);
+        //TODO: depricate
+        // checkStateForScaleEstimation(state_, current_frame_id, new_scaled_estimates_);
         // LOG(FATAL) << "Done";
 
     }
@@ -609,6 +618,9 @@ void MonoBatchBackendModule::runDynamicUpdate(
         //points to add to the graph that previous existed (were modelled) at proceeding timesteps
         TrackletIds existing_well_tracked_points;
 
+        // std::vector<std::pair<FrameId, TrackletId>> well_tracked_points;
+        std::set<FrameId> frames_covered;
+
         for(TrackletId tracklet_id : tracklet_ids) {
             CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
 
@@ -632,18 +644,24 @@ void MonoBatchBackendModule::runDynamicUpdate(
                 //the previous point should be in the graph
                 CHECK(new_values_.exists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
                 existing_well_tracked_points.push_back(tracklet_id);
+                frames_covered.insert(current_frame_id);
             }
             else {
                 CHECK(!new_values_.exists(previous_dynamic_point_symbol)) << DynoLikeKeyFormatter(previous_dynamic_point_symbol);
+                std::set<FrameId> possible_frames_covered;
                 //not in graph so lets see if well tracked
                 bool is_well_tracked = true;
-                for(size_t i = current_frame_id - min_dynamic_obs; i <= current_frame_id; i++) {
+                for(FrameId i = current_frame_id - min_dynamic_obs; i <= current_frame_id; i++) {
                     //for each dynamic point, check if we have a previous point that is also tracked
                     is_well_tracked &= tracklet.exists(i);
+                    possible_frames_covered.insert(i);
                 }
 
                 if(is_well_tracked) {
                     new_well_tracked_points.push_back(tracklet_id);
+                    //point is well tracked so add history to well tracked points
+                    frames_covered.insert(possible_frames_covered.begin(), possible_frames_covered.end());
+
                 }
 
             }
@@ -653,6 +671,22 @@ void MonoBatchBackendModule::runDynamicUpdate(
         }
 
         LOG(INFO) << new_well_tracked_points.size() << " newly tracked for dynamic object and " << existing_well_tracked_points.size() << " existing tracks for object id " << object_id;
+
+        for(FrameId frame : frames_covered) {
+            ObjectPoseGT object_pose_gt;
+            auto gt_frame_packet = gt_packet_map_.at(frame);
+            if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                LOG(ERROR) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
+                // continue;
+            }
+            else {
+                LOG(INFO) << object_pose_gt;
+            }
+        }
+
+        //TODO: depricate
+        // decideInitalisationMethod(well_tracked_points, object_id, current_frame_id);
+
         for(TrackletId tracked_id : new_well_tracked_points) {
             DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracked_id);
 
@@ -661,10 +695,10 @@ void MonoBatchBackendModule::runDynamicUpdate(
             //all the time)
             //we need to start it at the second (hence +1) frame so that we always have the object in the prior frame!!
             //this only needs to happen for new_well_tracked_points
-            const size_t starting_frame_points = current_frame_id - min_dynamic_obs+1;
-            const size_t starting_frame_motion = starting_frame_points + 1;
+            const FrameId starting_frame_points = current_frame_id - min_dynamic_obs+1;
+            const FrameId starting_frame_motion = starting_frame_points + 1;
             //up to and including the current frame
-            for(size_t frame = starting_frame_points; frame <= current_frame_id; frame++) {
+            for(FrameId frame = starting_frame_points; frame <= current_frame_id; frame++) {
                 DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame, tracked_id);
                 const Keypoint& kp = tracklet.at(frame);
 
@@ -918,7 +952,7 @@ void MonoBatchBackendModule::fullBatchOptimize(gtsam::Values& values, gtsam::Non
 
 }
 
-
+//TODO: depricate
 void MonoBatchBackendModule::checkStateForScaleEstimation(const gtsam::Values& values, FrameId last_optimized_frame_id, StatusLandmarkEstimates& new_estimates) {
     const auto& camera_params = camera_->getParams();
     const gtsam::Matrix3 K = camera_params.getCameraMatrixEigen();
@@ -1058,14 +1092,18 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
         const auto prev_object_motion_key = ObjectMotionSymbol(prev_object_id, previous_frame_id);
         const auto curr_object_motion_key = ObjectMotionSymbol(prev_object_id, current_frame_id);
 
-        //we also need to check if the associated object motion is actually in the graph (as we need a certain number of observations before we add)
-        // if(!estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key)) {
-        //logic should be !estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key) but seems to be
-        //some discrepancy between motions observed and motions added (not sure why....)
-        if(new_values_.exists(prev_object_motion_key) && !new_values_.exists(curr_object_motion_key)) {
+        ObjectPoseGT object_pose_gt;
+        auto gt_frame_packet = gt_packet_map_.at(current_frame_id);
+        if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+            LOG(ERROR) << "Could not find gt object at frame " << current_frame_id<< " for object Id " << object_id << " and packet " << gt_frame_packet;
+            // continue;
+        }
 
-            //sanity check to see if the values reflect this
-            // CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(curr_object_motion_key);
+        const gtsam::Pose3& prev_H_current_world_gt = *object_pose_gt.prev_H_current_world_;
+        LOG(INFO) << prev_H_current_world_gt.translation().norm() << " object id " << object_id;
+        if(prev_H_current_world_gt.translation().norm() < 0.05) {
+            LOG(ERROR) << "Object " << object_id << " stopped between " << previous_frame_id << " and " << current_frame_id;
+
 
             //get all points
             auto extracted_dynamic_points = new_values_.extract<gtsam::Point3>(gtsam::Symbol::ChrTest(kDynamicLandmarkSymbolChar));
@@ -1079,7 +1117,7 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
 
                     //get nice gt data
                     auto input = input_packet_map_.at(point_frame_id);
-                    Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
+                    Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(point_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
 
                     new_factors_.addPrior(key, gt_lmk,
                         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
@@ -1089,6 +1127,38 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
             }
 
         }
+
+        //we also need to check if the associated object motion is actually in the graph (as we need a certain number of observations before we add)
+        // if(!estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key)) {
+        //logic should be !estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key) but seems to be
+        //some discrepancy between motions observed and motions added (not sure why....)
+        // if(new_values_.exists(prev_object_motion_key) && !new_values_.exists(curr_object_motion_key)) {
+
+        //     //sanity check to see if the values reflect this
+        //     // CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(curr_object_motion_key);
+
+        //     //get all points
+        //     auto extracted_dynamic_points = new_values_.extract<gtsam::Point3>(gtsam::Symbol::ChrTest(kDynamicLandmarkSymbolChar));
+        //     for(const auto&[key, point] : extracted_dynamic_points) {
+        //         DynamicPointSymbol dps(key);
+        //         const TrackletId tracklet_id = dps.trackletId();
+        //         const FrameId point_frame_id = dps.frameId();
+        //         const auto stored_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+
+        //         if(point_frame_id == previous_frame_id && stored_object_id == object_id) {
+
+        //             //get nice gt data
+        //             auto input = input_packet_map_.at(point_frame_id);
+        //             Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
+
+        //             new_factors_.addPrior(key, gt_lmk,
+        //                 gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
+
+        //             debug_info.incrementNumScalePriors(object_id);
+        //         }
+        //     }
+
+        // }
     }
 
 }
@@ -1116,6 +1186,85 @@ bool MonoBatchBackendModule::safeAddConstantObjectVelocityFactor(FrameId current
         return false;
     }
 }
+
+
+//TODO: depricate
+ObjectDegeneracyType MonoBatchBackendModule::decideInitalisationMethod(const std::vector<std::pair<FrameId, TrackletId>>& well_tracked_points, ObjectId object_id, FrameId current_frame) {
+    //first check for degeneracy cases
+    //first collect into frames
+    gtsam::FastMap<FrameId, TrackletIds> tracklets_per_frame;
+    for(const std::pair<FrameId, TrackletId>& tracklet_info : well_tracked_points) {
+        const FrameId frame_id = tracklet_info.first;
+        const TrackletId tracklet_id = tracklet_info.second;
+
+        if(!tracklets_per_frame.exists(frame_id)) {
+            tracklets_per_frame.insert2(frame_id, TrackletIds{});
+        }
+        tracklets_per_frame.at(frame_id).push_back(tracklet_id);
+
+    }
+
+    //1. Object (assume car!! we actually dont have information as to the semantics of the object) is too small!
+
+    //object must be closer than FLAGS_min_object_distance_away meters away
+    const double min_distance_away = FLAGS_min_object_distance_away;
+    const double expected_metric_width = FLAGS_expected_metric_width;
+    const double expected_metric_height = FLAGS_expected_metric_height;
+    //from the camera center which is the center of the image when projected
+    const Landmark top_left(-expected_metric_width/2, expected_metric_height/2, min_distance_away);
+    const Landmark bottom_right(expected_metric_width/2, -expected_metric_height/2, min_distance_away);
+    const Landmarks lmks = {top_left, bottom_right};
+    Keypoints kpts;
+
+    camera_->project(lmks, &kpts);
+    //convert to cv rect
+    const cv::Point tl(kpts.at(0)(0), kpts.at(0)(1));
+    const cv::Point br(kpts.at(1)(0), kpts.at(1)(1));
+    //allowable area of projected object on the image plane
+    const cv::Rect projected_rect(tl, br);
+
+    for(const auto&[frame_id, tracklets] : tracklets_per_frame) {
+        CHECK(input_packet_map_.exists(frame_id));
+        const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+        const Frame& frame = input->frame_;
+        //viz for degeneracy cases
+        cv::Mat rgb_objects;
+        frame.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+
+        const cv::Rect& bb = frame.object_observations_.at(object_id).bounding_box_;
+        //area of object mask in the image plane
+        const double area = bb.area();
+        const double ratio = area/projected_rect.area();
+        LOG(INFO) << "Ratio " << ratio << " object id " << object_id << " frame id " << frame_id;
+        //true if the projected area is > by a ration than the allowable threshold
+        bool is_okay_size;
+        if(ratio < FLAGS_allowable_object_size_thresh) {
+            is_okay_size = false;
+        }
+        else {
+            is_okay_size = true;
+        }
+
+        if(!is_okay_size) {
+            //TODO: copied from Frame.cc (centralize)
+            const cv::Scalar red_colour = cv::Scalar(0, 0, 255, 255);
+            const std::string label = "Object: " + std::to_string(object_id) + " - too SMALL!";
+            utils::drawLabeledBoundingBox(rgb_objects, label, red_colour, bb);
+        }
+
+        //TODO: need to label per frame but this is only an issue for the first few frames
+        // if(display_queue_) display_queue_->push(ImageToDisplay("Degeneracy Cases", rgb_objects));
+
+
+        cv::imshow("Degeneracy Cases", rgb_objects);
+        cv::waitKey(1);
+
+    }
+
+    //for now
+    return ObjectDegeneracyType::DEGENERATE_TRIANGULATION;
+}
+
 
 Landmark MonoBatchBackendModule::initaliseFromPerturbedGtPose(FrameId, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3&, const GroundTruthInputPacket& gt_packet) {
     const auto& camera_params = camera_->getParams();
@@ -1165,6 +1314,46 @@ Landmark MonoBatchBackendModule::initaliseFromScaledGtDepth(FrameId frame_id, Tr
     Landmark lmk_world;
     camera_->backProject(measurement, scaled_depth, &lmk_world, cam_pose);
     return lmk_world;
+}
+
+Landmark MonoBatchBackendModule::initaliseWithDegeneracyChecks(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {
+    const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+    const Frame& frame = input->frame_;
+
+    using ObjectFramePair = std::pair<FrameId, ObjectId>;
+    //std::hash function for this map is defined in StructuredContainers.hpp
+    static gtsam::FastMap<ObjectFramePair, bool> is_object_ok_size_cache;
+    //first check cache
+    const auto cache_key = std::make_pair(frame_id, object_id);
+
+    cv::Mat rgb_objects;
+    frame.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+    //first check for degeneracy cases
+    //1. Object (assume car!! we actually dont have information as to the semantics of the object) is too small!
+    bool is_okay_size;
+     if(is_object_ok_size_cache.exists(cache_key)) {
+        is_okay_size = is_object_ok_size_cache.at(cache_key);
+    }
+    else {
+        const cv::Rect& bb = frame.object_observations_.at(object_id).bounding_box_;
+        //area of object mask in the image plane
+        const double area = bb.area();
+        //what we expect the object size to be in the image plane given we know something about
+        //the objects real size?
+        const double minimum_allowable_area = 10;
+        //as object gets further away the area gets smaller, so the scale ration will go down
+        const double ratio = area/minimum_allowable_area;
+        const double kMinRatioThreshold = 0.5;
+        if(ratio < kMinRatioThreshold) {
+            is_okay_size = false;
+        }
+        else {
+            is_okay_size = true;
+        }
+        //2. Attempt triangulation from road and check if degenracy case
+        //3. Initalise somehow?
+    }
+
 }
 
 Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&) {

@@ -52,9 +52,15 @@ int main(int argc, char* argv[]) {
     // dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
     // while(pipeline.spin()) {};
     dyno::VirtualKittiDataLoader::Params params;
-    params.scene = "Scene01";
+    params.scene = "Scene20";
     params.scene_type = "clone";
     params.mask_type = dyno::MaskType::MOTION;
+
+    // dyno::KittiDataLoader::Params params;
+    // params.base_line = 388.1822;
+    // params.mask_type = dyno::MaskType::MOTION;
+
+    // dyno::KittiDataLoader d("/root/data/vdo_slam/kitti/kitti/0020", params);
 
     dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
     d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {

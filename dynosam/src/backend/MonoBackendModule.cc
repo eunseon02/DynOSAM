@@ -47,7 +47,7 @@ DEFINE_string(backend_graph_file, "/root/results/DynoSAM/mono_backend_graph.g2o"
 namespace dyno {
 
 MonoBackendModule::MonoBackendModule(const BackendParams& backend_params, Camera::Ptr camera)
-    :   BackendModule(backend_params, camera)
+    :   BackendModule(backend_params, camera, nullptr)
 {
 
     gtsam::ISAM2Params isam_params;

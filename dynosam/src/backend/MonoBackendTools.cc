@@ -25,6 +25,7 @@
 #include "dynosam/utils/Numerical.hpp"
 #include <gtsam/geometry/triangulation.h>
 #include <opencv2/core/eigen.hpp>
+#include <dynosam/utils/Accumulator.hpp>
 
 namespace dyno {
 
@@ -299,7 +300,7 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
     return std::optional<double>{};
   }
 
-  cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8UC3);
+  // cv::Mat contours_viz = cv::Mat::zeros(obj_mask.size(), CV_8UC3);
   // for (int i_contour = 0; i_contour < contours.size(); i_contour++){
   //   for (int i_point = 0; i_point < contours[i_contour].size(); i_point++){
   //     // std::cout << "Contour point at " << contours[i_contour][i_point].x << ", " << contours[i_contour][i_point].y << std::endl;
@@ -310,7 +311,8 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
   //   cv::Scalar color = cv::Scalar(0, 0, 255);
   //   drawContours( contours_viz, contours, (int)i, color, 1, cv::LINE_8, hierarchy, 0 );
   // }
-  // cv::imshow("Contours", contours_viz);
+  // cv::imshow("Contours " + std::to_string(obj_id), contours_viz);
+  // cv::waitKey(1);
 
   cv::Mat ground_pixel_prev_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
   cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
@@ -364,8 +366,9 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
 
   // std::cout << "Passed ground pixel search.\n";
 
-  // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  // // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
   // cv::imshow("Ground pixels", ground_pixel_viz);
+  // cv::waitKey(1);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
@@ -384,15 +387,32 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
   // cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
 
   double depth_sum = 0.0;
+  int num_degenerate_points = 0;
+
+  utils::Accumulatord depth_accumulator;
 
   for (int i_ground_pixels = 0; i_ground_pixels < n_ground_pixels; i_ground_pixels++){
     gtsam::Point2Vector measurments({ground_pixels_prev[i_ground_pixels], ground_pixels_curr[i_ground_pixels]});
     gtsam::TriangulationResult this_point_result;
     try {
-       this_point_result = gtsam::triangulateSafe(cameras, measurments, gtsam::TriangulationParameters{});
+      gtsam::TriangulationParameters triangulation_params;
+      //values in the matrix > rankTolerance will add to the rank
+      // triangulation_params.rankTolerance = 30.0;
+      // // triangulation_params.enableEPI = true;
+      // triangulation_params.dynamicOutlierRejectionThreshold = 0.1;
+      // triangulation_params.landmarkDistanceThreshold = 20;
+
+      this_point_result = gtsam::triangulateSafe(cameras, measurments, triangulation_params);
     }
-    catch(const gtsam::TriangulationCheiralityException& e) {
+    catch(const gtsam::TriangulationCheiralityException&) {
        continue;
+    }
+    catch(const gtsam::CheiralityException&) {
+       continue;
+    }
+
+    if(this_point_result.degenerate()) {
+      num_degenerate_points++;
     }
 
     if(!this_point_result) {continue; }
@@ -405,18 +425,24 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
 
     // std::cout << this_point_camera_curr.z() << " ";
 
-    depth_sum += this_point_camera_curr.z();
+    // depth_sum += this_point_camera_curr.z();
+    depth_accumulator.Add(this_point_camera_curr.z());
 
   }
-  // std::cout << std::endl;
 
-  // std::cout << "Passed averaging depth.\n";
+  // LOG(INFO) << "num degenerate points " << num_degenerate_points << " out of " << n_ground_pixels << " with std " << depth_accumulator.StandardDeviation();
+  //remove outliers, if value within +/- this value from the mean
+  const double kStdOutlierThreshold = 1;
+  double obj_depth_mean = depth_accumulator.Mean();
+  double obj_depth_std = depth_accumulator.StandardDeviation();
 
-  double obj_depth = depth_sum / n_ground_pixels;
+  utils::Accumulatord depth_accumulator_filtered = depth_accumulator.OutlierRejectionStd(kStdOutlierThreshold);
 
-  // std::cout << "Estimated depth: " << obj_depth << std::endl;
 
-  return std::optional<double>(obj_depth);
+  LOG(INFO) << "Old mean " << obj_depth_mean << " old std " << obj_depth_std
+    << ". new mean " << depth_accumulator_filtered.Mean() << " new std " << depth_accumulator_filtered.StandardDeviation();
+
+  return std::optional<double>(depth_accumulator.Mean());
 }
 
 /**

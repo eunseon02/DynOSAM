@@ -39,6 +39,12 @@ enum ProjectionFactorType {
     PROJECTION
 };
 
+enum ObjectDegeneracyType {
+    TOO_SMALL,
+    DEGENERATE_TRIANGULATION,
+    OK
+};
+
 struct ProjectionFactorStatus {
     TrackletId tracklet_id_;
     ProjectionFactorType pf_type_;

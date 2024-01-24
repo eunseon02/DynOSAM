@@ -26,11 +26,13 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/common/Exceptions.hpp"
-#include "dynosam/backend/BackendDefinitions.hpp"
 
+#include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
+
+#include "dynosam/visualizer/Visualizer-Definitions.hpp" //for ImageDisplayQueueOptional
 
 
 namespace dyno {
@@ -48,7 +50,7 @@ public:
     using Base::SpinReturn;
 
 
-    BackendModule(const BackendParams& params, Camera::Ptr camera);
+    BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
     ~BackendModule() = default;
 
 
@@ -63,6 +65,8 @@ protected:
     //! Camera related parameters
     Camera::Ptr camera_;
     boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
+
+    ImageDisplayQueue* display_queue_{nullptr}; //! Optional display queue
 
     //params for factors
     SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points

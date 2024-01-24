@@ -153,34 +153,16 @@ cv::Mat Frame::drawDetectedObjectBoxes() const {
     cv::Mat rgb_objects;
     tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
 
-    cv::Mat mask;
-    tracking_images_.cloneImage<ImageType::MotionMask>(mask);
+    for(auto& object_observation_pair : object_observations_) {
+        const ObjectId object_id = object_observation_pair.first;
+        const cv::Rect& bb = object_observation_pair.second.bounding_box_;
 
-    const ObjectIds tracked_object_ids = this->getObjectIds();
-    // For each tracked object, find its id in the mask
-    // and draw it.
-    // We apply some eroding/dilation on it to make the resulting submask smoother
-    // so that we can more easily fit an rectangle to it
-    for(const ObjectId object_id : tracked_object_ids) {
-        cv::Mat obj_mask = (mask == object_id);
-        cv::Mat dilated_obj_mask;
-        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
-                                                            cv::Size(1, 11)); // a rectangle of 1*5
-        cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+        if(bb.empty()) { continue; }
 
-        std::vector<std::vector<cv::Point>> contours;
-        std::vector<cv::Vec4i> hierarchy;
-        cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+        const std::string label = "Object: " + std::to_string(object_id);
+        utils::drawLabeledBoundingBox(rgb_objects, label, colour, bb);
 
-        if(contours.empty()) {continue;}
-
-        for(auto it : contours) {
-            cv::Rect bb = cv::boundingRect(it);
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
-            const std::string label = "Object: " + std::to_string(object_id);
-            utils::drawLabeledBoundingBox(rgb_objects, label, colour, bb);
-
-        }
     }
 
     return rgb_objects;
@@ -327,10 +309,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 
 void Frame::constructDynamicObservations() {
-    // CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
-    // utils::TimingStatsCollector construct_obs_timer("construct_dynamic_obs_timer");
-
     const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
 
     auto inlier_iterator = dynamic_features_.beginUsable();
@@ -351,6 +330,45 @@ void Frame::constructDynamicObservations() {
 
         object_observations_[instance_label].object_features_.push_back(dynamic_feature->tracklet_id_);
     }
+
+    // now construct image masks from tracking mask
+    // For each tracked object, find its id in the mask
+    // and draw it.
+    // We apply some eroding/dilation on it to make the resulting submask smoother
+    // so that we can more easily fit an rectangle to it
+    const cv::Mat& mask = tracking_images_.get<ImageType::MotionMask>();
+    for(auto& object_observation_pair : object_observations_) {
+        const ObjectId object_id = object_observation_pair.first;
+        DynamicObjectObservation& obs = object_observation_pair.second;
+
+        cv::Mat obj_mask = (mask == object_id);
+        cv::Mat dilated_obj_mask;
+        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+                                                            cv::Size(1, 11)); // a rectangle of 1*5
+        cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+
+        std::vector<std::vector<cv::Point>> contours;
+        std::vector<cv::Vec4i> hierarchy;
+        cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+        if(contours.empty()) {
+            obs.bounding_box_ = cv::Rect();
+        }
+        else if(contours.size() == 1u) {
+            obs.bounding_box_ = cv::boundingRect(contours.at(0));
+        }
+        else {
+            std::vector<cv::Rect> rectangles;
+            for(auto it : contours) {
+                rectangles.push_back(cv::boundingRect(it));
+            }
+            cv::Rect merged_rect = rectangles[0];
+            for(const auto& r : rectangles) { merged_rect |= r; }
+            obs.bounding_box_ = merged_rect;
+        }
+    }
+
+
 }
 
 void Frame::moveObjectToStatic(ObjectId instance_label) {

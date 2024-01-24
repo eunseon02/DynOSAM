@@ -63,7 +63,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
         //intitial computation
         const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
         CHECK(!previous_frame_);
-        CHECK(img_size_.width == other_size.width && img_size_.height == other_size.height);
+        CHECK_EQ(img_size_.width, other_size.width);
+        CHECK_EQ(img_size_.height, other_size.height);
         initial_computation_ = false;
     }
     else {

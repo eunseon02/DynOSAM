@@ -100,7 +100,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
         gt_objects.drawBoundingBox(rgb_gt_objects);
     }
 
-    if(display_queue_) display_queue_->push(ImageToDisplay("GT Object BB", rgb_gt_objects));
+    // if(display_queue_) display_queue_->push(ImageToDisplay("GT Object BB", rgb_gt_objects));
      if(display_queue_) display_queue_->push(ImageToDisplay("Object BB", frame->drawDetectedObjectBoxes()));
 
 

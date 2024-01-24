@@ -40,7 +40,7 @@ namespace dyno {
 class MonoBatchBackendModule : public BackendModule {
 
 public:
-    MonoBatchBackendModule(const BackendParams& backend_params, Camera::Ptr camera);
+    MonoBatchBackendModule(const BackendParams& backend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue = nullptr);
     ~MonoBatchBackendModule();
 
     using SpinReturn = BackendModule::SpinReturn;
@@ -137,6 +137,11 @@ private:
 
     bool safeAddConstantObjectVelocityFactor(FrameId current_frame, ObjectId object_id, const gtsam::Values& values, gtsam::NonlinearFactorGraph& factors);
 
+    // The frame in well_tracked_points might not be the current frame as this includes the set of newly trackled points to add
+    ObjectDegeneracyType decideInitalisationMethod(const std::vector<std::pair<FrameId, TrackletId>>& well_tracked_points, ObjectId object_id, FrameId current_frame);
+
+    //starting frame should be current_frame - min_observations + 1
+    // void addTrackedDynamicPointsToGraph(const std::vector<std::pair<FrameId, TrackletId>>& tracklet_infos, ObjectId object_id, FrameId current_frame, FrameId starting_frame_points, FrameId starting_frame_motion)
 
     //Dynamic point Initalisation methods
     //0
@@ -144,6 +149,11 @@ private:
     //1
     Landmark initaliseFromScaledGtDepth(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&);
     //2
+    //System initaliseation without any gt
+    //this checks for degeneracy cases and may attempt to add a prior on thie point as well
+    //TODO: clear up all the interfaces as it is very messy
+    Landmark initaliseWithDegeneracyChecks(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&);
+
     Landmark initaliseFromNearbyRoad(FrameId frame_id, TrackletId, ObjectId object_id, const Keypoint& measurement, const gtsam::Pose3& cam_pose, const GroundTruthInputPacket&);
 
 

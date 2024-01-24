@@ -79,7 +79,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
             LOG(INFO) << "Making MonoInstance frontend";
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<MonoInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera);
+            backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera, &display_queue_);
         }   break;
 
         default: {

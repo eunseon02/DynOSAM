@@ -66,6 +66,20 @@ void ObjectPoseGT::setMotions(const ObjectPoseGT& previous_object_gt, const gtsa
     // H between t-1 and t in the world frame
     gtsam::Pose3 H_W_gt = L_world_prev * H_L_gt * L_world_prev.inverse();
     prev_H_current_world_ = H_W_gt;
+
+    MotionInfo motion_info;
+    motion_info.is_moving_ = isMoving(L_world_prev, L_world_curr);
+    motion_info.has_stopped_ = false; //default
+
+    if(previous_object_gt.motion_info_) {
+        //moving in the previous frame but not in this frame
+        if(previous_object_gt.motion_info_->is_moving_ && !motion_info.is_moving_) {
+            motion_info.has_stopped_ = true;
+        }
+    }
+
+    motion_info_ = motion_info;
+
 }
 
 void ObjectPoseGT::drawBoundingBox(cv::Mat& img) const {
@@ -78,7 +92,12 @@ void ObjectPoseGT::drawBoundingBox(cv::Mat& img) const {
 ObjectPoseGT::operator std::string() const {
     std::stringstream ss;
     ss << "FrameId: " << frame_id_
-        << " ObjectId: " << object_id_;
+       << " ObjectId: " << object_id_;
+
+    if(motion_info_) {
+        ss << " Is moving " << motion_info_->is_moving_
+           << " Has stopped " << motion_info_->has_stopped_;
+    }
     return ss.str();
 }
 

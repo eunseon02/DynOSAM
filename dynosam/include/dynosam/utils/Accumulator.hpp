@@ -71,6 +71,7 @@ static constexpr int kInfiniteWindowSize = std::numeric_limits<int>::max();
 template <typename SampleType, typename SumType, int WindowSize>
 class Accumulator {
  public:
+  using This = Accumulator<SampleType, SumType, WindowSize>;
   Accumulator()
       : sample_index_(0),
         total_samples_(0),
@@ -178,8 +179,36 @@ class Accumulator {
   /* ------------------------------------------------------------------------ */
   SumType StandardDeviation() const { return std::sqrt(LazyVariance()); }
 
+  //TODO: needs tests
+  // only includes values that are within mean +/- threshold * std
+  This OutlierRejectionStd(double threshold) {
+    const auto mean = Mean();
+    const auto std = StandardDeviation();
+
+    const auto min_value = mean - threshold * std;
+    const auto max_value = mean + threshold * std;
+
+    This filtered;
+    for(auto value : *this) {
+      if(value > min_value && value < max_value) {
+        filtered.Add(value);
+      }
+    }
+
+    return filtered;
+  }
+
   /* ------------------------------------------------------------------------ */
   const std::vector<SampleType> &GetAllSamples() const { return samples_; }
+
+  typename std::vector<SampleType>::iterator begin() { return samples_.begin(); }
+  const typename std::vector<SampleType>::iterator begin() const { return samples_.begin(); }
+
+  typename std::vector<SampleType>::iterator end() { return samples_.end(); }
+  const typename std::vector<SampleType>::iterator end() const { return samples_.end(); }
+
+  const typename std::vector<SampleType>::const_iterator cbegin() const { return samples_.cbegin(); }
+  const typename std::vector<SampleType>::const_iterator cend() const { return samples_.cend(); }
 
 private:
   std::vector<SampleType> samples_;

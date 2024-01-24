@@ -27,10 +27,11 @@
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera)
+BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     :   Base("backend"),
         base_params_(params),
-        camera_(CHECK_NOTNULL(camera))
+        camera_(CHECK_NOTNULL(camera)),
+        display_queue_(display_queue)
 
 {
     const auto& camera_params = camera_->getParams();

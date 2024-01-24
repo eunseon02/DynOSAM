@@ -130,7 +130,7 @@ public:
             << " - loaded from timestamps file found at " << default_dataset_->getAbsoluteFolderPath<TimestampFileIdx>();
     }
 
-    //only valid after load
+    //only valid after setLoaders
     virtual size_t getDatasetSize() const { return timestamp_file_->size(); }
     const std::string getDatasetPath() const { return dataset_path_; }
 

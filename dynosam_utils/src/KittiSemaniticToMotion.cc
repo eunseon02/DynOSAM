@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     cv::Mat rgb_cur;
 
 
-    const std::string path = "/root/data/vdo_slam/kitti/kitti/0006";
+    const std::string path = "/root/data/vdo_slam/kitti/kitti/0020";
     //becuase this uses the KittiDataLoader, this will use whatever semantic/instance laoder is in
     KittiDataLoader::Params params;
     params.base_line = 0; //dont care
@@ -162,7 +162,7 @@ int main(int argc, char* argv[]) {
                 mask_cur = instance_mask;
                 rgb_cur = rgb;
 
-                std::vector<int> moving_labels = findMovingObject(prev_packet_vector, gt_object_pose_gt);
+                std::vector<int> moving_labels = findMovingObject(prev_packet_vector, gt_object_pose_gt,0.2);
                 motion_mask = constructMotionMask(instance_mask, moving_labels);
 
                 cv::Mat motion_mask_viz, instance_mask_viz;

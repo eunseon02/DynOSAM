@@ -36,9 +36,10 @@ namespace dyno {
 struct ObjectPoseGT {
     DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
 
-    // struct MotionInfo {
-    //     bool is_moving{}
-    // };
+    struct MotionInfo {
+        bool is_moving_;
+        bool has_stopped_; //has stopped since the previous frame. If true, then is_moving_ should be false
+    };
 
     FrameId frame_id_; //k
     ObjectId object_id_;
@@ -58,6 +59,8 @@ struct ObjectPoseGT {
 
     /// @brief Motion in the (ground truth camera) frame (^WX_{k-1}) that takes us from k-1 (frame_id -1) to k (frame_id)
     std::optional<gtsam::Pose3> prev_H_current_X_;
+
+    std::optional<MotionInfo> motion_info_;
 
     /**
      * @brief Draws the object label and bounding box on the provided image

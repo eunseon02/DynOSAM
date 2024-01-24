@@ -320,6 +320,7 @@ private:
     static void updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth);
 
     //based on the current set of dynamic features
+    // populates object_observations_
     void constructDynamicObservations();
 
     Landmark getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature, const gtsam::Pose3& X_world) const;
