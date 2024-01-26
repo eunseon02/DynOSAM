@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,16 +21,15 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/utils/Logger.hpp"
-
+#include "dynosam/logger/Logger.hpp"
 #include <gflags/gflags.h>
+#include <glog/logging.h>
 
-DEFINE_string(output_path, "./", "Path where to store DynoSAM's log output.");
 
+DEFINE_string(output_path, "./", "Path where to store dynosam's log output.");
 
 namespace dyno {
 
-/* ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,
                                  const bool& open_file_in_append_mode)
@@ -42,13 +41,23 @@ OfstreamWrapper::OfstreamWrapper(const std::string& filename,
 // destructed. So no need to explicitly call .close();
 OfstreamWrapper::~OfstreamWrapper() {
   LOG(INFO) << "Closing output file: " << filename_.c_str();
+  ofstream_.flush();
   ofstream_.close();
 }
 
 void OfstreamWrapper::closeAndOpenLogFile() {
+  ofstream_.flush();
   ofstream_.close();
   CHECK(!filename_.empty());
   OpenFile(output_path_ + '/' + filename_, &ofstream_, false);
+}
+
+
+bool OfstreamWrapper::WriteOutCsvWriter(const CsvWriter& csv, const std::string& filename) {
+    //set append mode to false as we never want to write over the top of a csv file as this
+    //will upset the header
+    OfstreamWrapper ofsw(filename, false);
+    return csv.write(ofsw.ofstream_);
 }
 
 void OfstreamWrapper::openLogFile(const std::string& output_file_name,
@@ -61,24 +70,5 @@ void OfstreamWrapper::openLogFile(const std::string& output_file_name,
 }
 
 
-GroundTruthLogger::GroundTruthLogger()
-    :   gt_pose_("camera_pose_gt.csv"),
-        gt_object_motion_("object_motion_gt.csv"),
-        gt_object_pose_("object_pose_gt.csv") {}
-
-void GroundTruthLogger::log(const GroundTruthInputPacket& gt_packet) {
 
 }
-
-FrontendLogger::FrontendLogger()
-    :   vo_error_("frontend_vo_error.csv"),
-        estimated_pose_("frontend_camera_pose.csv"),
-        object_motion_error_("frontend_object_motion_error.csv"),
-        estimated_object_motion_("frontend_object_motion_error.csv") {}
-
-void FrontendLogger::log(const Frame& frame, const GroundTruthInputPacket& gt_packet) {
-
-}
-
-
-} //dyno

@@ -79,6 +79,21 @@ void ImageType::MotionMask::validate(const cv::Mat& input) {
     validateMask(input, name());
 }
 
+//TODO:!!!! classsegmentation now assumes that it has same type as semantic and motion mask!!
+void ImageType::ClassSegmentation::validate(const cv::Mat& input) {
+    validateMask(input, name());
+}
+
+//TODO: using same function as semantic mask (generalise properly!!)
+//e.g. both semantic and class seg assume background/undefined are the same value!!
+cv::Mat ImageType::ClassSegmentation::toRGB(const ImageWrapper<ClassSegmentation>& image) {
+    const cv::Mat& class_seg_mask = image;
+    cv::Mat background = cv::Mat::zeros(class_seg_mask.size(), CV_8UC3);
+    cv::Mat rgb_class_seg = cv::Mat::zeros(class_seg_mask.size(), CV_8UC3);
+    utils::semanticMaskToRgb(background,class_seg_mask, rgb_class_seg);
+    return rgb_class_seg;
+}
+
 
 ImageContainer::Ptr ImageContainer::Create(
         const Timestamp timestamp,
@@ -87,7 +102,8 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask)
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation)
 {
     std::shared_ptr<ImageContainer> container(
         new ImageContainer(
@@ -97,7 +113,8 @@ ImageContainer::Ptr ImageContainer::Create(
             depth,
             optical_flow,
             semantic_mask,
-            motion_mask)
+            motion_mask,
+            class_segmentation)
         );
     container->validateSetup();
     return container;
@@ -111,8 +128,9 @@ ImageContainer::ImageContainer(
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask)
-    :  Base(img, depth, optical_flow, semantic_mask, motion_mask),
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation)
+    :  Base(img, depth, optical_flow, semantic_mask, motion_mask, class_segmentation),
        timestamp_(timestamp),
        frame_id_(frame_id)
     { }
@@ -126,7 +144,8 @@ std::string ImageContainer::toString() const {
     const std::string image_config = isImageRGB() ? "RGB" : "Grey";
     ss << "Configuration: " << image_config
         << " Depth (" << hasDepth() << ") Semantic Mask (" << hasSemanticMask()
-        << ") Motion Mask (" << hasMotionMask() << ")" << "\n";
+        << ") Motion Mask (" << hasMotionMask()
+        << ") Class Segmentation (" << hasClassSegmentation() << ")" << "\n";
 
     return ss.str();
 }
@@ -140,7 +159,7 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask) {
 
-    return Create(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>());
+    return Create(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>(), ImageWrapper<ImageType::ClassSegmentation>());
 
 }
 
@@ -150,9 +169,10 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::RGBMono>& img,
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask) {
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation) {
 
-    return Create(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask);
+    return Create(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask, class_segmentation);
 }
 
 

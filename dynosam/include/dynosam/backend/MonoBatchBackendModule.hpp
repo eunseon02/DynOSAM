@@ -58,52 +58,6 @@ public:
     DynamicPointInitFunc dynamic_point_init_func_;
     MotionInitFunc motion_init_func_;
 
-    class DebugInfo {
-    public:
-        FrameId frame_id;
-        std::set<ObjectId> objects_motions_added; //with frame =k, so motions are k-1 to k
-        gtsam::FastMap<ObjectId, int> num_scale_priors_added_per_object_;
-        gtsam::FastMap<ObjectId, int> num_initial_priors_added_per_object_;
-        gtsam::FastMap<ObjectId, int> num_newly_tracked_object_points_;
-        gtsam::FastMap<ObjectId, int> num_existing_tracked_object_points_;
-
-        inline void incrementNumScalePriors(ObjectId object_id) { incrementMap(num_scale_priors_added_per_object_, object_id);}
-        inline void incrementInitialPriors(ObjectId object_id) { incrementMap(num_initial_priors_added_per_object_, object_id);}
-        inline void incrementNewlyTrackedObjectPoints(ObjectId object_id) { incrementMap(num_newly_tracked_object_points_, object_id);}
-        inline void incrementExistingTrackedObjectPoints(ObjectId object_id) { incrementMap(num_existing_tracked_object_points_, object_id);}
-
-        friend std::ostream& operator<<(std::ostream& os, const DebugInfo& info) {
-
-            auto print_map =[](const gtsam::FastMap<ObjectId, int>& fast_map) {
-                std::stringstream ss;
-                for(const auto& [object_id, num] : fast_map) {
-                    ss << std::setw(6) << "object id = " << object_id << " count = " << num << "\n";
-                }
-                return ss.str();
-            };
-
-            os << "frame: " << info.frame_id << "\n";
-            os << "object motions added " << container_to_string(info.objects_motions_added) << "\n";
-            os << "Num scale priors:\n" << print_map(info.num_scale_priors_added_per_object_);
-            os << "Num initial priors:\n" << print_map(info.num_initial_priors_added_per_object_);
-            os << "Num newly tracked points:\n" << print_map(info.num_newly_tracked_object_points_);
-            os << "Num existing tracked points:\n" << print_map(info.num_existing_tracked_object_points_);
-            return os;
-        }
-
-
-    private:
-        void incrementMap(gtsam::FastMap<ObjectId, int>& fast_map, ObjectId object_id) {
-            if(fast_map.exists(object_id)) {
-                fast_map.at(object_id)++;
-            }
-            else {
-                fast_map.insert2(object_id, 1);
-            }
-        }
-
-
-    };
 
 private:
     //copied from MonoBackendModule -> should synthesise classes together once implementation
@@ -163,7 +117,7 @@ private:
     gtsam::NonlinearFactorGraph new_factors_;
 
     gtsam::Values state_;
-    gtsam::FastMap<FrameId,GroundTruthInputPacket> gt_packet_map_;
+    GroundTruthPacketMap gt_packet_map_;
     gtsam::FastMap<FrameId,MonocularInstanceOutputPacket::ConstPtr> input_packet_map_;
 
     gtsam::SharedNoiseModel robust_static_pixel_noise_; //! Robust 2d isotropic pixel noise on static points (for projection factors)

@@ -71,8 +71,14 @@ std::optional<double> estimateDepthFromRoad(
   const Camera::Ptr camera,
   const cv::Mat& prev_semantic_mask,
   const cv::Mat& curr_semantic_mask,
+  const ImageWrapper<ImageType::ClassSegmentation>& prev_class_seg,
+  const ImageWrapper<ImageType::ClassSegmentation>& curr_class_seg,
   const cv::Mat& prev_optical_flow,
-  const ObjectId obj_id);
+  const ObjectId obj_id,
+  gtsam::Point2Vector& observation_prev,
+  gtsam::Point2Vector& observation_curr,
+  gtsam::Point3Vector& triangualted_points,
+  Depths& z_camera);
 
 
 std::optional<double> estimateDepthFromDimension(const cv::Mat& semantic_mask,

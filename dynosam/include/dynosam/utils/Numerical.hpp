@@ -53,11 +53,30 @@ size_t hashTriplet(const T1& p1, const T2& p2, const T3& p3) {
   return static_cast<unsigned int>(p1 + p2 * sl + p3 * sl2);
 }
 
-
+/**
+ * @brief Float point comparison up to a tolerance.
+ *
+ * Wrapper on gtsam::fpEqual
+ *
+ * @param a
+ * @param b
+ * @param tol
+ * @return true
+ * @return false
+ */
 inline bool fpEqual(double a, double b, double tol=1e-9) {
     return gtsam::fpEqual(a, b, tol);
 }
 
+/**
+ * @brief Checks if a double value is zero up to a tolerance.
+ *
+ * Uses fpEqual.
+ *
+ * @param a
+ * @return true
+ * @return false
+ */
 inline bool is_zero(double a) {
     return fpEqual(a, 0.0);
 }
@@ -81,6 +100,72 @@ inline double rads2Deg(double rads) {
  */
 inline double deg2Rads(double degrees) {
     return degrees * M_PI/180.0;
+}
+
+
+/**
+ * @brief Floating-point modulo
+ * The result (the remainder) has same sign as the divisor.
+ * Similar to matlab's mod(); Not similar to fmod() -   Mod(-3,4)= 1   fmod(-3,4)= -3.
+ *
+ * https://stackoverflow.com/questions/4633177/c-how-to-wrap-a-float-to-the-interval-pi-pi
+ *
+ * @tparam T
+ * @param x
+ * @param y
+ * @return T
+ */
+template <typename T>
+T mod(T x, T y)
+{
+  static_assert(!std::numeric_limits<T>::is_exact, "Mod: floating-point type expected");
+
+  if (0. == y)
+    return x;
+
+  double m = x - y * floor(x / y);
+
+  // handle boundary cases resulted from floating-point cut off:
+  if (y > 0)  // modulo range: [0..y)
+  {
+    if (m >= y)  // Mod(-1e-16             , 360.    ): m= 360.
+      return 0;
+
+    if (m < 0)
+    {
+      if (y + m == y)
+        return 0;  // just in case...
+      else
+        return y + m;  // Mod(106.81415022205296 , _TWO_PI ): m= -1.421e-14
+    }
+  }
+  else  // modulo range: (y..0]
+  {
+    if (m <= y)  // Mod(1e-16              , -360.   ): m= -360.
+      return 0;
+
+    if (m > 0)
+    {
+      if (y + m == y)
+        return 0;  // just in case...
+      else
+        return y + m;  // Mod(-106.81415022205296, -_TWO_PI): m= 1.421e-14
+    }
+  }
+
+  return m;
+}
+
+
+/**
+ * @brief Wraps an angle between [0... 2*PI]
+ *
+ * @param ang angle in radians
+ * @return double
+ */
+inline double wrapTwoPi(double ang)
+{
+  return mod(ang, 2.0 * M_PI);
 }
 
 

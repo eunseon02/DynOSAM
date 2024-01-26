@@ -44,6 +44,7 @@ struct CantorPairingFunction {
 };
 
 
+
 class DynamicPointSymbol {
 protected:
     unsigned char c_;

@@ -105,12 +105,15 @@ add_library(${PROJECT_NAME} SHARED
   src/pipeline/PipelineBase.cc
   src/pipeline/PipelineSpinner.cc
 
+  src/logger/Logger.cc
+
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
   src/utils/Spinner.cc
   src/utils/Statistics.cc
   src/utils/TimingStats.cc
-  src/utils/Logger.cc
+  src/utils/Metrics.cc
+  src/utils/CsvWriter.cc
 
   src/visualizer/ColourMap.cc
   src/visualizer/VisualizerPipelines.cc
@@ -244,6 +247,7 @@ if(BUILD_TESTING)
     test/test_structured_containers.cc
     test/test_triangulation.cc
     test/test_backend_structures.cc
+    test/test_csvwriter.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

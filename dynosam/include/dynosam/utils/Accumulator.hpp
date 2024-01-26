@@ -142,6 +142,7 @@ class Accumulator {
   /* ------------------------------------------------------------------------ */
   inline SumType median() const {
     CHECK_GT(samples_.size(), 0);
+
     return samples_.at(std::ceil(samples_.size() / 2) - 1);
   }
 

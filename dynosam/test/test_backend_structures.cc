@@ -41,3 +41,26 @@ TEST(DynamicObjectTracklet, testGetFirstFrame) {
     EXPECT_EQ(tracklet.getFirstFrame(), 2);
 
 }
+
+
+TEST(DynamicObjectSymbol, testReconstructMotionInfo) {
+
+    gtsam::Key motion_key = ObjectMotionSymbol(12, 10);
+
+    ObjectId recovered_object_id;
+    FrameId recovered_frame_id;
+    EXPECT_TRUE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
+
+    EXPECT_EQ(recovered_object_id, 12);
+    EXPECT_EQ(recovered_frame_id, 10);
+
+}
+
+TEST(DynamicObjectSymbol, testReconstructMotionInfoFromOtherSymbol) {
+
+    gtsam::Key motion_key = CameraPoseSymbol(10);
+
+    ObjectId recovered_object_id;
+    FrameId recovered_frame_id;
+    EXPECT_FALSE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
+}

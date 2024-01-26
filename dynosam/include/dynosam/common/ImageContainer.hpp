@@ -52,39 +52,7 @@ public:
 };
 
 
-struct ImageType {
-
-    struct RGBMono {
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "RGBMono"; }
-    };
-
-    //really should be disparity?
-    struct Depth {
-        constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "Depth"; }
-    };
-    struct OpticalFlow {
-        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "OpticalFlow"; }
-    };
-    struct SemanticMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for SemanticMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "SemanticMask"; }
-    };
-    struct MotionMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for MotionMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "MotionMask"; }
-    };
-
-    static_assert(SemanticMask::OpenCVType == MotionMask::OpenCVType);
-};
-
-
+//T needs to be like image type and have the functions name, validate etc
 template<typename T>
 struct ImageWrapper {
     using Type = T;
@@ -121,6 +89,54 @@ struct ImageWrapper {
     inline bool exists() const {
         return !image.empty();
     }
+};
+
+
+struct ImageType {
+
+    struct RGBMono {
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "RGBMono"; }
+    };
+
+    //really should be disparity?
+    struct Depth {
+        constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "Depth"; }
+    };
+    struct OpticalFlow {
+        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "OpticalFlow"; }
+    };
+    struct SemanticMask {
+        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for SemanticMask image type
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "SemanticMask"; }
+    };
+    struct MotionMask {
+        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for MotionMask image type
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "MotionMask"; }
+    };
+    struct ClassSegmentation {
+        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for ClassSegmentation image type
+        static void validate(const cv::Mat& input);
+        static std::string name() { return "ClassSegmentation"; }
+
+
+        //TODO: add ways to load semantic information
+        enum Labels {
+            Undefined = 0,
+            Road = 1
+        };
+
+        static cv::Mat toRGB(const ImageWrapper<ClassSegmentation>& image);
+    };
+
+
+    static_assert(SemanticMask::OpenCVType == MotionMask::OpenCVType);
 };
 
 
@@ -320,7 +336,8 @@ class ImageContainer : public ImageContainerSubset<
     ImageType::Depth,
     ImageType::OpticalFlow,
     ImageType::SemanticMask,
-    ImageType::MotionMask> {
+    ImageType::MotionMask,
+    ImageType::ClassSegmentation> {
 
 public:
     DYNO_POINTER_TYPEDEFS(ImageContainer)
@@ -330,7 +347,8 @@ public:
         ImageType::Depth,
         ImageType::OpticalFlow,
         ImageType::SemanticMask,
-        ImageType::MotionMask>;
+        ImageType::MotionMask,
+        ImageType::ClassSegmentation>;
 
 
     /**
@@ -348,6 +366,8 @@ public:
 
     cv::Mat getMotionMask() const { return Base::get<ImageType::MotionMask>(); }
 
+    cv::Mat getClassSegmentation() const { return Base::get<ImageType::ClassSegmentation>(); }
+
     /**
      * @brief Returns true if the set of input images does not contain depth and
      * therefore should be used as part of a Monocular VO pipeline
@@ -359,6 +379,7 @@ public:
     inline bool hasDepth() const { return !getDepth().empty(); }
     inline bool hasSemanticMask() const { return !getSemanticMask().empty(); }
     inline bool hasMotionMask() const { return !getMotionMask().empty(); }
+    inline bool hasClassSegmentation() const { return !getClassSegmentation().empty(); }
 
     /**
      * @brief True if the image has 3 channels and is therefore expected to be RGB.
@@ -402,6 +423,7 @@ public:
      * @param depth
      * @param optical_flow
      * @param motion_mask
+     * @param class_segmentation
      * @return ImageContainer::Ptr
      */
     static ImageContainer::Ptr Create(
@@ -410,7 +432,8 @@ public:
         const ImageWrapper<ImageType::RGBMono>& img,
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
 protected:
     /**
@@ -426,6 +449,7 @@ protected:
      * @param optical_flow
      * @param semantic_mask
      * @param motion_mask
+     * @param class_segmentation
      * @return ImageContainer::Ptr
      */
     static ImageContainer::Ptr Create(
@@ -435,8 +459,11 @@ protected:
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
+
+private:
     explicit ImageContainer(
         const Timestamp timestamp,
         const FrameId frame_id,
@@ -444,9 +471,9 @@ protected:
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
-private:
     void validateSetup() const override;
 
 private:

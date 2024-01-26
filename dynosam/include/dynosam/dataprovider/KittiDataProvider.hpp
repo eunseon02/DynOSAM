@@ -390,7 +390,8 @@ public:
                     ImageWrapper<ImageType::RGBMono>(rgb),
                     ImageWrapper<ImageType::Depth>(depth),
                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                    ImageWrapper<ImageType::MotionMask>(instance_mask));
+                    ImageWrapper<ImageType::MotionMask>(instance_mask),
+                    ImageWrapper<ImageType::ClassSegmentation>{});
             }
             else {
                 image_container = ImageContainer::Create(

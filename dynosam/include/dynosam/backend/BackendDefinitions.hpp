@@ -27,12 +27,14 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/backend/DynamicPointSymbol.hpp"
+#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/common/GroundTruthPacket.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
 
 #include <gtsam/inference/Symbol.h>
-#include "gtsam/inference/LabeledSymbol.h"
+#include <gtsam/inference/LabeledSymbol.h>
 
 #include <variant>
 #include <unordered_map>
@@ -59,6 +61,12 @@ inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
   return H(label, static_cast<std::uint64_t>(frame_id));
 }
 
+bool checkIfLabeledSymbol(gtsam::Key key);
+
+bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
+
+
+//TODO: depricate!!
 /**
  * @brief Construct an object motion symbol with the current frame id (k).
  *
@@ -327,7 +335,6 @@ public:
 private:
     TrackletMap tracklet_map_;
 };
-
 
 
 

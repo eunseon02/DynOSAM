@@ -48,6 +48,7 @@ cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& botto
 
 void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
 
+//TODO: should put into properties of the ImageContainer?
 void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz);
 
 

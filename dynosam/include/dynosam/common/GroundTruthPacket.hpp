@@ -109,6 +109,7 @@ public:
 
     ObjectIds getObjectIds() const;
 
+    //TODO: clear up implementation of findAssociatedObject as there are many variations
     /**
      * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
      *
@@ -140,6 +141,8 @@ public:
      * @return false
      */
     bool findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, size_t& obj_idx, size_t& other_obj_idx) const;
+    bool findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, const ObjectPoseGT** obj, const ObjectPoseGT** other_obj) const;
+
 
     /**
      * @brief Calcualtes and sets the object motion ground truth variables of this GroundTruthInputPacket using the previous object motions.
@@ -168,6 +171,7 @@ private:
 };
 
 
+using GroundTruthPacketMap = gtsam::FastMap<FrameId,  GroundTruthInputPacket>;
 
 
 } //dyno

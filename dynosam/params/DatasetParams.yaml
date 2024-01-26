@@ -4,8 +4,8 @@ mask_type: "motion"
 
 
 ## KITTI Params
-# base_line: 387.5744 #0000-0013
-base_line: 388.1822 #0018-0020
+base_line: 387.5744 #0000-0013
+# base_line: 388.1822 #0018-0020
 depth_scale_factor: 256.0
 
 

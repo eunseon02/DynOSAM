@@ -27,6 +27,8 @@
 #include <opencv2/core/eigen.hpp>
 #include <dynosam/utils/Accumulator.hpp>
 
+#include "dynosam/common/ImageContainer.hpp"
+
 namespace dyno {
 
 namespace mono_backend_tools {
@@ -263,8 +265,15 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
   const Camera::Ptr camera,
   const cv::Mat& prev_semantic_mask,
   const cv::Mat& curr_semantic_mask,
+  const ImageWrapper<ImageType::ClassSegmentation>& prev_class_seg,
+  const ImageWrapper<ImageType::ClassSegmentation>& curr_class_seg,
   const cv::Mat& prev_optical_flow,
-  const ObjectId obj_id){
+  const ObjectId obj_id,
+  gtsam::Point2Vector& observation_prev,
+  gtsam::Point2Vector& observation_curr,
+  gtsam::Point3Vector& triangualted_points,
+  Depths& z_camera){
+
 
 
   ObjectIds prev_object_ids = vision_tools::getObjectLabels(prev_semantic_mask);
@@ -282,15 +291,20 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
   // cv::Mat obj_mask_curr = (curr_semantic_mask == obj_id);
   // cv::imshow("Object Mask Current", obj_mask_curr);
 
-  cv::Mat dilated_obj_mask;
-  cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
-                                                    cv::Size(1, 11)); // a rectangle of 1*5
-  cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
-  // cv::imshow("Object Mask Dilated", dilated_obj_mask);
+  // cv::Mat dilated_obj_mask;
+  // cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+  //                                                   cv::Size(1, 11)); // a rectangle of 1*5
+  // cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+  // // cv::imshow("Object Mask Dilated", dilated_obj_mask);
 
+  // std::vector<std::vector<cv::Point> > contours;
+  // std::vector<cv::Vec4i> hierarchy;
+  // cv::findContours(dilated_obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+  //NOTE: while using virtual kitti assume perfect masks so no need for dilation!!!
   std::vector<std::vector<cv::Point> > contours;
   std::vector<cv::Vec4i> hierarchy;
-  cv::findContours(dilated_obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+  cv::findContours(obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
   if (contours.size()>0){
     // std::cout << "There are " << contours.size() << " contours of obj " << obj_id << " we can find on the previous image.\n";
@@ -336,39 +350,45 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
     Keypoint this_pixel = gtsam::Point2(full_contour[i_points].x, full_contour[i_points].y);
 
     int u = functional_keypoint::u(this_pixel);
-    cv::Mat this_semantic_col = prev_semantic_mask.col(u);
+    const cv::Mat& this_semantic_col = prev_semantic_mask.col(u);
     int i_row = 0;
     // Search upwards up to the contour until we hit the descired object patch
     for (i_row = prev_semantic_mask.rows-1; i_row >= functional_keypoint::v(this_pixel); i_row--){
-      if (this_semantic_col.at<ObjectId>(i_row) == obj_id){
-        break;
-      }
-    }
-
-    // Verify that the previous pixel is a background pixel - in the case of an object being blocked by another one below it
-    // Also make sure the pixel is not already at the bottom of the image - does not have a previous pixel
-    if (i_row < prev_semantic_mask.rows-1 && this_semantic_col.at<ObjectId>(i_row+1) == 0){
+      //check for road semantics
       int v = i_row+1;
-      double flow_xe = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[0]);
-      double flow_ye = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[1]);
+      const Keypoint kp_prev(u, v);
+      //TODO: fix auto casting of the at function here! The template cannot diffirentiate between cv::Mat and the ImageWrapper becuase of the explicit cast
+      bool prev_is_road =
+        functional_keypoint::at<int>(kp_prev, prev_class_seg) == ImageType::ClassSegmentation::Labels::Road;
 
-      OpticalFlow flow(flow_xe, flow_ye);
-      Keypoint ground_pixel_curr = Feature::CalculatePredictedKeypoint(Keypoint(u, v), flow);
-      if (curr_semantic_mask.at<ObjectId>(ground_pixel_curr.y(), ground_pixel_curr.x()) == 0){
-        ground_pixels_prev.push_back(Keypoint(u, v));
-        ground_pixel_prev_viz.at<uchar>(v, u) = 255;
-        ground_pixels_curr.push_back(ground_pixel_curr);
+      if (this_semantic_col.at<ObjectId>(i_row) == obj_id && prev_is_road){
+         // Verify that the previous pixel is a background pixel - in the case of an object being blocked by another one below it
+        // Also make sure the pixel is not already at the bottom of the image - does not have a previous pixel
+        if (i_row < prev_semantic_mask.rows-1 && this_semantic_col.at<ObjectId>(i_row+1) == 0){
+          double flow_xe = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[0]);
+          double flow_ye = static_cast<double>(prev_optical_flow.at<cv::Vec2f>(v, u)[1]);
 
-        ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
+          OpticalFlow flow(flow_xe, flow_ye);
+          Keypoint ground_pixel_curr = Feature::CalculatePredictedKeypoint(Keypoint(u, v), flow);
+          bool curr_is_road =
+            functional_keypoint::at<int>(ground_pixel_curr, curr_class_seg) == ImageType::ClassSegmentation::Labels::Road;
+          if (curr_semantic_mask.at<ObjectId>(ground_pixel_curr.y(), ground_pixel_curr.x()) == 0 && curr_is_road){
+            ground_pixels_prev.push_back(Keypoint(u, v));
+            ground_pixel_prev_viz.at<uchar>(v, u) = 255;
+            ground_pixels_curr.push_back(ground_pixel_curr);
+
+            ground_pixel_viz.at<uchar>(ground_pixel_curr.y(), ground_pixel_curr.x()) = 255;
+          }
+        }
       }
     }
   }
 
   // std::cout << "Passed ground pixel search.\n";
 
-  // // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
-  // cv::imshow("Ground pixels", ground_pixel_viz);
-  // cv::waitKey(1);
+  // cv::imshow("Ground pixels prev", ground_pixel_prev_viz);
+  cv::imshow("Ground pixels", ground_pixel_viz);
+  cv::waitKey(1);
 
   int n_ground_pixels = ground_pixels_prev.size();
   std::vector<gtsam::Point3> ground_points;
@@ -383,13 +403,14 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
   };
 
 
-  // gtsam::Matrix3 intrinsic;
-  // cv::cv2eigen(camera_params.getCameraMatrix(), intrinsic);
-
   double depth_sum = 0.0;
   int num_degenerate_points = 0;
 
+  //this is not depth - its Z (in camera frame!!)
   utils::Accumulatord depth_accumulator;
+  gtsam::Point2Vector observation_prev_pre_filter;
+  gtsam::Point2Vector observation_curr_pre_filter;
+  gtsam::Point3Vector triangualted_points_pre_filter;
 
   for (int i_ground_pixels = 0; i_ground_pixels < n_ground_pixels; i_ground_pixels++){
     gtsam::Point2Vector measurments({ground_pixels_prev[i_ground_pixels], ground_pixels_curr[i_ground_pixels]});
@@ -398,11 +419,34 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
       gtsam::TriangulationParameters triangulation_params;
       //values in the matrix > rankTolerance will add to the rank
       // triangulation_params.rankTolerance = 30.0;
-      // // triangulation_params.enableEPI = true;
+      // triangulation_params.enableEPI = true;
       // triangulation_params.dynamicOutlierRejectionThreshold = 0.1;
       // triangulation_params.landmarkDistanceThreshold = 20;
 
       this_point_result = gtsam::triangulateSafe(cameras, measurments, triangulation_params);
+      // gtsam::Point3 point = gtsam::triangulatePoint3(cameras, measurments, 10, false, nullptr, true);
+      // size_t i = 0;
+      // double maxReprojError = 0.0;
+      // for(const auto& camera: cameras) {
+      //   const gtsam::Pose3& pose = camera.pose();
+      //   // verify that the triangulated point lies in front of all cameras
+      //   // Only needed if this was not yet handled by exception
+      //   const gtsam::Point3& p_local = pose.transformTo(point);
+      //   if (p_local.z() <= 0)
+      //     this_point_result = gtsam::TriangulationResult::BehindCamera();
+      //   // Check reprojection error
+      //   if (triangulation_params.dynamicOutlierRejectionThreshold > 0) {
+      //     const auto& zi = measurments.at(i);
+      //     gtsam::Point2 reprojectionError = camera.reprojectionError(point, zi);
+      //     maxReprojError = std::max(maxReprojError, reprojectionError.norm());
+      //   }
+      //   i += 1;
+      // }
+      // if (triangulation_params.dynamicOutlierRejectionThreshold > 0
+      //     && maxReprojError > triangulation_params.dynamicOutlierRejectionThreshold)
+      //   this_point_result= gtsam::TriangulationResult::Outlier();
+
+      // this_point_result = gtsam::TriangulationResult(point);
     }
     catch(const gtsam::TriangulationCheiralityException&) {
        continue;
@@ -410,6 +454,7 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
     catch(const gtsam::CheiralityException&) {
        continue;
     }
+    catch(...) {continue;}
 
     if(this_point_result.degenerate()) {
       num_degenerate_points++;
@@ -422,27 +467,43 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
 
     // TODO: Filter these points/depths and reject outliers
     gtsam::Point3 this_point_camera_curr = X_world_camera_curr.transformTo(this_point);
+    observation_prev_pre_filter.push_back(ground_pixels_prev[i_ground_pixels]);
+    observation_curr_pre_filter.push_back(ground_pixels_curr[i_ground_pixels]);
+    triangualted_points_pre_filter.push_back(this_point);
 
-    // std::cout << this_point_camera_curr.z() << " ";
 
-    // depth_sum += this_point_camera_curr.z();
     depth_accumulator.Add(this_point_camera_curr.z());
 
   }
 
   // LOG(INFO) << "num degenerate points " << num_degenerate_points << " out of " << n_ground_pixels << " with std " << depth_accumulator.StandardDeviation();
   //remove outliers, if value within +/- this value from the mean
-  const double kStdOutlierThreshold = 1;
+  //must be bigger than one... dumbass
+  const double kStdOutlierThreshold = 1.5;
   double obj_depth_mean = depth_accumulator.Mean();
   double obj_depth_std = depth_accumulator.StandardDeviation();
 
-  utils::Accumulatord depth_accumulator_filtered = depth_accumulator.OutlierRejectionStd(kStdOutlierThreshold);
+  const auto min_value = obj_depth_mean - kStdOutlierThreshold * obj_depth_std;
+  const auto max_value = obj_depth_mean + kStdOutlierThreshold * obj_depth_std;
 
+  utils::Accumulatord depth_accumulator_filtered;
+  const auto& samples = depth_accumulator.GetAllSamples();
+  //TODO: clean up and make function? How to know which indicies remain after filtering?
+  for(size_t i = 0; i < samples.size(); i++) {
+    auto depth = samples.at(i);
+    if(depth > min_value && depth < max_value) {
+      depth_accumulator_filtered.Add(depth);
+      observation_prev.push_back(observation_prev_pre_filter.at(i));
+      observation_curr.push_back(observation_curr_pre_filter.at(i));
+      triangualted_points.push_back(triangualted_points_pre_filter.at(i));
+      z_camera.push_back(depth);
+    }
+  }
 
   LOG(INFO) << "Old mean " << obj_depth_mean << " old std " << obj_depth_std
     << ". new mean " << depth_accumulator_filtered.Mean() << " new std " << depth_accumulator_filtered.StandardDeviation();
 
-  return std::optional<double>(depth_accumulator.Mean());
+  return std::optional<double>(depth_accumulator_filtered.Mean());
 }
 
 /**

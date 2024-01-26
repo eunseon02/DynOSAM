@@ -63,7 +63,7 @@ int main(int argc, char* argv[]) {
     // dyno::KittiDataLoader d("/root/data/vdo_slam/kitti/kitti/0020", params);
 
     dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
-    d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) {
+    d.setCallback([](dyno::FrameId frame, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, cv::Mat class_semantics, dyno::GroundTruthInputPacket gt_packet) {
         LOG(INFO) << "Frame " << frame << " ts " << timestamp;
 
         cv::Mat flow_viz;
@@ -72,9 +72,15 @@ int main(int argc, char* argv[]) {
         cv::Mat mask_viz;
         dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
 
+
+        cv::Mat road_viz = dyno::ImageType::ClassSegmentation::toRGB(
+            class_semantics
+        );
+
         cv::imshow("RGB", rgb);
         cv::imshow("OF", flow_viz);
         cv::imshow("Motion", mask_viz);
+        cv::imshow("Road semantics", road_viz);
 
         cv::waitKey(1);
 

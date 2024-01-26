@@ -151,6 +151,18 @@ bool GroundTruthInputPacket::findAssociatedObject(ObjectId label, GroundTruthInp
     return false;
 }
 
+bool GroundTruthInputPacket::findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, const ObjectPoseGT** obj, const ObjectPoseGT** other_obj) const {
+    size_t obj_idx, other_obj_idx;
+
+    if(findAssociatedObject(label, other, obj_idx, other_obj_idx)) {
+        *obj = &object_poses_.at(obj_idx);
+        *other_obj = &other.object_poses_.at(other_obj_idx);
+        return true;
+    }
+
+    return false;
+}
+
 bool GroundTruthInputPacket::findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, ObjectPoseGT** obj, const ObjectPoseGT** other_obj) {
     size_t obj_idx, other_obj_idx;
 

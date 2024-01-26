@@ -1,7 +1,7 @@
 #!/bin/bash
 
 --test_flag=11
-
+--output_path=/root/results/DynoSAM/
 
 # backend parameters
 --max_opt_iterations=30
@@ -13,7 +13,7 @@
 #if a sigma on the first set of object points should be added
 --use_first_seen_dynamic_point_prior=true
 # if use_first_seen_dynamic_point_prior==true, this will be the sigma used on the 3x3 noise model
---first_seen_dynamic_point_sigma=2.0
+--first_seen_dynamic_point_sigma=10.0
 
 # 0: Initalise from perturbed gt pose 1: Initalise from gt depth with modified scale. 2: Init from road
 --dynamic_point_init_func_type=2
@@ -27,8 +27,8 @@
 --min_depth_scale=0.4
 --mmax_depth_scale=1.4
 
---use_last_seen_dynamic_point_prior=true
---scale_prior_sigma=0.5
+--use_last_seen_dynamic_point_prior=false
+--scale_prior_sigma=0.01
 
 
 # degeneracy checks

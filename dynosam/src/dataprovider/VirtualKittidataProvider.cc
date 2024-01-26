@@ -50,6 +50,7 @@ inline int getTrackID(const std::vector<std::string>& split_string, int idx) {
     return std::stoi(split_string.at(idx)) + 1;
 }
 
+
 /**
  * @brief Loading class for the Virtual Kitti 2 dataset: https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/
  *
@@ -714,8 +715,8 @@ protected:
     /**
      * @brief Loads instance semantic mask from the file path.
      *
-     * This loads the image using libpng++ since we need to load the image as an 8bit indexed PNG file (which opencv does not have functionality)
-     * for. Keeping consistent with the ground truth indexing we use for VirtualKitti we do not need to modify the trackID's within the image
+     * This loads the image using libpng++ since we need to load the image as an 8bit indexed PNG file (which opencv does not have functionality
+     * for). Keeping consistent with the ground truth indexing we use for VirtualKitti we do not need to modify the trackID's within the image
      * since we want the trackID's to be indexed from 1
      *
      * @param file_path
@@ -745,7 +746,6 @@ protected:
     VirtualKittiTextGtLoader::Ptr gt_loader_;
 
 };
-
 
 //this one we will have to remove semgentation mask depending on whats in the gt folder
 class VirtualKittiMotionSegFolder : public VirtualKittiGenericInstanceSegFolder {
@@ -805,6 +805,59 @@ public:
 
 };
 
+class VirtualKittiClassSegmentationDataFolder : public GenericVirtualKittiImageLoader {
+
+public:
+    VirtualKittiClassSegmentationDataFolder(const std::string& path) : GenericVirtualKittiImageLoader(path) {}
+    cv::Mat getItem(size_t idx) override {
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(5) << idx;
+        const std::string file_path = full_path_  + "/classgt_" + ss.str() + ".png";
+        throwExceptionIfPathInvalid(file_path);
+        return loadClassSegmentation(file_path);
+    }
+
+private:
+    //TODO: comments
+    cv::Mat loadClassSegmentation(const std::string& file_path) const {
+
+        //TODO: for now just hardcode in road!!!
+        png::image<png::rgb_pixel> rgb_image(file_path);
+
+        cv::Size size(rgb_image.get_width(), rgb_image.get_height());
+        cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
+
+        for (size_t y = 0; y < rgb_image.get_height(); ++y)
+        {
+            for (size_t x = 0; x < rgb_image.get_width(); ++x)
+            {
+                const auto& pixel = rgb_image.get_pixel(x, y);
+                const unsigned char red = (unsigned char)pixel.red;
+                const unsigned char green = (unsigned char)pixel.green;
+                const unsigned char blue = (unsigned char)pixel.blue;
+
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[0] = blue;
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[1] = green;
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[2] = red;
+
+                //TODO: hardcoded road values from VKITTI2
+                if(red == 100 && green == 60 && blue == 100) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
+                }
+                else {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Undefined;
+                }
+            }
+        }
+
+
+        return class_segmentation;
+
+
+    }
+};
+
+
 //instance segmentation for all objects regardless of motion
 class VirtualKittiInstanceSegFolder : public VirtualKittiGenericInstanceSegFolder {
 
@@ -849,6 +902,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     const std::string forward_flow_folder = path + "/" + v_forward_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardFlow/Camera_0";
     const std::string backward_flow_folder = path + "/" + v_backward_flow_folder + "/" + scene + "/" + scene_type + "/frames/backwardFlow/Camera_0";
     const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardsceneFlow/Camera_0";
+    const std::string class_semantics_folder = path + "/" + v_class_semantics_folder + "/" + scene + "/" + scene_type + "/frames/classSegmentation/Camera_0";
     const std::string instance_segmentation_folder = path + "/" + v_instance_segmentation_folder + "/" + scene + "/" + scene_type + "/frames/instanceSegmentation/Camera_0";
     const std::string rgb_folder = path + "/" + v_rgb_folder + "/" + scene + "/" + scene_type + "/frames/rgb/Camera_0";
     const std::string text_gt_folder = path + "/" + v_text_gt_folder + "/" + scene + "/" + scene_type;
@@ -856,6 +910,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     throwExceptionIfPathInvalid(depth_folder);
     throwExceptionIfPathInvalid(forward_flow_folder);
     throwExceptionIfPathInvalid(forward_scene_flow_folder);
+    throwExceptionIfPathInvalid(class_semantics_folder);
     throwExceptionIfPathInvalid(instance_segmentation_folder);
     throwExceptionIfPathInvalid(rgb_folder);
     throwExceptionIfPathInvalid(text_gt_folder);
@@ -882,6 +937,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     CHECK_NOTNULL(motion_mask_loader);
 
     auto gt_loader_folder = std::make_shared<VirtualKittiGTFolder>(gt_loader, timestamp_folder);
+    auto class_semantics_loader = std::make_shared<VirtualKittiClassSegmentationDataFolder>(class_semantics_folder);
 
     this->setLoaders(
         timestamp_folder,
@@ -889,6 +945,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
         optical_flow_loader,
         depth_loader,
         motion_mask_loader,
+        class_semantics_loader,
         gt_loader_folder
     );
 
@@ -898,6 +955,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
         cv::Mat optical_flow,
         cv::Mat depth,
         cv::Mat instance_mask,
+        cv::Mat class_semantics,
         GroundTruthInputPacket gt_object_pose_gt) -> bool
     {
         CHECK(timestamp == gt_object_pose_gt.timestamp_);
@@ -914,7 +972,8 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::MotionMask>(instance_mask));
+                ImageWrapper<ImageType::MotionMask>(instance_mask),
+                ImageWrapper<ImageType::ClassSegmentation>(class_semantics));
         }
         else {
             image_container = ImageContainer::Create(

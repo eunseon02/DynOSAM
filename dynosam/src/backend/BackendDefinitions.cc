@@ -24,11 +24,32 @@
 
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/DynamicPointSymbol.hpp"
+#include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/Metrics.hpp"
 
 #include <gtsam/inference/LabeledSymbol.h>
 #include <gtsam/inference/Symbol.h>
 
 namespace dyno {
+
+
+bool checkIfLabeledSymbol(gtsam::Key key) {
+  const gtsam::LabeledSymbol asLabeledSymbol(key);
+  return (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0);
+}
+
+bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id) {
+  //assume motion key is a labelled symbol
+  if(!checkIfLabeledSymbol(key)) {return false; }
+
+  const gtsam::LabeledSymbol as_labeled_symbol(key);
+  if(as_labeled_symbol.chr() != kObjectMotionSymbolChar) { return false;}
+
+  frame_id = static_cast<FrameId>(as_labeled_symbol.index());
+
+  char label = as_labeled_symbol.label();
+  object_label = label - '0';
+}
 
 std::string DynoLikeKeyFormatter(gtsam::Key key)
 {
@@ -61,6 +82,8 @@ std::string DynoLikeKeyFormatter(gtsam::Key key)
     return std::to_string(key);
   }
 }
+
+
 
 
 }
