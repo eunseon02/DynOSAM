@@ -500,8 +500,8 @@ std::optional<double> estimateDepthFromRoad(const gtsam::Pose3& X_world_camera_p
     }
   }
 
-  LOG(INFO) << "Old mean " << obj_depth_mean << " old std " << obj_depth_std
-    << ". new mean " << depth_accumulator_filtered.Mean() << " new std " << depth_accumulator_filtered.StandardDeviation();
+  LOG(INFO) << "Old Point Count " << samples.size() << " Old mean " << obj_depth_mean << " old std " << obj_depth_std
+    << ". New Point count " << z_camera.size() << " new mean " << depth_accumulator_filtered.Mean() << " new std " << depth_accumulator_filtered.StandardDeviation();
 
   return std::optional<double>(depth_accumulator_filtered.Mean());
 }

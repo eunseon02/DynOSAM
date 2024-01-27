@@ -167,10 +167,10 @@ public:
         //TODO: for now? When to apply preprocessing?
         cv::Mat depth;
         loadRGB(file_path, depth);
-
-        //apply depth factor first to get information into meters (from cm)
-        depth /= 100.0;
+        //first convert to double as loadRGB provides 16UC1
         depth.convertTo(depth, CV_64F);
+        //apply depth factor to get information into meters (from cm)
+        depth /= 100.0;
 
         return depth;
     }

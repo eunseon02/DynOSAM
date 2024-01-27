@@ -27,6 +27,7 @@
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/Accumulator.hpp"
 
 #include "dynosam/utils/GtsamUtils.hpp"
 
@@ -1388,8 +1389,10 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
     static gtsam::FastMap<ObjectFramePair, Depth> depth_from_road_cache;
     //cache of tracket points on the ground plane in the current frame
     static gtsam::FastMap<ObjectFramePair, gtsam::Point2Vector> gt_plane_obs_cache;
-    //cache of Z coordinates of triangulated poitns in the camera frame
-    static gtsam::FastMap<ObjectFramePair, Depths> gt_plane_camera_z_cache;
+    static gtsam::FastMap<ObjectFramePair, gtsam::Matrix> gt_plane_coeffs_cache;
+
+    const gtsam::Matrix3 K_inv = camera_->getParams().getCameraMatrixEigen().inverse();
+
 
     double depth;
     //first check cache
@@ -1408,9 +1411,55 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
         //takes you from k-1 to k
         const cv::Mat& prev_optical_flow = prev_image_container->get<ImageType::OpticalFlow>();
 
+        const cv::Mat& curr_class_seg_mask = curr_image_container->get<ImageType::ClassSegmentation>();
+
         gtsam::Pose3 X_world_camera_prev;
         gtsam::Key prev_camera_key = CameraPoseSymbol(frame_id-1);
         CHECK(utils::getEstimateOfKey(new_values_, prev_camera_key, &X_world_camera_prev)) << "Key: " << DynoLikeKeyFormatter(prev_camera_key) << " should be in the values";
+
+
+        //FIND THE ROAD!!
+        const Frame& frame = input->frame_;
+        auto feature_points_on_ground_itr = FeatureFilterIterator(
+            const_cast<FeatureContainer&>(frame.static_features_),
+            [&curr_class_seg_mask](const Feature::Ptr& f) -> bool {
+                bool feature_is_road =
+                    functional_keypoint::at<int>(f->keypoint_, curr_class_seg_mask) == ImageType::ClassSegmentation::Labels::Road;
+
+                return Feature::IsUsable(f) && feature_is_road;
+            }
+        );
+
+        //Calculate the ground plane
+        Landmarks static_ground_points;
+        Keypoints kps;
+        for(Feature::Ptr f_on_road : feature_points_on_ground_itr) {
+            Landmark lmk;
+            CHECK(f_on_road->hasDepth());
+            // LOG(INFO) << f_on_road->depth_;
+            //TODO: usingt gt depth for ground plane estimateion
+            camera_->backProject(f_on_road->keypoint_, f_on_road->depth_, &lmk, X_world_camera_curr);
+            static_ground_points.push_back(lmk);
+            kps.push_back(f_on_road->keypoint_);
+
+        }
+
+        //size of points on ground
+        size_t m = static_ground_points.size();
+        gtsam::Matrix A = gtsam::Matrix::Zero(m, 3);
+        gtsam::Matrix b = gtsam::Matrix::Zero(m, 1);
+
+        for(size_t i = 0; i < m; i++) {
+            const Landmark& lmk = static_ground_points.at(i);
+            A(i, 0) = lmk(0);
+            A(i, 1) = lmk(2);
+            A(i, 2) = 1.0;
+
+            b(i, 0) = lmk(1);
+        }
+
+        //plane coeffs -> Ax + Bz + C = y, because in camera convention y axis is normal to the ground usually
+        gtsam::Matrix plane_coeffs = A.colPivHouseholderQr().solve(b);
 
 
         gtsam::Point2Vector observation_prev;
@@ -1437,34 +1486,44 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
         CHECK_EQ(observation_curr.size(), z_camera.size());
 
         gt_plane_obs_cache.insert2(cache_key, observation_curr);
-        gt_plane_camera_z_cache.insert2(cache_key,z_camera);
 
+        utils::Accumulatord depth_accumulator;
+        //calc average depth using plane coeefs not dlt triangulation!
+        for(const Keypoint& kp : observation_curr) {
+            gtsam::Point3 kp_hom(kp(0), kp(1), 1);
+            gtsam::Point3 ray_cam = K_inv * kp_hom;
+            gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
+            ray_world.normalize();
 
-        for(const auto& pt : triangulated_points) {
-            auto estimate = std::make_pair(-1, pt);
-            LandmarkStatus status;
-            status.label_ = object_id;
-            status.method_ = LandmarkStatus::Method::TRIANGULATED;
+            const double A = plane_coeffs(0);
+            const double B = plane_coeffs(1);
+            const double C = plane_coeffs(2);
 
-            new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+            const gtsam::Point3 camera_center = X_world_camera_curr.translation();
+            //depth of the kp
+            const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
+            depth_accumulator.Add(lambda);
 
         }
 
-        if(!depth_opt) {LOG(FATAL) << "Could not initalise object depth using estimateDepthFromRoad"; }
+        // if(!depth_opt) {LOG(FATAL) << "Could not initalise object depth using estimateDepthFromRoad"; }
 
-        depth = *depth_opt;
+        depth = depth_accumulator.Mean();
 
         //add to cache
         depth_from_road_cache.insert2(cache_key, depth);
+        gt_plane_coeffs_cache.insert2(cache_key, plane_coeffs);
     }
 
     gtsam::Point2Vector gt_plane_curr_obs = gt_plane_obs_cache.at(cache_key);
-    Depths points_z_cameras = gt_plane_camera_z_cache.at(cache_key);
+    gtsam::Matrix plane_coeffs = gt_plane_coeffs_cache.at(cache_key);
 
 
 
-    //find closest traacked kp to the actual measurement so we can put a soft prior on it
-    //only search vertically since we dilate the object mas
+
+
+    // //find closest traacked kp to the actual measurement so we can put a soft prior on it
+    // //only search vertically since we dilate the object mas
     auto closest_track_it = std::min_element(gt_plane_curr_obs.begin(), gt_plane_curr_obs.end(), [measurement]
         (const Keypoint& a, const Keypoint& b) {
             const double dist_a = gtsam::distance2(a, measurement);
@@ -1476,15 +1535,33 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
     const DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame_id, tracklet_id);
 
     const Keypoint closest_track = *closest_track_it;
+
     //if the measurement is very close to the closest mark it with a prior!!
     //TODO:within N pixels -> shoudl match how much we dilate the mask in estimateDepthFromRoad
     //no deilateion when virtual kitti (for testing!)
     if(gtsam::distance2(closest_track, measurement) < 2) {
         //index of triangulated measurement
-        auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
-        double point_z_camera = points_z_cameras.at(index);
+        // auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
+        // double point_z_camera = points_z_cameras.at(index);
+        // Landmark lmk;
+        // camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
+
+        gtsam::Point3 kp_hom(measurement(0), measurement(1), 1);
+        gtsam::Point3 ray_cam = K_inv * kp_hom;
+        gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
+        ray_world.normalize();
+
+        const double A = plane_coeffs(0);
+        const double B = plane_coeffs(1);
+        const double C = plane_coeffs(2);
+
+        const gtsam::Point3 camera_center = X_world_camera_curr.translation();
+        //depth of the kp
+        const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
         Landmark lmk;
-        camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
+        camera_->backProject(measurement, lambda, &lmk, X_world_camera_curr);
+        // const double expected_depth = functional_keypoint::at<Depth>(kp, image_container->getDepth());
+        // LOG(INFO) << lambda << " " <<expected_depth;
 
         new_factors_.addPrior(dynamic_point_symbol, lmk,
                 gtsam::noiseModel::Isotropic::Sigma(3, 10.0));
