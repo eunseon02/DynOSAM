@@ -147,45 +147,33 @@ int main(int argc, char* argv[]) {
 
             const auto object_labels = vision_tools::getObjectLabels(motion);
             for(ObjectId object_id : object_labels) {
-                gtsam::Point2Vector observation_prev;
                 gtsam::Point2Vector observation_curr;
-                gtsam::Point3Vector triangulated_points;
-                //Z coordinates of triangulated poitns in the camera frame
-                Depths z_camera;
-                std::optional<double> depth_opt = mono_backend_tools::estimateDepthFromRoad(
-                    previous_cam_pose,
-                    gt_packet.X_world_,
-                    camera,
-                    previous_motion_mask,
-                    motion,
-                    previous_class_segmentation,
-                    class_semantics,
-                    previous_optical_flow,
-                    object_id,
-                    observation_prev,
+                if(!mono_backend_tools::findObjectPointsNearRoad(
                     observation_curr,
-                    triangulated_points,
-                    z_camera
-                );
-
-                for(const Keypoint& kp : observation_curr) {
-                    gtsam::Point3 kp_hom(kp(0), kp(1), 1);
-                    gtsam::Point3 ray_cam = K_inv * kp_hom;
-                    gtsam::Point3 ray_world = gt_packet.X_world_.rotation() * ray_cam;
-                    ray_world.normalize();
-
-                    const double A = plane_coeffs(0);
-                    const double B = plane_coeffs(1);
-                    const double C = plane_coeffs(2);
-
-                    const gtsam::Point3 camera_center = gt_packet.X_world_.translation();
-                    //depth of the kp
-                    const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
-
-                    const double expected_depth = functional_keypoint::at<Depth>(kp, image_container->getDepth());
-                    LOG(INFO) << lambda << " " <<expected_depth;
-
+                    motion,
+                    class_semantics,
+                    object_id,
+                    -1
+                )) { LOG(FATAL) << "Could not find any object points near the road for object " << object_id;
                 }
+                // for(const Keypoint& kp : observation_curr) {
+                //     gtsam::Point3 kp_hom(kp(0), kp(1), 1);
+                //     gtsam::Point3 ray_cam = K_inv * kp_hom;
+                //     gtsam::Point3 ray_world = gt_packet.X_world_.rotation() * ray_cam;
+                //     ray_world.normalize();
+
+                //     const double A = plane_coeffs(0);
+                //     const double B = plane_coeffs(1);
+                //     const double C = plane_coeffs(2);
+
+                //     const gtsam::Point3 camera_center = gt_packet.X_world_.translation();
+                //     //depth of the kp
+                //     const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
+
+                //     const double expected_depth = functional_keypoint::at<Depth>(kp, image_container->getDepth());
+                //     LOG(INFO) << lambda << " " <<expected_depth;
+
+                // }
             }
 
 

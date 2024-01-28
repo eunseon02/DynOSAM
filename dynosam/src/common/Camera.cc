@@ -90,17 +90,63 @@ void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk)
   backProjectFromZ(kp, Z, lmk, gtsam::Pose3::Identity());
 }
 
-void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world) const {
+void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world, gtsam::OptionalJacobian<3, 3> Dp) const {
   CHECK(lmk);
   const auto calibration = camera_impl_->calibration();
   //Convert (distorted) image coordinates uv to intrinsic coordinates xy
-  gtsam::Point2 pc = calibration.calibrate(kp);
+  Eigen::Matrix<double, 2, decltype(calibration)::dimension> Dcal;
+  gtsam::Matrix22 Dcal_point;
+  gtsam::Point2 pc = calibration.calibrate(kp, Dcal, Dcal_point);
+
   // projection equation x = f(X/Z). The f is used to normalize the image cooridinates and since we already have
   // normalized cordinates xy, we can omit the f
   const double X = pc(0) * Z;
   const double Y = pc(1) * Z;
 
-  *lmk = X_world * gtsam::Vector3(X, Y, Z);
+  const gtsam::Point3 P_camera(X, Y, Z);
+
+  //jacobian of the transforFrom function w.r.t P_camera
+  gtsam::Matrix33 H_point;
+  *lmk = X_world.transformFrom(P_camera, boost::none, H_point);
+
+  // *lmk = X_world * gtsam::Vector3(X, Y, Z);
+
+  if(Dp) {
+    //TODO:!!!! (jacobians!!)
+    //TODO: test!!!
+    //cal1 should be top row of Dcal_point which determines how the pc(0) changes with input u, v
+    const double dcal1_du = Dcal_point(0,0);
+    const double dcal1_dv = Dcal_point(0,1);
+
+    //cal1 should be top row of Dcal_point which determines how the pc(1) changes with input u, v
+    const double dcal2_du = Dcal_point(1, 0);
+    const double dcal2_dv = Dcal_point(1, 1);
+
+    gtsam::Matrix33 J;
+    //top row is how X changes with u, v and Z
+    J(0, 0) = dcal1_du * Z;
+    J(0, 1) = dcal1_dv * Z;
+    J(0, 2) = Z;
+
+    //how Y changes with u, v and Z
+    J(1, 0) = dcal2_du * Z;
+    J(1, 1) = dcal2_dv * Z;
+    J(1, 2) = Z;
+
+    //how Z changes with Z
+    J(2, 0) = 0;
+    J(2, 1) = 0;
+    J(2, 2) = 1;
+
+    //J is computed as the jacobian without the affect of X_world
+    // f = X_world * C(u, v, Z)
+    //   = X_world * P_camera
+    //df/dfuvz = df/dC * dC/duvz
+    //         = df/dC * J
+    //since C -> C(u, v, z) = point in R^3, df/dC is the Jacobian of X_world * P_camera -> Rotation component of X_world, or H_point
+    *Dp = H_point * J;
+  }
+
 }
 
 

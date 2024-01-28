@@ -125,7 +125,7 @@ public:
    * @param lmk Landmark* 3D landmark to set.
    */
   void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk) const;
-  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world) const;
+  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world, gtsam::OptionalJacobian<3, 3> Dp = {}) const;
 
   static Landmark cameraToWorldConvention(const Landmark& lmk);
 

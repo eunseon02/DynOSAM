@@ -65,20 +65,33 @@ Eigen::VectorXd pointsToDepths(const gtsam::Matrix3& intrinsic, const gtsam::Poi
 
 bool checkClusterViaStd(const double std_thres, const Eigen::VectorXd& depths);
 
-std::optional<double> estimateDepthFromRoad(
-  const gtsam::Pose3& X_world_camera_prev,
-  const gtsam::Pose3& X_world_camera_curr,
-  const Camera::Ptr camera,
-  const cv::Mat& prev_semantic_mask,
-  const cv::Mat& curr_semantic_mask,
-  const ImageWrapper<ImageType::ClassSegmentation>& prev_class_seg,
-  const ImageWrapper<ImageType::ClassSegmentation>& curr_class_seg,
-  const cv::Mat& prev_optical_flow,
-  const ObjectId obj_id,
-  gtsam::Point2Vector& observation_prev,
-  gtsam::Point2Vector& observation_curr,
-  gtsam::Point3Vector& triangualted_points,
-  Depths& z_camera);
+
+//TODO: put here for now
+//Returns A, B, C in Ax + Bz + C = y, because in camera convention y axis is normal to the ground usually
+gtsam::Matrix calculateRoadPlane(const FeatureContainer& static_features, const Camera& camera, const gtsam::Pose3& X_world_camera, const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
+
+
+bool findObjectPointsNearRoad(
+  gtsam::Point2Vector& observations,
+  const ImageWrapper<ImageType::MotionMask>& motion_mask,
+  const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation,
+  const ObjectId object_id,
+  int downwards_dilation_element = -1);
+
+// std::optional<double> estimateDepthFromRoad(
+//   const gtsam::Pose3& X_world_camera_prev,
+//   const gtsam::Pose3& X_world_camera_curr,
+//   const Camera::Ptr camera,
+//   const cv::Mat& prev_semantic_mask,
+//   const cv::Mat& curr_semantic_mask,
+//   const ImageWrapper<ImageType::ClassSegmentation>& prev_class_seg,
+//   const ImageWrapper<ImageType::ClassSegmentation>& curr_class_seg,
+//   const cv::Mat& prev_optical_flow,
+//   const ObjectId obj_id,
+//   gtsam::Point2Vector& observation_prev,
+//   gtsam::Point2Vector& observation_curr,
+//   gtsam::Point3Vector& triangualted_points,
+//   Depths& z_camera);
 
 
 std::optional<double> estimateDepthFromDimension(const cv::Mat& semantic_mask,

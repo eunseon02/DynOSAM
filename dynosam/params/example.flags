@@ -11,7 +11,7 @@
 --use_gt_camera_pose=true
 
 #if a sigma on the first set of object points should be added
---use_first_seen_dynamic_point_prior=true
+--use_first_seen_dynamic_point_prior=false
 # if use_first_seen_dynamic_point_prior==true, this will be the sigma used on the 3x3 noise model
 --first_seen_dynamic_point_sigma=10.0
 
