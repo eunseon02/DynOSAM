@@ -389,7 +389,7 @@ bool findObjectPointsNearRoad(
     }
   }
 
-  cv::imshow("Ground pixels", ground_pixel_viz);
+  // cv::imshow("Ground pixels", ground_pixel_viz);
   // cv::waitKey();
 
   LOG(INFO) << "observations size" << observations.size();

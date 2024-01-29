@@ -1358,14 +1358,14 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                         new_scaled_estimates_.push_back(std::make_pair(status, estimate));
                     }
 
-                     for(const auto& lmk : lmks_ground_plane_k_1) {
-                        auto estimate = std::make_pair(-1, lmk);
-                        LandmarkStatus status;
-                        status.label_ = object_id + 5;
-                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+                    //  for(const auto& lmk : lmks_ground_plane_k_1) {
+                    //     auto estimate = std::make_pair(-1, lmk);
+                    //     LandmarkStatus status;
+                    //     status.label_ = object_id + 5;
+                    //     status.method_ = LandmarkStatus::Method::TRIANGULATED;
 
-                        new_scaled_estimates_.push_back(std::make_pair(status, estimate));
-                    }
+                    //     new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                    // }
                     using PointT = pcl::PointXYZ;
                     using PointCloudT = pcl::PointCloud<PointT>;
                     pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
@@ -1410,21 +1410,21 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
 
                     registration_icp.setInputSource(cloud_k_1);
                     registration_icp.setInputTarget(cloud_k);
-                    registration_icp.setRANSACIterations(50);
-                    registration_icp.setMaximumIterations (50);
+                    registration_icp.setRANSACIterations(200);
+                    registration_icp.setMaximumIterations (200);
                     //if distance is smaller than this threshhold
-                    registration_icp.setRANSACOutlierRejectionThreshold(0.10);
+                    registration_icp.setRANSACOutlierRejectionThreshold(0.01);
                     //if distance between two correspondent points in source <-> target, points will be ignord
-                    registration_icp.setMaxCorrespondenceDistance(0.1);
+                    registration_icp.setMaxCorrespondenceDistance(0.05);
                     registration_icp.align (*cloud_icp);
 
                     if(registration_icp.hasConverged()) {
                         LOG(INFO) << "ICP has converged " << registration_icp.getFitnessScore() << " for object " << object_id << " frames " << frame_id_k_1 <<  " -> " << frame_id_k;
 
-                        // if(registration_icp.getFitnessScore() > 0.1) {
-                        //     //fitness score is awful so go to next object
-                        //     continue;
-                        // }
+                        if(registration_icp.getFitnessScore() > 0.1) {
+                            //fitness score is awful so go to next object
+                            continue;
+                        }
                         gtsam::Pose3 transform(registration_icp.getFinalTransformation ().cast<double>());
                         LOG(INFO) << "Transform " << transform;
                         LOG(INFO) << "GT Motion " << guess;
@@ -1451,14 +1451,29 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                             new_scaled_estimates_.push_back(std::make_pair(status, estimate));
                         }
 
-                        // new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
-                        //     curr_object_motion_key,
-                        //     transform,
-                        //     gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
-                        // new_values_.update(curr_object_motion_key, gtsam::Pose3(
-                        //     gtsam::Rot3::Identity(),
-                        //     transform.translation()
-                        // ));
+                        // Landmarks testing_points;
+                        // for (const auto& lmk: lmks_ground_plane_k_1){
+                        //     auto transformed_lmk = transform.transformFrom(lmk);
+                        //     testing_points.push_back(lmk);
+                        // }
+                        // for(const auto& lmk : testing_points) {
+                        //     auto estimate = std::make_pair(-1, lmk);
+                        //     LandmarkStatus status;
+                        //     status.label_ = object_id+20;
+                        //     status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+                        //     new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                        // }
+                        // cv::waitKey();
+
+                        new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
+                            curr_object_motion_key,
+                            transform,
+                            gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
+                        new_values_.update(curr_object_motion_key, gtsam::Pose3(
+                            gtsam::Rot3::Identity(),
+                            transform.translation()
+                        ));
 
                     }
                     else {
