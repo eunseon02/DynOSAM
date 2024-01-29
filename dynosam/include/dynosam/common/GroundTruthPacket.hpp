@@ -29,6 +29,8 @@
 #include <opencv4/opencv2/opencv.hpp> //for cv::Rect
 #include <gtsam/geometry/Pose3.h> //for Pose3
 
+#include <glog/log_severity.h>
+
 
 namespace dyno {
 
@@ -105,7 +107,22 @@ public:
     //! Vector of GT objects. This should contain all the objects in the sequence
     std::vector<ObjectPoseGT> object_poses_;
 
-    bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const;
+    /**
+     * @brief Attempts to get the ObjectPoseGT with the requested id from the packet.
+     * If the object id does not exist, false is returned.
+     *
+     * Log severity indicates what should happen if the object id does NOT exist
+     * 0: nothing, and the function returns false
+     * 1: a GLOG(WARNING) message is thrown, and the function returns false
+     * 2: An exception is thrown, and the function returns false
+     *
+     * @param object_id
+     * @param object_pose_gt
+     * @param log_severity
+     * @return true
+     * @return false
+     */
+    bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt, int log_severity = 0) const;
 
     ObjectIds getObjectIds() const;
 

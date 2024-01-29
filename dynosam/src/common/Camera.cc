@@ -85,16 +85,16 @@ void Camera::backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, 
   *lmk = X_world * camera_impl_->backproject(kp, depth);
 }
 
-void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk) const {
+void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, gtsam::OptionalJacobian<3, 3> Dp) const {
   CHECK(lmk);
-  backProjectFromZ(kp, Z, lmk, gtsam::Pose3::Identity());
+  backProjectFromZ(kp, Z, lmk, gtsam::Pose3::Identity(), Dp);
 }
 
 void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world, gtsam::OptionalJacobian<3, 3> Dp) const {
   CHECK(lmk);
   const auto calibration = camera_impl_->calibration();
   //Convert (distorted) image coordinates uv to intrinsic coordinates xy
-  Eigen::Matrix<double, 2, decltype(calibration)::dimension> Dcal;
+  Eigen::Matrix<double, 2, decltype(calibration)::dimension> Dcal; //unused
   gtsam::Matrix22 Dcal_point;
   gtsam::Point2 pc = calibration.calibrate(kp, Dcal, Dcal_point);
 
@@ -109,10 +109,7 @@ void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk,
   gtsam::Matrix33 H_point;
   *lmk = X_world.transformFrom(P_camera, boost::none, H_point);
 
-  // *lmk = X_world * gtsam::Vector3(X, Y, Z);
-
   if(Dp) {
-    //TODO:!!!! (jacobians!!)
     //TODO: test!!!
     //cal1 should be top row of Dcal_point which determines how the pc(0) changes with input u, v
     const double dcal1_du = Dcal_point(0,0);
@@ -126,12 +123,12 @@ void Camera::backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk,
     //top row is how X changes with u, v and Z
     J(0, 0) = dcal1_du * Z;
     J(0, 1) = dcal1_dv * Z;
-    J(0, 2) = Z;
+    J(0, 2) = pc(0);
 
     //how Y changes with u, v and Z
     J(1, 0) = dcal2_du * Z;
     J(1, 1) = dcal2_dv * Z;
-    J(1, 2) = Z;
+    J(1, 2) = pc(1);
 
     //how Z changes with Z
     J(2, 0) = 0;

@@ -25,6 +25,7 @@ find_package(opengv REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(PCL REQUIRED)
 
 
 find_package(Boost REQUIRED)
@@ -51,6 +52,7 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${GTSAM_INCLUDE_DIR}
+  ${PCL_INCLUDE_DIRS}
 )
 
 # build library
@@ -149,6 +151,7 @@ target_link_libraries(${PROJECT_NAME}
   png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 

@@ -28,7 +28,7 @@
 --mmax_depth_scale=1.4
 
 --use_last_seen_dynamic_point_prior=false
---scale_prior_sigma=0.01
+--scale_prior_sigma=0.2
 
 
 # degeneracy checks

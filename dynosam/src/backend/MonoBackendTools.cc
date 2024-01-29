@@ -303,7 +303,7 @@ gtsam::Matrix calculateRoadPlane(const FeatureContainer& static_features, const 
 }
 
 
-
+//observations
 bool findObjectPointsNearRoad(
   gtsam::Point2Vector& observations,
   const ImageWrapper<ImageType::MotionMask>& motion_mask,
@@ -335,7 +335,7 @@ bool findObjectPointsNearRoad(
   std::vector<cv::Vec4i> hierarchy;
   cv::findContours(obj_mask, contours, hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
-  cv::imshow("Object Mask Dilated", obj_mask);
+  // cv::imshow("Object Mask Dilated", obj_mask);
 
   // for( size_t i = 0; i< contours.size(); i++ ){
   //   cv::Scalar color = cv::Scalar(0, 0, 255);
@@ -347,6 +347,8 @@ bool findObjectPointsNearRoad(
   if (contours.size() < 1){
     return false;
   }
+
+  cv::Mat ground_pixel_viz = cv::Mat::zeros(obj_mask.size(), CV_8U);
 
   int n_points = 0;
   for (int i_contour = 0; i_contour < contours.size(); i_contour++){
@@ -363,10 +365,12 @@ bool findObjectPointsNearRoad(
 
     int u = functional_keypoint::u(this_pixel);
     const cv::Mat& this_semantic_col = motion_mask_cv.col(u);
+
+    //i_row should be on the object
     int i_row = 0;
     // Search upwards up to the contour until we hit the descired object patch
     for (i_row = motion_mask_cv.rows-1; i_row >= functional_keypoint::v(this_pixel); i_row--){
-      //check for road semantics one pixel above
+      //check for road semantics one pixel above, v should be on the road
       int v = i_row+1;
       const Keypoint kp(u, v);
       //TODO: fix auto casting of the at function here! The template cannot diffirentiate between cv::Mat and the ImageWrapper becuase of the explicit cast
@@ -376,12 +380,17 @@ bool findObjectPointsNearRoad(
       if (this_semantic_col.at<ObjectId>(i_row) == object_id && is_road){
          // Verify that the previous pixel is a background pixel - in the case of an object being blocked by another one below it
         // Also make sure the pixel is not already at the bottom of the image - does not have a previous pixel
-        if (i_row < motion_mask_cv.rows-1 && this_semantic_col.at<ObjectId>(i_row+1) == background_label){
+        if (i_row < motion_mask_cv.rows-1){
           observations.push_back(kp);
+
+          ground_pixel_viz.at<uchar>(v, u) = 255;
         }
       }
     }
   }
+
+  cv::imshow("Ground pixels", ground_pixel_viz);
+  // cv::waitKey();
 
   LOG(INFO) << "observations size" << observations.size();
 

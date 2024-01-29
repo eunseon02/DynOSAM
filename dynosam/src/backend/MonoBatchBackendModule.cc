@@ -31,10 +31,26 @@
 
 #include "dynosam/utils/GtsamUtils.hpp"
 
+//TODO: for now!!
+#include <pcl/io/ply_io.h>
+#include <pcl/point_types.h>
+#include <pcl/registration/icp.h>
+#include <pcl/registration/registration.h>
+#include <pcl/registration/correspondence_estimation.h>
+#include <pcl/registration/correspondence_estimation_normal_shooting.h>
+#include <pcl/registration/correspondence_estimation_backprojection.h>
+#include <pcl/registration/correspondence_rejection_median_distance.h>
+#include <pcl/registration/correspondence_rejection_surface_normal.h>
+#include <pcl/registration/transformation_estimation_point_to_plane_lls.h>
+#include <pcl/registration/default_convergence_criteria.h>
+#include <pcl/filters/voxel_grid.h>
+
 #include <random>
 
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/LevenbergMarquardtParams.h>
+
+#include <gtsam/slam/PoseTranslationPrior.h>
 
 DEFINE_bool(use_gt_camera_pose, true, "If true gt camera pose (with noise) will be used as initalisation.");
 DEFINE_double(dp_init_sigma_perturb, 0.1, "Amount of noise to add to each dynamic point when initalising it.");
@@ -222,9 +238,9 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     runStaticUpdate(current_frame_id, current_pose_symbol, input->static_keypoint_measurements_);
     runDynamicUpdate(current_frame_id, current_pose_symbol, input->dynamic_keypoint_measurements_, input->estimated_motions_);
 
-    if(FLAGS_use_last_seen_dynamic_point_prior) {
-        checkForScalePriors(current_frame_id, input->estimated_motions_);
-    }
+    // if(FLAGS_use_last_seen_dynamic_point_prior) {
+    checkForScalePriors(current_frame_id, input->estimated_motions_);
+    // }
 
 
     std::stringstream ss;
@@ -237,11 +253,11 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     static int n_opt = 1;
 
     if(should_optimize) {
-        // BackendLogger bl;
-        // bl.log("before_opt_" + std::to_string(n_opt) , new_values_, gt_packet_map_);
+        BackendLogger bl;
+        bl.log("before_opt_" + std::to_string(n_opt) , new_values_, gt_packet_map_);
         fullBatchOptimize(new_values_, new_factors_);
-        // bl.log("after_opt_" + std::to_string(n_opt), state_, gt_packet_map_);
-        // bl.log("mono_batch", debug_infos_);
+        bl.log("after_opt_" + std::to_string(n_opt), state_, gt_packet_map_);
+        bl.log("mono_batch", debug_infos_);
 
         n_opt++;
         //TODO: depricate
@@ -693,17 +709,17 @@ void MonoBatchBackendModule::runDynamicUpdate(
 
         LOG(INFO) << new_well_tracked_points.size() << " newly tracked for dynamic object and " << existing_well_tracked_points.size() << " existing tracks for object id " << object_id;
 
-        for(FrameId frame : frames_covered) {
-            ObjectPoseGT object_pose_gt;
-            auto gt_frame_packet = gt_packet_map_.at(frame);
-            if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                LOG(ERROR) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
-                // continue;
-            }
-            else {
-                LOG(INFO) << object_pose_gt;
-            }
-        }
+        // for(FrameId frame : frames_covered) {
+        //     ObjectPoseGT object_pose_gt;
+        //     auto gt_frame_packet = gt_packet_map_.at(frame);
+        //     if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+        //         LOG(ERROR) << "Could not find gt object at frame " << frame << " for object Id " << object_id << " and packet " << gt_frame_packet;
+        //         // continue;
+        //     }
+        //     else {
+        //         LOG(INFO) << object_pose_gt;
+        //     }
+        // }
 
         //TODO: depricate
         // decideInitalisationMethod(well_tracked_points, object_id, current_frame_id);
@@ -1099,19 +1115,20 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
         return;
     }
 
-    const auto previous_frame_id = current_frame_id-1u;
-    DebugInfo& debug_info = debug_infos_.at(previous_frame_id);
-    CHECK_EQ(debug_info.frame_id, previous_frame_id);
+    const auto frame_id_k_1 = current_frame_id-1u;
+    const auto frame_id_k = current_frame_id;
+    DebugInfo& debug_info = debug_infos_.at(frame_id_k_1);
+    CHECK_EQ(debug_info.frame_id, frame_id_k_1);
     //get objects in last frame and compare to this frame
-    const ObjectIds objects_in_last_frame = do_tracklet_manager_.getPerFrameObjects(previous_frame_id);
+    const ObjectIds objects_in_last_frame = do_tracklet_manager_.getPerFrameObjects(frame_id_k_1);
     for(ObjectId prev_object_id : objects_in_last_frame) {
         const auto object_id = prev_object_id;
         LOG(INFO) << prev_object_id << " " << estimated_motions.exists(prev_object_id);
         //object is not in the current frame
         //this SHOULD (if all our tracking is correct) indicate that the object has disappeared
         //motion to take us from k-2 to k-1
-        const auto prev_object_motion_key = ObjectMotionSymbol(prev_object_id, previous_frame_id);
-        const auto curr_object_motion_key = ObjectMotionSymbol(prev_object_id, current_frame_id);
+        const auto prev_object_motion_key = ObjectMotionSymbol(prev_object_id, frame_id_k_1);
+        const auto curr_object_motion_key = ObjectMotionSymbol(prev_object_id, frame_id_k);
 
         // ObjectPoseGT object_pose_gt;
         // auto gt_frame_packet = gt_packet_map_.at(current_frame_id);
@@ -1153,32 +1170,305 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
         // if(!estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key)) {
         //logic should be !estimated_motions.exists(prev_object_id) && new_values_.exists(prev_object_motion_key) but seems to be
         //some discrepancy between motions observed and motions added (not sure why....)
-        if(new_values_.exists(prev_object_motion_key) && !new_values_.exists(curr_object_motion_key)) {
+        // if(new_values_.exists(prev_object_motion_key) && !new_values_.exists(curr_object_motion_key)) {
 
-            //sanity check to see if the values reflect this
-            // CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(curr_object_motion_key);
+        //     //sanity check to see if the values reflect this
+        //     // CHECK(!new_values_.exists(curr_object_motion_key)) << DynoLikeKeyFormatter(curr_object_motion_key);
 
-            //get all points
-            auto extracted_dynamic_points = new_values_.extract<gtsam::Point3>(gtsam::Symbol::ChrTest(kDynamicLandmarkSymbolChar));
-            for(const auto&[key, point] : extracted_dynamic_points) {
-                DynamicPointSymbol dps(key);
-                const TrackletId tracklet_id = dps.trackletId();
-                const FrameId point_frame_id = dps.frameId();
-                const auto stored_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+        //     //get all points
+        //     auto extracted_dynamic_points = new_values_.extract<gtsam::Point3>(gtsam::Symbol::ChrTest(kDynamicLandmarkSymbolChar));
+        //     for(const auto&[key, point] : extracted_dynamic_points) {
+        //         DynamicPointSymbol dps(key);
+        //         const TrackletId tracklet_id = dps.trackletId();
+        //         const FrameId point_frame_id = dps.frameId();
+        //         const auto stored_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
 
-                if(point_frame_id == previous_frame_id && stored_object_id == object_id) {
+        //         if(point_frame_id == previous_frame_id && stored_object_id == object_id) {
 
-                    //get nice gt data
-                    auto input = input_packet_map_.at(point_frame_id);
-                    Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
+        //             //get nice gt data
+        //             auto input = input_packet_map_.at(point_frame_id);
+        //             Landmark gt_lmk =  new_values_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id)) * input->frame_.backProjectToCamera(tracklet_id);
 
-                    new_factors_.addPrior(key, gt_lmk,
-                        gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
+        //             new_factors_.addPrior(key, gt_lmk,
+        //                 gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
 
-                    debug_info.incrementNumScalePriors(object_id);
-                }
+        //             debug_info.incrementNumScalePriors(object_id);
+        //         }
+        //     }
+
+        // }
+
+
+        //TODO:::!! Copied from initaliseFromNearbyRoad
+        using ObjectFramePair = std::pair<FrameId, ObjectId>;
+        // using FrameTrackletPair = std::pair<FrameId, TrackletId>;
+        //std::hash function for this map is defined in StructuredContainers.hpp
+        //pair is average depth and std deviation of the filtered accumulated depth
+        //cache of tracket points on the ground plane in the current frame
+        static gtsam::FastMap<ObjectFramePair, gtsam::Point2Vector> ground_plane_obs_cache;
+        static gtsam::FastMap<ObjectFramePair, gtsam::Matrix> ground_plane_coeffs_cache;
+        const gtsam::Matrix3 K_inv = camera_->getParams().getCameraMatrixEigen().inverse();
+
+
+        auto get_plane_coeffs_and_obs = [=](
+            gtsam::FastMap<ObjectFramePair, gtsam::Point2Vector>& ground_plane_obs_cache,
+            gtsam::FastMap<ObjectFramePair, gtsam::Matrix>& ground_plane_coeffs_cache,
+            ObjectId object_id,
+            FrameId frame_id,
+            gtsam::Matrix& ground_plane_coeffs,
+            gtsam::Point2Vector& observations) -> bool
+        {
+            const auto cache_key = std::make_pair(frame_id, object_id);
+            if(ground_plane_obs_cache.exists(cache_key)) {
+                ground_plane_coeffs = ground_plane_coeffs_cache.at(cache_key);
+                observations = ground_plane_obs_cache.at(cache_key);
+                return true;
             }
 
+            const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id);
+            const auto& curr_image_container = input->image_container_;
+            const cv::Mat& curr_motion_mask = curr_image_container->get<ImageType::MotionMask>();
+            const auto& curr_class_seg = curr_image_container->getImageWrapper<ImageType::ClassSegmentation>();
+
+            gtsam::Pose3 X_world_camera_curr;
+            gtsam::Key curr_camera_key = CameraPoseSymbol(frame_id);
+            CHECK(utils::getEstimateOfKey(new_values_, curr_camera_key, &X_world_camera_curr)) << "Key: " << DynoLikeKeyFormatter(curr_camera_key) << " should be in the values";
+
+            const Frame& frame = input->frame_;
+
+            ground_plane_coeffs =
+                mono_backend_tools::calculateRoadPlane(frame.static_features_, *camera_, X_world_camera_curr, curr_class_seg);
+
+            if(mono_backend_tools::findObjectPointsNearRoad(
+                observations,
+                curr_motion_mask,
+                curr_class_seg,
+                object_id,
+                -1
+            ))
+            {
+                LOG(INFO) << observations.size();
+
+                ground_plane_obs_cache.insert2(cache_key, observations);
+                ground_plane_coeffs_cache.insert2(cache_key, ground_plane_coeffs);
+                return true;
+            }
+
+            return false;
+
+
+        }; //get_plane_coeffs_and_obs
+
+
+        auto calculate_3d_points_with_plane = [=, &K_inv](
+            const gtsam::Matrix& plane_coeffs,
+            const gtsam::Point2Vector& obs,
+            const gtsam::Pose3& X_world,
+            Landmarks& landmarks_world)
+        {
+            for(const Keypoint& kp : obs) {
+                gtsam::Point3 kp_hom(kp(0), kp(1), 1);
+                gtsam::Point3 ray_cam = K_inv * kp_hom;
+                gtsam::Point3 ray_world = X_world.rotation() * ray_cam;
+                ray_world.normalize();
+
+                const double A = plane_coeffs(0);
+                const double B = plane_coeffs(1);
+                const double C = plane_coeffs(2);
+
+                const gtsam::Point3 camera_center = X_world.translation();
+                //depth of the kp which is on the ground, as found by findObjectPointsNearRoad
+                const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
+
+                Landmark lmk;
+                camera_->backProject(kp, lambda, &lmk, X_world);
+                landmarks_world.push_back(lmk);
+            }
+        };
+
+
+        const bool b1 = new_values_.exists(prev_object_motion_key);
+        const bool b2 = new_values_.exists(curr_object_motion_key);
+        if(b1 && b2) {
+
+            gtsam::Matrix ground_plane_coeffs_k, ground_plane_coeffs_k_1;
+            gtsam::Point2Vector ground_plane_obs_k, ground_plane_obs_k_1;
+
+            gtsam::Pose3 X_world_k_1, X_world_k;
+            CHECK(utils::getEstimateOfKey(new_values_, CameraPoseSymbol(frame_id_k), &X_world_k)) << "Key: " << DynoLikeKeyFormatter(CameraPoseSymbol(frame_id_k)) << " should be in the values";
+            CHECK(utils::getEstimateOfKey(new_values_, CameraPoseSymbol(frame_id_k_1), &X_world_k_1)) << "Key: " << DynoLikeKeyFormatter(CameraPoseSymbol(frame_id_k_1)) << " should be in the values";
+
+
+            //we have plane an ground points near objects for frames k-1 and k
+            if(get_plane_coeffs_and_obs(ground_plane_obs_cache, ground_plane_coeffs_cache, object_id, frame_id_k, ground_plane_coeffs_k, ground_plane_obs_k) &&
+                get_plane_coeffs_and_obs(ground_plane_obs_cache, ground_plane_coeffs_cache, object_id, frame_id_k_1, ground_plane_coeffs_k_1, ground_plane_obs_k_1))
+                {
+
+                    //we dont want the ground points we want the points on the object and how THEY move -> using the ground only works
+                    //if the car (or object) is obscuring the ground between frames
+                    //if the car is moving at a relative angle to the camera then the only points that are observed are parallel to the ground plane
+                    //which doesnt move between frames. When the relative observation of the object in front of the camera (or just not obscured)
+                    //then the moving car reveals the shape beneath it, particualery when all the car can be observed
+
+                    //get 3d points for each obs using the ground plane and point intersection
+                    //landmarks are in the world frame
+                    Landmarks lmks_ground_plane_k, lmks_ground_plane_k_1;
+                    LOG(INFO) << "ground_plane_coeffs_k " << ground_plane_coeffs_k;
+                    LOG(INFO) << "ground_plane_coeffs_k_1 " << ground_plane_coeffs_k_1;
+
+                    // calculate_3d_points_with_plane(ground_plane_coeffs_k, ground_plane_obs_k, X_world_k, lmks_ground_plane_k);
+                    // calculate_3d_points_with_plane(ground_plane_coeffs_k_1, ground_plane_obs_k_1, X_world_k_1, lmks_ground_plane_k_1);
+                    const MonocularInstanceOutputPacket::ConstPtr input = input_packet_map_.at(frame_id_k);
+                    const auto& curr_image_container = input->image_container_;
+                    const cv::Mat& curr_depth = curr_image_container->get<ImageType::Depth>();
+                    for(const auto& kp : ground_plane_obs_k) {
+                        const Depth depth = functional_keypoint::at<Depth>(kp, curr_depth);
+
+                        Landmark lmk;
+                        camera_->backProject(kp, depth, &lmk, X_world_k);
+                        lmks_ground_plane_k.push_back(lmk);
+
+                    }
+
+                    const MonocularInstanceOutputPacket::ConstPtr input_k_1 = input_packet_map_.at(frame_id_k_1);
+                    const auto& curr_image_container_k_1 = input_k_1->image_container_;
+                    const cv::Mat& depth_k_1 = curr_image_container_k_1->get<ImageType::Depth>();
+                    for(const auto& kp : ground_plane_obs_k_1) {
+                        const Depth depth = functional_keypoint::at<Depth>(kp, depth_k_1);
+
+                        Landmark lmk;
+                        camera_->backProject(kp, depth, &lmk, X_world_k_1);
+                        lmks_ground_plane_k_1.push_back(lmk);
+
+                    }
+
+                    LOG(ERROR) << "COULD GET SCALE PRIOR ON OBJECT " << object_id << " frames " << frame_id_k_1 <<  " -> " << frame_id_k;
+                    LOG(ERROR) << lmks_ground_plane_k.size() << " " << lmks_ground_plane_k_1.size();
+                    LOG(ERROR) << ground_plane_obs_k.size() << " " << ground_plane_obs_k_1.size();
+
+                    // const Depth depth = functional_keypoint::at<Depth>(Keypoint(j, i), curr_depth);
+
+
+                    for(const auto& lmk : lmks_ground_plane_k) {
+                        auto estimate = std::make_pair(-1, lmk);
+                        LandmarkStatus status;
+                        status.label_ = object_id;
+                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+                        new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                    }
+
+                     for(const auto& lmk : lmks_ground_plane_k_1) {
+                        auto estimate = std::make_pair(-1, lmk);
+                        LandmarkStatus status;
+                        status.label_ = object_id + 5;
+                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+                        new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                    }
+                    using PointT = pcl::PointXYZ;
+                    using PointCloudT = pcl::PointCloud<PointT>;
+                    pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
+                    // pcl::Registration<PointT, PointT> registration_icp;
+
+                    PointCloudT::Ptr cloud_k(new PointCloudT);  // Original point cloud
+                    PointCloudT::Ptr cloud_k_1(new PointCloudT);  // Transformed point cloud
+                    PointCloudT::Ptr cloud_icp(new PointCloudT);  // Transformed point cloud
+
+
+
+                    for(const auto& lmk : lmks_ground_plane_k) {
+                        cloud_k->push_back(PointT(
+                            static_cast<float>(lmk(0)),
+                            static_cast<float>(lmk(1)),
+                            static_cast<float>(lmk(2))));
+                    }
+
+                    for(const auto& lmk : lmks_ground_plane_k_1) {
+                        cloud_k_1->push_back(PointT(
+                            static_cast<float>(lmk(0)),
+                            static_cast<float>(lmk(1)),
+                            static_cast<float>(lmk(2))));
+                    }
+
+                    // pcl::VoxelGrid<PointT> avg;
+                    // avg.setInputCloud(cloud_k);
+                    // avg.setLeafSize(0.25f, 0.25f, 0.25f);
+                    // avg.filter(*cloud_k);
+
+                    // avg.setInputCloud(cloud_k_1);
+                    // avg.setLeafSize(0.25f, 0.25f, 0.25f);
+                    // avg.filter(*cloud_k_1);
+
+                    auto gt_frame_packet = gt_packet_map_.at(frame_id_k);
+                    gtsam::Pose3 guess;
+                    ObjectPoseGT object_pose_gt;
+                    if(gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                        guess =  *object_pose_gt.prev_H_current_world_;
+                    }
+
+
+                    registration_icp.setInputSource(cloud_k_1);
+                    registration_icp.setInputTarget(cloud_k);
+                    registration_icp.setRANSACIterations(50);
+                    registration_icp.setMaximumIterations (50);
+                    //if distance is smaller than this threshhold
+                    registration_icp.setRANSACOutlierRejectionThreshold(0.10);
+                    //if distance between two correspondent points in source <-> target, points will be ignord
+                    registration_icp.setMaxCorrespondenceDistance(0.1);
+                    registration_icp.align (*cloud_icp);
+
+                    if(registration_icp.hasConverged()) {
+                        LOG(INFO) << "ICP has converged " << registration_icp.getFitnessScore() << " for object " << object_id << " frames " << frame_id_k_1 <<  " -> " << frame_id_k;
+
+                        // if(registration_icp.getFitnessScore() > 0.1) {
+                        //     //fitness score is awful so go to next object
+                        //     continue;
+                        // }
+                        gtsam::Pose3 transform(registration_icp.getFinalTransformation ().cast<double>());
+                        LOG(INFO) << "Transform " << transform;
+                        LOG(INFO) << "GT Motion " << guess;
+
+                        // auto gt_frame_packet = gt_packet_map_.at(frame_id_k);
+                        // ObjectPoseGT object_pose_gt;
+                        // if(gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                        //     LOG(INFO) << "GT Motion " << *object_pose_gt.prev_H_current_world_;
+                        //     new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
+                        //         curr_object_motion_key,
+                        //         *object_pose_gt.prev_H_current_world_,
+                        //         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
+                        // }
+
+                        for(const auto& pt : cloud_icp->points) {
+                            auto estimate = std::make_pair(-1, gtsam::Point3(
+                                pt.x, pt.y, pt.z
+                            ));
+                            LandmarkStatus status;
+                            //make different object for colour?
+                            status.label_ = object_id+10;
+                            status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+                            new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                        }
+
+                        // new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
+                        //     curr_object_motion_key,
+                        //     transform,
+                        //     gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
+                        // new_values_.update(curr_object_motion_key, gtsam::Pose3(
+                        //     gtsam::Rot3::Identity(),
+                        //     transform.translation()
+                        // ));
+
+                    }
+                    else {
+                        LOG(INFO) << "ICP has NOT converged " << registration_icp.getFitnessScore() << " for object " << object_id << " frames " << frame_id_k_1 <<  " -> " << frame_id_k;
+                    }
+
+
+
+
+                }
         }
     }
 
@@ -1490,7 +1780,8 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
     bool ground_plane_calculated = gt_plane_obs_cache.exists(cache_key);
     //if we have ground plane it means we could find the road near the car
     //this means we will try to ACTUALLY find a good measurement to put a prior on the object
-    if(ground_plane_calculated) {
+    // if(ground_plane_calculated) {
+    if(false) {
         gtsam::Point2Vector gt_plane_curr_obs = gt_plane_obs_cache.at(cache_key);
         gtsam::Matrix plane_coeffs = gt_plane_coeffs_cache.at(cache_key);
 
@@ -1508,58 +1799,58 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
 
         const Keypoint closest_track = *closest_track_it;
 
-        //if the measurement is very close to the closest mark it with a prior!!
-        //TODO:within N pixels -> shoudl match how much we dilate the mask in estimateDepthFromRoad
-        //no deilateion when virtual kitti (for testing!)
-        //if increase (and dilation) this will allow more points to be associated with the same contour and therefore the same prior
-        if(gtsam::distance2(closest_track, measurement) < 2) {
-            //index of triangulated measurement
-            // auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
-            // double point_z_camera = points_z_cameras.at(index);
-            // Landmark lmk;
-            // camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
+        // //if the measurement is very close to the closest mark it with a prior!!
+        // //TODO:within N pixels -> shoudl match how much we dilate the mask in estimateDepthFromRoad
+        // //no deilateion when virtual kitti (for testing!)
+        // //if increase (and dilation) this will allow more points to be associated with the same contour and therefore the same prior
+        // if(gtsam::distance2(closest_track, measurement) < 2) {
+        //     //index of triangulated measurement
+        //     // auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
+        //     // double point_z_camera = points_z_cameras.at(index);
+        //     // Landmark lmk;
+        //     // camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
 
-            //use measurement or closest track (which is the kp on the ground)
-            gtsam::Point3 kp_hom(closest_track(0), closest_track(1), 1);
-            gtsam::Point3 ray_cam = K_inv * kp_hom;
-            gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
-            ray_world.normalize();
+        //     //use measurement or closest track (which is the kp on the ground)
+        //     gtsam::Point3 kp_hom(closest_track(0), closest_track(1), 1);
+        //     gtsam::Point3 ray_cam = K_inv * kp_hom;
+        //     gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
+        //     ray_world.normalize();
 
-            const double A = plane_coeffs(0);
-            const double B = plane_coeffs(1);
-            const double C = plane_coeffs(2);
+        //     const double A = plane_coeffs(0);
+        //     const double B = plane_coeffs(1);
+        //     const double C = plane_coeffs(2);
 
-            const gtsam::Point3 camera_center = X_world_camera_curr.translation();
-            //depth of the kp
-            const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
-
-
-            //within an acceptable std of the mean (which is used to initalise all the points on this object), add prior on it
-            if(std::abs(lambda - depth) < 1.2 * depth_std) {
-                Landmark lmk_on_road_camera;
-                camera_->backProject(closest_track, lambda, &lmk_on_road_camera);
-
-                //now use the z of the lmk on road to construct the actual lmk using the measurement of the kp on the object
-                Landmark lmk_on_object;
-                camera_->backProjectFromZ(measurement, lmk_on_road_camera(2), &lmk_on_object, X_world_camera_curr);
-
-                new_factors_.addPrior(dynamic_point_symbol, lmk_on_object,
-                        //very large covaraicne on y as we dont know the height...? this isnt correct either
-                        //since we use the tracket point for initalisation
-                        gtsam::noiseModel::Isotropic::Sigmas(gtsam::Vector3(1, 1, 1)));
-
-                auto estimate = std::make_pair(tracklet_id, lmk_on_object);
-                LandmarkStatus status;
-                status.label_ = object_id;
-                status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
-                new_scaled_estimates_.push_back(std::make_pair(status, estimate));
-            }
+        //     const gtsam::Point3 camera_center = X_world_camera_curr.translation();
+        //     //depth of the kp
+        //     const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
 
 
-            DebugInfo& debug_info = debug_infos_.at(frame_id);
-            debug_info.incrementNumScalePriors(object_id);
-        }
+        //     //within an acceptable std of the mean (which is used to initalise all the points on this object), add prior on it
+        //     if(std::abs(lambda - depth) < 1.2 * depth_std) {
+        //         Landmark lmk_on_road_camera;
+        //         camera_->backProject(closest_track, lambda, &lmk_on_road_camera);
+
+        //         //now use the z of the lmk on road to construct the actual lmk using the measurement of the kp on the object
+        //         Landmark lmk_on_object;
+        //         camera_->backProjectFromZ(measurement, lmk_on_road_camera(2), &lmk_on_object, X_world_camera_curr);
+
+        //         new_factors_.addPrior(dynamic_point_symbol, lmk_on_object,
+        //                 //very large covaraicne on y as we dont know the height...? this isnt correct either
+        //                 //since we use the tracket point for initalisation
+        //                 gtsam::noiseModel::Isotropic::Sigmas(gtsam::Vector3(1, 1, 1)));
+
+        //         auto estimate = std::make_pair(tracklet_id, lmk_on_object);
+        //         LandmarkStatus status;
+        //         status.label_ = object_id;
+        //         status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+        //         new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+        //     }
+
+
+        //     DebugInfo& debug_info = debug_infos_.at(frame_id);
+        //     debug_info.incrementNumScalePriors(object_id);
+        // }
     }
 
 

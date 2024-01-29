@@ -117,10 +117,19 @@ std::ostream& operator<<(std::ostream &os, const ObjectPoseGT& object_pose) {
     return os;
 }
 
-bool GroundTruthInputPacket::getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt) const {
+bool GroundTruthInputPacket::getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt, int log_severity) const {
     auto it_this = std::find_if(object_poses_.begin(), object_poses_.end(),
                 [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
     if(it_this == object_poses_.end()) {
+        std::stringstream ss;
+        ss << "Could not find object at frame " << this->frame_id_ << " for object Id " << object_id << " and packet " << *this;
+
+        if(log_severity == 1) {
+            LOG(WARNING) << ss.str();
+        }
+        else if(log_severity > 1) {
+            throw DynosamException(ss.str());
+        }
         return false;
     }
 

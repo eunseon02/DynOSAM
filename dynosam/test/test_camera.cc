@@ -188,7 +188,7 @@ TEST(Camera, backProjectToZJacobian)
 
   //construct 3x1 vector of input to satisfy the matrix structure of the problem we want to sove
   gtsam::Vector3 input(kpt(0), kpt(1), Z);
-  //numericalDerivative21 -> 2 function arguments, derivative of the first one?
+  //numericalDerivative21 -> 2 function arguments, derivative w.r.t uvz
   gtsam::Matrix33 numerical_J = gtsam::numericalDerivative21<gtsam::Vector3, gtsam::Vector3, const gtsam::Pose3&>(
     numerical_deriv_func, input, pose);
 
