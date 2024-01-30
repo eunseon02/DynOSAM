@@ -41,6 +41,8 @@ int main(int argc, char* argv[]) {
     options.arguments(non_ros_args);
     options.use_intra_process_comms(true);
 
+    // LOG(INFO) << FLAGS_test_flag;
+
     rclcpp::executors::SingleThreadedExecutor exec;
     auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
 

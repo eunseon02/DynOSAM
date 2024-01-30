@@ -98,6 +98,7 @@ struct TRErrorPair {
 
 struct TRErrorPairVector : public std::vector<TRErrorPair> {
     using Base = std::vector<TRErrorPair>;
+    using Base::push_back;
 
     void push_back(double translation, double rot);
 

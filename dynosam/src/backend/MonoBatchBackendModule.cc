@@ -35,6 +35,7 @@
 #include <pcl/io/ply_io.h>
 #include <pcl/point_types.h>
 #include <pcl/registration/icp.h>
+#include <pcl/registration/icp_nl.h>
 #include <pcl/registration/registration.h>
 #include <pcl/registration/correspondence_estimation.h>
 #include <pcl/registration/correspondence_estimation_normal_shooting.h>
@@ -60,6 +61,21 @@ DEFINE_bool(use_first_seen_dynamic_point_prior, true,
 DEFINE_double(first_seen_dynamic_point_sigma, 10,
     "The sigma used on the prior for the initials set of dynamic point observations. Used if use_first_seen_dynamic_point_prior==true");
 
+DEFINE_bool(use_object_points_near_ground_prior, true,
+    "If true, a prior will be added to the set of points near the ground plane, using their projected value");
+DEFINE_double(object_points_near_ground_sigma, 0.5,
+    "The sigma used on the prior for the points near the ground. Used if use_object_points_near_ground_prior==true");
+
+
+
+DEFINE_bool(use_motion_from_road_prior, true,
+    "If true, a prior will be added to transaltion component of the motion, calculated from road points near the object");
+DEFINE_double(motion_scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
+
+DEFINE_bool(use_gt_motion_from_road, false,
+    "if true, use the gt motion between frames, else, use estimated. Only used if use_motion_from_road_prior==true");
+
+
 DEFINE_int32(dynamic_point_init_func_type, 0,
     "Which function to use when initalising the dynamic 3d points. "
     "0: Initalise from perturbed gt pose, "
@@ -74,7 +90,6 @@ DEFINE_int32(max_opt_iterations, 300, "Max iteration of the LM solver");
 DEFINE_int32(optimize_n_frame, 15, "Runs the (full batch) optimziation every N frames");
 
 DEFINE_bool(use_last_seen_dynamic_point_prior, false, "Will add a prior using perturbed gt on the last observed frame of an object");
-DEFINE_double(scale_prior_sigma, 0.1, "Sigma to use on the scale prior");
 
 //object too small degeneracy cases!!
 //right now we dont have semantic segmentation so assume everythign is a car?
@@ -324,10 +339,15 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     }
 
     gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
-    gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>> object_poses_composed_with_frame;
+    //if there has been a change in the system - this will not update!!!!!
+    static gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>> object_poses_composed_with_frame;
     for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
         object_poses_composed_.insert({object_id, gtsam::Pose3Vector{}});
-        object_poses_composed_with_frame.insert({object_id,gtsam::FastMap<FrameId, gtsam::Pose3>{}});
+
+        if(!object_poses_composed_with_frame.exists(object_id)) {
+            object_poses_composed_with_frame.insert({object_id,gtsam::FastMap<FrameId, gtsam::Pose3>{}});
+        }
+
 
         FrameIds all_frames = do_tracklet_manager_.getFramesPerObject(object_id);
         LOG(INFO) << "Adding output for object " << object_id << " appearing at frame " << container_to_string(all_frames);
@@ -402,8 +422,27 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
                     LOG(FATAL) << "Could not find gt object at frame " << frame_id-1 << " for object Id" << object_id;
                 }
                 CHECK_EQ(object_poses_composed_.at(object_id).size(), 0u);
-                object_poses_composed_.at(object_id).push_back(object_pose_gt.L_world_);
-                object_poses_composed_with_frame.at(object_id).insert2(frame_id-1, object_pose_gt.L_world_);
+
+                //calculate centroid of object at this location
+                gtsam::Point3 centroid(0, 0, 0);
+                size_t num_points = 0;
+                for(const auto&[key, point] : extracted_dynamic_points_opt) {
+                    DynamicPointSymbol dps(key);
+
+                    const TrackletId tracklet_id = dps.trackletId();
+                    const FrameId point_frame_id = dps.frameId();
+                    const auto point_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+
+                    if(point_object_id == object_id && point_frame_id == frame_id) {
+                        centroid += point;
+                        num_points++;
+                    }
+                }
+
+                centroid /= num_points;
+                const gtsam::Pose3 starting_pose(object_pose_gt.L_world_.rotation(), centroid);
+                object_poses_composed_.at(object_id).push_back(starting_pose);
+                object_poses_composed_with_frame.at(object_id).insert2(frame_id-1, starting_pose);
             }
             gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
             CHECK_GT(object_poses_composed_.at(object_id).size(), 0u);
@@ -415,37 +454,6 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         }
 
         LOG(INFO) << "Added " <<  object_poses_composed_.at(object_id).size() << " composed poses for object " << object_id;
-
-        // //this is a lot of iteration for what should be a straighforward lookup
-        // const TrackletIds tracklet_ids = do_tracklet_manager_.getPerObjectTracklets(object_id);
-
-        // for(TrackletId tracklet_id : tracklet_ids) {
-        //     CHECK(do_tracklet_manager_.trackletExists(tracklet_id));
-
-        //     const DynamicObjectTracklet<Keypoint>& tracklet = do_tracklet_manager_.getByTrackletId(tracklet_id);
-
-        //     for(const auto& [frame_id, measurement] : tracklet) {
-        //         (void)measurement;
-        //         DynamicPointSymbol dynamic_point_symbol = DynamicLandmarkSymbol(frame_id, tracklet_id);
-
-        //         if(state_.exists(dynamic_point_symbol)) {
-        //             const Landmark lmk = state_.at<Landmark>(dynamic_point_symbol);
-        //             // const Landmark lmk = new_values_.at<Landmark>(dynamic_point_symbol);
-        //             auto lmk_estimate = std::make_pair(tracklet_id, lmk);
-
-        //             LandmarkStatus status;
-        //             status.label_ = object_id;
-        //             status.method_ = LandmarkStatus::Method::OPTIMIZED;
-
-        //             all_dynamic_object_triangulation.push_back(std::make_pair(status, lmk_estimate));
-        //         }
-
-        //     }
-
-        // }
-
-        LOG(INFO) << "Done adding points";
-
     }
 
     if(should_optimize) {
@@ -1289,7 +1297,7 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
 
         const bool b1 = new_values_.exists(prev_object_motion_key);
         const bool b2 = new_values_.exists(curr_object_motion_key);
-        if(b1 && b2) {
+        if(b1 && b2 && FLAGS_use_motion_from_road_prior) {
 
             gtsam::Matrix ground_plane_coeffs_k, ground_plane_coeffs_k_1;
             gtsam::Point2Vector ground_plane_obs_k, ground_plane_obs_k_1;
@@ -1368,8 +1376,8 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                     // }
                     using PointT = pcl::PointXYZ;
                     using PointCloudT = pcl::PointCloud<PointT>;
-                    pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
-                    // pcl::Registration<PointT, PointT> registration_icp;
+                    // pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
+                    pcl::IterativeClosestPointNonLinear<PointT, PointT> registration_icp;
 
                     PointCloudT::Ptr cloud_k(new PointCloudT);  // Original point cloud
                     PointCloudT::Ptr cloud_k_1(new PointCloudT);  // Transformed point cloud
@@ -1400,12 +1408,6 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                     // avg.setLeafSize(0.25f, 0.25f, 0.25f);
                     // avg.filter(*cloud_k_1);
 
-                    auto gt_frame_packet = gt_packet_map_.at(frame_id_k);
-                    gtsam::Pose3 guess;
-                    ObjectPoseGT object_pose_gt;
-                    if(gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                        guess =  *object_pose_gt.prev_H_current_world_;
-                    }
 
 
                     registration_icp.setInputSource(cloud_k_1);
@@ -1418,6 +1420,7 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                     registration_icp.setMaxCorrespondenceDistance(0.05);
                     registration_icp.align (*cloud_icp);
 
+
                     if(registration_icp.hasConverged()) {
                         LOG(INFO) << "ICP has converged " << registration_icp.getFitnessScore() << " for object " << object_id << " frames " << frame_id_k_1 <<  " -> " << frame_id_k;
 
@@ -1427,17 +1430,22 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                         }
                         gtsam::Pose3 transform(registration_icp.getFinalTransformation ().cast<double>());
                         LOG(INFO) << "Transform " << transform;
-                        LOG(INFO) << "GT Motion " << guess;
 
-                        // auto gt_frame_packet = gt_packet_map_.at(frame_id_k);
-                        // ObjectPoseGT object_pose_gt;
-                        // if(gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                        //     LOG(INFO) << "GT Motion " << *object_pose_gt.prev_H_current_world_;
-                        //     new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
-                        //         curr_object_motion_key,
-                        //         *object_pose_gt.prev_H_current_world_,
-                        //         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
-                        // }
+                        auto gt_frame_packet = gt_packet_map_.at(frame_id_k);
+                        ObjectPoseGT object_pose_gt;
+                        if(FLAGS_use_gt_motion_from_road && gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                            LOG(INFO) << "GT Motion " << *object_pose_gt.prev_H_current_world_;
+                            new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
+                                curr_object_motion_key,
+                                *object_pose_gt.prev_H_current_world_,
+                                gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_motion_scale_prior_sigma));
+                        }
+                        else if(!FLAGS_use_gt_motion_from_road) {
+                            new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
+                                curr_object_motion_key,
+                                transform,
+                                gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_motion_scale_prior_sigma));
+                        }
 
                         for(const auto& pt : cloud_icp->points) {
                             auto estimate = std::make_pair(-1, gtsam::Point3(
@@ -1466,14 +1474,11 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                         // }
                         // cv::waitKey();
 
-                        new_factors_.emplace_shared<gtsam::PoseTranslationPrior<gtsam::Pose3>>(
-                            curr_object_motion_key,
-                            transform,
-                            gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_scale_prior_sigma));
-                        new_values_.update(curr_object_motion_key, gtsam::Pose3(
-                            gtsam::Rot3::Identity(),
-                            transform.translation()
-                        ));
+
+                        // new_values_.update(curr_object_motion_key, gtsam::Pose3(
+                        //     gtsam::Rot3::Identity(),
+                        //     transform.translation()
+                        // ));
 
                     }
                     else {
@@ -1796,7 +1801,7 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
     //if we have ground plane it means we could find the road near the car
     //this means we will try to ACTUALLY find a good measurement to put a prior on the object
     // if(ground_plane_calculated) {
-    if(false) {
+    if(ground_plane_calculated && FLAGS_use_object_points_near_ground_prior) {
         gtsam::Point2Vector gt_plane_curr_obs = gt_plane_obs_cache.at(cache_key);
         gtsam::Matrix plane_coeffs = gt_plane_coeffs_cache.at(cache_key);
 
@@ -1818,54 +1823,54 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
         // //TODO:within N pixels -> shoudl match how much we dilate the mask in estimateDepthFromRoad
         // //no deilateion when virtual kitti (for testing!)
         // //if increase (and dilation) this will allow more points to be associated with the same contour and therefore the same prior
-        // if(gtsam::distance2(closest_track, measurement) < 2) {
-        //     //index of triangulated measurement
-        //     // auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
-        //     // double point_z_camera = points_z_cameras.at(index);
-        //     // Landmark lmk;
-        //     // camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
+        if(gtsam::distance2(closest_track, measurement) < 2) {
+            //index of triangulated measurement
+            // auto index = std::distance(std::begin(gt_plane_curr_obs), closest_track_it);
+            // double point_z_camera = points_z_cameras.at(index);
+            // Landmark lmk;
+            // camera_->backProjectFromZ(measurement, point_z_camera, &lmk, cam_pose);
 
-        //     //use measurement or closest track (which is the kp on the ground)
-        //     gtsam::Point3 kp_hom(closest_track(0), closest_track(1), 1);
-        //     gtsam::Point3 ray_cam = K_inv * kp_hom;
-        //     gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
-        //     ray_world.normalize();
+            //use measurement or closest track (which is the kp on the ground)
+            gtsam::Point3 kp_hom(closest_track(0), closest_track(1), 1);
+            gtsam::Point3 ray_cam = K_inv * kp_hom;
+            gtsam::Point3 ray_world = X_world_camera_curr.rotation() * ray_cam;
+            ray_world.normalize();
 
-        //     const double A = plane_coeffs(0);
-        //     const double B = plane_coeffs(1);
-        //     const double C = plane_coeffs(2);
+            const double A = plane_coeffs(0);
+            const double B = plane_coeffs(1);
+            const double C = plane_coeffs(2);
 
-        //     const gtsam::Point3 camera_center = X_world_camera_curr.translation();
-        //     //depth of the kp
-        //     const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
-
-
-        //     //within an acceptable std of the mean (which is used to initalise all the points on this object), add prior on it
-        //     if(std::abs(lambda - depth) < 1.2 * depth_std) {
-        //         Landmark lmk_on_road_camera;
-        //         camera_->backProject(closest_track, lambda, &lmk_on_road_camera);
-
-        //         //now use the z of the lmk on road to construct the actual lmk using the measurement of the kp on the object
-        //         Landmark lmk_on_object;
-        //         camera_->backProjectFromZ(measurement, lmk_on_road_camera(2), &lmk_on_object, X_world_camera_curr);
-
-        //         new_factors_.addPrior(dynamic_point_symbol, lmk_on_object,
-        //                 //very large covaraicne on y as we dont know the height...? this isnt correct either
-        //                 //since we use the tracket point for initalisation
-        //                 gtsam::noiseModel::Isotropic::Sigmas(gtsam::Vector3(1, 1, 1)));
-
-        //         auto estimate = std::make_pair(tracklet_id, lmk_on_object);
-        //         LandmarkStatus status;
-        //         status.label_ = object_id;
-        //         status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
-        //         new_scaled_estimates_.push_back(std::make_pair(status, estimate));
-        //     }
+            const gtsam::Point3 camera_center = X_world_camera_curr.translation();
+            //depth of the kp
+            const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
 
 
-        //     DebugInfo& debug_info = debug_infos_.at(frame_id);
-        //     debug_info.incrementNumScalePriors(object_id);
-        // }
+            //within an acceptable std of the mean (which is used to initalise all the points on this object), add prior on it
+            if(std::abs(lambda - depth) < 1.2 * depth_std) {
+                Landmark lmk_on_road_camera;
+                camera_->backProject(closest_track, lambda, &lmk_on_road_camera);
+
+                //now use the z of the lmk on road to construct the actual lmk using the measurement of the kp on the object
+                Landmark lmk_on_object;
+                camera_->backProjectFromZ(measurement, lmk_on_road_camera(2), &lmk_on_object, X_world_camera_curr);
+
+                new_factors_.addPrior(dynamic_point_symbol, lmk_on_object,
+                        //very large covaraicne on y as we dont know the height...? this isnt correct either
+                        //since we use the tracket point for initalisation
+                        gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_object_points_near_ground_sigma));
+
+                auto estimate = std::make_pair(tracklet_id, lmk_on_object);
+                LandmarkStatus status;
+                status.label_ = object_id;
+                status.method_ = LandmarkStatus::Method::TRIANGULATED;
+
+                new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+            }
+
+
+            DebugInfo& debug_info = debug_infos_.at(frame_id);
+            debug_info.incrementNumScalePriors(object_id);
+        }
     }
 
 

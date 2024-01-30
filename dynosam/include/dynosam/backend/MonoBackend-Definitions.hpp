@@ -156,9 +156,17 @@ struct BackendLogger {
             "object_id",
             "x", "y" ,"z", "r", "p", "y",
             "t_err", "r_err"));
+
+        CsvWriter object_motion_summary(CsvHeader(
+            "object_id",
+            "avg_t_err", "avg_r_err",
+            "num_frame"));
+
         auto extracted_motions = values.extract<gtsam::Pose3>(gtsam::Symbol::ChrTest(kObjectMotionSymbolChar));
 
         using namespace dyno::utils;
+
+        gtsam::FastMap<ObjectId, TRErrorPairVector> avg_errors;
 
         for(const auto&[key, motion] : extracted_motions) {
             ObjectId object_id;
@@ -188,6 +196,12 @@ struct BackendLogger {
                 const double rp = rpy(1);
                 const double ry = rpy(2);
 
+                if(!avg_errors.exists(object_id)) {
+                    avg_errors.insert2(object_id, TRErrorPairVector{});
+                }
+
+                avg_errors.at(object_id).push_back(motion_error);
+
                 object_motion << frame_id
                             << object_id
                             << x << y << z
@@ -200,8 +214,21 @@ struct BackendLogger {
             }
         }
 
-        const std::string file_name = "/" + name + "_motion_log.csv";
-        OfstreamWrapper::WriteOutCsvWriter(object_motion, file_name);
+        {
+            const std::string file_name = "/" + name + "_motion_log.csv";
+            OfstreamWrapper::WriteOutCsvWriter(object_motion, file_name);
+        }
+
+        {
+            for(const auto&[object_id, avg_error] : avg_errors) {
+                const TRErrorPair avg = avg_error.average();
+
+                object_motion_summary << object_id << avg.translation_ << avg.rot_ << avg_error.size();
+            }
+
+            const std::string file_name = "/" + name + "_motion_summary_log.csv";
+            OfstreamWrapper::WriteOutCsvWriter(object_motion_summary, file_name);
+        }
     }
 
     void log(const std::string& name, const GroundTruthPacketMap& packet_map, const gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>>& composed_object_poses) {

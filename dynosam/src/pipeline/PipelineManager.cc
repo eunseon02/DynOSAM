@@ -30,6 +30,9 @@
 
 #include <glog/logging.h>
 
+DEFINE_uint32(starting_frame, -1, "Starting frame of the dataset. If -1 use the default which is the starting frame=0");
+DEFINE_uint32(ending_frame, -1, "Ending frame of the dataset. If -1 use the default which is the ending_frame=dataset_size");
+
 
 namespace dyno {
 
@@ -43,7 +46,12 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
     CHECK(data_loader_);
     CHECK(frontend_display);
-    // CHECK(backend_display);
+
+    //TODO: we should not set starting from here as this should not be a property of the DataProvider (e.g this doesnt make sense for an online system)
+    //see comment in DataProvider header
+    LOG(INFO) << (int)FLAGS_starting_frame;
+    data_loader_->setStartingFrame((int)FLAGS_starting_frame);
+    data_loader_->setEndingFrame((int)FLAGS_ending_frame);
 
     //TODO: factories for different loaders etc later
     data_interface_ = std::make_unique<DataInterfacePipeline>(params.parallel_run_);

@@ -27,6 +27,7 @@
 #include "dynosam/dataprovider/DataProvider.hpp"
 #include "dynosam/utils/Macros.hpp"
 #include "dynosam/utils/Tuple.hpp"
+#include "dynosam/common/Exceptions.hpp"
 
 
 #include <filesystem>
@@ -37,6 +38,12 @@
 #include <fstream>
 
 namespace dyno {
+
+class TimestampDataFolderDoesNotExist : public DynosamException {
+public:
+    TimestampDataFolderDoesNotExist() : DynosamException("TimestampBaseLoader does not exist. Have you called setLoaders()?") {}
+};
+
 
 template<typename... DynoDataTypes>
 struct _DynoDatasetConstructor {
@@ -128,13 +135,29 @@ public:
 
         LOG(ERROR) << "DynoDataset prepared with an expected size of " << getDatasetSize()
             << " - loaded from timestamps file found at " << default_dataset_->getAbsoluteFolderPath<TimestampFileIdx>();
+        are_loaders_set_ = true;
     }
 
+    /**
+     * @brief Returns true when setLoaders(...) has been called and the internal datasets have been constructed correctly
+     * After this point spin() and getDatasetSize() can be called as they use the laoded datasets
+     *
+     * @return true
+     * @return false
+     */
+    bool isProviderValid() const { return are_loaders_set_; }
+
     //only valid after setLoaders
-    virtual size_t getDatasetSize() const { return timestamp_file_->size(); }
+    virtual size_t getDatasetSize() const {
+        if(!timestamp_file_) {
+            throw TimestampDataFolderDoesNotExist();
+        }
+        return timestamp_file_->size();
+    }
     const std::string getDatasetPath() const { return dataset_path_; }
 
     bool processSingle(size_t frame_id) {
+        //TODO: change to check with isProviderValid!!
         if(!dataset_) {
             LOG(ERROR) << "Dataset not loaded with setLoaders()! Skipping processing";
             return false;
@@ -150,37 +173,31 @@ public:
         DefaultDataset::DataTypeTuple default_data;
         typename TypedGenericDataset::DataTypeTuple extra_data;
         constexpr size_t default_data_size = std::tuple_size<DefaultDataset::DataTypeTuple>::value;
-        constexpr size_t extra_data_size = std::tuple_size<typename TypedGenericDataset::DataTypeTuple>::value;
 
         //iterate over default dataset portion of the ConcatDataTypes
         for(size_t data_idx = 0; data_idx < default_data_size; data_idx++) {
-            internal::select_apply<default_data_size>(data_idx, [&](auto stream_index) {
-                internal::select_apply<default_data_size>(stream_index, [&](auto I) {
-                    //I should be data_idx -> access the data vector we just loaded
-                    auto per_folder_data_vector = default_dataset_->getDataVector<I>();
+            internal::select_apply<default_data_size>(data_idx, [&](auto I) {
+                //I should be data_idx -> access the data vector we just loaded
+                auto per_folder_data_vector = default_dataset_->getDataVector<I>();
 
-                    //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
-                    //update data
-                    std::get<I>(default_data) = per_folder_data_vector.at(frame_id);
+                //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
+                //update data
+                std::get<I>(default_data) = per_folder_data_vector.at(frame_id);
 
-                });
             });
         }
 
-
+        constexpr size_t extra_data_size = std::tuple_size<typename TypedGenericDataset::DataTypeTuple>::value;
         // //iterate over extra dataset portion of the ConcatDataTypes
         for(size_t data_idx = 0; data_idx < extra_data_size; data_idx++) {
-            internal::select_apply<extra_data_size>(data_idx, [&](auto stream_index) {
+            internal::select_apply<extra_data_size>(data_idx, [&](auto I) {
+                //I should be data_idx -> access the data vector we just loaded
+                auto per_folder_data_vector = dataset_->template getDataVector<I>();
 
-                internal::select_apply<extra_data_size>(stream_index, [&](auto I) {
-                    //I should be data_idx -> access the data vector we just loaded
-                    auto per_folder_data_vector = dataset_->template getDataVector<I>();
+                //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
+                //update data
+                std::get<I>(extra_data) = per_folder_data_vector.at(frame_id);
 
-                    //the data idx should also correspond with the index in the DynoDataTypesTuple tuple
-                    //update data
-                    std::get<I>(extra_data) = per_folder_data_vector.at(frame_id);
-
-                });
             });
         }
 
@@ -200,12 +217,12 @@ public:
 
     }
 
-    //TODO: set start and end idx?
-    void processRange() {
-        for (size_t frame_id = 0; frame_id < getDatasetSize(); frame_id++) {
-            processSingle(frame_id);
-        }
-    }
+    // //TODO: set start and end idx?
+    // void processRange() {
+    //     for (size_t frame_id = 0; frame_id < getDatasetSize(); frame_id++) {
+    //         processSingle(frame_id);
+    //     }
+    // }
 
     //TODO: atm only default - could enable if on size so the same function could be used to get from default and extra dataset
     //as we have to zero index them both (or use consexpr? to select and re index)
@@ -222,6 +239,7 @@ private:
     typename DefaultDataset::UniquePtr default_dataset_;
 
     TimestampBaseLoader::Ptr timestamp_file_;
+    bool are_loaders_set_{false};
 };
 
 //should not be inherited but instead is functional!!
@@ -241,35 +259,70 @@ public:
 
     virtual ~DynoDatasetProvider() = default;
 
-    virtual bool spin() override {
-        const size_t dataset_size = this->getDatasetSize();
-        if(active_frame_id >= dataset_size) {
-            LOG_FIRST_N(INFO, 1) << "Finished dataset";
-            return false;
-        }
-
-
-        utils::TimingStatsCollector data_set_provider_timer("dataset_spin");
-        if(!BaseDynoDataset::processSingle(active_frame_id)) {
-            LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id;
-            return false;
-        }
-
-        active_frame_id++;
-        return true;
-
-        // LOG(INFO) << "Spinning dataset at path " << BaseDynoDataset::getDatasetPath() << " with size " << dataset_size;
-
-        // for (size_t frame_id = 0; frame_id < dataset_size; frame_id++) {
-        //     if(!BaseDynoDataset::processSingle(frame_id)) return false;
-        // }
-
-        // return true;
-
+    bool isValid() const override {
+        return BaseDynoDataset::isProviderValid();
     }
 
-protected:
-    size_t active_frame_id = 0u;
+
+    size_t getDatasetSize() const override {
+        return BaseDynoDataset::getDatasetSize();
+    }
+
+    virtual bool spinOnce(size_t frame_id) override {
+        return BaseDynoDataset::processSingle(frame_id);
+    }
+
+    // virtual bool spin() override {
+    //     const size_t dataset_size = this->getDatasetSize();
+
+    //     //initalise and check
+    //     if(is_first_spin_) {
+    //         // by default start dataset at 0
+    //         size_t starting_frame = 0u;
+    //         // by default end dataset at the last frame
+    //         size_t ending_frame = dataset_size;
+
+    //         if(requested_starting_frame_id_) {
+    //             starting_frame = *requested_starting_frame_id_;
+    //         }
+
+    //         if(requested_ending_frame_id_) {
+    //             ending_frame = *requested_ending_frame_id_;
+    //         }
+
+    //         //check ending frame first
+    //         if(ending_frame > dataset_size) {
+    //             throw DynoDatasetException("Requested ending frame is greater than the size of the dataset (" + std::to_string(ending_frame) + " > " + std::to_string(dataset_size));
+    //         }
+
+    //         if(starting_frame > ending_frame) {
+    //             throw DynoDatasetException("Requested starting frame is invalid - either less than 0 or greater than the ending frame (starting frame= " + std::to_string(starting_frame) + ", ending frame= " + std::to_string(ending_frame));
+    //         }
+
+    //         //update varibles actually used in the spin
+    //         active_frame_id_ = starting_frame;
+    //         ending_frame_id_ = ending_frame;
+    //         is_first_spin_ = false;
+    //     }
+
+
+    //     if(active_frame_id_ >= ending_frame_id_) {
+    //         LOG_FIRST_N(INFO, 1) << "Finished dataset";
+    //         return false;
+    //     }
+
+
+    //     utils::TimingStatsCollector("dataset_spin");
+    //     if(!BaseDynoDataset::processSingle(active_frame_id_)) {
+    //         LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id_;
+    //         return false;
+    //     }
+
+    //     active_frame_id_++;
+    //     return true;
+    // }
+
+
 
 };
 

@@ -13,10 +13,18 @@
 #if a sigma on the first set of object points should be added
 --use_first_seen_dynamic_point_prior=false
 # if use_first_seen_dynamic_point_prior==true, this will be the sigma used on the 3x3 noise model
---first_seen_dynamic_point_sigma=10.0
+--first_seen_dynamic_point_sigma=3.0
 
 # 0: Initalise from perturbed gt pose 1: Initalise from gt depth with modified scale. 2: Init from road
 --dynamic_point_init_func_type=2
+
+--use_object_points_near_ground_prior=true
+--object_points_near_ground_sigma=0.1
+
+--use_motion_from_road_prior=true
+#if true, use the gt motion between frames, else, use estimated. Only used if use_motion_from_road_prior==true
+--use_gt_motion_from_road=true
+--motion_scale_prior_sigma=1.0
 
 # Used when Used when dynamic_point_init_func_type==0
 # Sigma to use on the gt object pose when initalising dynamic points near the pose.
@@ -28,8 +36,3 @@
 --mmax_depth_scale=1.4
 
 --use_last_seen_dynamic_point_prior=false
---scale_prior_sigma=2.0
-
-
-# degeneracy checks
---allowable_object_size_thresh=3.0

@@ -994,7 +994,9 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
     this->setCallback(callback);
 
-    active_frame_id = 1u; //have to start at at least 1 so we can index backwards with optical flow
+
+    //TODO: virtual function in base class to validate starting/end frames as it may be different between datasets?
+    setStartingFrame(1u); //have to start at at least 1 so we can index backwards with optical flow
 
 }
 
