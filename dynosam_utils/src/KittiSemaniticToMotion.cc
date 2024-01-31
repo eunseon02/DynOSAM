@@ -145,6 +145,7 @@ int main(int argc, char* argv[]) {
             cv::Mat,
             cv::Mat,
             cv::Mat instance_mask,
+            cv::Mat,
             gtsam::Pose3 camera_pose_gt,
             GroundTruthInputPacket gt_object_pose_gt) -> bool
         {

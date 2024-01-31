@@ -29,6 +29,7 @@
 #include "dynosam/utils/OpenCVUtils.hpp"
 
 #include "dynosam/frontend/FrontendInputPacket.hpp"
+#include <png++/png.hpp>
 
 namespace dyno {
 
@@ -275,9 +276,51 @@ private:
     gtsam::FastMap<FrameId, GroundTruthInputPacket> gt_packets_;
 };
 
+class KittiClassSegmentationDataFolder : public dyno::DataFolder<cv::Mat> {
+public:
+    DYNO_POINTER_TYPEDEFS(KittiClassSegmentationDataFolder)
 
-//additional loaders are depth, semantic mask, camera pose gt and gt input packet
-class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
+    KittiClassSegmentationDataFolder() {}
+    //really should chage the name of "semantic" to be instance_mask as this is the true pixel level semantic information
+    inline std::string getFolderName() const override { return "pixel_semantics"; }
+
+    cv::Mat getItem(size_t idx) override {
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(6) << idx;
+        const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".png";
+        throwExceptionIfPathInvalid(file_path);
+
+        png::image<png::rgb_pixel> index_image(file_path);
+
+        cv::Size size(index_image.get_width(), index_image.get_height());
+        cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
+
+        for (size_t y = 0; y < index_image.get_height(); ++y)
+        {
+            for (size_t x = 0; x < index_image.get_width(); ++x)
+            {
+                const auto& pixel = index_image.get_pixel(x, y);
+                const int red = (int)pixel.red;
+                const int green = (int)pixel.green;
+                const int blue = (int)pixel.blue;
+
+                //TODO: HARDCODED!!! https://github.com/google-research/deeplab2/blob/main/g3doc/setup/kitti_step.md
+                if(red == 0) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
+                }
+                else if(red == 12) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Rider;
+                }
+
+            }
+        }
+        return class_segmentation;
+    }
+};
+
+
+//additional loaders are depth, semantic/motion mask, pixel level semantics, camera pose gt and gt input packet
+class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
 
@@ -305,7 +348,6 @@ public:
     };
 
 
-
     /**
      * @brief Construct a new Kitti Data Loader object
      *
@@ -315,6 +357,7 @@ public:
      *  /image_0
      *  /motion
      *  /semantic
+     *  /pixel_semantics (TODO: shoudl change semantic and pixel semantics to instance_mask and semantics)
      *  /object_pose.txt
      *  /pose_gt.txt
      *  /times.txt
@@ -322,7 +365,7 @@ public:
      * @param dataset_path
      * @param params
      */
-    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path), params_(params)
     {
         TimestampFile::Ptr timestamp_file =  std::make_shared<TimestampFile>();
@@ -345,6 +388,8 @@ public:
         }
         CHECK_NOTNULL(mask_folder);
 
+        KittiClassSegmentationDataFolder::Ptr pixel_level_semantics_folder = std::make_shared<KittiClassSegmentationDataFolder>();
+
         KittiCameraPoseFolder::Ptr camera_pose_folder = std::make_shared<KittiCameraPoseFolder>();
         KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
             timestamp_file, camera_pose_folder
@@ -362,6 +407,7 @@ public:
             std::make_shared<OpticalFlowDataFolder>(),
             std::make_shared<DepthDataFolder>(),
             mask_folder,
+            pixel_level_semantics_folder,
             camera_pose_folder,
             object_pose_gt_folder
         );
@@ -372,6 +418,7 @@ public:
             cv::Mat optical_flow,
             cv::Mat depth,
             cv::Mat instance_mask,
+            cv::Mat pixel_semantics,
             gtsam::Pose3 camera_pose_gt,
             GroundTruthInputPacket gt_object_pose_gt) -> bool
         {
@@ -391,7 +438,7 @@ public:
                     ImageWrapper<ImageType::Depth>(depth),
                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
                     ImageWrapper<ImageType::MotionMask>(instance_mask),
-                    ImageWrapper<ImageType::ClassSegmentation>{});
+                    ImageWrapper<ImageType::ClassSegmentation>(pixel_semantics));
             }
             else {
                 image_container = ImageContainer::Create(

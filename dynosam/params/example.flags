@@ -19,12 +19,12 @@
 --dynamic_point_init_func_type=2
 
 --use_object_points_near_ground_prior=true
---object_points_near_ground_sigma=0.1
+--object_points_near_ground_sigma=10.0
 
---use_motion_from_road_prior=true
+--use_motion_from_road_prior=false
 #if true, use the gt motion between frames, else, use estimated. Only used if use_motion_from_road_prior==true
 --use_gt_motion_from_road=true
---motion_scale_prior_sigma=1.0
+--motion_scale_prior_sigma=0.001
 
 # Used when Used when dynamic_point_init_func_type==0
 # Sigma to use on the gt object pose when initalising dynamic points near the pose.

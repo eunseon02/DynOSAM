@@ -162,6 +162,7 @@ ament_export_libraries(${PROJECT_NAME}
   Boost::boost
   gtsam
   ${OpenCV_LIBRARIES}
+  png
 )
 
 

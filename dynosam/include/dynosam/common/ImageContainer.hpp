@@ -129,7 +129,8 @@ struct ImageType {
         //TODO: add ways to load semantic information
         enum Labels {
             Undefined = 0,
-            Road = 1
+            Road,
+            Rider,
         };
 
         static cv::Mat toRGB(const ImageWrapper<ClassSegmentation>& image);

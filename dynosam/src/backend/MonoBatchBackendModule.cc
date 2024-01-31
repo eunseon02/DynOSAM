@@ -337,20 +337,153 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         all_dynamic_object_triangulation.push_back(std::make_pair(status, estimate));
 
     }
+    gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed;
+    gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>> object_poses_composed_with_frame;
 
-    gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
-    //if there has been a change in the system - this will not update!!!!!
-    static gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>> object_poses_composed_with_frame;
-    for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
-        object_poses_composed_.insert({object_id, gtsam::Pose3Vector{}});
+    //use the debug info to go over all the objewcts and calculate the poses (we redraw every time!! should only do when optimize)
+    for(const auto&[frame_id, debug_info] : debug_infos_) {
+        for(const auto object_id : debug_info.objects_motions_added) {
 
-        if(!object_poses_composed_with_frame.exists(object_id)) {
-            object_poses_composed_with_frame.insert({object_id,gtsam::FastMap<FrameId, gtsam::Pose3>{}});
+            gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
+            if(!state_.exists(motion_symbol)) { continue; }
+
+
+
+            if(!object_poses_composed_with_frame.exists(object_id)) {
+                object_poses_composed_with_frame.insert({object_id,gtsam::FastMap<FrameId, gtsam::Pose3>{}});
+            }
+
+             if(!object_poses_composed.exists(object_id)) {
+                object_poses_composed.insert({object_id, gtsam::Pose3Vector{}});
+            }
+
+            const FrameId frame_id_k_1 = frame_id;
+            //check if first time object has appeared
+            bool is_first = object_poses_composed_with_frame.at(object_id).empty();
+
+            if(is_first) {
+                ObjectPoseGT object_pose_gt;
+                CHECK(gt_packet_map_.exists(frame_id_k_1));
+                auto gt_frame_packet = gt_packet_map_.at(frame_id_k_1);
+                if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+                    LOG(FATAL) << "Could not find gt object at frame " << frame_id_k_1 << " for object Id" << object_id;
+                }
+                CHECK_EQ(object_poses_composed.at(object_id).size(), 0u);
+
+                //calculate centroid of object at this location
+                gtsam::Point3 centroid(0, 0, 0);
+                size_t num_points = 0;
+                for(const auto&[key, point] : extracted_dynamic_points_opt) {
+                    DynamicPointSymbol dps(key);
+
+                    const TrackletId tracklet_id = dps.trackletId();
+                    const FrameId point_frame_id = dps.frameId();
+                    const auto point_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+
+                    if(point_object_id == object_id && point_frame_id == frame_id) {
+                        centroid += point;
+                        num_points++;
+                    }
+                }
+
+                centroid /= num_points;
+                const gtsam::Pose3 starting_pose(object_pose_gt.L_world_.rotation(), centroid);
+                object_poses_composed.at(object_id).push_back(starting_pose);
+                object_poses_composed_with_frame.at(object_id).insert2(frame_id_k_1, starting_pose);
+            }
+
+            gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
+            CHECK_GT(object_poses_composed.at(object_id).size(), 0u);
+            gtsam::Pose3 object_pose = motion * (object_poses_composed.at(object_id).back()); //object pose at the current frame, composed from the previous motion
+            object_poses_composed.at(object_id).push_back(object_pose);
+            object_poses_composed_with_frame.at(object_id).insert2(frame_id, object_pose);
+
+            // FrameIds frame_ids; //the actual frame ids the object appears (in the graph) in -> this SHOULD be the same as seen from the frontend but in some cases this is different (unsure why yet!)
+            // for(size_t i = 1; i < all_frames.size(); i++) {
+            //     //assumes all frames contain a continuous set of frames (e.g. 2, 3, 4...)
+            //     FrameId frame_id = all_frames.at(i);
+            //     if(state_.exists(motion_symbol)) {
+
+            //         //sanity check
+            //         if(frame_ids.size() > 0) {
+            //             //check in order
+            //             auto prev_frame_id = frame_ids.back();
+            //             //they can be not in order when the object reappears and we use gt to relabal the object (but its now been seen out of order)
+            //             // CHECK_EQ(prev_frame_id + 1, frame_id);
+            //             //instead of running the CHECK, we do if statement and just stop trackin the object
+            //             //TODO: HACK!
+            //             if(prev_frame_id + 1 != frame_id) {
+            //                 break;
+            //             }
+            //         }
+
+            //         frame_ids.push_back(frame_id);
+            //     }
+
+            // }
+            // LOG(INFO) << "Adding output for object " << object_id << " which are in graph for frames " << container_to_string(frame_ids);
+
+            // //we can start this from 0 as we iterated over the "all seen frames" starting at 1
+            // for(size_t i = 0; i < frame_ids.size(); i++) {
+            //     FrameId frame_id = frame_ids.at(i);
+            //     gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
+
+            //     //if first motion, add pose that this motion takes us from (k-1) and then use the motion to construct k as well
+            //     if(i == 0) {
+            //         ObjectPoseGT object_pose_gt;
+            //         CHECK(gt_packet_map_.exists(frame_id - 1));
+            //         auto gt_frame_packet = gt_packet_map_.at(frame_id-1);
+            //         if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+            //             LOG(FATAL) << "Could not find gt object at frame " << frame_id-1 << " for object Id" << object_id;
+            //         }
+            //         CHECK_EQ(object_poses_composed.at(object_id).size(), 0u);
+
+            //         //calculate centroid of object at this location
+            //         gtsam::Point3 centroid(0, 0, 0);
+            //         size_t num_points = 0;
+            //         for(const auto&[key, point] : extracted_dynamic_points_opt) {
+            //             DynamicPointSymbol dps(key);
+
+            //             const TrackletId tracklet_id = dps.trackletId();
+            //             const FrameId point_frame_id = dps.frameId();
+            //             const auto point_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+
+            //             if(point_object_id == object_id && point_frame_id == frame_id) {
+            //                 centroid += point;
+            //                 num_points++;
+            //             }
+            //         }
+
+            //         centroid /= num_points;
+            //         const gtsam::Pose3 starting_pose(object_pose_gt.L_world_.rotation(), centroid);
+            //         object_poses_composed.at(object_id).push_back(starting_pose);
+            //         object_poses_composed_with_frame.at(object_id).insert2(frame_id-1, starting_pose);
+            //     }
+            //     gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
+            //     CHECK_GT(object_poses_composed.at(object_id).size(), 0u);
+            //     gtsam::Pose3 object_pose = motion * (object_poses_composed.at(object_id).back()); //object pose at the current frame, composed from the previous motion
+            //     object_poses_composed.at(object_id).push_back(object_pose);
+            //     object_poses_composed_with_frame.at(object_id).insert2(frame_id, object_pose);
+
+
+            // }
+
+            LOG(INFO) << "Added " <<  object_poses_composed.at(object_id).size() << " composed poses for object " << object_id;
+
         }
+    }
+    // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+    //if there has been a change in the system - this will not update!!!!!
+    // for(const auto& [object_id, ref_estimate] : input->estimated_motions_) {
+    //     object_poses_composed_.insert({object_id, gtsam::Pose3Vector{}});
+
+    //     if(!object_poses_composed_with_frame.exists(object_id)) {
+    //         object_poses_composed_with_frame.insert({object_id,gtsam::FastMap<FrameId, gtsam::Pose3>{}});
+    //     }
 
 
-        FrameIds all_frames = do_tracklet_manager_.getFramesPerObject(object_id);
-        LOG(INFO) << "Adding output for object " << object_id << " appearing at frame " << container_to_string(all_frames);
+        // FrameIds all_frames = do_tracklet_manager_.getFramesPerObject(object_id);
+        // LOG(INFO) << "Adding output for object " << object_id << " appearing at frame " << container_to_string(all_frames);
 
         //TODO: we should do it like this, but if there is a problem with the tracking or somegthing (see object 4 (kitti seq 04 between frames 3-4))
         // the object data is not tracked properly and the frames the objects are seen in do not correspond with the motions added here
@@ -382,79 +515,79 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         //     }
         // }
 
-        FrameIds frame_ids; //the actual frame ids the object appears (in the graph) in -> this SHOULD be the same as seen from the frontend but in some cases this is different (unsure why yet!)
-        for(size_t i = 1; i < all_frames.size(); i++) {
-            //assumes all frames contain a continuous set of frames (e.g. 2, 3, 4...)
-            FrameId frame_id = all_frames.at(i);
-            gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
-            if(state_.exists(motion_symbol)) {
+        // FrameIds frame_ids; //the actual frame ids the object appears (in the graph) in -> this SHOULD be the same as seen from the frontend but in some cases this is different (unsure why yet!)
+        // for(size_t i = 1; i < all_frames.size(); i++) {
+        //     //assumes all frames contain a continuous set of frames (e.g. 2, 3, 4...)
+        //     FrameId frame_id = all_frames.at(i);
+        //     gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
+        //     if(state_.exists(motion_symbol)) {
 
-                //sanity check
-                if(frame_ids.size() > 0) {
-                    //check in order
-                    auto prev_frame_id = frame_ids.back();
-                    //they can be not in order when the object reappears and we use gt to relabal the object (but its now been seen out of order)
-                    // CHECK_EQ(prev_frame_id + 1, frame_id);
-                    //instead of running the CHECK, we do if statement and just stop trackin the object
-                    //TODO: HACK!
-                    if(prev_frame_id + 1 != frame_id) {
-                        break;
-                    }
-                }
+        //         //sanity check
+        //         if(frame_ids.size() > 0) {
+        //             //check in order
+        //             auto prev_frame_id = frame_ids.back();
+        //             //they can be not in order when the object reappears and we use gt to relabal the object (but its now been seen out of order)
+        //             // CHECK_EQ(prev_frame_id + 1, frame_id);
+        //             //instead of running the CHECK, we do if statement and just stop trackin the object
+        //             //TODO: HACK!
+        //             if(prev_frame_id + 1 != frame_id) {
+        //                 break;
+        //             }
+        //         }
 
-                frame_ids.push_back(frame_id);
-            }
+        //         frame_ids.push_back(frame_id);
+        //     }
 
-        }
-        LOG(INFO) << "Adding output for object " << object_id << " which are in graph for frames " << container_to_string(frame_ids);
+        // }
+        // LOG(INFO) << "Adding output for object " << object_id << " which are in graph for frames " << container_to_string(frame_ids);
 
-        //we can start this from 0 as we iterated over the "all seen frames" starting at 1
-        for(size_t i = 0; i < frame_ids.size(); i++) {
-            FrameId frame_id = frame_ids.at(i);
-            gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
+        // //we can start this from 0 as we iterated over the "all seen frames" starting at 1
+        // for(size_t i = 0; i < frame_ids.size(); i++) {
+        //     FrameId frame_id = frame_ids.at(i);
+        //     gtsam::Symbol motion_symbol = ObjectMotionSymbolFromCurrentFrame(object_id, frame_id);
 
-            //if first motion, add pose that this motion takes us from (k-1) and then use the motion to construct k as well
-            if(i == 0) {
-                ObjectPoseGT object_pose_gt;
-                CHECK(gt_packet_map_.exists(frame_id - 1));
-                auto gt_frame_packet = gt_packet_map_.at(frame_id-1);
-                if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
-                    LOG(FATAL) << "Could not find gt object at frame " << frame_id-1 << " for object Id" << object_id;
-                }
-                CHECK_EQ(object_poses_composed_.at(object_id).size(), 0u);
+        //     //if first motion, add pose that this motion takes us from (k-1) and then use the motion to construct k as well
+        //     if(i == 0) {
+        //         ObjectPoseGT object_pose_gt;
+        //         CHECK(gt_packet_map_.exists(frame_id - 1));
+        //         auto gt_frame_packet = gt_packet_map_.at(frame_id-1);
+        //         if(!gt_frame_packet.getObject(object_id, object_pose_gt)) {
+        //             LOG(FATAL) << "Could not find gt object at frame " << frame_id-1 << " for object Id" << object_id;
+        //         }
+        //         CHECK_EQ(object_poses_composed_.at(object_id).size(), 0u);
 
-                //calculate centroid of object at this location
-                gtsam::Point3 centroid(0, 0, 0);
-                size_t num_points = 0;
-                for(const auto&[key, point] : extracted_dynamic_points_opt) {
-                    DynamicPointSymbol dps(key);
+        //         //calculate centroid of object at this location
+        //         gtsam::Point3 centroid(0, 0, 0);
+        //         size_t num_points = 0;
+        //         for(const auto&[key, point] : extracted_dynamic_points_opt) {
+        //             DynamicPointSymbol dps(key);
 
-                    const TrackletId tracklet_id = dps.trackletId();
-                    const FrameId point_frame_id = dps.frameId();
-                    const auto point_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
+        //             const TrackletId tracklet_id = dps.trackletId();
+        //             const FrameId point_frame_id = dps.frameId();
+        //             const auto point_object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
 
-                    if(point_object_id == object_id && point_frame_id == frame_id) {
-                        centroid += point;
-                        num_points++;
-                    }
-                }
+        //             if(point_object_id == object_id && point_frame_id == frame_id) {
+        //                 centroid += point;
+        //                 num_points++;
+        //             }
+        //         }
 
-                centroid /= num_points;
-                const gtsam::Pose3 starting_pose(object_pose_gt.L_world_.rotation(), centroid);
-                object_poses_composed_.at(object_id).push_back(starting_pose);
-                object_poses_composed_with_frame.at(object_id).insert2(frame_id-1, starting_pose);
-            }
-            gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
-            CHECK_GT(object_poses_composed_.at(object_id).size(), 0u);
-            gtsam::Pose3 object_pose = motion * (object_poses_composed_.at(object_id).back()); //object pose at the current frame, composed from the previous motion
-            object_poses_composed_.at(object_id).push_back(object_pose);
-            object_poses_composed_with_frame.at(object_id).insert2(frame_id, object_pose);
+        //         centroid /= num_points;
+        //         const gtsam::Pose3 starting_pose(object_pose_gt.L_world_.rotation(), centroid);
+        //         object_poses_composed_.at(object_id).push_back(starting_pose);
+        //         object_poses_composed_with_frame.at(object_id).insert2(frame_id-1, starting_pose);
+        //     }
+        //     gtsam::Pose3 motion = state_.at<gtsam::Pose3>(motion_symbol);
+        //     CHECK_GT(object_poses_composed_.at(object_id).size(), 0u);
+        //     gtsam::Pose3 object_pose = motion * (object_poses_composed_.at(object_id).back()); //object pose at the current frame, composed from the previous motion
+        //     object_poses_composed_.at(object_id).push_back(object_pose);
+        //     object_poses_composed_with_frame.at(object_id).insert2(frame_id, object_pose);
 
 
-        }
+        // }
 
-        LOG(INFO) << "Added " <<  object_poses_composed_.at(object_id).size() << " composed poses for object " << object_id;
-    }
+        // LOG(INFO) << "Added " <<  object_poses_composed_.at(object_id).size() << " composed poses for object " << object_id;
+    // }
 
     if(should_optimize) {
         BackendLogger bl;
@@ -474,7 +607,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
     backend_output->initial_dynamic_lmks_ = initial_dynamic_lmks;
     // backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
     backend_output->static_lmks_ = lmk_map;
-    backend_output->object_poses_composed_ = object_poses_composed_;
+    backend_output->object_poses_composed_ = object_poses_composed;
 
     if(state_.exists(CameraPoseSymbol(current_frame_id))) {
         backend_output->T_world_camera_ = state_.at<gtsam::Pose3>(CameraPoseSymbol(current_frame_id));
@@ -1376,8 +1509,8 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                     // }
                     using PointT = pcl::PointXYZ;
                     using PointCloudT = pcl::PointCloud<PointT>;
-                    // pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
-                    pcl::IterativeClosestPointNonLinear<PointT, PointT> registration_icp;
+                    pcl::IterativeClosestPoint<PointT, PointT> registration_icp;
+                    // pcl::IterativeClosestPointNonLinear<PointT, PointT> registration_icp;
 
                     PointCloudT::Ptr cloud_k(new PointCloudT);  // Original point cloud
                     PointCloudT::Ptr cloud_k_1(new PointCloudT);  // Transformed point cloud

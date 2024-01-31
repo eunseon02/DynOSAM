@@ -239,7 +239,16 @@ struct BackendLogger {
             "t_abs_err", "r_abs_err",
             "t_rel_err", "r_rel_err"));
 
+        CsvWriter object_pose_summary(CsvHeader(
+            "object_id",
+            "avg_t_abs_err", "avg_r_abs_err",
+            "avg_t_rel_err", "avg_r_rel_err",
+            "num_frame"));
+
         using namespace dyno::utils;
+
+        gtsam::FastMap<ObjectId, TRErrorPairVector> avg_abs_errors;
+        gtsam::FastMap<ObjectId, TRErrorPairVector> avg_rel_errors;
 
         for(const auto&[object_id, poses_map] : composed_object_poses) {
             for(const auto&[frame_id, pose] : poses_map) {
@@ -278,14 +287,50 @@ struct BackendLogger {
                     TRErrorPair relative_pose_error = TRErrorPair::CalculateRelativePoseError(previous_estimated_pose, estimated_pose, gt_pose_prev, gt_pose);
                     t_rel_err = relative_pose_error.translation_;
                     r_rel_err = relative_pose_error.rot_;
+
+                    if(!avg_rel_errors.exists(object_id)) {
+                        avg_rel_errors.insert2(object_id, TRErrorPairVector{});
+                    }
+                    avg_rel_errors.at(object_id).push_back(relative_pose_error);
                 }
+
+                if(!avg_abs_errors.exists(object_id)) {
+                    avg_abs_errors.insert2(object_id, TRErrorPairVector{});
+                }
+                avg_abs_errors.at(object_id).push_back(absolute_pose_error);
 
                 object_pose << frame_id << object_id << t_abs_err << r_abs_err << t_rel_err << r_rel_err;
             }
         }
 
-        const std::string file_name = "/" + name + "_object_pose_error_log.csv";
-        OfstreamWrapper::WriteOutCsvWriter(object_pose, file_name);
+        {
+            const std::string file_name = "/" + name + "_object_pose_error_log.csv";
+            OfstreamWrapper::WriteOutCsvWriter(object_pose, file_name);
+        }
+
+        {
+            for(const auto&[object_id, avg_abs_error] : avg_abs_errors) {
+                const TRErrorPair avg_abs = avg_abs_error.average();
+
+                double rel_t_error = -1;
+                double rel_r_error = -1;
+
+                //we will not have a object id for all relative errors
+                if(avg_rel_errors.exists(object_id)) {
+                    const TRErrorPair avg_rel = avg_rel_errors.at(object_id).average();
+                    rel_t_error = avg_rel.translation_;
+                    rel_r_error = avg_rel.rot_;
+                }
+
+                object_pose_summary << object_id
+                    << avg_abs.translation_ << avg_abs.rot_
+                    << rel_t_error << rel_r_error
+                    << avg_abs_error.size();
+            }
+
+            const std::string file_name = "/" + name + "_object_pose_error_summary_log.csv";
+            OfstreamWrapper::WriteOutCsvWriter(object_pose_summary, file_name);
+        }
     }
 
     void log(const std::string& name, const DebugInfoMap& infos) {
