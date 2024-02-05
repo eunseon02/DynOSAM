@@ -254,9 +254,7 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
                     // const Landmark lmk = new_values_.at<Landmark>(dynamic_point_symbol);
                     auto lmk_estimate = std::make_pair(tracklet_id, lmk);
 
-                    LandmarkStatus status;
-                    status.label_ = object_id;
-                    status.method_ = LandmarkStatus::Method::OPTIMIZED;
+                    LandmarkStatus status(object_id,  LandmarkStatus::Method::OPTIMIZED);
 
                     all_dynamic_object_triangulation.push_back(std::make_pair(status, lmk_estimate));
                 }
@@ -808,10 +806,7 @@ bool MonoBackendModule::attemptObjectTriangulation(
         const Landmark lmk = lmks_world.at(i);
         auto lmk_estimate = std::make_pair(tracklet_id, lmk);
 
-        LandmarkStatus status;
-        status.label_ = object_id;
-        status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
+        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
         triangulated_values.push_back(std::make_pair(status, lmk_estimate));
     }
 

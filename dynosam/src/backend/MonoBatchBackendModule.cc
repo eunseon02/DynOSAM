@@ -307,10 +307,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
 
         auto estimate = std::make_pair(tracklet_id, point);
 
-        LandmarkStatus status;
-        status.label_ = object_id;
-        status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
+        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
         initial_dynamic_lmks.push_back(std::make_pair(status, estimate));
 
     }
@@ -330,10 +327,7 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
 
         auto estimate = std::make_pair(tracklet_id, point);
 
-        LandmarkStatus status;
-        status.label_ = object_id;
-        status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
+        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
         all_dynamic_object_triangulation.push_back(std::make_pair(status, estimate));
 
     }
@@ -1233,9 +1227,7 @@ void MonoBatchBackendModule::checkStateForScaleEstimation(const gtsam::Values& v
 
                         auto estimate = std::make_pair(tracklet_id, lmk);
 
-                        LandmarkStatus status;
-                        status.label_ = object_id;
-                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
+                        LandmarkStatus status(object_id, LandmarkStatus::Method::TRIANGULATED);
                         new_estimates.push_back(std::make_pair(status, estimate));
                     }
                 }
@@ -1492,10 +1484,7 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
 
                     for(const auto& lmk : lmks_ground_plane_k) {
                         auto estimate = std::make_pair(-1, lmk);
-                        LandmarkStatus status;
-                        status.label_ = object_id;
-                        status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
+                        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
                         new_scaled_estimates_.push_back(std::make_pair(status, estimate));
                     }
 
@@ -1584,11 +1573,7 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                             auto estimate = std::make_pair(-1, gtsam::Point3(
                                 pt.x, pt.y, pt.z
                             ));
-                            LandmarkStatus status;
-                            //make different object for colour?
-                            status.label_ = object_id+10;
-                            status.method_ = LandmarkStatus::Method::TRIANGULATED;
-
+                            LandmarkStatus status(object_id + 10,  LandmarkStatus::Method::TRIANGULATED);
                             new_scaled_estimates_.push_back(std::make_pair(status, estimate));
                         }
 
@@ -1993,9 +1978,7 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
                         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_object_points_near_ground_sigma));
 
                 auto estimate = std::make_pair(tracklet_id, lmk_on_object);
-                LandmarkStatus status;
-                status.label_ = object_id;
-                status.method_ = LandmarkStatus::Method::TRIANGULATED;
+                LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
 
                 new_scaled_estimates_.push_back(std::make_pair(status, estimate));
             }

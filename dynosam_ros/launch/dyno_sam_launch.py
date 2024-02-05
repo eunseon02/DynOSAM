@@ -109,7 +109,7 @@ def load_dynosam_node(context, *args, **kwargs):
 
 
 def generate_launch_description():
-    default_data_set_path = "/root/data/vdo_slam/kitti/kitti/0004"
+    default_data_set_path = "/root/data/vdo_slam/kitti/kitti/0003"
     # default_data_set_path = "/root/data/virtual_kitti"
     default_glog_v = 20
     default_params_path = get_dynosam_params_path()

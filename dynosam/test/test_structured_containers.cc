@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/common/StructuredContainers.hpp"
+#include "dynosam/common/Types.hpp"
 
 
 #include <glog/logging.h>

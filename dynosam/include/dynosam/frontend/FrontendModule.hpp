@@ -27,10 +27,10 @@
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
-
+#include "dynosam/common/ModulePacketVariants.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+// #include "dynosam/common"
 
 #include <type_traits>
 
@@ -42,10 +42,12 @@ struct InvalidImageContainerException : public DynosamException {
     : DynosamException("Image container with config: " + container.toString() + "\n was invalid - " + what) {}
 };
 
+
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
  *
  */
+
 class FrontendModule : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>  {
 
 public:
@@ -55,7 +57,7 @@ public:
     using Base::SpinReturn;
 
     FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
-    ~FrontendModule() = default;
+    virtual ~FrontendModule() = default;
 
 protected:
     /**
@@ -93,6 +95,10 @@ protected:
 protected:
     const FrontendParams base_params_;
     ImageDisplayQueue* display_queue_;
+
+    GroundTruthPacketMap gt_packet_map_;
+    ObjectPoseMap object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
+    gtsam::Pose3Vector camera_poses_; //! Keeps track of current camera trajectory. Really just for (viz) and drawn everytime
 
 };
 

@@ -98,29 +98,6 @@ using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gts
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
 
-/**
- * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be background_label
- * Also includes information on how the landamrk was estimated, age etc...
- *
- */
-struct LandmarkStatus {
-
-    enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
-
-    ObjectId label_; //! Will be 0 if background
-    Method method_; //! How the landmark was constructed
-
-};
-
-
-/// @brief A pair relating a tracklet ID with an estiamted landmark
-using LandmarkEstimate = std::pair<TrackletId, Landmark>;
-/// @brief A pair relating a Landmark estimate (TrackletId + Landmark) with a status - inidicating type and the object label
-using StatusLandmarkEstimate = std::pair<LandmarkStatus, LandmarkEstimate>;
-/// @brief A vector of StatusLandmarkEstimate
-using StatusLandmarkEstimates = std::vector<StatusLandmarkEstimate>;
 
 /**
  * @brief Definition of a tracklet - a tracket point seen at multiple frames.

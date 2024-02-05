@@ -25,12 +25,17 @@
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 
+#include "dynosam/common/Exceptions.hpp"
+#include "dynosam/utils/Variant.hpp"
+
 
 using namespace dyno;
 
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
+
 
 // //custom type with dyno::to_string defined. Must be inside dyno namespace
 // namespace dyno {
@@ -48,6 +53,56 @@ using namespace dyno;
 //     EXPECT_EQ(traits<decltype(4)>::ToString(4), "4");
 //     EXPECT_EQ(traits<CustomToString>::ToString(CustomToString{}), "custom_to_string");
 // }
+
+// TEST(Exceptions, testExceptionStream) {
+//     EXPECT_THROW({ExceptionStream::Create<DynosamException>();}, std::runtime_error);
+//     EXPECT_NO_THROW({ExceptionStream::Create();});
+// }
+
+// TEST(Exceptions, testExceptionStreamMessage) {
+//     //would be preferable to use gmock like
+//     //Throws<std::runtime_error>(Property(&std::runtime_error::what,
+//     //      HasSubstr("message"))));
+//     //but currently issues getting the gmock library to be found...
+//     // try {
+//     //     ExceptionStream::Create<std::runtime_error>() << "A message";
+//     // }
+//     // catch(const std::runtime_error& expected) {
+//     //     EXPECT_EQ(std::string(expected.what()), "A message");
+//     // }
+//     // catch(...) {
+//     //     FAIL() << "An excpetion was thrown but it was not std::runtime_error";
+//     // }
+//     // FAIL() << "Exception should be thrown but was not";
+//     ExceptionStream::Create<std::runtime_error>() << "A message";
+// }
+
+// // TEST(Exceptions, testBasicThrow) {
+// //     checkAndThrow(false);
+// //     // EXPECT_THROW({checkAndThrow(false);}, DynosamException);
+// //     // EXPECT_NO_THROW({checkAndThrow(true);});
+// // }
+
+TEST(VariantTypes, isVariant) {
+    using Var = std::variant<int, std::string>;
+    EXPECT_TRUE(is_variant_v<Var>);
+    EXPECT_FALSE(is_variant_v<int>);
+}
+
+TEST(VariantTypes, variantContains) {
+    using Var = std::variant<int, std::string>;
+    //for some reason EXPECT_TRUE doenst work?
+    // EXPECT_TRUE(isvariantmember_v<int, Var>);
+   bool r = is_variant_member_v<int, Var>;
+   EXPECT_EQ(r, true);
+
+   r = is_variant_member_v<std::string, Var>;
+   EXPECT_EQ(r, true);
+
+   r = is_variant_member_v<double, Var>;
+   EXPECT_EQ(r, false);
+}
+
 
 TEST(ImageType, testRGBMonoValidation) {
 

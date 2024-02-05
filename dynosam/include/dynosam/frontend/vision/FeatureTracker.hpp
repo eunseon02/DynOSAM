@@ -60,6 +60,14 @@ public:
     inline Frame::Ptr getPreviousFrame() { return previous_tracked_frame_; }
     inline const Frame::ConstPtr getPreviousFrame() const { return previous_tracked_frame_; }
 
+    /**
+     * @brief Get the most recent frame that has been tracked.
+     * After a call to track, this will be the frame that is returned and will track features between getPreviousFrame() to this frame
+     *
+     * @return Frame::Ptr
+     */
+    inline Frame::Ptr getCurrentFrame() { return previous_frame_; }
+
 
 protected:
 

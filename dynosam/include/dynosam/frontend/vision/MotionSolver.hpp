@@ -33,6 +33,7 @@
 #include <opengv/sac/Ransac.hpp>
 
 #include <optional>
+#include <glog/logging.h>
 
 using AbsolutePoseProblem = opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem;
 using AbsolutePoseSacProblem = opengv::sac::Ransac<AbsolutePoseProblem>;
@@ -41,6 +42,77 @@ using RelativePoseProblem = opengv::sac_problems::relative_pose::CentralRelative
 using RelativePoseSacProblem = opengv::sac::Ransac<RelativePoseProblem>;
 
 namespace dyno {
+
+template <class SampleConsensusProblem>
+bool runRansac(
+    std::shared_ptr<SampleConsensusProblem> sample_consensus_problem_ptr,
+    const double& threshold,
+    const int& max_iterations,
+    const double& probability,
+    const bool& do_nonlinear_optimization,
+    gtsam::Pose3& best_pose,
+    std::vector<int>& inliers)
+{
+    CHECK(sample_consensus_problem_ptr);
+    inliers.clear();
+
+     //! Create ransac
+    opengv::sac::Ransac<SampleConsensusProblem> ransac(
+        max_iterations, threshold, probability);
+
+    //! Setup ransac
+    ransac.sac_model_ = sample_consensus_problem_ptr;
+
+    //! Run ransac
+    bool success = ransac.computeModel(0);
+
+    if (success) {
+      if (ransac.iterations_ >= max_iterations && ransac.inliers_.empty()) {
+        success = false;
+        best_pose = gtsam::Pose3();
+        inliers = {};
+      } else {
+        best_pose =
+            utils::openGvTfToGtsamPose3(ransac.model_coefficients_);
+        inliers = ransac.inliers_;
+
+
+        if (do_nonlinear_optimization) {
+          opengv::transformation_t optimized_pose;
+          sample_consensus_problem_ptr->optimizeModelCoefficients(
+              inliers, ransac.model_coefficients_, optimized_pose);
+          best_pose = Eigen::MatrixXd(optimized_pose);
+        }
+      }
+    } else {
+      CHECK(ransac.inliers_.empty());
+      best_pose = gtsam::Pose3();
+      inliers.clear();
+    }
+
+    return success;
+}
+
+
+template <class SampleConsensusProblem>
+bool runRansac(
+    std::shared_ptr<SampleConsensusProblem> sample_consensus_problem_ptr,
+    const FrontendParams& params,
+    gtsam::Pose3& best_pose,
+    std::vector<int>& inliers)
+{
+    return runRansac<SampleConsensusProblem>(
+        sample_consensus_problem_ptr,
+        params.ransac_threshold,
+        params.ransac_iterations,
+        params.ransac_probability,
+        params.optimize_3d3d_pose_from_inliers,
+        best_pose,
+        inliers
+    );
+}
+
+
 
 template<typename Result>
 class MotionSolverResult : public std::optional<Result> {

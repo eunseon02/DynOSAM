@@ -524,7 +524,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -545,7 +545,7 @@ Visualization Manager:
         Value: /dynosam/backend/dynamic_newly_scaled
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -592,25 +592,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 33.282684326171875
+      Distance: 56.10725784301758
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 3.8768177032470703
-        Y: 0.8056430220603943
-        Z: 17.492685317993164
+        X: 4.4046549797058105
+        Y: 13.266343116760254
+        Z: 25.045005798339844
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.43479785323143005
+      Pitch: -0.5497984886169434
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.61041784286499
+      Yaw: 4.600367069244385
     Saved: ~
 Window Geometry:
   Displays:
@@ -630,5 +630,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1717
-  X: 33
-  Y: 91
+  X: 67
+  Y: 116

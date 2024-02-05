@@ -39,43 +39,4 @@ enum class FrontendType {
 };
 
 
-
-/**
- * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be background_label
- *
- */
-struct KeypointStatus {
-  const KeyPointType kp_type_;
-  const ObjectId label_; //! Will be 0 if background
-
-  KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
-
-  inline bool isStatic() const {
-    const bool is_static = (kp_type_ == KeyPointType::STATIC);
-    {
-      //sanity check
-      if(is_static) CHECK_EQ(label_, background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
-    }
-    return is_static;
-  }
-
-  inline static KeypointStatus Static() {
-    return KeypointStatus(KeyPointType::STATIC, background_label);
-  }
-
-  inline static KeypointStatus Dynamic(ObjectId label) {
-    CHECK(label != background_label);
-    return KeypointStatus(KeyPointType::DYNAMIC, label);
-  }
-};
-
-/// @brief A pair relating a tracklet ID with an observed keypoint
-using KeypointMeasurement = std::pair<TrackletId, Keypoint>;
-/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
-using StatusKeypointMeasurement = std::pair<KeypointStatus, KeypointMeasurement>;
-/// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = std::vector<StatusKeypointMeasurement>;
-
 }

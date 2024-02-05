@@ -48,70 +48,70 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 
 int main(int argc, char* argv[]) {
 
-    using namespace dyno;
+    // using namespace dyno;
 
-    const std::string path = "/root/data/vdo_slam/kitti/kitti-step/panoptic_maps/train/0000/000000.png";
+    // const std::string path = "/root/data/vdo_slam/kitti/kitti-step/panoptic_maps/train/0000/000000.png";
 
-    png::image<png::rgb_pixel> index_image(path);
+    // png::image<png::rgb_pixel> index_image(path);
 
-    cv::Size size(index_image.get_width(), index_image.get_height());
-    cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
+    // cv::Size size(index_image.get_width(), index_image.get_height());
+    // cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
 
-    for (size_t y = 0; y < index_image.get_height(); ++y)
-    {
-        for (size_t x = 0; x < index_image.get_width(); ++x)
-        {
-            const auto& pixel = index_image.get_pixel(x, y);
-            const int red = (int)pixel.red;
-            const int green = (int)pixel.green;
-            const int blue = (int)pixel.blue;
+    // for (size_t y = 0; y < index_image.get_height(); ++y)
+    // {
+    //     for (size_t x = 0; x < index_image.get_width(); ++x)
+    //     {
+    //         const auto& pixel = index_image.get_pixel(x, y);
+    //         const int red = (int)pixel.red;
+    //         const int green = (int)pixel.green;
+    //         const int blue = (int)pixel.blue;
 
-            if(red == 0) {
-                class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
-            }
-            else if(red == 12) {
-                class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Rider;
-            }
+    //         if(red == 0) {
+    //             class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
+    //         }
+    //         else if(red == 12) {
+    //             class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Rider;
+    //         }
 
 
-            // semantic_image.at<cv::Vec3b>(y, x)[0] = blue;
-            // semantic_image.at<cv::Vec3b>(y, x)[1] = green;
-            // semantic_image.at<cv::Vec3b>(y, x)[2] = red;
-        }
-    }
+    //         // semantic_image.at<cv::Vec3b>(y, x)[0] = blue;
+    //         // semantic_image.at<cv::Vec3b>(y, x)[1] = green;
+    //         // semantic_image.at<cv::Vec3b>(y, x)[2] = red;
+    //     }
+    // }
 
-    cv::Mat road_viz = dyno::ImageType::ClassSegmentation::toRGB(
-            class_segmentation
-        );
+    // cv::Mat road_viz = dyno::ImageType::ClassSegmentation::toRGB(
+    //         class_segmentation
+    //     );
 
-    cv::imshow("Seg", road_viz);
-    cv::waitKey(0);
+    // cv::imshow("Seg", road_viz);
+    // cv::waitKey(0);
 
-    // google::ParseCommandLineFlags(&argc, &argv, true);
-    // google::InitGoogleLogging(argv[0]);
-    // FLAGS_logtostderr = 1;
-    // FLAGS_colorlogtostderr = 1;
-    // FLAGS_log_prefix = 1;
+    google::ParseCommandLineFlags(&argc, &argv, true);
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = 1;
+    FLAGS_colorlogtostderr = 1;
+    FLAGS_log_prefix = 1;
 
-    // dyno::DynoParams dyno_params("/home/user/dev_ws/src/DynOSAM/dynosam/params/");
+    dyno::DynoParams dyno_params("/home/user/dev_ws/src/DynOSAM/dynosam/params/");
 
-    // auto camera = std::make_shared<dyno::Camera>(dyno_params.camera_params_);
+    auto camera = std::make_shared<dyno::Camera>(dyno_params.camera_params_);
 
-    // // auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti, dyno::KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
-    // // auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
+    // auto data_loader = std::make_unique<dyno::KittiDataLoader>(FLAGS_path_to_kitti, dyno::KittiDataLoader::MaskType::SEMANTIC_INSTANCE);
+    // auto frontend_display = std::make_shared<dyno::OpenCVFrontendDisplay>();
 
-    // // dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
-    // // while(pipeline.spin()) {};
-    // dyno::VirtualKittiDataLoader::Params params;
-    // params.scene = "Scene01";
-    // params.scene_type = "clone";
+    // dyno::DynoPipelineManager pipeline(params, std::move(data_loader), frontend_display);
+    // while(pipeline.spin()) {};
+    dyno::VirtualKittiDataLoader::Params params;
+    params.scene = "Scene01";
+    params.scene_type = "clone";
+    params.mask_type = dyno::MaskType::MOTION;
+
+    // dyno::KittiDataLoader::Params params;
+    // params.base_line = 388.1822;
     // params.mask_type = dyno::MaskType::MOTION;
 
-    // // dyno::KittiDataLoader::Params params;
-    // // params.base_line = 388.1822;
-    // // params.mask_type = dyno::MaskType::MOTION;
-
-    // // dyno::KittiDataLoader d("/root/data/vdo_slam/kitti/kitti/0020", params);
+    // dyno::KittiDataLoader d("/root/data/vdo_slam/kitti/kitti/0020", params);
 
     // cv::Mat previous_optical_flow;
     // cv::Mat previous_class_segmentation;
@@ -119,162 +119,45 @@ int main(int argc, char* argv[]) {
     // gtsam::Pose3 previous_cam_pose;
 
 
-    // dyno::FeatureTracker::UniquePtr tracker= std::make_unique<dyno::FeatureTracker>(dyno_params.frontend_params_, camera);
+    dyno::FeatureTracker::UniquePtr tracker= std::make_unique<dyno::FeatureTracker>(dyno_params.frontend_params_, camera);
 
-    // dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
-    // d.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, cv::Mat class_semantics, dyno::GroundTruthInputPacket gt_packet) {
-    //     LOG(INFO) << "Frame " << frame_id << " ts " << timestamp;
-    //     using namespace dyno;
-    //     dyno::ImageContainer::Ptr image_container = ImageContainer::Create(
-    //             timestamp,
-    //             frame_id,
-    //             ImageWrapper<ImageType::RGBMono>(rgb),
-    //             ImageWrapper<ImageType::Depth>(depth),
-    //             ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-    //             ImageWrapper<ImageType::MotionMask>(motion),
-    //             ImageWrapper<ImageType::ClassSegmentation>(class_semantics));
-
-    //     auto tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
-    //     size_t n_optical_flow, n_new_tracks;
-    //     Frame::Ptr frame =  tracker->track(frame_id, timestamp, tracking_images, n_optical_flow, n_new_tracks);
-
-    //     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    //     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), dyno_params.frontend_params_.depth_background_thresh, dyno_params.frontend_params_.depth_obj_thresh);
-
-    //     Frame::Ptr previous_frame = tracker->getPreviousFrame();
-    //     const gtsam::Matrix3 K_inv = camera->getParams().getCameraMatrixEigen().inverse();
+    dyno::VirtualKittiDataLoader d("/root/data/virtual_kitti", params);
+    d.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, cv::Mat class_semantics, dyno::GroundTruthInputPacket gt_packet) {
+        LOG(INFO) << "Frame " << frame_id << " ts " << timestamp;
+        using namespace dyno;
+        dyno::ImageContainer::Ptr image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::MotionMask>(motion),
+                ImageWrapper<ImageType::ClassSegmentation>(class_semantics));
 
 
-    //     if(previous_frame) {
-    //         cv::Mat tracking_img = tracker->computeImageTracks(*previous_frame, *frame);
+        // cv::Mat flow_viz;
+        // dyno::utils::flowToRgb(optical_flow, flow_viz);
 
-    //         auto feature_points_on_ground_itr = FeatureFilterIterator(
-    //             const_cast<FeatureContainer&>(frame->static_features_),
-    //             [&class_semantics](const Feature::Ptr& f) -> bool {
-    //                 bool feature_is_road =
-    //                     functional_keypoint::at<int>(f->keypoint_, class_semantics) == ImageType::ClassSegmentation::Labels::Road;
-
-    //                 return Feature::IsUsable(f) && feature_is_road;
-    //             }
-    //         );
-
-    //         Landmarks static_ground_points;
-    //         Keypoints kps;
-    //         for(Feature::Ptr f_on_road : feature_points_on_ground_itr) {
-    //             Landmark lmk;
-    //             CHECK(f_on_road->hasDepth());
-    //             camera->backProject(f_on_road->keypoint_, f_on_road->depth_, &lmk, gt_packet.X_world_);
-    //             static_ground_points.push_back(lmk);
-    //             kps.push_back(f_on_road->keypoint_);
-
-    //         }
-
-    //         //size of points on ground
-    //         size_t m = static_ground_points.size();
-    //         gtsam::Matrix A = gtsam::Matrix::Zero(m, 3);
-    //         gtsam::Matrix b = gtsam::Matrix::Zero(m, 1);
-
-    //         for(size_t i = 0; i < m; i++) {
-    //             const Landmark& lmk = static_ground_points.at(i);
-    //             A(i, 0) = lmk(0);
-    //             A(i, 1) = lmk(2);
-    //             A(i, 2) = 1.0;
-
-    //             b(i, 0) = lmk(1);
-    //         }
-
-    //         //plane coeffs -> Ax + Bz + C = y, because in camera convention y axis is normal to the ground usually
-    //         gtsam::Matrix plane_coeffs = A.colPivHouseholderQr().solve(b);
-    //         LOG(INFO) << "X= " << plane_coeffs;
-
-    //         const auto object_labels = vision_tools::getObjectLabels(motion);
-    //         for(ObjectId object_id : object_labels) {
-    //             gtsam::Point2Vector observation_curr;
-    //             if(!mono_backend_tools::findObjectPointsNearRoad(
-    //                 observation_curr,
-    //                 motion,
-    //                 class_semantics,
-    //                 object_id,
-    //                 -1
-    //             )) { LOG(FATAL) << "Could not find any object points near the road for object " << object_id;
-    //             }
-    //             // for(const Keypoint& kp : observation_curr) {
-    //             //     gtsam::Point3 kp_hom(kp(0), kp(1), 1);
-    //             //     gtsam::Point3 ray_cam = K_inv * kp_hom;
-    //             //     gtsam::Point3 ray_world = gt_packet.X_world_.rotation() * ray_cam;
-    //             //     ray_world.normalize();
-
-    //             //     const double A = plane_coeffs(0);
-    //             //     const double B = plane_coeffs(1);
-    //             //     const double C = plane_coeffs(2);
-
-    //             //     const gtsam::Point3 camera_center = gt_packet.X_world_.translation();
-    //             //     //depth of the kp
-    //             //     const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
-
-    //             //     const double expected_depth = functional_keypoint::at<Depth>(kp, image_container->getDepth());
-    //             //     LOG(INFO) << lambda << " " <<expected_depth;
-
-    //             // }
-    //         }
+        // cv::Mat mask_viz;
+        // dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
 
 
-    //         // for(size_t i = 0; i < m; i++) {
-    //         //     const Landmark& lmk = static_ground_points.at(i);
-    //         //     const Keypoint& kp = kps.at(i);
+        // cv::Mat road_viz = dyno::ImageType::ClassSegmentation::toRGB(
+        //     class_semantics
+        // );
 
-    //         //     gtsam::Point3 kp_hom(kp(0), kp(1), 1);
-    //         //     gtsam::Point3 ray_cam = K_inv * kp_hom;
-    //         //     gtsam::Point3 ray_world = gt_packet.X_world_.rotation() * ray_cam;
-    //         //     ray_world.normalize();
-
-    //         //     const double A = plane_coeffs(0);
-    //         //     const double B = plane_coeffs(1);
-    //         //     const double C = plane_coeffs(2);
-
-    //         //     const gtsam::Point3 camera_center = gt_packet.X_world_.translation();
-
-    //         //     //depth of the kp
-    //         //     const double lambda = (-C - A* camera_center(0) + camera_center(1) - B*camera_center(2))/(A * ray_world(0) - ray_world(1) + B * ray_world(2));
-    //         //     // const double execpted_lambda = gtsam::Point3 (lmk - gt_packet.X_world_.translation()).norm();
-    //         //     // LOG(INFO) << lambda << " " <<execpted_lambda;
+        cv::imshow("RGB", rgb);
+        cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
+        cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+        cv::imshow("Road semantics", image_container->getImageWrapper<ImageType::ClassSegmentation>().toRGB());
 
 
+        cv::waitKey(1);
 
-    //         // }
+        return true;
+    });
 
-    //         cv::imshow("Tracks", tracking_img);
-
-    //     }
-
-
-    //     cv::Mat flow_viz;
-    //     dyno::utils::flowToRgb(optical_flow, flow_viz);
-
-    //     cv::Mat mask_viz;
-    //     dyno::utils::semanticMaskToRgb(rgb, motion, mask_viz);
-
-
-    //     cv::Mat road_viz = dyno::ImageType::ClassSegmentation::toRGB(
-    //         class_semantics
-    //     );
-
-    //     cv::imshow("RGB", rgb);
-    //     cv::imshow("OF", flow_viz);
-    //     cv::imshow("Motion", mask_viz);
-    //     cv::imshow("Road semantics", road_viz);
-
-    //     previous_optical_flow = optical_flow;
-    //     previous_class_segmentation = class_semantics;
-    //     previous_motion_mask = motion;
-    //     previous_cam_pose = gt_packet.X_world_;
-
-    //     cv::waitKey(1);
-
-    //     return true;
-    // });
-
-    // while(d.spin()) {}
+    while(d.spin()) {}
 
 
 

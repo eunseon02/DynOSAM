@@ -53,8 +53,8 @@ void UndistorterRectifier::UndistortRectifyKeypoints(
 
     //but slow as we have to do all conversion back and forth
     //if the Eigen matrices are aligned we might not even need to do this...
-    std::vector<cv::Point2d> keypoints_cv = utils::gtsamPointsToCv(keypoints);
-    std::vector<cv::Point2d> undistorted_keypoints_cv;
+    std::vector<cv::Point2f> keypoints_cv = utils::gtsamPointsToCv(keypoints);
+    std::vector<cv::Point2f> undistorted_keypoints_cv;
 
 
 

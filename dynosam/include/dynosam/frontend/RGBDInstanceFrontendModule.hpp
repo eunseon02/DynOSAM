@@ -43,7 +43,7 @@ private:
     Camera::Ptr camera_;
     // MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
-    std::map<ObjectId, gtsam::Pose3> object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
+    FrontendLogger::UniquePtr logger_;
 
 private:
 
@@ -54,12 +54,14 @@ private:
     RGBDInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,
         const MotionEstimateMap& estimated_motions,
+        const gtsam::Pose3& T_world_camera,
         const cv::Mat& debug_image = cv::Mat(),
-        const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
 
+    //updates object poses
+    void propogateObjectPoses(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id);
 
-    void logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id);
+
 
 
 };

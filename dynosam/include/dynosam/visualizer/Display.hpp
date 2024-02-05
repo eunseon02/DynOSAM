@@ -35,6 +35,7 @@ namespace dyno {
 template<typename INPUT>
 class DisplayBase {
 public:
+    using Input = INPUT;
     using This = DisplayBase<INPUT>;
     DYNO_POINTER_TYPEDEFS(This)
 

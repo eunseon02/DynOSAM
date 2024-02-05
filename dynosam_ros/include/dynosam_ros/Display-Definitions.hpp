@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,24 +21,15 @@
  *   SOFTWARE.
  */
 
-#include "internal/helpers.hpp"
+#pragma once
 
-#include <gtest/gtest.h>
-#include <glog/logging.h>
+#include <string>
 
-#include "rclcpp/rclcpp.hpp"
+namespace dyno {
 
+struct DisplayParams {
+    std::string world_frame_id_ = "world";
+    std::string camera_frame_id_ = "camera";
+};
 
-DEFINE_string(test_data_path, getTestDataPath(), "Path to data for unit tests.");
-
-int main(int argc, char** argv)
-{
-  rclcpp::init(argc, argv);
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging(argv[0]);
-  FLAGS_logtostderr = 1;
-  FLAGS_colorlogtostderr = 1;
-  FLAGS_log_prefix = 1;
-  FLAGS_v = 1;
-  return RUN_ALL_TESTS();
 }

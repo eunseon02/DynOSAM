@@ -23,7 +23,7 @@
 
 #pragma once
 
-#include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/common/ImageTypes.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/Tuple.hpp"
@@ -37,107 +37,10 @@
 
 namespace dyno {
 
-//thrown when an image type validation step fails
-class InvalidImageTypeException : public DynosamException {
-public:
-
-    InvalidImageTypeException(const std::string& reason) :
-       DynosamException("Invalid image type exception: " + reason) {}
-
-};
 
 class ImageContainerConstructionException : public DynosamException {
 public:
     ImageContainerConstructionException(const std::string& what) : DynosamException(what) {}
-};
-
-
-//T needs to be like image type and have the functions name, validate etc
-template<typename T>
-struct ImageWrapper {
-    using Type = T;
-
-    //TODO: for now remove const (which is dangerous i guess, but need assignment operator)?
-    //what about copying image data instead of just reference? Right now, everything is ref
-    cv::Mat image;
-
-    ImageWrapper(const cv::Mat& img) : image(img) {
-
-        const std::string name = Type::name();
-
-        if(img.empty()) {
-            throw InvalidImageTypeException("Image was empty for type " + name);
-        }
-        //should throw excpetion if problematic
-        Type::validate(img);
-    }
-
-    operator cv::Mat&() { return image; }
-    operator const cv::Mat&() const { return image; }
-
-    ImageWrapper() : image() {}
-
-    /**
-     * @brief Returns an ImageWrapper with the underlying image data cloned
-     *
-     * @return ImageWrapper<Type>
-     */
-    ImageWrapper<Type> clone() {
-        return ImageWrapper<Type>(image.clone());
-    }
-
-    inline bool exists() const {
-        return !image.empty();
-    }
-};
-
-
-struct ImageType {
-
-    struct RGBMono {
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "RGBMono"; }
-    };
-
-    //really should be disparity?
-    struct Depth {
-        constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "Depth"; }
-    };
-    struct OpticalFlow {
-        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "OpticalFlow"; }
-    };
-    struct SemanticMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for SemanticMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "SemanticMask"; }
-    };
-    struct MotionMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for MotionMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "MotionMask"; }
-    };
-    struct ClassSegmentation {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for ClassSegmentation image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "ClassSegmentation"; }
-
-
-        //TODO: add ways to load semantic information
-        enum Labels {
-            Undefined = 0,
-            Road,
-            Rider,
-        };
-
-        static cv::Mat toRGB(const ImageWrapper<ClassSegmentation>& image);
-    };
-
-
-    static_assert(SemanticMask::OpenCVType == MotionMask::OpenCVType);
 };
 
 

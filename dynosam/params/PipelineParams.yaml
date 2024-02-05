@@ -7,4 +7,4 @@ data_provider_type: 0
 
 
 #RGBD instance = 0, MONO instance = 1 (same as FrontendType)
-frontend_type: 1
+frontend_type: 0

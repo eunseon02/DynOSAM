@@ -45,6 +45,13 @@ public:
 };
 
 
+class DynoDatasetException : public DynosamException {
+public:
+    DynoDatasetException(const std::string& what) : DynosamException(what) {}
+};
+
+
+
 template<typename... DynoDataTypes>
 struct _DynoDatasetConstructor {
 
@@ -242,7 +249,6 @@ private:
     bool are_loaders_set_{false};
 };
 
-//should not be inherited but instead is functional!!
 template<typename... DataTypes>
 class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvider  {
 
@@ -251,77 +257,107 @@ public:
     using This = DynoDatasetProvider<DataTypes...>;
     DYNO_POINTER_TYPEDEFS(This)
 
+    using BaseDynoDataset::isProviderValid;
+    using BaseDynoDataset::getDatasetSize;
+
     //does not accept DataProviderModule* for dataprovider
     DynoDatasetProvider(
         const fs::path& dataset_path)
-        : BaseDynoDataset(dataset_path), DataProvider() {
-        }
+        : BaseDynoDataset(dataset_path), DataProvider() {}
 
     virtual ~DynoDatasetProvider() = default;
 
-    bool isValid() const override {
-        return BaseDynoDataset::isProviderValid();
+
+    //ignore if -1. How to reset to original starting frame? we only have -1 so that in main we can call setStartingFrame without doing any checks
+    void setStartingFrame(int starting_frame) {
+        if(starting_frame != -1)
+            requested_starting_frame_id_ = starting_frame;
+    }
+    //ignore if -1
+    void setEndingFrame(int ending_frame) {
+        if(ending_frame != -1)
+            requested_ending_frame_id_ = ending_frame;
+    }
+
+    /**
+     * @brief Resets the dataset to the "start", such that the next call to spin will
+     * begin the dataset again from the starting frame id. The starting/ending id will return to
+     * whatever the last call to setStartingFrame/setEndingFrame set the values to, or default
+     * if they have not been called
+     *
+     * Whatever changes to the dataset, ie. updating the starting and ending frames will take affect
+     * after reset is called
+     *
+     */
+    void reset() {
+        is_first_spin_ = true;
+        active_frame_id_ = 0;
     }
 
 
-    size_t getDatasetSize() const override {
-        return BaseDynoDataset::getDatasetSize();
+    virtual bool spin() override {
+        if(!isProviderValid()) {
+            LOG(ERROR) << "Cannot spin as provider is invalid";
+            return false;
+        }
+
+        const size_t dataset_size = getDatasetSize();
+
+        //initalise and check
+        if(is_first_spin_) {
+            // by default start dataset at 0
+            size_t starting_frame = 0u;
+            // by default end dataset at the last frame
+            size_t ending_frame = dataset_size;
+
+            if(requested_starting_frame_id_ >= 0) {
+                starting_frame = requested_starting_frame_id_;
+            }
+
+            if(requested_ending_frame_id_ >= 0) {
+                ending_frame = requested_ending_frame_id_;
+            }
+
+            //check ending frame first
+            if(ending_frame > dataset_size) {
+                throw DynoDatasetException("Requested ending frame is greater than the size of the dataset (" + std::to_string(ending_frame) + " > " + std::to_string(dataset_size));
+            }
+
+            if(starting_frame > ending_frame) {
+                throw DynoDatasetException("Requested starting frame is invalid - either less than 0 or greater than the ending frame (starting frame= " + std::to_string(starting_frame) + ", ending frame= " + std::to_string(ending_frame));
+            }
+
+            //update varibles actually used in the spin
+            active_frame_id_ = starting_frame;
+            ending_frame_id_ = ending_frame;
+            is_first_spin_ = false;
+        }
+
+
+        if(active_frame_id_ >= ending_frame_id_) {
+            LOG_FIRST_N(INFO, 1) << "Finished dataset";
+            return false;
+        }
+
+
+        utils::TimingStatsCollector("dataset_spin");
+        if(!BaseDynoDataset::processSingle(active_frame_id_)) {
+            LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id_;
+            return false;
+        }
+
+        active_frame_id_++;
+        return true;
     }
 
-    virtual bool spinOnce(size_t frame_id) override {
-        return BaseDynoDataset::processSingle(frame_id);
-    }
+private:
+    size_t active_frame_id_ = 0u;
+    size_t ending_frame_id_ = 0u; //Start at 0, but this will be set upon the first call to spin()
 
-    // virtual bool spin() override {
-    //     const size_t dataset_size = this->getDatasetSize();
+    int requested_starting_frame_id_{-1};
+    int requested_ending_frame_id_{-1};
 
-    //     //initalise and check
-    //     if(is_first_spin_) {
-    //         // by default start dataset at 0
-    //         size_t starting_frame = 0u;
-    //         // by default end dataset at the last frame
-    //         size_t ending_frame = dataset_size;
-
-    //         if(requested_starting_frame_id_) {
-    //             starting_frame = *requested_starting_frame_id_;
-    //         }
-
-    //         if(requested_ending_frame_id_) {
-    //             ending_frame = *requested_ending_frame_id_;
-    //         }
-
-    //         //check ending frame first
-    //         if(ending_frame > dataset_size) {
-    //             throw DynoDatasetException("Requested ending frame is greater than the size of the dataset (" + std::to_string(ending_frame) + " > " + std::to_string(dataset_size));
-    //         }
-
-    //         if(starting_frame > ending_frame) {
-    //             throw DynoDatasetException("Requested starting frame is invalid - either less than 0 or greater than the ending frame (starting frame= " + std::to_string(starting_frame) + ", ending frame= " + std::to_string(ending_frame));
-    //         }
-
-    //         //update varibles actually used in the spin
-    //         active_frame_id_ = starting_frame;
-    //         ending_frame_id_ = ending_frame;
-    //         is_first_spin_ = false;
-    //     }
-
-
-    //     if(active_frame_id_ >= ending_frame_id_) {
-    //         LOG_FIRST_N(INFO, 1) << "Finished dataset";
-    //         return false;
-    //     }
-
-
-    //     utils::TimingStatsCollector("dataset_spin");
-    //     if(!BaseDynoDataset::processSingle(active_frame_id_)) {
-    //         LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id_;
-    //         return false;
-    //     }
-
-    //     active_frame_id_++;
-    //     return true;
-    // }
-
+    bool is_first_spin_{true};
 
 
 };

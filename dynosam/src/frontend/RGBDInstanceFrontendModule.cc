@@ -30,6 +30,9 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
 
+DEFINE_bool(init_object_pose_from_gt, false , "If true, then the viz pose from the frontend will start from the gt");
+DEFINE_bool(use_frontend_logger, false , "If true, the frontend logger will be used");
+
 namespace dyno {
 
 
@@ -39,13 +42,21 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
+
+    if(FLAGS_use_frontend_logger) {
+        logger_ = std::make_unique<FrontendLogger>();
+    }
 }
 
-FrontendModule::ImageValidationResult RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
+FrontendModule::ImageValidationResult
+RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& image_container) const {
     return ImageValidationResult(image_container->hasDepth(), "Depth is required");
 }
 
-FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
+FrontendModule::SpinReturn
+RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
+    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
+
     ImageContainer::Ptr image_container = input->image_container_;
 
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
@@ -75,16 +86,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(FrontendInpu
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
-    LOG(INFO) << "In RGBD instance module frontend boostrap";
-
     return {State::Nominal, nullptr};
 }
 
 
-FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
+FrontendModule::SpinReturn
+RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
+    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
     ImageContainer::Ptr image_container = input->image_container_;
-    LOG(INFO) << "In RGBD instance module frontend nominal";
-
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
     //and then subsequently elimate non-moving objects later on
@@ -106,7 +115,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     }
 
     size_t n_optical_flow, n_new_tracks;
-    LOG(INFO) << "Beginning tracking on frame " << input->getFrameId();
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("tracking_timer");
@@ -117,8 +125,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     CHECK(previous_frame);
-
-    LOG(INFO) << "Done tracking on frame " << input->getFrameId();
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
 
@@ -137,7 +143,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
     }
 
-    LOG(INFO) << "Done correspondences";
 
 
     AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
@@ -172,7 +177,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
     AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame->T_world_camera_);
 
     MotionEstimateMap motion_estimates;
-    std::map<ObjectId, gtsam::Pose3> per_frame_object_poses; //for viz
     for(const auto& [object_id, observations] : frame->object_observations_) {
         utils::TimingStatsCollector object_motion_timer("solve_object_motion");
         AbsolutePoseCorrespondences dynamic_correspondences;
@@ -189,7 +193,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
         }
 
 
-        LOG(INFO) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
+        VLOG(20) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
 
         const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
             dynamic_correspondences);
@@ -207,15 +211,21 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 
             const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
             CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
-            logAndPropogateObjectPoses(per_frame_object_poses, gt_packet, object_motion_result.get(), object_id);
+            propogateObjectPoses(object_motion_result.get(), object_id, frame->frame_id_);
         }
+    }
+
+
+    if(logger_) {
+        logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_, previous_frame->T_world_camera_);
+        logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
     }
 
     cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
 
 
-    auto output = constructOutput(*frame, motion_estimates, tracking_img, per_frame_object_poses, input->optional_gt_);
+    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
     return {State::Nominal, output};
 }
 
@@ -223,12 +233,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(FrontendInput
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame,
     const MotionEstimateMap& estimated_motions,
+    const gtsam::Pose3& T_world_camera,
     const cv::Mat& debug_image,
-    const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses,
     const GroundTruthInputPacket::Optional& gt_packet)
 {
     StatusKeypointMeasurements static_keypoint_measurements;
-    Landmarks static_landmarks;
+    StatusLandmarkEstimates static_landmarks;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
         const TrackletId tracklet_id = f->tracklet_id_;
         const Keypoint kp = f->keypoint_;
@@ -236,16 +246,18 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        KeypointStatus status = KeypointStatus::Static();
-        KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
+        KeypointStatus kp_status = KeypointStatus::Static();
+        KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
+        static_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
 
-        static_keypoint_measurements.push_back(std::make_pair(status, measurement));
-        static_landmarks.push_back(lmk);
+        LandmarkStatus lmk_status = LandmarkStatus::Static(LandmarkStatus::Method::MEASURED);
+        LandmarkEstimate lmk_estimate = std::make_pair(tracklet_id, lmk);
+        static_landmarks.push_back(std::make_pair(lmk_status, lmk_estimate));
     }
 
 
     StatusKeypointMeasurements dynamic_keypoint_measurements;
-    Landmarks dynamic_landmarks;
+    StatusLandmarkEstimates dynamic_landmarks;
     for(const auto& [object_id, obs] : frame.object_observations_) {
         CHECK_EQ(object_id, obs.instance_label_);
         CHECK(obs.marked_as_moving_);
@@ -260,53 +272,98 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 const Keypoint kp = f->keypoint_;
                 const Landmark lmk = frame.backProjectToWorld(tracklet_id);
 
-                KeypointStatus status = KeypointStatus::Dynamic(object_id);
-                KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
+                KeypointStatus kp_status = KeypointStatus::Dynamic(object_id);
+                KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
+                dynamic_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
 
-                dynamic_keypoint_measurements.push_back(std::make_pair(status, measurement));
-                dynamic_landmarks.push_back(lmk);
+                LandmarkStatus lmk_status(object_id, LandmarkStatus::Method::MEASURED);
+                LandmarkEstimate lmk_estimate = std::make_pair(tracklet_id, lmk);
+                dynamic_landmarks.push_back(std::make_pair(lmk_status, lmk_estimate));
             }
         }
 
     }
+
+    //update trajectory of camera poses to be visualised by the frontend viz module
+    camera_poses_.push_back(T_world_camera);
 
     return std::make_shared<RGBDInstanceOutputPacket>(
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         static_landmarks,
         dynamic_landmarks,
-        frame.T_world_camera_,
+        T_world_camera,
         frame,
         estimated_motions,
-        propogated_object_poses,
+        object_poses_,
+        camera_poses_,
         debug_image,
         gt_packet
     );
 }
 
 
-void RGBDInstanceFrontendModule::logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id) {
-    auto it = std::find_if(gt_packet.object_poses_.begin(), gt_packet.object_poses_.end(),
-                    [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
+void RGBDInstanceFrontendModule::propogateObjectPoses(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
+    //start from previous frame -> if we have a motion we must have observations in k-1
+    const FrameId frame_id_k_1 = frame_id - 1;
+    if(!object_poses_.exists(object_id)) {
 
-    if(it == gt_packet.object_poses_.end()) {
-        LOG(WARNING) << "Object Id " << object_id << " cannot be found in the gt packet";
+        gtsam::Pose3 starting_pose;
+
+        //need gt pose for rotation even if not for translation
+        CHECK(gt_packet_map_.exists(frame_id_k_1)) << "Cannot initalise object poses for viz using gt as the ground truth does not exist for frame " << frame_id_k_1;
+        const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map_.at(frame_id_k_1);
+
+        ObjectPoseGT object_pose_gt_k;
+        if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
+            LOG(ERROR) << "Object Id " << object_id <<  " cannot be found in the gt packet. Unable to initalise object starting point use gt pose. Skipping!";
+            return;
+            // throw std::runtime_error("Object Id " + std::to_string(object_id) + " cannot be found in the gt packet. Unable to initalise object starting point use gt pose");
+        }
+
+        starting_pose = object_pose_gt_k.L_world_;
+
+        //if not use gt translation, find centroid of object
+        if(!FLAGS_init_object_pose_from_gt) {
+            const auto frame_k_1 = tracker_->getPreviousFrame();
+            const auto frame_k = tracker_->getCurrentFrame();
+
+            auto object_points = FeatureFilterIterator(
+                const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+                [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+                    return Feature::IsUsable(f) && f->instance_label_ == object_id &&
+                    frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
+                });
+
+            gtsam::Point3 centroid(0, 0, 0);
+            size_t count = 0;
+            for(const auto& feature : object_points) {
+                gtsam::Point3 lmk = frame_k_1->backProjectToWorld(feature->tracklet_id_);
+                centroid += lmk;
+                count++;
+            }
+
+            centroid /= count;
+            //update starting pose
+            starting_pose = gtsam::Pose3(object_pose_gt_k.L_world_.rotation(), centroid);
+
+
+        }
+        //new object
+        object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
+        object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
+    }
+
+    auto& pose_map = object_poses_.at(object_id);
+    if(!pose_map.exists(frame_id_k_1)) {
+        //this can happen if the object misses a frame (e.g becomes too small - this is problematic while we do not properly propogate out own tracking labels!!)
+        LOG(ERROR)<< "Previous frame " << frame_id_k_1 << " does not exist for object " << object_id << ". They should be in order?";
         return;
     }
 
-    const ObjectPoseGT& object_gt_packet = *it;
-
-    if(object_poses_.find(object_id) == object_poses_.end()) {
-        object_poses_[object_id] = gt_packet.X_world_ * object_gt_packet.L_camera_;
-    }
-    else {
-        //propogate
-        const gtsam::Pose3& prev_L_world = object_poses_[object_id];
-        const gtsam::Pose3 curr_L_world = prev_H_world_curr * prev_L_world;
-        object_poses_[object_id] = curr_L_world;
-    }
-
-    per_frame_object_poses[object_id] = object_poses_[object_id];
+    const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
+    gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
+    pose_map.insert2(frame_id, object_pose_k);
 }
 
 } //dyno

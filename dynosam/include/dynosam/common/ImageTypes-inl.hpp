@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,24 +21,31 @@
  *   SOFTWARE.
  */
 
-#include "internal/helpers.hpp"
+#pragma once
 
-#include <gtest/gtest.h>
-#include <glog/logging.h>
+#include "dynosam/common/ImageTypes.hpp"
 
-#include "rclcpp/rclcpp.hpp"
+namespace dyno {
 
+template<typename IMAGETYPE>
+ImageWrapper<IMAGETYPE>::ImageWrapper(const cv::Mat& img) : image(img) {
+    const std::string name = Type::name();
 
-DEFINE_string(test_data_path, getTestDataPath(), "Path to data for unit tests.");
-
-int main(int argc, char** argv)
-{
-  rclcpp::init(argc, argv);
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging(argv[0]);
-  FLAGS_logtostderr = 1;
-  FLAGS_colorlogtostderr = 1;
-  FLAGS_log_prefix = 1;
-  FLAGS_v = 1;
-  return RUN_ALL_TESTS();
+    if(img.empty()) {
+        throw InvalidImageTypeException("Image was empty for type " + name);
+    }
+    //should throw excpetion if problematic
+    Type::validate(img);
 }
+
+template<typename IMAGETYPE>
+ImageWrapper<IMAGETYPE> ImageWrapper<IMAGETYPE>::clone() const {
+    return ImageWrapper<IMAGETYPE>(image.clone());
+}
+
+
+template<typename IMAGETYPE>
+bool ImageWrapper<IMAGETYPE>::exists() const { return !image.empty(); }
+
+
+} //dyno

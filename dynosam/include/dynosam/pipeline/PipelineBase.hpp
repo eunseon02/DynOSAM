@@ -256,6 +256,51 @@ private:
   std::atomic_bool parallel_run_;
 };
 
+template <typename INPUT, typename OUTPUT>
+class FunctionalSIMOPipelineModule : public SIMOPipelineModule<INPUT, OUTPUT> {
+public:
+  using Base = SIMOPipelineModule<INPUT, OUTPUT>;
+  using typename Base::InputConstSharedPtr;
+  using typename Base::OutputConstSharedPtr;
+  using typename Base::OutputQueue;
+  using typename Base::InputQueue;
+
+  using ProcessFunc = std::function<OutputConstSharedPtr(const InputConstSharedPtr&)>;
+
+  /**
+   * @brief
+   *
+   * When constructing ProcessFunc the argument and return types must be explicit
+   * e.g.
+   * using VarPipeline = FunctionalSIMOPipelineModule<int, NullPipelinePayload>;
+   * VarPipeline p("var_module", &input_queue,
+      [](const VarPipeline::InputConstSharedPtr& var_ptr) -> VarPipeline::OutputConstSharedPtr {
+          return std::make_shared<NullPipelinePayload>;
+      });
+
+      when defining the lambda.
+   *
+   * @param module_name
+   * @param input_queue
+   * @param func
+   * @param parallel_run
+   */
+  FunctionalSIMOPipelineModule(
+    const std::string& module_name,
+    InputQueue* input_queue,
+    const ProcessFunc& func,
+    bool parallel_run = true) : Base(module_name, input_queue, parallel_run), func_(func) {}
+
+  OutputConstSharedPtr process(const InputConstSharedPtr& input) override {
+    return func_(input);
+  }
+
+private:
+  ProcessFunc func_;
+
+};
+
+
 }  // namespace dyno
 
 

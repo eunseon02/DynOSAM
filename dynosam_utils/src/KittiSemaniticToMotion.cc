@@ -166,9 +166,9 @@ int main(int argc, char* argv[]) {
                 std::vector<int> moving_labels = findMovingObject(prev_packet_vector, gt_object_pose_gt,0.2);
                 motion_mask = constructMotionMask(instance_mask, moving_labels);
 
-                cv::Mat motion_mask_viz, instance_mask_viz;
-                utils::semanticMaskToRgb(rgb_cur, motion_mask, motion_mask_viz);
-                utils::semanticMaskToRgb(rgb_cur, instance_mask, instance_mask_viz);
+                cv::Mat motion_mask_viz = utils::labelMaskToRGB(motion_mask, background_label, rgb_cur);
+                cv::Mat instance_mask_viz = utils::labelMaskToRGB(instance_mask, background_label, rgb_cur);
+
 
                 // cv::Mat disp = utils::concatenateImagesVertically(instance_mask_viz, motion_mask_viz);
                 // cv::imshow("Masks", disp);

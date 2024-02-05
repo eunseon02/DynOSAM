@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Exceptions.hpp"
+#include "dynosam/utils/Macros.hpp"
 
 #include <fstream>
 #include <iostream>
@@ -76,6 +77,7 @@ public:
 class CsvWriter
 {
     public:
+        DYNO_POINTER_TYPEDEFS(CsvWriter)
 
         CsvWriter(const CsvHeader& header, const std::string& seperator = ",");
         ~CsvWriter();

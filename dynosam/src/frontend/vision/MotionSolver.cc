@@ -90,45 +90,32 @@ MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Landma
 
     opengv::absolute_pose::CentralAbsoluteAdapter adapter(bearing_vectors, points );
 
-    // create a Ransac object
-    AbsolutePoseSacProblem ransac;
-    // create an AbsolutePoseSacProblem
     // (algorithm is selectable: KNEIP, GAO, or EPNP)
     std::shared_ptr<AbsolutePoseProblem>
         absposeproblem_ptr(
         new AbsolutePoseProblem(
         adapter, AbsolutePoseProblem::KNEIP ) );
 
-    // LOG(INFO) << "Solving ransac";
-    // run ransac
-    ransac.sac_model_ = absposeproblem_ptr;
-    //https://github.com/laurentkneip/opengv/issues/121
-    ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-    // ransac.threshold_ = .5*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-    // LOG(INFO) << "Solving ransac";
-    ransac.max_iterations_ = 500;
-    if(!ransac.computeModel(0)) {
-        LOG(WARNING) << "Could not compute ransac mode";
+    gtsam::Pose3 opengv_transform;
+    std::vector<int> ransac_inliers;
+    if(!runRansac<AbsolutePoseProblem>(
+        absposeproblem_ptr,
+        params,
+        opengv_transform,
+        ransac_inliers
+    )) {
         return MotionResult::Unsolvable();
     }
 
-    // LOG(INFO) << "here";
-    // // get the result
-    opengv::transformation_t best_transformation =
-        ransac.model_coefficients_;
-
-    gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
-
-
-    CHECK(ransac.inliers_.size() <= correspondences.size());
-    for(int inlier_idx : ransac.inliers_) {
+    CHECK(ransac_inliers.size() <= correspondences.size());
+    for(int inlier_idx : ransac_inliers) {
         const auto& corres = correspondences.at(inlier_idx);
         inliers.push_back(corres.tracklet_id_);
     }
 
     determineOutlierIds(inliers, tracklets, outliers);
     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-    CHECK_EQ(inliers.size(), ransac.inliers_.size());
+    CHECK_EQ(inliers.size(), ransac_inliers.size());
 
 
     return MotionSolverResult<gtsam::Pose3>(opengv_transform, tracklets, inliers, outliers);
@@ -182,7 +169,6 @@ MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Keypoi
     opengv::relative_pose::CentralRelativeAdapter adapter(ref_bearing_vectors, cur_bearing_vectors );
 
     // create a Ransac object
-    RelativePoseSacProblem ransac;
     std::shared_ptr<RelativePoseProblem>
         relposeproblem_ptr(
         new RelativePoseProblem(
@@ -190,36 +176,28 @@ MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Keypoi
             RelativePoseProblem::NISTER
             )
         );
-    // LOG(INFO) << "Solving ransac";
-    // run ransac
-    ransac.sac_model_ = relposeproblem_ptr;
-    //https://github.com/laurentkneip/opengv/issues/121
-    // ransac.threshold_ = 1.0 - cos(atan(sqrt(2.0)*0.5/800.0));
-    ransac.threshold_ = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-    // LOG(INFO) << "Solving ransac";
-    ransac.max_iterations_ = 500;
-    if(!ransac.computeModel(0)) {
-        LOG(WARNING) << "Could not compute ransac mode";
+
+
+    gtsam::Pose3 opengv_transform;
+    std::vector<int> ransac_inliers;
+    if(!runRansac<RelativePoseProblem>(
+        relposeproblem_ptr,
+        params,
+        opengv_transform,
+        ransac_inliers
+    )) {
         return MotionResult::Unsolvable();
     }
 
-    // LOG(INFO) << "here";
-    // // get the result
-    opengv::transformation_t best_transformation =
-        ransac.model_coefficients_;
-
-    gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
-
-
-    CHECK(ransac.inliers_.size() <= correspondences.size());
-    for(int inlier_idx : ransac.inliers_) {
+    CHECK(ransac_inliers.size() <= correspondences.size());
+    for(int inlier_idx : ransac_inliers) {
         const auto& corres = correspondences.at(inlier_idx);
         inliers.push_back(corres.tracklet_id_);
     }
 
     determineOutlierIds(inliers, tracklets, outliers);
     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-    CHECK_EQ(inliers.size(), ransac.inliers_.size());
+    CHECK_EQ(inliers.size(), ransac_inliers.size());
 
 
     return MotionResult(opengv_transform, tracklets, inliers, outliers);

@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,24 +21,35 @@
  *   SOFTWARE.
  */
 
-#include "internal/helpers.hpp"
+#include "dynosam/common/Exceptions.hpp"
 
-#include <gtest/gtest.h>
-#include <glog/logging.h>
+namespace dyno {
 
-#include "rclcpp/rclcpp.hpp"
+// ExceptionStream::~ExceptionStream() noexcept(false) {
+//     throw_exception_();
+// }
+
+// ExceptionStream::ExceptionStream(const ExceptionStream& other) {
+//     //copy
+//     ss_ << other.ss_.str();
+//     throw_exception_ = other.throw_exception_;
+//     uncaught_count_ = other.uncaught_count_;
+// }
+
+// ExceptionStream& ExceptionStream::operator=(const ExceptionStream& other) {
+//     //we want copy and swap idiom
+//     ss_.clear();
+//     ExceptionStream tmp_other(other);
+//     tmp_other.swap(*this);
+//     return *this;
+// }
 
 
-DEFINE_string(test_data_path, getTestDataPath(), "Path to data for unit tests.");
+// void ExceptionStream::swap(ExceptionStream& other) {
+//     using std::swap;
+//     swap(ss_, other.ss_);
+//     swap(throw_exception_, other.throw_exception_);
+//     swap(uncaught_count_, other.uncaught_count_);
+// }
 
-int main(int argc, char** argv)
-{
-  rclcpp::init(argc, argv);
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging(argv[0]);
-  FLAGS_logtostderr = 1;
-  FLAGS_colorlogtostderr = 1;
-  FLAGS_log_prefix = 1;
-  FLAGS_v = 1;
-  return RUN_ALL_TESTS();
 }

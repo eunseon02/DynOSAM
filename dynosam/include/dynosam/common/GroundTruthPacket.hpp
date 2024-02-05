@@ -126,7 +126,6 @@ public:
 
     ObjectIds getObjectIds() const;
 
-    //TODO: clear up implementation of findAssociatedObject as there are many variations
     /**
      * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
      *
@@ -134,10 +133,12 @@ public:
      *
      * We pass in a pointer to a pointer so we can modify the value of pointer itself
      *
-     * @param label
-     * @param other
-     * @param obj
-     * @param other_obj
+     * @param label ObjectId
+     * @param other GroundTruthInputPacket&
+     * @param obj ObjectPoseGT** Pointer to the object in THIS packet. Pointer is passed in as address so the pointer can be changed.
+     * This points to the obejct contained in this vector.
+     * @param other_obj ObjectPoseGT** Pointer to the object in the OTHER packet. Pointer is passed in as address so the pointer can be changed.
+     * This points to the obejct contained in the OTHER vector.
      * @return true
      * @return false
      */
@@ -149,6 +150,15 @@ public:
      *
      * If the query object is in both this and the other packet, true is returned and the index location obj and other_obj are set.
      * The index is the position in the object_poses_ vector (respectively) where the ObjectPoseGT can be found
+     *
+     * e.g.
+     *
+     * GroundTruthPacket packet, other_packet;
+     *
+     * size_t packet_idx, other_packet_idx;
+     * packet.findAssociatedObject(1u, other_packet, packet_idx, other_packet_idx);
+     *
+     * assert(packet.object_poses_.at(packet_idx).object_id == other_packet.object_poses_.at(other_packet_idx).object_id == 1u)
      *
      * @param label
      * @param other

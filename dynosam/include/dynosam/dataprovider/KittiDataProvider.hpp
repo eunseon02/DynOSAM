@@ -300,9 +300,7 @@ public:
             for (size_t x = 0; x < index_image.get_width(); ++x)
             {
                 const auto& pixel = index_image.get_pixel(x, y);
-                const int red = (int)pixel.red;
-                const int green = (int)pixel.green;
-                const int blue = (int)pixel.blue;
+                const auto red = pixel.red;
 
                 //TODO: HARDCODED!!! https://github.com/google-research/deeplab2/blob/main/g3doc/setup/kitti_step.md
                 if(red == 0) {
@@ -449,13 +447,6 @@ public:
                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
                     ImageWrapper<ImageType::SemanticMask>(instance_mask));
             }
-
-            // cv::Mat mask_viz;
-            // dyno::utils::semanticMaskToRgb(rgb, instance_mask, mask_viz);
-
-            // cv::imshow("Motion", mask_viz);
-
-            // cv::waitKey(1);
 
 
             CHECK(image_container_callback_);
