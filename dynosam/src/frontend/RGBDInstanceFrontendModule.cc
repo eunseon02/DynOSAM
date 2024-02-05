@@ -133,88 +133,28 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     }
-
-    AbsolutePoseCorrespondences correspondences;
-    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
-    //bearing vectors are also not undistorted atm!!
-    //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
-    {
-        utils::TimingStatsCollector track_dynamic_timer("frame_correspondences");
-        frame->getCorrespondences(correspondences, *previous_frame, KeyPointType::STATIC, frame->landmarkWorldKeypointCorrespondance());
+    //update frame->T_world_camera_
+    if(!solveCameraMotion(frame, previous_frame)) {
+        LOG(ERROR) << "Could not solve for camera";
     }
-
-
-
-    AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
-    AbsoluteCameraMotionSolver::MotionResult camera_pose_result;
-    {
-        utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-        camera_pose_result = camera_motion_solver.solve(correspondences);
-    }
-
-    // LOG(INFO) << "Done correspondences";
-
-    if(camera_pose_result.valid()) {
-        frame->T_world_camera_ = camera_pose_result.get();
-    }
-    else {
-        LOG(ERROR) << "Unable to solve camera pose for frame " << frame->frame_id_;
-        frame->T_world_camera_ = gtsam::Pose3::Identity();
-
-    }
-    // LOG(INFO) << "Solved camera pose";
-
-    TrackletIds tracklets = frame->static_features_.collectTracklets();
-    CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
-
-    frame->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
 
     {
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
         vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
 
-    AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame->T_world_camera_);
 
     MotionEstimateMap motion_estimates;
     for(const auto& [object_id, observations] : frame->object_observations_) {
-        utils::TimingStatsCollector object_motion_timer("solve_object_motion");
-        AbsolutePoseCorrespondences dynamic_correspondences;
 
-        // //get the corresponding feature pairs
-        bool result = frame->getDynamicCorrespondences(
-            dynamic_correspondences,
-            *previous_frame,
-            object_id,
-            frame->landmarkWorldKeypointCorrespondance());
-
-        if(!result) {
-            continue;
-        }
-
-
-        VLOG(20) << "Solving motion with " << dynamic_correspondences.size() << " correspondences for object instance " << object_id;
-
-        const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
-            dynamic_correspondences);
-
-        if(object_motion_result.valid()) {
-            frame->dynamic_features_.markOutliers(object_motion_result.outliers_);
-
-            ReferenceFrameEstimate<Motion3> estimate(object_motion_result, ReferenceFrame::WORLD);
-            motion_estimates.insert({object_id, estimate});
-
-            if(!input->optional_gt_.has_value()) {
-                LOG(WARNING) << "Cannot update object pose because no gt!";
-                continue;
-            }
-
-            const GroundTruthInputPacket gt_packet = input->optional_gt_.value();
-            CHECK_EQ(gt_packet.frame_id_, frame->frame_id_);
-            propogateObjectPoses(object_motion_result.get(), object_id, frame->frame_id_);
+        if(!solveObject3d2dMotion(frame, previous_frame, object_id, motion_estimates)) {
+            VLOG(5) << "Could not solve motion for object " << object_id <<
+                " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
         }
     }
 
+    //update the object_poses trajectory map which will be send to the viz
+    propogateObjectPoses(motion_estimates, frame->frame_id_);
 
     if(logger_) {
         logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_, previous_frame->T_world_camera_);
@@ -227,6 +167,69 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
     auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
     return {State::Nominal, output};
+}
+
+
+bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1) {
+    AbsolutePoseCorrespondences correspondences;
+    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
+    //bearing vectors are also not undistorted atm!!
+    //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
+    {
+        utils::TimingStatsCollector("frame_correspondences");
+        frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->landmarkWorldKeypointCorrespondance());
+    }
+
+    {
+        AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
+
+
+        utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
+        AbsoluteCameraMotionSolver::MotionResult camera_pose_result = camera_motion_solver.solve(correspondences);
+
+        if(camera_pose_result) {
+            frame_k->T_world_camera_ = camera_pose_result.get();
+            TrackletIds tracklets = frame_k->static_features_.collectTracklets();
+            CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
+
+            frame_k->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
+            return true;
+        }
+        else {
+            frame_k->T_world_camera_ = gtsam::Pose3::Identity();
+            return false;
+        }
+    }
+}
+
+bool RGBDInstanceFrontendModule::solveObject3d2dMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
+    utils::TimingStatsCollector object_motion_timer("solve_object_motion");
+    AbsolutePoseCorrespondences dynamic_correspondences;
+
+    AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame_k->T_world_camera_);
+
+    // get the corresponding feature pairs
+    bool result = frame_k->getDynamicCorrespondences(
+        dynamic_correspondences,
+        *frame_k_1,
+        object_id,
+        frame_k->landmarkWorldKeypointCorrespondance());
+
+    if(!result) {
+        return false;
+    }
+
+    const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
+            dynamic_correspondences);
+
+    if(object_motion_result.valid()) {
+        frame_k->dynamic_features_.markOutliers(object_motion_result.outliers_);
+
+        ReferenceFrameEstimate<Motion3> estimate(object_motion_result, ReferenceFrame::WORLD);
+        motion_estimates.insert({object_id, estimate});
+        return true;
+    }
+    return false;
 }
 
 
@@ -303,7 +306,13 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 }
 
 
-void RGBDInstanceFrontendModule::propogateObjectPoses(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
+void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id) {
+    for(const auto& [object_id, motion_estimate] : motion_estimates) {
+        propogateObjectPose(motion_estimate, object_id, frame_id);
+    }
+}
+
+void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
     //start from previous frame -> if we have a motion we must have observations in k-1
     const FrameId frame_id_k_1 = frame_id - 1;
     if(!object_poses_.exists(object_id)) {
