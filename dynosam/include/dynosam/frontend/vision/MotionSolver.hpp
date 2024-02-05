@@ -285,38 +285,12 @@ public:
 
 
 
-
-
-// class MotionSolver {
-
-// public:
-//     MotionSolver(const FrontendParams& params, const CameraParams& camera_params);
-
-//     template<typename RefType, typename CurrType>
-//     MotionResult solveCameraPose(const GenericCorrespondences<RefType, CurrType>& correspondences) const {
-//         return motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
-//     }
-
-//     template<typename RefType, typename CurrType>
-//     MotionResult solveObjectMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const gtsam::Pose3& T_world_camera) const {
-//         const MotionResult result = motion_solver_tools::solveMotion<RefType, CurrType>(correspondences, params_, camera_params_);
-//         if(result.valid()) {
-//             const gtsam::Pose3 G_w = result.get().inverse();
-//             const gtsam::Pose3 H_w = T_world_camera * G_w;
-//             return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
-//         }
-
-//         //if not valid, return motion result as is
-//         return result;
-//     }
+class MotionSolver {
 
 
 
+}
 
-// protected:
-//     const FrontendParams params_;
-//     const CameraParams camera_params_;
 
-// };
 
 } //dyno

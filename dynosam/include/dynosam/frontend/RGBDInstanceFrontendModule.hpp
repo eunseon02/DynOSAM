@@ -41,7 +41,6 @@ public:
 
 private:
     Camera::Ptr camera_;
-    // MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
     FrontendLogger::UniquePtr logger_;
 

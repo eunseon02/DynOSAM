@@ -34,6 +34,9 @@
 
 namespace dyno {
 
+//forward from Tracker
+struct FeatureTrackerInfo;
+
 struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
 
 public:
@@ -81,6 +84,7 @@ public:
 
 
 //write to file on destructor
+//TODO: currently FrontendLogger really is RGBDLogger?
 class FrontendLogger {
 public:
     DYNO_POINTER_TYPEDEFS(FrontendLogger)
@@ -90,7 +94,7 @@ public:
 
     void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
     void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera_k, std::optional<const gtsam::Pose3> T_world_camera_k_1 = {});
-    void logFrontendStats();
+    // void logFrontendStats(const FeatureTrackerInfo& tracking_info);
 
 private:
     CsvWriter::UniquePtr object_motion_csv_;

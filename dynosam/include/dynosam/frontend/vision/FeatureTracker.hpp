@@ -34,6 +34,18 @@
 
 namespace dyno {
 
+struct FeatureTrackerInfo {
+    FrameId frame_id;
+
+    //static track info
+    size_t static_track_optical_flow;
+    size_t static_track_detections;
+
+    // num features tracked per dynamic object
+    gtsam::FastMap<ObjectId, size_t> dynamic_track;
+};
+
+
 class FeatureTracker
 {
 public:
@@ -46,7 +58,7 @@ public:
     virtual ~FeatureTracker() {}
 
     //note: MOTION MASK!!
-    Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks);
+    Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images);
 
     cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const;
 
@@ -68,18 +80,19 @@ public:
      */
     inline Frame::Ptr getCurrentFrame() { return previous_frame_; }
 
+    inline const FeatureTrackerInfo& getTrackerInfo() { return info_; }
+
 
 protected:
 
     void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);
-    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features);
+    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features, gtsam::FastMap<ObjectId, size_t>& n_dynamic_track);
 
     void propogateMask(TrackingInputImages& tracking_images);
 
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
-    // bool posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const;
 
     Feature::Ptr constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,
                                       FrameId frame_id) const;
@@ -93,6 +106,8 @@ private:
     Frame::Ptr previous_frame_{ nullptr }; //! The frame that will be used as the previous frame next time track is called. After track, this is actually the frame that track() returns
     Frame::Ptr previous_tracked_frame_{nullptr}; //! The frame that has just beed used to track on a new frame is created.
     ORBextractor::UniquePtr feature_detector_{nullptr};
+
+    FeatureTrackerInfo info_;
 
     size_t tracklet_count = 0;
     bool initial_computation_{ true };

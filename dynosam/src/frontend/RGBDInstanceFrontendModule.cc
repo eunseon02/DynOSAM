@@ -80,8 +80,7 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
     }
 
 
-    size_t n_optical_flow, n_new_tracks;
-    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
@@ -114,11 +113,10 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
-    size_t n_optical_flow, n_new_tracks;
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("tracking_timer");
-        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
     }
     CHECK(frame);

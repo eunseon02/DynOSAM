@@ -50,8 +50,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::boostrapSpin(FrontendInpu
     ImageContainer::Ptr image_container = input->image_container_;
 
     TrackingInputImages tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
-    size_t n_optical_flow, n_new_tracks;
-    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
     CHECK(image_container->hasDepth()) << "Needs depth for initial testing in backend";
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
@@ -68,8 +67,7 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 
     TrackingInputImages tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     //TODO: if we have a motion mask we should mark all the objects "as_moving" and remove this from the dynamic tracking, we should not do both
-    size_t n_optical_flow, n_new_tracks;
-    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images, n_optical_flow, n_new_tracks);
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
     CHECK(image_container->hasDepth()) << "Needs depth for initial testing in backend";
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();

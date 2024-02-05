@@ -59,6 +59,9 @@ public:
     FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
     virtual ~FrontendModule() = default;
 
+
+
+
 protected:
     /**
      * @brief Defines the result of checking the image container which is a done polymorphically per module (as
