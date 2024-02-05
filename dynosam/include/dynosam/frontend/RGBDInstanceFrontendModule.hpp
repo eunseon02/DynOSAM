@@ -41,28 +41,47 @@ public:
 
 private:
     Camera::Ptr camera_;
-    MotionSolver motion_solver_;
     FeatureTracker::UniquePtr tracker_;
-
-    Frame::Ptr previous_frame_;
-
-    std::map<ObjectId, gtsam::Pose3> object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
+    FrontendLogger::UniquePtr logger_;
 
 private:
 
-    bool validateImageContainer(const ImageContainer::Ptr& image_container) const override;
+    ImageValidationResult validateImageContainer(const ImageContainer::Ptr& image_container) const override;
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
+
+    /**
+     * @brief Solves PnP between frame_k-1 and frame_k using the tracked correspondances
+     * to estimate the frame of the current camera
+     *
+     * the pose of the Frame::Ptr (frame_k) is updated, and the features marked as outliers
+     * by PnP are set as outliers.
+     *
+     * @param frame_k
+     * @param frame_k_1
+     * @return true
+     * @return false
+     */
+    bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
+
+
+    bool solveObject3d2dMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1, ObjectId object_id, MotionEstimateMap& motion_estimates);
 
     RGBDInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,
         const MotionEstimateMap& estimated_motions,
+        const gtsam::Pose3& T_world_camera,
         const cv::Mat& debug_image = cv::Mat(),
-        const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses = {},
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
 
+    //updates the object_poses_ map which is then sent to the viz via the output
+    //this updates the estimated trajectory of the object from a starting pont using the
+    //object motion to propofate the object pose
+    void propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id);
+    //updates object poses
+    void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id);
 
-    void logAndPropogateObjectPoses(std::map<ObjectId, gtsam::Pose3>& per_frame_object_poses, const GroundTruthInputPacket& gt_packet, const gtsam::Pose3& prev_H_world_curr, ObjectId object_id);
+
 
 
 };

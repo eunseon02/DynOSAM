@@ -31,18 +31,28 @@
 
 #include <glog/logging.h>
 
+DEFINE_uint32(starting_frame, -1, "Starting frame of the dataset. If -1 use the default which is the starting frame=0");
+DEFINE_uint32(ending_frame, -1, "Ending frame of the dataset. If -1 use the default which is the ending_frame=dataset_size");
+
 namespace dyno {
 
 DataProvider::UniquePtr DataProviderFactory::Create(const std::string& dataset_folder_path, const std::string& params_folder_path, DatasetType dataset_type) {
     if(dataset_type == DatasetType::KITTI) {
         LOG(INFO) << "Using KITTI dataset at path: " << dataset_folder_path;
         KittiDataLoader::Params params = KittiDataLoader::Params::fromYaml(params_folder_path);
-        return std::make_unique<KittiDataLoader>(dataset_folder_path, params);
+        auto loader =  std::make_unique<KittiDataLoader>(dataset_folder_path, params);
+
+        loader->setStartingFrame(FLAGS_starting_frame);
+        loader->setEndingFrame(FLAGS_ending_frame);
+        return loader;
     }
     else if(dataset_type == DatasetType::VIRTUAL_KITTI) {
         LOG(INFO) << "Using Virtual KITTI dataset at path: " << dataset_folder_path;
         VirtualKittiDataLoader::Params params = VirtualKittiDataLoader::Params::fromYaml(params_folder_path);
-        return std::make_unique<VirtualKittiDataLoader>(dataset_folder_path, params);
+        auto loader = std::make_unique<VirtualKittiDataLoader>(dataset_folder_path, params);
+        loader->setStartingFrame(FLAGS_starting_frame);
+        loader->setEndingFrame(FLAGS_ending_frame);
+        return loader;
     }
     else {
         throw std::runtime_error("Unable to construct Dataprovider - unknown dataset type: " + static_cast<int>(dataset_type));

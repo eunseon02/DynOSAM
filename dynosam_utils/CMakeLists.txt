@@ -18,6 +18,8 @@ find_package(std_msgs REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(dynosam REQUIRED)
+find_package(GTSAM REQUIRED)
+find_package(TBB REQUIRED)
 
 # setup targets
 include_directories(
@@ -78,6 +80,10 @@ include_directories(include)
 
 #####exec test#########
 add_executable(kitti_semantic_to_motion src/KittiSemaniticToMotion.cc)
+
+target_link_libraries(kitti_semantic_to_motion
+tbb
+)
 
 ament_target_dependencies(kitti_semantic_to_motion
   rclcpp

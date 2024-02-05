@@ -24,69 +24,87 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-#include "dynosam/pipeline/PipelineBase.hpp"
+#include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
-
+#include "dynosam/common/ModulePacketVariants.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+// #include "dynosam/common"
 
 #include <type_traits>
 
 namespace dyno {
 
+
+struct InvalidImageContainerException : public DynosamException {
+    InvalidImageContainerException(const ImageContainer& container, const std::string& what)
+    : DynosamException("Image container with config: " + container.toString() + "\n was invalid - " + what) {}
+};
+
+
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
  *
  */
-class FrontendModule {
+
+class FrontendModule : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>  {
 
 public:
     DYNO_POINTER_TYPEDEFS(FrontendModule)
 
-    enum class State {
-        Boostrap = 0u, //! Initalize Frontend
-        Nominal = 1u //! Run Frontend
-    };
-
-    using SpinReturn = std::pair<State, FrontendOutputPacketBase::ConstPtr>;
+    using Base = ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>;
+    using Base::SpinReturn;
 
     FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
-    ~FrontendModule() = default;
+    virtual ~FrontendModule() = default;
 
-    FrontendOutputPacketBase::ConstPtr spinOnce(FrontendInputPacketBase::ConstPtr input);
+
+
 
 protected:
-    virtual bool validateImageContainer(const ImageContainer::Ptr& image_container) const = 0;
+    /**
+     * @brief Defines the result of checking the image container which is a done polymorphically per module (as
+     * each module has its own requirements)
+     *
+     * The requirement string indicates what should be true about the ImageContainer for the function to return true;
+     *
+     */
+    struct ImageValidationResult {
+        const bool valid_;
+        const std::string requirement_; //printed if result is not valid. Set by the function call
 
-    virtual SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) = 0;
-    virtual SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) = 0;
+        ImageValidationResult(bool valid, const std::string& requirement) :
+            valid_(valid), requirement_(requirement) {}
+
+    };
+
+protected:
+
+    void validateInput(const FrontendInputPacketBase::ConstPtr& input) const override;
+
+    /**
+     * @brief Checks that the incoming ImageContainer meeets the minimum requirement for the derived module.
+     *
+     * This is specifically to check that the right image types are contained with the container.
+     * If the result is false, InvalidImageContainerException is thrown with the requirements specified by the
+     * returned ImageValidationResult.
+     *
+     * @param image_container const ImageContainer::Ptr&
+     * @return ImageValidationResult
+     */
+    virtual ImageValidationResult validateImageContainer(const ImageContainer::Ptr& image_container) const = 0;
 
 protected:
     const FrontendParams base_params_;
     ImageDisplayQueue* display_queue_;
 
-private:
-    std::atomic<State> frontend_state_;
+    GroundTruthPacketMap gt_packet_map_;
+    ObjectPoseMap object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
+    gtsam::Pose3Vector camera_poses_; //! Keeps track of current camera trajectory. Really just for (viz) and drawn everytime
 
 };
 
-
-// class FrontendModuleTyped
-
-// template<typename ExpectedFrontendInputPacket, typename ExpectedInputImagePacket>
-// struct FrontendModuleTypeChekcer {
-
-//     static_assert(std::is_base_of_v<FrontendInputPacketBase,ExpectedFrontendInputPacket> == true);
-//     static_assert(std::is_base_of_v<InputImagePacketBase,ExpectedInputImagePacket> == true);
-
-//     //! To match the const types from the pipeline which use constptr
-//     using ExpectedFrontendInputPacketConstPtr = std::shared_ptr<const ExpectedFrontendInputPacket>;
-//     using ExpectedInputImagePacketConstPtr = std::shared_ptr<const ExpectedInputImagePacket>;
-
-
-
-// };
 
 
 

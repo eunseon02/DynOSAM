@@ -58,6 +58,7 @@ public:
     static ObjectId global_object_id;
 
     //semantic instance label to object observation (by the actual observations in the image)
+    //set in constructor
     std::map<ObjectId, DynamicObjectObservation> object_observations_;
 
     Frame(
@@ -82,6 +83,7 @@ public:
      */
     inline size_t numStaticUsableFeatures() {
         auto iter = usableStaticFeaturesBegin();
+        //we have defined the std::distance operator for this iterator type using std::iterator_traits.
         return static_cast<size_t>(std::distance(iter.begin(), iter.end()));
     }
 
@@ -172,7 +174,25 @@ public:
      */
     Camera::CameraImpl getFrameCamera() const;
 
+    inline ObjectIds getObjectIds() const {
+        ObjectIds object_ids;
+        for(const auto& kv : object_observations_) {
+            object_ids.push_back(kv.first);
+        }
+        return object_ids;
+    }
+
     void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
+
+    /**
+     * @brief From the detected list of objects (in Frame::object_observations_) draw the object masks
+     * as labelled bounding boxes.
+     *
+     * The function uses the MotionMask and RGBMono image types contained witin Frame::tracking_images_;
+     *
+     * @return cv::Mat RGB image with drawn bounding boxes and labels
+     */
+    cv::Mat drawDetectedObjectBoxes() const;
 
 
     //TODO: this really needs testing
@@ -245,6 +265,17 @@ public:
      */
     ConstructCorrespondanceFunc<Landmark, Keypoint> landmarkWorldKeypointCorrespondance() const;
 
+
+    /**
+     * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a
+     * TrackletCorrespondance where both types are keypoints (in the ref and cur frame respectively).
+     *
+     *  This is useful for 2D-2D correspondence types.
+     *
+     * @return ConstructCorrespondanceFunc<Keypoint, Keypoint>
+     */
+    ConstructCorrespondanceFunc<Keypoint, Keypoint> imageKeypointCorrespondance() const;
+
     /**
      * @brief Helper function that creates a ConstructCorrespondanceFunc which operates to return a TrackletCorrespondance
      * where the ref type is a Landmark in the world frame and the curr type is a normalized bearing vector constructed from the
@@ -289,6 +320,7 @@ private:
     static void updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth);
 
     //based on the current set of dynamic features
+    // populates object_observations_
     void constructDynamicObservations();
 
     Landmark getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature, const gtsam::Pose3& X_world) const;

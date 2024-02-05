@@ -24,9 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-
-//eh gross that we need this here - both should be in vision
-// #include "dynosam/frontend/vision/Vision-Definitions.hpp"
+#include <opencv4/opencv2/core.hpp>
 
 
 namespace dyno {
@@ -38,28 +36,20 @@ struct DynamicObjectObservation {
     TrackletIds object_features_; //! Tracklet id's of object features within the frame. Does not indicate usability
     ObjectId tracking_label_; //tracking id (not necessarily instance label???), -1 if not tracked yet
     ObjectId instance_label_; //this shoudl really be constant and part of the constructor as we get this straight from the input image and will never change
+    cv::Rect bounding_box_{}; //reconstructed from the object mask and not directly from the object features, although all features should lie in this cv::Rect
     bool marked_as_moving_{false};
 
     DynamicObjectObservation() : object_features_(), tracking_label_(-1) {}
     DynamicObjectObservation(const TrackletIds& object_features, ObjectId tracking_label) : object_features_(object_features), tracking_label_(tracking_label) {}
 
+    // std::pair<cv::Scalar, std::string> getColourLabel(bool use_opencv_convention = false) const;
+
+    // std:string getLabel() const;
+
 };
 
 using DynamicObjectObservations = std::vector<DynamicObjectObservation>;
 
-
-// class TemporalDynamic3DObject {
-
-// public:
-//     TemporalDynamic3DObject() {}
-
-//     TemporalDynamic3DObject(ObjectId object_id, const GenericCorrespondences<Landmark, Landmark>& world_correspondences);
-
-// private:
-//     ObjectId object_id_;
-//     GenericCorrespondences<Landmark, Landmark>& world_correspondences_;
-
-// };
 
 
 

@@ -48,10 +48,32 @@ cv::Mat concatenateImagesVertically(const cv::Mat& top_img, const cv::Mat& botto
 
 void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
 
-void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz);
+
+/**
+ * @brief Given an image that operates like a mask (ie. is a single channel image where each pixel value correspondes to a label of some type)
+ * draws the mask over an input image.
+ *
+ * The value at each pixel (labels) are treated like object labels which are used to generate a unique colour for the mask.
+ * The background label is used to indicate which pixel value should be ignored - this could be the background or simply unknown pixel values
+ *
+ * @param mask
+ * @param background_label
+ * @param rgb
+ * @return cv::Mat
+ */
+cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label, const cv::Mat& rgb);
+
+/**
+ * @brief Same as labelMaskToRGB(mask, background label) but instead draws the mask over a black image so only the mask values are shown
+ *
+ * @param mask
+ * @param background_label
+ * @return cv::Mat
+ */
+cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label);
 
 
-void drawLabel(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
+void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
 
 
 /**

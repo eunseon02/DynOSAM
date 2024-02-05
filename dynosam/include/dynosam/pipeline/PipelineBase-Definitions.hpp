@@ -29,15 +29,39 @@
 
 namespace dyno {
 
-enum class PipelineReturnCode {
-    SUCCESS,
-    IS_SHUTDOWN,
-    OUTPUT_PUSH_FAILURE,
-    PROCESSING_FAILURE,
-    GET_PACKET_FAILURE
+
+struct PipelineReturnStatus {
+    enum Code {
+        SUCCESS,
+        IS_SHUTDOWN,
+        OUTPUT_PUSH_FAILURE,
+        PROCESSING_FAILURE,
+        GET_PACKET_FAILURE
+    };
+
+    Code code_;
+
+    PipelineReturnStatus() {}
+    PipelineReturnStatus(Code code) : code_(code) {}
+    explicit PipelineReturnStatus(int val) : code_(static_cast<Code>(val)) {}
+
+    PipelineReturnStatus& operator=(Code code) {
+        this->code_ = code;
+        return *this;
+    }
+
+    operator Code() const { return code_; }
+    operator bool() const { return code_ == Code::SUCCESS; }
+
+    //TODO:
+    // operator std::string() const;
+
+    // friend std::ostream &operator<<(std::ostream &os, const PipelineReturnStatus& status);
+
 };
 
-using OnPipelineFailureCallback = std::function<void(PipelineReturnCode)>;
+
+using OnPipelineFailureCallback = std::function<void(PipelineReturnStatus)>;
 
 
 }

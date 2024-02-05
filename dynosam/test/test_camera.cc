@@ -23,12 +23,15 @@
 
 #include "internal/helpers.hpp"
 
+
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/utils/Numerical.hpp"
+
+#include <gtsam/base/numericalDerivative.h>
 
 using namespace dyno;
 
@@ -68,14 +71,7 @@ TEST(Camera, backProjectSingleSimple)
 {
   // Easy test first, back-project keypoint at the center of the image with
   // a given depth.
-  CameraParams::IntrinsicsCoeffs intrinsics(4);
-  CameraParams::DistortionCoeffs distortion(4);
-  intrinsics.at(0) = 721.5377;  // fx
-  intrinsics.at(1) = 721.5377;  // fy
-  intrinsics.at(2) = 609.5593;  // u0
-  intrinsics.at(3) = 172.8540;  // v0
-  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
-
+  CameraParams camera_params = dyno_testing::makeDefaultCameraParams();
   Camera camera(camera_params);
 
   Keypoint kpt(camera_params.cu(), camera_params.cv());
@@ -93,14 +89,7 @@ TEST(Camera, backProjectMultipleSimple)
 {
   // Easy test first, back-project keypoints at the center of the image with
   // different depths.
-  CameraParams::IntrinsicsCoeffs intrinsics(4);
-  CameraParams::DistortionCoeffs distortion(4);
-  intrinsics.at(0) = 721.5377;  // fx
-  intrinsics.at(1) = 721.5377;  // fy
-  intrinsics.at(2) = 609.5593;  // u0
-  intrinsics.at(3) = 172.8540;  // v0
-  CameraParams camera_params(intrinsics, distortion, cv::Size(640, 480), "radtan");
-
+  CameraParams camera_params = dyno_testing::makeDefaultCameraParams();
   Camera camera(camera_params);
 
   Keypoint kpt(camera_params.cu(), camera_params.cv());
@@ -147,4 +136,66 @@ TEST(Camera, backProjectSingleTopLeft)
   EXPECT_NEAR(expected_lmk.x(), actual_lmk.x(), 0.0001);
   EXPECT_NEAR(expected_lmk.y(), actual_lmk.y(), 0.0001);
   EXPECT_NEAR(expected_lmk.z(), actual_lmk.z(), 0.0001);
+}
+
+TEST(Camera, backProjectToZ)
+{
+  CameraParams camera_params = dyno_testing::makeDefaultCameraParams();
+  Camera camera(camera_params);
+
+  Keypoint kpt(camera_params.cu()/2.0, camera_params.cv()/2.0);
+  double depth = 2.0;
+
+  Landmark actual_lmk;
+  camera.backProject(kpt, depth, &actual_lmk);
+
+  const double Z = actual_lmk(2);
+  Landmark z_projected_lmk;
+  camera.backProjectFromZ(kpt, Z, &z_projected_lmk);
+
+  //check that the keypoint is the same as the actual one (we just change the Z)
+  //but the "measurement" shold remain the same
+  Keypoint calculated_kp;
+  camera.project(z_projected_lmk, &calculated_kp);
+  EXPECT_TRUE(gtsam::assert_equal(kpt, calculated_kp));
+
+
+}
+
+
+TEST(Camera, backProjectToZJacobian)
+{
+  CameraParams camera_params = dyno_testing::makeDefaultCameraParams();
+  Camera camera(camera_params);
+
+  Keypoint kpt(camera_params.cu()/2.0, camera_params.cv()/2.0);
+  double depth = 2.0;
+
+  Landmark actual_lmk;
+  camera.backProject(kpt, depth, &actual_lmk);
+  const double Z = actual_lmk(2);
+
+
+  gtsam::Pose3 pose(gtsam::Rot3::Rodrigues(0,2,3),gtsam::Point3(1,2,0));
+
+
+  auto numerical_deriv_func =[&camera](const gtsam::Vector3& uvz, const gtsam::Pose3& X_world) -> gtsam::Vector3 {
+    Landmark lmk;
+    camera.backProjectFromZ(gtsam::Point2(uvz(0), uvz(1)), uvz(2), &lmk, X_world);
+    return lmk;
+  };
+
+
+  //construct 3x1 vector of input to satisfy the matrix structure of the problem we want to sove
+  gtsam::Vector3 input(kpt(0), kpt(1), Z);
+  //numericalDerivative21 -> 2 function arguments, derivative w.r.t uvz
+  gtsam::Matrix33 numerical_J = gtsam::numericalDerivative21<gtsam::Vector3, gtsam::Vector3, const gtsam::Pose3&>(
+    numerical_deriv_func, input, pose);
+
+  Landmark lmk; //unused
+  gtsam::Matrix33 analytical_J;
+  camera.backProjectFromZ(kpt, Z, &lmk, pose, analytical_J);
+
+  EXPECT_TRUE(gtsam::assert_equal(numerical_J, analytical_J));
+
 }

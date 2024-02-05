@@ -22,25 +22,26 @@
  */
 
 
+#include "dynosam_ros/PipelineRos.hpp"
+#include "dynosam_ros/Utils.hpp"
+
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executor.hpp"
 
-#include "dynosam_ros/PipelineRos.hpp"
 #include <glog/logging.h>
+#include <gflags/gflags.h>
 
+DEFINE_int32(test_flag, 10, "A test flag");
 
 
 int main(int argc, char* argv[]) {
-
-    auto args = rclcpp::init_and_remove_ros_arguments(argc, argv);
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
+    auto non_ros_args = dyno::initRosAndLogging(argc, argv);
 
     rclcpp::NodeOptions options;
-    options.arguments(args);
+    options.arguments(non_ros_args);
     options.use_intra_process_comms(true);
+
+    // LOG(INFO) << FLAGS_test_flag;
 
     rclcpp::executors::SingleThreadedExecutor exec;
     auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();

@@ -24,7 +24,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
-
+#include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 namespace dyno {
@@ -149,6 +149,26 @@ void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max
 }
 
 
+cv::Mat Frame::drawDetectedObjectBoxes() const {
+    cv::Mat rgb_objects;
+    tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+
+    for(auto& object_observation_pair : object_observations_) {
+        const ObjectId object_id = object_observation_pair.first;
+        const cv::Rect& bb = object_observation_pair.second.bounding_box_;
+
+        if(bb.empty()) { continue; }
+
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+        const std::string label = "Object: " + std::to_string(object_id);
+        utils::drawLabeledBoundingBox(rgb_objects, label, colour, bb);
+
+    }
+
+    return rgb_objects;
+}
+
+
 
 bool Frame::getCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, KeyPointType kp_type) const {
     if(kp_type == KeyPointType::STATIC) {
@@ -173,6 +193,16 @@ Frame::ConstructCorrespondanceFunc<Landmark, Keypoint> Frame::landmarkWorldKeypo
     return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 }
 
+
+Frame::ConstructCorrespondanceFunc<Keypoint, Keypoint> Frame::imageKeypointCorrespondance() const {
+    auto func = [&](const Frame&, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        return TrackletCorrespondance(previous_feature->tracklet_id_, previous_feature->keypoint_, current_feature->keypoint_);
+    };
+
+    return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+
+}
+
 Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorldProjectedBearingCorrespondance() const {
     auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
         if(!previous_feature->hasDepth()) {
@@ -190,29 +220,6 @@ Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorl
 }
 
 
-
-// bool Frame::getDynamicCorrespondences(AbsolutePoseCorrespondences& correspondences, const Frame& previous_frame, ObjectId object_id) const {
-//     FeaturePairs feature_correspondences;
-//     const bool result = getDynamicCorrespondences(feature_correspondences, previous_frame, object_id);
-//     if(!result) {
-//         return false;
-//     }
-
-//     //unncessary but just for sanity check
-//     for(const auto& feature_pairs : feature_correspondences) {
-//         CHECK_EQ(feature_pairs.first->instance_label_, object_id);
-//         CHECK(feature_pairs.first->usable());
-
-//         CHECK_EQ(feature_pairs.second->instance_label_, object_id);
-//         CHECK(feature_pairs.second->usable());
-
-//         CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
-//     }
-
-//     convertCorrespondencesWorld(correspondences, feature_correspondences, previous_frame);
-//     return result;
-// }
-
 bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const {
 
     if(object_observations_.find(object_id) == object_observations_.end()) {
@@ -221,7 +228,7 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
     }
 
     const DynamicObjectObservation& observation = object_observations_.at(object_id);
-    CHECK(observation.marked_as_moving_);
+    // TODO: need to put back on - if we have motion mask, we should just mark all objects as moving CHECK(observation.marked_as_moving_);
     const TrackletIds& tracklets = observation.object_features_;
 
     FeatureContainer feature_container;
@@ -248,7 +255,7 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
         feature_container.beginUsable()
     );
 
-    LOG(INFO) << "Found " << correspondences.size() << " correspondences for object instance " << object_id << " " << (correspondences.size() > 0u);
+    // LOG(INFO) << "Found " << correspondences.size() << " correspondences for object instance " << object_id << " " << (correspondences.size() > 0u);
 
     return correspondences.size() > 0u;
 }
@@ -275,15 +282,15 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
 
 
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
-    const cv::Mat& depth_mat = depth;
     auto iter = container.beginUsable();
 
     for(Feature::Ptr feature : iter) {
         CHECK(feature->usable());
         // const Feature::Ptr& feature = *iter;
-        const int x = functional_keypoint::u(feature->keypoint_);
-        const int y = functional_keypoint::v(feature->keypoint_);
-        const Depth d = depth_mat.at<Depth>(y, x);
+        // const int x = functional_keypoint::u(feature->keypoint_);
+        // const int y = functional_keypoint::v(feature->keypoint_);
+        // const Depth d = depth_mat.at<Depth>(y, x);
+        const Depth d = functional_keypoint::at<Depth>(feature->keypoint_, depth);
 
         if(d > max_depth || d <= 0) {
             feature->markInvalid();
@@ -302,10 +309,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 
 void Frame::constructDynamicObservations() {
-    // CHECK_GT(dynamic_features_.size(), 0u);
     object_observations_.clear();
-    // utils::TimingStatsCollector construct_obs_timer("construct_dynamic_obs_timer");
-
     const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
 
     auto inlier_iterator = dynamic_features_.beginUsable();
@@ -326,6 +330,45 @@ void Frame::constructDynamicObservations() {
 
         object_observations_[instance_label].object_features_.push_back(dynamic_feature->tracklet_id_);
     }
+
+    // now construct image masks from tracking mask
+    // For each tracked object, find its id in the mask
+    // and draw it.
+    // We apply some eroding/dilation on it to make the resulting submask smoother
+    // so that we can more easily fit an rectangle to it
+    const cv::Mat& mask = tracking_images_.get<ImageType::MotionMask>();
+    for(auto& object_observation_pair : object_observations_) {
+        const ObjectId object_id = object_observation_pair.first;
+        DynamicObjectObservation& obs = object_observation_pair.second;
+
+        cv::Mat obj_mask = (mask == object_id);
+        cv::Mat dilated_obj_mask;
+        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+                                                            cv::Size(1, 11)); // a rectangle of 1*5
+        cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+
+        std::vector<std::vector<cv::Point>> contours;
+        std::vector<cv::Vec4i> hierarchy;
+        cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+        if(contours.empty()) {
+            obs.bounding_box_ = cv::Rect();
+        }
+        else if(contours.size() == 1u) {
+            obs.bounding_box_ = cv::boundingRect(contours.at(0));
+        }
+        else {
+            std::vector<cv::Rect> rectangles;
+            for(auto it : contours) {
+                rectangles.push_back(cv::boundingRect(it));
+            }
+            cv::Rect merged_rect = rectangles[0];
+            for(const auto& r : rectangles) { merged_rect |= r; }
+            obs.bounding_box_ = merged_rect;
+        }
+    }
+
+
 }
 
 void Frame::moveObjectToStatic(ObjectId instance_label) {

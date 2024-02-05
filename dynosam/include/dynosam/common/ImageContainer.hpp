@@ -23,7 +23,8 @@
 
 #pragma once
 
-#include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/common/ImageTypes.hpp"
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/Tuple.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
@@ -36,90 +37,10 @@
 
 namespace dyno {
 
-//thrown when an image type validation step fails
-class InvalidImageTypeException : public std::runtime_error {
+
+class ImageContainerConstructionException : public DynosamException {
 public:
-
-    InvalidImageTypeException(const std::string& reason) :
-        std::runtime_error("Invalid image type exception: " + reason) {}
-
-};
-
-class InvalidImageContainerException : public std::runtime_error {
-public:
-    InvalidImageContainerException(const std::string& what) : std::runtime_error(what) {}
-};
-
-
-struct ImageType {
-
-    struct RGBMono {
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "RGBMono"; }
-    };
-
-    //really should be disparity?
-    struct Depth {
-        constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "Depth"; }
-    };
-    struct OpticalFlow {
-        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "OpticalFlow"; }
-    };
-    struct SemanticMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for SemanticMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "SemanticMask"; }
-    };
-    struct MotionMask {
-        constexpr static int OpenCVType = CV_32SC1; //! Expected opencv image type for MotionMask image type
-        static void validate(const cv::Mat& input);
-        static std::string name() { return "MotionMask"; }
-    };
-
-    static_assert(SemanticMask::OpenCVType == MotionMask::OpenCVType);
-};
-
-
-template<typename T>
-struct ImageWrapper {
-    using Type = T;
-
-    //TODO: for now remove const (which is dangerous i guess, but need assignment operator)?
-    //what about copying image data instead of just reference? Right now, everything is ref
-    cv::Mat image;
-
-    ImageWrapper(const cv::Mat& img) : image(img) {
-
-        const std::string name = Type::name();
-
-        if(img.empty()) {
-            throw InvalidImageTypeException("Image was empty for type " + name);
-        }
-        //should throw excpetion if problematic
-        Type::validate(img);
-    }
-
-    operator cv::Mat&() { return image; }
-    operator const cv::Mat&() const { return image; }
-
-    ImageWrapper() : image() {}
-
-    /**
-     * @brief Returns an ImageWrapper with the underlying image data cloned
-     *
-     * @return ImageWrapper<Type>
-     */
-    ImageWrapper<Type> clone() {
-        return ImageWrapper<Type>(image.clone());
-    }
-
-    inline bool exists() const {
-        return !image.empty();
-    }
+    ImageContainerConstructionException(const std::string& what) : DynosamException(what) {}
 };
 
 
@@ -161,7 +82,7 @@ public:
     {
          //this is (not-pure) virtual function could be overloaded. This means that we're calling an overloaded function
          //in the base constructor which leads to undefined behaviour...?
-        validateSetup();
+        // validateSetup();
     }
     virtual ~ImageContainerSubset() = default;
 
@@ -297,7 +218,7 @@ protected:
 
     /**
      * @brief Validates that the input images (if not empty) are the same size.
-     * Throws InvalidImageContainerException if invalid.
+     * Throws ImageContainerConstructionException if invalid.
      *
      * Compares all non-empty images against the first image size
      *
@@ -319,7 +240,8 @@ class ImageContainer : public ImageContainerSubset<
     ImageType::Depth,
     ImageType::OpticalFlow,
     ImageType::SemanticMask,
-    ImageType::MotionMask> {
+    ImageType::MotionMask,
+    ImageType::ClassSegmentation> {
 
 public:
     DYNO_POINTER_TYPEDEFS(ImageContainer)
@@ -329,7 +251,8 @@ public:
         ImageType::Depth,
         ImageType::OpticalFlow,
         ImageType::SemanticMask,
-        ImageType::MotionMask>;
+        ImageType::MotionMask,
+        ImageType::ClassSegmentation>;
 
 
     /**
@@ -347,6 +270,8 @@ public:
 
     cv::Mat getMotionMask() const { return Base::get<ImageType::MotionMask>(); }
 
+    cv::Mat getClassSegmentation() const { return Base::get<ImageType::ClassSegmentation>(); }
+
     /**
      * @brief Returns true if the set of input images does not contain depth and
      * therefore should be used as part of a Monocular VO pipeline
@@ -358,6 +283,7 @@ public:
     inline bool hasDepth() const { return !getDepth().empty(); }
     inline bool hasSemanticMask() const { return !getSemanticMask().empty(); }
     inline bool hasMotionMask() const { return !getMotionMask().empty(); }
+    inline bool hasClassSegmentation() const { return !getClassSegmentation().empty(); }
 
     /**
      * @brief True if the image has 3 channels and is therefore expected to be RGB.
@@ -392,15 +318,56 @@ public:
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask);
 
+    /**
+     * @brief Construct an image container equivalent to RGBD + Motion Mask input
+     *
+     * @param timestamp
+     * @param frame_id
+     * @param img
+     * @param depth
+     * @param optical_flow
+     * @param motion_mask
+     * @param class_segmentation
+     * @return ImageContainer::Ptr
+     */
     static ImageContainer::Ptr Create(
         const Timestamp timestamp,
         const FrameId frame_id,
         const ImageWrapper<ImageType::RGBMono>& img,
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
 protected:
+    /**
+     * @brief Static construction of a full image container and calls validateSetup on the resulting object.
+     *
+     * Used by each public Create function to construct the underlying ImageContainer. validateSetup must called after construction
+     * as it is a virtual function.
+     *
+     * @param timestamp
+     * @param frame_id
+     * @param img
+     * @param depth
+     * @param optical_flow
+     * @param semantic_mask
+     * @param motion_mask
+     * @param class_segmentation
+     * @return ImageContainer::Ptr
+     */
+    static ImageContainer::Ptr Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
+
+
+private:
     explicit ImageContainer(
         const Timestamp timestamp,
         const FrameId frame_id,
@@ -408,9 +375,9 @@ protected:
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask);
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
-private:
     void validateSetup() const override;
 
 private:

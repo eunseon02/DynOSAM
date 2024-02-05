@@ -29,6 +29,7 @@
 #include "dynosam/utils/OpenCVUtils.hpp"
 
 #include "dynosam/frontend/FrontendInputPacket.hpp"
+#include <png++/png.hpp>
 
 namespace dyno {
 
@@ -90,28 +91,16 @@ public:
      */
     std::string getFolderName() const override { return "object_pose.txt"; }
     GroundTruthInputPacket getItem(size_t idx) override {
-        //no guarantee (by ordering) that camera_pose_loader has been inited correctly before the get item so we add the data here and not in the onPathInit
-        CHECK(camera_pose_loader_);
-        CHECK(camera_pose_loader_->isAbsolutePathSet());
+        GroundTruthInputPacket& gt_packet = constructGTPacketOnly(idx);
 
-        const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
-        const Timestamp timestamp = timestamp_loader_->getItem(idx);
-
-        //  frame_id < nTimes - 1??
-        GroundTruthInputPacket gt_packet;
-        gt_packet.timestamp_ = timestamp;
-        gt_packet.frame_id_ = idx;
-        // add ground truths for this fid
-        for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
-        {
-            gt_packet.object_poses_.push_back(object_poses_[object_ids_vector_[idx][i]]);
-        // sanity check
-        CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
+        //if frame idx > 0 calcualte motions
+        if(idx > 0) {
+            const GroundTruthInputPacket& prev_gt_packet = constructGTPacketOnly(idx - 1);
+            gt_packet.calculateAndSetMotions(prev_gt_packet);
         }
-        gt_packet.X_world_ = camera_pose;
 
-        //TODO: recalcualte every time?
         return gt_packet;
+
     }
 
 
@@ -122,6 +111,7 @@ private:
      */
     void onPathInit() override {
         std::ifstream object_pose_stream((std::string)getAbsolutePath(), std::ios::in);
+        CHECK(object_pose_stream.good());
 
         //hmm we dont know the number of expected frames here...
         while (!object_pose_stream.eof())
@@ -159,6 +149,40 @@ private:
 
             object_ids_vector_[frame_id].push_back(i);
         }
+    }
+
+    //connstrict gt packet only - without calcuting the motions from a previous packet. This is used to ensure we dont do recursive getIdx calls
+    GroundTruthInputPacket& constructGTPacketOnly(size_t idx) {
+        //no guarantee (by ordering) that camera_pose_loader has been inited correctly before the get item so we add the data here and not in the onPathInit
+        CHECK(camera_pose_loader_);
+        CHECK(camera_pose_loader_->isAbsolutePathSet());
+
+        const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
+        const Timestamp timestamp = timestamp_loader_->getItem(idx);
+
+        //use cahce to avoid calculating every time
+        if(gt_packets_.exists(idx)) {
+            return gt_packets_.at(idx);
+        }
+
+        //  frame_id < nTimes - 1??
+        GroundTruthInputPacket gt_packet;
+        gt_packet.timestamp_ = timestamp;
+        gt_packet.frame_id_ = idx;
+        // add ground truths for this fid
+        for (size_t i = 0; i < object_ids_vector_[idx].size(); i++)
+        {
+            ObjectPoseGT object_pose_gt = object_poses_[object_ids_vector_[idx][i]];
+            object_pose_gt.L_world_ = camera_pose * object_pose_gt.L_camera_;
+            gt_packet.object_poses_.push_back(object_pose_gt);
+            // sanity check
+            CHECK_EQ(gt_packet.object_poses_[i].frame_id_, idx);
+        }
+        gt_packet.X_world_ = camera_pose;
+        gt_packets_.insert({idx, gt_packet});
+
+        //must return the actual stored one
+        return gt_packets_.at(idx);
     }
 
     ObjectPoseGT constructObjectPoseGT(const std::vector<double>& obj_pose_gt) const {
@@ -249,12 +273,52 @@ private:
     KittiCameraPoseFolder::Ptr camera_pose_loader_;
     std::vector<ObjectIds> object_ids_vector_;
     std::vector<ObjectPoseGT> object_poses_;
-    std::vector<GroundTruthInputPacket> gt_packets_; //unused?
+    gtsam::FastMap<FrameId, GroundTruthInputPacket> gt_packets_;
+};
+
+class KittiClassSegmentationDataFolder : public dyno::DataFolder<cv::Mat> {
+public:
+    DYNO_POINTER_TYPEDEFS(KittiClassSegmentationDataFolder)
+
+    KittiClassSegmentationDataFolder() {}
+    //really should chage the name of "semantic" to be instance_mask as this is the true pixel level semantic information
+    inline std::string getFolderName() const override { return "pixel_semantics"; }
+
+    cv::Mat getItem(size_t idx) override {
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(6) << idx;
+        const std::string file_path = (std::string)getAbsolutePath()  + "/" + ss.str() + ".png";
+        throwExceptionIfPathInvalid(file_path);
+
+        png::image<png::rgb_pixel> index_image(file_path);
+
+        cv::Size size(index_image.get_width(), index_image.get_height());
+        cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
+
+        for (size_t y = 0; y < index_image.get_height(); ++y)
+        {
+            for (size_t x = 0; x < index_image.get_width(); ++x)
+            {
+                const auto& pixel = index_image.get_pixel(x, y);
+                const auto red = pixel.red;
+
+                //TODO: HARDCODED!!! https://github.com/google-research/deeplab2/blob/main/g3doc/setup/kitti_step.md
+                if(red == 0) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
+                }
+                else if(red == 12) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Rider;
+                }
+
+            }
+        }
+        return class_segmentation;
+    }
 };
 
 
-//additional loaders are depth, semantic mask, camera pose gt and gt input packet
-class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
+//additional loaders are depth, semantic/motion mask, pixel level semantics, camera pose gt and gt input packet
+class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
 
@@ -282,7 +346,6 @@ public:
     };
 
 
-
     /**
      * @brief Construct a new Kitti Data Loader object
      *
@@ -292,6 +355,7 @@ public:
      *  /image_0
      *  /motion
      *  /semantic
+     *  /pixel_semantics (TODO: shoudl change semantic and pixel semantics to instance_mask and semantics)
      *  /object_pose.txt
      *  /pose_gt.txt
      *  /times.txt
@@ -299,7 +363,7 @@ public:
      * @param dataset_path
      * @param params
      */
-    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path), params_(params)
     {
         TimestampFile::Ptr timestamp_file =  std::make_shared<TimestampFile>();
@@ -322,10 +386,15 @@ public:
         }
         CHECK_NOTNULL(mask_folder);
 
+        KittiClassSegmentationDataFolder::Ptr pixel_level_semantics_folder = std::make_shared<KittiClassSegmentationDataFolder>();
+
         KittiCameraPoseFolder::Ptr camera_pose_folder = std::make_shared<KittiCameraPoseFolder>();
         KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
             timestamp_file, camera_pose_folder
         );
+
+        CHECK(camera_pose_folder);
+        CHECK(object_pose_gt_folder);
 
 
 
@@ -336,6 +405,7 @@ public:
             std::make_shared<OpticalFlowDataFolder>(),
             std::make_shared<DepthDataFolder>(),
             mask_folder,
+            pixel_level_semantics_folder,
             camera_pose_folder,
             object_pose_gt_folder
         );
@@ -346,6 +416,7 @@ public:
             cv::Mat optical_flow,
             cv::Mat depth,
             cv::Mat instance_mask,
+            cv::Mat pixel_semantics,
             gtsam::Pose3 camera_pose_gt,
             GroundTruthInputPacket gt_object_pose_gt) -> bool
         {
@@ -355,14 +426,27 @@ public:
             CHECK(ground_truth_packet_callback_);
             if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
 
-            auto image_container = ImageContainer::Create(
-                timestamp,
-                frame_id,
-                ImageWrapper<ImageType::RGBMono>(rgb),
-                ImageWrapper<ImageType::Depth>(depth),
-                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::SemanticMask>(instance_mask)
-            );
+            ImageContainer::Ptr image_container = nullptr;
+
+            if(params_.mask_type == MaskType::MOTION) {
+                image_container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::MotionMask>(instance_mask),
+                    ImageWrapper<ImageType::ClassSegmentation>(pixel_semantics));
+            }
+            else {
+                image_container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::SemanticMask>(instance_mask));
+            }
 
 
             CHECK(image_container_callback_);

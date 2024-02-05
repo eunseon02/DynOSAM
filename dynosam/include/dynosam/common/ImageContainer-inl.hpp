@@ -41,11 +41,10 @@ ImageContainerSubset<SubsetImageTypes...> ImageContainerSubset<ImageTypes...>::m
         //get the type at the new subset
         internal::select_apply<SubN>(i, [&](auto I) {
             using SubType = typename Subset::ImageTypeStruct<I>;
-            //find this image type in the current container as the idnex may be different
+            //find this image type in the current container as the index may be different
             constexpr size_t current_index = This::Index<SubType>();
             //with the index i of the subset wrapper (corresponding with type SubType)
             //get the image wrapper in this container using the request (sub) type
-            //TODO:do we want cv::Mat data to be const (refer counter) or at some point clone? See ImageType where the cv::mat is stored?
             auto current_wrapped_image = std::get<current_index>(image_storage_);
 
             //if invalid but request, throw runtime error becuase whats the point of requesting an invalid image
@@ -89,7 +88,7 @@ void ImageContainerSubset<ImageTypes...>::validateSetup() const {
                     //compare against required size
                     const cv::Size incoming_size = This::get<ImageTypeStruct>().size();
                     if(incoming_size != required_size) {
-                        throw InvalidImageContainerException(
+                        throw ImageContainerConstructionException(
                             "Non-empty images were not all the same size. First image (type: " +
                             type_name<This::ImageTypeStruct<0u>>() + ") was of size " + to_string(required_size) +
                             " and other image (type: " + type_name<ImageTypeStruct>() + ") was of size " + to_string(incoming_size)

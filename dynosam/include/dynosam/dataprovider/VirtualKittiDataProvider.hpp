@@ -46,8 +46,8 @@ namespace dyno {
 
 
 
-//depth, motion mask and gt
-using VirtualKittiDatasetProvider = DynoDatasetProvider<cv::Mat, cv::Mat, GroundTruthInputPacket>;
+//depth, motion mask, semantic mask and gt
+using VirtualKittiDatasetProvider = DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, GroundTruthInputPacket>;
 
 class VirtualKittiDataLoader : public VirtualKittiDatasetProvider {
 
@@ -73,6 +73,7 @@ private:
     const std::string v_forward_flow_folder = "vkitti_2.0.3_forwardFlow";
     const std::string v_backward_flow_folder = "vkitti_2.0.3_backwardFlow";
     const std::string v_forward_scene_flow_folder = "vkitti_2.0.3_forwardSceneFlow";
+    const std::string v_class_semantics_folder = "vkitti_2.0.3_classSegmentation";
     const std::string v_instance_segmentation_folder = "vkitti_2.0.3_instanceSegmentation";
     const std::string v_rgb_folder = "vkitti_2.0.3_rgb";
     const std::string v_text_gt_folder = "vkitti_2.0.3_textgt";

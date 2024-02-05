@@ -35,6 +35,7 @@ class DynoPipelineManagerRos : public rclcpp::Node {
 
 public:
     explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    ~DynoPipelineManagerRos() = default;
 
     bool spinOnce() {
         RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());

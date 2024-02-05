@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,26 +23,29 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-
-
-#include "dynosam/visualizer/Visualizer-Definitions.hpp" //for image queue
-
+#include "dynosam/common/ImageTypes.hpp"
 
 namespace dyno {
 
+template<typename IMAGETYPE>
+ImageWrapper<IMAGETYPE>::ImageWrapper(const cv::Mat& img) : image(img) {
+    const std::string name = Type::name();
 
-class FrontendDisplay {
-public:
-    DYNO_POINTER_TYPEDEFS(FrontendDisplay)
+    if(img.empty()) {
+        throw InvalidImageTypeException("Image was empty for type " + name);
+    }
+    //should throw excpetion if problematic
+    Type::validate(img);
+}
 
-    FrontendDisplay() {}
-    virtual ~FrontendDisplay() {}
+template<typename IMAGETYPE>
+ImageWrapper<IMAGETYPE> ImageWrapper<IMAGETYPE>::clone() const {
+    return ImageWrapper<IMAGETYPE>(image.clone());
+}
 
-    virtual void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) = 0;
 
+template<typename IMAGETYPE>
+bool ImageWrapper<IMAGETYPE>::exists() const { return !image.empty(); }
 
-};
 
 } //dyno

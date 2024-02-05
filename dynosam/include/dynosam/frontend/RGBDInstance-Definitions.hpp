@@ -27,30 +27,37 @@
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
+#include "dynosam/logger/Logger.hpp"
+
 
 #include <glog/logging.h>
 
 namespace dyno {
+
+//forward from Tracker
+struct FeatureTrackerInfo;
 
 struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
 
 public:
     DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
 
-    const Landmarks static_landmarks_; //! in the world frame
-    const Landmarks dynamic_landmarks_; //! in the world frame
+    const StatusLandmarkEstimates static_landmarks_; //! in the world frame
+    const StatusLandmarkEstimates dynamic_landmarks_; //! in the world frame
     const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
-    const std::map<ObjectId, gtsam::Pose3> propogated_object_poses_;
+    const ObjectPoseMap propogated_object_poses_; //! Propogated poses using the esimtate from the frontend
+    const gtsam::Pose3Vector camera_poses_; //! Vector of ego-motion poses (drawn everytime)
 
      RGBDInstanceOutputPacket(
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
-        const Landmarks& static_landmarks,
-        const Landmarks& dynamic_landmarks,
+        const StatusLandmarkEstimates& static_landmarks,
+        const StatusLandmarkEstimates& dynamic_landmarks,
         const gtsam::Pose3 T_world_camera,
         const Frame& frame,
         const MotionEstimateMap& estimated_motions,
-        const std::map<ObjectId, gtsam::Pose3> propogated_object_poses = {},
+        const ObjectPoseMap propogated_object_poses = {},
+        const gtsam::Pose3Vector camera_poses = {},
         const cv::Mat& debug_image = cv::Mat(),
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
     )
@@ -66,14 +73,32 @@ public:
     static_landmarks_(static_landmarks),
     dynamic_landmarks_(dynamic_landmarks),
     estimated_motions_(estimated_motions),
-    propogated_object_poses_(propogated_object_poses)
+    propogated_object_poses_(propogated_object_poses),
+    camera_poses_(camera_poses)
     {
         //they need to be the same size as we expect a 1-to-1 relation between the keypoint and the landmark (which acts as an initalisation point)
         CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());
         CHECK_EQ(dynamic_landmarks_.size(), dynamic_keypoint_measurements_.size());
     }
+};
 
 
+//write to file on destructor
+//TODO: currently FrontendLogger really is RGBDLogger?
+class FrontendLogger {
+public:
+    DYNO_POINTER_TYPEDEFS(FrontendLogger)
+    FrontendLogger();
+    //write to file on destructor
+    ~FrontendLogger();
+
+    void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
+    void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera_k, std::optional<const gtsam::Pose3> T_world_camera_k_1 = {});
+    // void logFrontendStats(const FeatureTrackerInfo& tracking_info);
+
+private:
+    CsvWriter::UniquePtr object_motion_csv_;
+    CsvWriter::UniquePtr camera_pose_csv_;
 };
 
 } //dymo

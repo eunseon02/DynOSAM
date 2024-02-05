@@ -95,14 +95,50 @@ public:
 
   /**
    * @brief Back projects a single keypoint from the image frame and into the
-   * camera frame given a depth in z.
+   * camera frame given a depth.
    *
-   * @param kp Keypoint to back project
-   * @param depth Depth value to project along
-   * @param lmk  3D landmark to set.
+   * @param kp const Keypoint& Keypoint to back project
+   * @param depth const Depth& Depth value to project along
+   * @param lmk Landmark* 3D landmark to set.
    */
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk) const;
   void backProject(const Keypoint& kp, const Depth& depth, Landmark* lmk, const gtsam::Pose3& X_world) const;
+
+  /**
+   * @brief Projects a point using a keypoint measurement and a Z measurement, rather than depth
+   *
+   * Depth is the depth along a projected ray while Z is the distance the point is from the camera frame along the Z
+   * axis
+   *
+   *                  * (P)
+   *          |      /
+   *          |     /
+   *          |    /
+   *        Z |   / d (depth)
+   *          |  /
+   *          | /
+   *          |/
+   *      --------- (Camera Plane)
+   *
+   * @param kp const Keypoint&
+   * @param Z const double Z distance of the point along the Z axis
+   * @param lmk Landmark* 3D landmark to set.
+   * @param Dp gtsam::OptionalJacobian<3, 3> Jacobian w.r.t to the calculated lmk. Row structure is [x,y,z] of the output lmk and Col structure
+   * is [u, v, Z] (i.e [kp(0), kp(1), Z]) of the input
+   */
+  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, gtsam::OptionalJacobian<3, 3> Dp = {}) const;
+
+  /**
+   * @brief Projects a point using a keypoint measurement and a Z measurement, rather than depth
+   *
+   * @param kp const Keypoint&
+   * @param Z double Z coordinate of the 3D point in the camera frame
+   * @param lmk Landmark* 3D landmark to set in the coordinate frame determined by X_world
+   * @param X_world const gtsam::Pose3& pose to transform the 3D point to. If I, lmk will be in the camera frame
+   * @param Dp gtsam::OptionalJacobian<3, 3> Jacobian w.r.t to the calculated lmk. Row structure is [x,y,z] of the output lmk and Col structure
+   * is [u, v, Z] (i.e [kp(0), kp(1), Z]) of the input
+   */
+  void backProjectFromZ(const Keypoint& kp, const double Z, Landmark* lmk, const gtsam::Pose3& X_world, gtsam::OptionalJacobian<3, 3> Dp = {}) const;
 
   static Landmark cameraToWorldConvention(const Landmark& lmk);
 

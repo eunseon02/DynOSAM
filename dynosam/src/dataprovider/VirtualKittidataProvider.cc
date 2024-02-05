@@ -50,6 +50,7 @@ inline int getTrackID(const std::vector<std::string>& split_string, int idx) {
     return std::stoi(split_string.at(idx)) + 1;
 }
 
+
 /**
  * @brief Loading class for the Virtual Kitti 2 dataset: https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/
  *
@@ -129,11 +130,6 @@ private:
         cv::Mat channels[2];
         //now only take g and r channels
         cv::split(unscaled_out_flow, channels);
-        // cv::Mat& g = channels[1];
-        // cv::Mat& r = channels[2];
-        // g *= w -1.0;
-        // r *= h -1.0;
-
         // g,r == flow_y,x normalized by height,width
         cv::Mat& flow_y = channels[1];
         cv::Mat& flow_x = channels[2];
@@ -171,10 +167,10 @@ public:
         //TODO: for now? When to apply preprocessing?
         cv::Mat depth;
         loadRGB(file_path, depth);
-
-        //apply depth factor first to get information into meters (from cm)
-        depth /= 100.0;
+        //first convert to double as loadRGB provides 16UC1
         depth.convertTo(depth, CV_64F);
+        //apply depth factor to get information into meters (from cm)
+        depth /= 100.0;
 
         return depth;
     }
@@ -599,7 +595,6 @@ private:
 
 
                 const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
-                // const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(M_PI_2, 0, M_PI_2), gtsam::traits<gtsam::Point3>::Identity());
                 //pose is in world coordinate convention so we put into camera convention (the camera_to_world.inverse())
                 //the pose provided is actually world -> camera but we want camera -> world eg T_world_camera, so we apply the inverse transform
                 pose = camera_to_world.inverse() * pose.inverse();
@@ -634,14 +629,22 @@ private:
 
             const auto& it = object_poses.find(frame_id);
             if(it != object_poses.end()) {
-                const auto& object_id_pose_map = it->second;
-                for(const auto& [object_id, object_pose_gt] : object_id_pose_map) {
+                auto& object_id_pose_map = it->second;
+                for(auto& [object_id, object_pose_gt] : object_id_pose_map) {
                     //query for moving
                     // if(isMoving(frame_id, object_id)) {
                         // LOG(INFO) << "Added moving object " << frame_id << " " << object_id;
-                        gt_packet.object_poses_.push_back(object_pose_gt);
+                        auto object_pose = object_pose_gt;
+                        object_pose.L_world_ = gt_packet.X_world_ * object_pose.L_camera_;
+                        gt_packet.object_poses_.push_back(object_pose);
                     // }
                 }
+            }
+
+            //set motions
+            if(frame_id > 0) {
+                const GroundTruthInputPacket& previous_gt_packet = gt_packets.at(frame_id - 1);
+                gt_packet.calculateAndSetMotions(previous_gt_packet);
             }
 
             gt_packets.push_back(gt_packet);
@@ -712,8 +715,8 @@ protected:
     /**
      * @brief Loads instance semantic mask from the file path.
      *
-     * This loads the image using libpng++ since we need to load the image as an 8bit indexed PNG file (which opencv does not have functionality)
-     * for. Keeping consistent with the ground truth indexing we use for VirtualKitti we do not need to modify the trackID's within the image
+     * This loads the image using libpng++ since we need to load the image as an 8bit indexed PNG file (which opencv does not have functionality
+     * for). Keeping consistent with the ground truth indexing we use for VirtualKitti we do not need to modify the trackID's within the image
      * since we want the trackID's to be indexed from 1
      *
      * @param file_path
@@ -743,7 +746,6 @@ protected:
     VirtualKittiTextGtLoader::Ptr gt_loader_;
 
 };
-
 
 //this one we will have to remove semgentation mask depending on whats in the gt folder
 class VirtualKittiMotionSegFolder : public VirtualKittiGenericInstanceSegFolder {
@@ -803,6 +805,59 @@ public:
 
 };
 
+class VirtualKittiClassSegmentationDataFolder : public GenericVirtualKittiImageLoader {
+
+public:
+    VirtualKittiClassSegmentationDataFolder(const std::string& path) : GenericVirtualKittiImageLoader(path) {}
+    cv::Mat getItem(size_t idx) override {
+        std::stringstream ss;
+        ss << std::setfill('0') << std::setw(5) << idx;
+        const std::string file_path = full_path_  + "/classgt_" + ss.str() + ".png";
+        throwExceptionIfPathInvalid(file_path);
+        return loadClassSegmentation(file_path);
+    }
+
+private:
+    //TODO: comments
+    cv::Mat loadClassSegmentation(const std::string& file_path) const {
+
+        //TODO: for now just hardcode in road!!!
+        png::image<png::rgb_pixel> rgb_image(file_path);
+
+        cv::Size size(rgb_image.get_width(), rgb_image.get_height());
+        cv::Mat class_segmentation(size, ImageType::ClassSegmentation::OpenCVType);
+
+        for (size_t y = 0; y < rgb_image.get_height(); ++y)
+        {
+            for (size_t x = 0; x < rgb_image.get_width(); ++x)
+            {
+                const auto& pixel = rgb_image.get_pixel(x, y);
+                const unsigned char red = (unsigned char)pixel.red;
+                const unsigned char green = (unsigned char)pixel.green;
+                const unsigned char blue = (unsigned char)pixel.blue;
+
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[0] = blue;
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[1] = green;
+                // class_segmentation_rgb.at<cv::Vec3b>(y, x)[2] = red;
+
+                //TODO: hardcoded road values from VKITTI2
+                if(red == 100 && green == 60 && blue == 100) {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Road;
+                }
+                else {
+                    class_segmentation.at<int>(y, x) = ImageType::ClassSegmentation::Labels::Undefined;
+                }
+            }
+        }
+
+
+        return class_segmentation;
+
+
+    }
+};
+
+
 //instance segmentation for all objects regardless of motion
 class VirtualKittiInstanceSegFolder : public VirtualKittiGenericInstanceSegFolder {
 
@@ -846,7 +901,8 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     const std::string depth_folder = path + "/" + v_depth_folder + "/" + scene + "/" + scene_type + "/frames/depth/Camera_0";
     const std::string forward_flow_folder = path + "/" + v_forward_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardFlow/Camera_0";
     const std::string backward_flow_folder = path + "/" + v_backward_flow_folder + "/" + scene + "/" + scene_type + "/frames/backwardFlow/Camera_0";
-    const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardSceneFlow/Camera_0";
+    const std::string forward_scene_flow_folder = path + "/" + v_forward_scene_flow_folder + "/" + scene + "/" + scene_type + "/frames/forwardsceneFlow/Camera_0";
+    const std::string class_semantics_folder = path + "/" + v_class_semantics_folder + "/" + scene + "/" + scene_type + "/frames/classSegmentation/Camera_0";
     const std::string instance_segmentation_folder = path + "/" + v_instance_segmentation_folder + "/" + scene + "/" + scene_type + "/frames/instanceSegmentation/Camera_0";
     const std::string rgb_folder = path + "/" + v_rgb_folder + "/" + scene + "/" + scene_type + "/frames/rgb/Camera_0";
     const std::string text_gt_folder = path + "/" + v_text_gt_folder + "/" + scene + "/" + scene_type;
@@ -854,6 +910,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     throwExceptionIfPathInvalid(depth_folder);
     throwExceptionIfPathInvalid(forward_flow_folder);
     throwExceptionIfPathInvalid(forward_scene_flow_folder);
+    throwExceptionIfPathInvalid(class_semantics_folder);
     throwExceptionIfPathInvalid(instance_segmentation_folder);
     throwExceptionIfPathInvalid(rgb_folder);
     throwExceptionIfPathInvalid(text_gt_folder);
@@ -880,6 +937,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
     CHECK_NOTNULL(motion_mask_loader);
 
     auto gt_loader_folder = std::make_shared<VirtualKittiGTFolder>(gt_loader, timestamp_folder);
+    auto class_semantics_loader = std::make_shared<VirtualKittiClassSegmentationDataFolder>(class_semantics_folder);
 
     this->setLoaders(
         timestamp_folder,
@@ -887,6 +945,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
         optical_flow_loader,
         depth_loader,
         motion_mask_loader,
+        class_semantics_loader,
         gt_loader_folder
     );
 
@@ -896,6 +955,7 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
         cv::Mat optical_flow,
         cv::Mat depth,
         cv::Mat instance_mask,
+        cv::Mat class_semantics,
         GroundTruthInputPacket gt_object_pose_gt) -> bool
     {
         CHECK(timestamp == gt_object_pose_gt.timestamp_);
@@ -905,14 +965,15 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
         ImageContainer::Ptr image_container = nullptr;
 
-        if(params.mask_type == MaskType::MOTION) {
+        if(params_.mask_type == MaskType::MOTION) {
             image_container = ImageContainer::Create(
                 timestamp,
                 frame_id,
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::MotionMask>(instance_mask));
+                ImageWrapper<ImageType::MotionMask>(instance_mask),
+                ImageWrapper<ImageType::ClassSegmentation>(class_semantics));
         }
         else {
             image_container = ImageContainer::Create(
@@ -933,7 +994,9 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 
     this->setCallback(callback);
 
-    active_frame_id = 1u; //have to start at at least 1 so we can index backwards with optical flow
+
+    //TODO: virtual function in base class to validate starting/end frames as it may be different between datasets?
+    setStartingFrame(1u); //have to start at at least 1 so we can index backwards with optical flow
 
 }
 

@@ -22,13 +22,17 @@ RUN apt-get update \
     nano \
     vim \
     clang-format \
-    ros-humble-ros2cli-common-extensions \
-    ros-humble-vision-opencv \
     && pip3 install black pre-commit \
     && rm -rf /var/lib/apt/lists/*
 
 # ROS installs
-RUN apt install ros-humble-diagnostic*
+RUN apt install ros-humble-diagnostic-updater \
+      ros-humble-ros2cli-common-extensions \
+      ros-humble-vision-opencv \
+      ros-humble-diagnostics
+
+# other deps
+RUN apt install libpng++-dev
 
 
 WORKDIR /root/

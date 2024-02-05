@@ -30,56 +30,31 @@
 
 namespace dyno {
 
-void validateMask(const cv::Mat& input, const std::string& name) {
-    //we guanrantee with a static assert that the SemanticMask and MotionMask types are the same
-    const static std::string expected_type = utils::cvTypeToString(ImageType::MotionMask::OpenCVType);
-    if(input.type() != ImageType::MotionMask::OpenCVType) {
-        throw InvalidImageTypeException(
-            name + " image was not " + expected_type + ". Input image type was " + utils::cvTypeToString(input.type())
+
+ImageContainer::Ptr ImageContainer::Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation)
+{
+    std::shared_ptr<ImageContainer> container(
+        new ImageContainer(
+            timestamp,
+            frame_id,
+            img,
+            depth,
+            optical_flow,
+            semantic_mask,
+            motion_mask,
+            class_segmentation)
         );
-    }
+    container->validateSetup();
+    return container;
 }
-
-void ImageType::RGBMono::validate(const cv::Mat& input) {
-    if(input.type() != CV_8UC1 && input.type() != CV_8UC3) {
-        throw InvalidImageTypeException(
-            "RGBMono image was not CV_8UC1 or CV_8UC3. Input image type was " + utils::cvTypeToString(input.type())
-        );
-    }
-}
-
-
-void ImageType::Depth::validate(const cv::Mat& input){
-    const static std::string expected_type = utils::cvTypeToString(OpenCVType);
-     if(input.type() != OpenCVType) {
-        throw InvalidImageTypeException(
-            "Depth image was not ." + expected_type + "Input image type was " + utils::cvTypeToString(input.type())
-        );
-    }
-
-}
-
-
-void ImageType::OpticalFlow::validate(const cv::Mat& input) {
-    const static std::string expected_type = utils::cvTypeToString(OpenCVType);
-    if(input.type() != OpenCVType) {
-        throw InvalidImageTypeException(
-            "OpticalFlow image was not " + expected_type + ". Input image type was " + utils::cvTypeToString(input.type())
-        );
-    }
-}
-
-
-void ImageType::SemanticMask::validate(const cv::Mat& input) {
-    validateMask(input, name());
-}
-
-
-void ImageType::MotionMask::validate(const cv::Mat& input) {
-    validateMask(input, name());
-}
-
-
 
 
 ImageContainer::ImageContainer(
@@ -89,22 +64,24 @@ ImageContainer::ImageContainer(
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask)
-    :  Base(img, depth, optical_flow, semantic_mask, motion_mask),
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation)
+    :  Base(img, depth, optical_flow, semantic_mask, motion_mask, class_segmentation),
        timestamp_(timestamp),
        frame_id_(frame_id)
-    { validateSetup(); }
+    { }
 
 
 std::string ImageContainer::toString() const {
     std::stringstream ss;
     ss << "Timestamp: " << timestamp_ << "\n";
-    ss << "Frame Id:" << frame_id_ << "\n";
+    ss << "Frame Id: " << frame_id_ << "\n";
 
     const std::string image_config = isImageRGB() ? "RGB" : "Grey";
     ss << "Configuration: " << image_config
         << " Depth (" << hasDepth() << ") Semantic Mask (" << hasSemanticMask()
-        << ") Motion Mask (" << hasMotionMask() << ")" << "\n";
+        << ") Motion Mask (" << hasMotionMask()
+        << ") Class Segmentation (" << hasClassSegmentation() << ")" << "\n";
 
     return ss.str();
 }
@@ -118,7 +95,7 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::SemanticMask>& semantic_mask) {
 
-    return std::shared_ptr<ImageContainer>(new ImageContainer(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>()));
+    return Create(timestamp, frame_id, img, depth, optical_flow, semantic_mask, ImageWrapper<ImageType::MotionMask>(), ImageWrapper<ImageType::ClassSegmentation>());
 
 }
 
@@ -128,9 +105,10 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::RGBMono>& img,
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
-        const ImageWrapper<ImageType::MotionMask>& motion_mask) {
+        const ImageWrapper<ImageType::MotionMask>& motion_mask,
+        const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation) {
 
-    return std::shared_ptr<ImageContainer>(new ImageContainer(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask));
+    return Create(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask, class_segmentation);
 }
 
 

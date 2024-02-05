@@ -23,15 +23,4 @@
 
 #include "dynosam/visualizer/VisualizerPipelines.hpp"
 
-namespace dyno {
-
-FrontendVizPipeline::FrontendVizPipeline(InputQueue* input_queue, FrontendDisplay::Ptr frontend_display)
-    :   SIMO("frontend-viz", input_queue), frontend_display_(frontend_display) {}
-
-NullPipelinePayload::ConstPtr FrontendVizPipeline::process(const FrontendOutputPacketBase::ConstPtr& input) {
-    frontend_display_->spinOnce(input);
-    static auto null_payload = std::make_shared<NullPipelinePayload>();
-    return null_payload;
-}
-
-}
+namespace dyno {}

@@ -25,6 +25,7 @@ find_package(opengv REQUIRED)
 find_package(GTSAM REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(PCL REQUIRED)
 
 
 find_package(Boost REQUIRED)
@@ -43,6 +44,7 @@ if (DYNO_VERIFY_GTSAM_CONFIG)
 endif()
 
 
+
 # setup targets
 include_directories(
   include
@@ -50,6 +52,7 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${OpenCV_INCLUDE_DIRS}
   ${GTSAM_INCLUDE_DIR}
+  ${PCL_INCLUDE_DIRS}
 )
 
 # build library
@@ -58,7 +61,12 @@ add_library(${PROJECT_NAME} SHARED
   src/common/Types.cc
   src/common/CameraParams.cc
   src/common/Camera.cc
+  src/common/GroundTruthPacket.cc
   src/common/ImageContainer.cc
+  src/common/ImageTypes.cc
+  src/common/StructuredContainers.cc
+  src/common/DynamicObjects.cc
+  src/common/Exceptions.cc
 
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
@@ -75,23 +83,44 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/FrontendModule.cc
   src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
-
+  src/frontend/MonoInstanceFrontendModule.cc
   src/frontend/vision/ORBextractor.cc
   src/frontend/vision/FeatureTracker.cc
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
+  src/frontend/RGBDInstance-Definitions.cc
 
+  src/backend/BackendDefinitions.cc
+  src/backend/BackendPipeline.cc
+  src/backend/BackendModule.cc
+  src/backend/BackendParams.cc
+  src/backend/FactorGraphTools.cc
+  src/backend/MonoBackendModule.cc
+  src/backend/MonoBatchBackendModule.cc
+  src/backend/MonoBackendTools.cc
+  src/backend/DynamicPointSymbol.cc
+  src/backend/Map.cc
+
+  src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
 
   src/pipeline/PipelineManager.cc
-  src/pipeline/PIpelineParams.cc
+  src/pipeline/PipelineDefinitions.cc
+  src/pipeline/PipelineParams.cc
+  src/pipeline/PipelineBase.cc
+  src/pipeline/PipelineSpinner.cc
+
+  src/logger/Logger.cc
 
   src/utils/OpenCVUtils.cc
   src/utils/GtsamUtils.cc
   src/utils/Spinner.cc
   src/utils/Statistics.cc
   src/utils/TimingStats.cc
+  src/utils/Metrics.cc
+  src/utils/CsvWriter.cc
 
+  src/visualizer/ColourMap.cc
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc
   src/visualizer/Visualizer-Definitions.cc
@@ -125,6 +154,7 @@ target_link_libraries(${PROJECT_NAME}
   png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
+  ${PCL_LIBRARIES}
 )
 
 
@@ -135,10 +165,22 @@ ament_export_libraries(${PROJECT_NAME}
   Boost::boost
   gtsam
   ${OpenCV_LIBRARIES}
+  png
 )
 
-# ament_export_dependencies(rclcpp std_msgs sensor_msgs eigen3_cmake_module Eigen3)
-ament_export_dependencies(rclcpp std_msgs sensor_msgs OpenCV opengv GTSAM eigen3_cmake_module Eigen3 )
+
+set(DYNO_EXPORT_DEPS
+  rclcpp
+  std_msgs
+  sensor_msgs
+  OpenCV opengv
+  GTSAM
+  eigen3_cmake_module
+  Eigen3
+)
+
+
+ament_export_dependencies(${DYNO_EXPORT_DEPS})
 
 
 target_include_directories(${PROJECT_NAME}
@@ -163,6 +205,12 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+
+## This is VERY IMPORTANT so that dynosam_ros can find the params folder using ament indexing!!
+install(DIRECTORY
+  params
+  DESTINATION share/${PROJECT_NAME}
 )
 
 
@@ -200,9 +248,14 @@ if(BUILD_TESTING)
     test/test_code_concepts.cc
     test/test_camera_params.cc
     test/test_camera.cc
+    test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/test_tools.cc
+    test/test_pipelines.cc
     test/test_structured_containers.cc
+    test/test_triangulation.cc
+    test/test_backend_structures.cc
+    test/test_csvwriter.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

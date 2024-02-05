@@ -130,7 +130,7 @@ int main(int argc, char* argv[]) {
     cv::Mat rgb_cur;
 
 
-    const std::string path = "/root/data/vdo_slam/kitti/kitti/0018";
+    const std::string path = "/root/data/vdo_slam/kitti/kitti/0020";
     //becuase this uses the KittiDataLoader, this will use whatever semantic/instance laoder is in
     KittiDataLoader::Params params;
     params.base_line = 0; //dont care
@@ -145,6 +145,7 @@ int main(int argc, char* argv[]) {
             cv::Mat,
             cv::Mat,
             cv::Mat instance_mask,
+            cv::Mat,
             gtsam::Pose3 camera_pose_gt,
             GroundTruthInputPacket gt_object_pose_gt) -> bool
         {
@@ -162,12 +163,12 @@ int main(int argc, char* argv[]) {
                 mask_cur = instance_mask;
                 rgb_cur = rgb;
 
-                std::vector<int> moving_labels = findMovingObject(prev_packet_vector, gt_object_pose_gt);
+                std::vector<int> moving_labels = findMovingObject(prev_packet_vector, gt_object_pose_gt,0.2);
                 motion_mask = constructMotionMask(instance_mask, moving_labels);
 
-                cv::Mat motion_mask_viz, instance_mask_viz;
-                utils::semanticMaskToRgb(rgb_cur, motion_mask, motion_mask_viz);
-                utils::semanticMaskToRgb(rgb_cur, instance_mask, instance_mask_viz);
+                cv::Mat motion_mask_viz = utils::labelMaskToRGB(motion_mask, background_label, rgb_cur);
+                cv::Mat instance_mask_viz = utils::labelMaskToRGB(instance_mask, background_label, rgb_cur);
+
 
                 // cv::Mat disp = utils::concatenateImagesVertically(instance_mask_viz, motion_mask_viz);
                 // cv::imshow("Masks", disp);

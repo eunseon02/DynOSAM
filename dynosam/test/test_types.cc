@@ -23,13 +23,85 @@
 
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
+#include "dynosam/common/GroundTruthPacket.hpp"
+
+#include "dynosam/common/Exceptions.hpp"
+#include "dynosam/utils/Variant.hpp"
+
 
 using namespace dyno;
 
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
+
+// //custom type with dyno::to_string defined. Must be inside dyno namespace
+// namespace dyno {
+//     struct CustomToString {};
+// }
+
+
+// template<>
+// std::string dyno::to_string(const CustomToString&) {
+//     return "custom_to_string";
+// }
+
+// TEST(IOTraits, testToString) {
+
+//     EXPECT_EQ(traits<decltype(4)>::ToString(4), "4");
+//     EXPECT_EQ(traits<CustomToString>::ToString(CustomToString{}), "custom_to_string");
+// }
+
+// TEST(Exceptions, testExceptionStream) {
+//     EXPECT_THROW({ExceptionStream::Create<DynosamException>();}, std::runtime_error);
+//     EXPECT_NO_THROW({ExceptionStream::Create();});
+// }
+
+// TEST(Exceptions, testExceptionStreamMessage) {
+//     //would be preferable to use gmock like
+//     //Throws<std::runtime_error>(Property(&std::runtime_error::what,
+//     //      HasSubstr("message"))));
+//     //but currently issues getting the gmock library to be found...
+//     // try {
+//     //     ExceptionStream::Create<std::runtime_error>() << "A message";
+//     // }
+//     // catch(const std::runtime_error& expected) {
+//     //     EXPECT_EQ(std::string(expected.what()), "A message");
+//     // }
+//     // catch(...) {
+//     //     FAIL() << "An excpetion was thrown but it was not std::runtime_error";
+//     // }
+//     // FAIL() << "Exception should be thrown but was not";
+//     ExceptionStream::Create<std::runtime_error>() << "A message";
+// }
+
+// // TEST(Exceptions, testBasicThrow) {
+// //     checkAndThrow(false);
+// //     // EXPECT_THROW({checkAndThrow(false);}, DynosamException);
+// //     // EXPECT_NO_THROW({checkAndThrow(true);});
+// // }
+
+TEST(VariantTypes, isVariant) {
+    using Var = std::variant<int, std::string>;
+    EXPECT_TRUE(is_variant_v<Var>);
+    EXPECT_FALSE(is_variant_v<int>);
+}
+
+TEST(VariantTypes, variantContains) {
+    using Var = std::variant<int, std::string>;
+    //for some reason EXPECT_TRUE doenst work?
+    // EXPECT_TRUE(isvariantmember_v<int, Var>);
+   bool r = is_variant_member_v<int, Var>;
+   EXPECT_EQ(r, true);
+
+   r = is_variant_member_v<std::string, Var>;
+   EXPECT_EQ(r, true);
+
+   r = is_variant_member_v<double, Var>;
+   EXPECT_EQ(r, false);
+}
 
 
 TEST(ImageType, testRGBMonoValidation) {
@@ -258,7 +330,7 @@ TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
         ImageWrapper<ImageType::Depth>(depth),
         ImageWrapper<ImageType::OpticalFlow>(optical_flow),
         ImageWrapper<ImageType::SemanticMask>(semantic_mask)
-    );}, InvalidImageContainerException);
+    );}, ImageContainerConstructionException);
 
 }
 
@@ -386,5 +458,107 @@ TEST(Feature, checkDepth) {
 
     f.depth_ = 12.0;
     EXPECT_TRUE(f.hasDepth());
+
+}
+
+
+TEST(GroundTruthInputPacket, findAssociatedObjectWithIdx) {
+
+    ObjectPoseGT obj01;
+    obj01.frame_id_ = 0;
+    obj01.object_id_ = 1;
+
+    ObjectPoseGT obj02;
+    obj02.frame_id_ = 0;
+    obj02.object_id_ = 2;
+
+    ObjectPoseGT obj03;
+    obj03.frame_id_ = 0;
+    obj03.object_id_ = 3;
+
+    ObjectPoseGT obj11;
+    obj11.frame_id_ = 1;
+    obj11.object_id_ = 1;
+
+    ObjectPoseGT obj12;
+    obj12.frame_id_ = 1;
+    obj12.object_id_ = 2;
+
+    GroundTruthInputPacket packet_0;
+    packet_0.frame_id_ = 0;
+    packet_0.object_poses_.push_back(obj01);
+    packet_0.object_poses_.push_back(obj02);
+    packet_0.object_poses_.push_back(obj03);
+
+    GroundTruthInputPacket packet_1;
+    packet_1.frame_id_ = 1;
+    //put in out of order compared to packet_1
+    packet_1.object_poses_.push_back(obj12);
+    packet_1.object_poses_.push_back(obj11);
+
+    size_t obj_idx, obj_other_idx;
+    EXPECT_TRUE(packet_0.findAssociatedObject(1, packet_1, obj_idx, obj_other_idx));
+
+    EXPECT_EQ(obj_idx, 0);
+    EXPECT_EQ(obj_other_idx, 1);
+
+    EXPECT_TRUE(packet_0.findAssociatedObject(2, packet_1, obj_idx, obj_other_idx));
+
+    EXPECT_EQ(obj_idx, 1);
+    EXPECT_EQ(obj_other_idx, 0);
+
+    //object 3 is not in packet_1
+    EXPECT_FALSE(packet_0.findAssociatedObject(3, packet_1, obj_idx, obj_other_idx));
+
+
+}
+
+TEST(GroundTruthInputPacket, findAssociatedObjectWithPtr) {
+
+    ObjectPoseGT obj01;
+    obj01.frame_id_ = 0;
+    obj01.object_id_ = 1;
+
+    ObjectPoseGT obj02;
+    obj02.frame_id_ = 0;
+    obj02.object_id_ = 2;
+
+    ObjectPoseGT obj03;
+    obj03.frame_id_ = 0;
+    obj03.object_id_ = 3;
+
+    ObjectPoseGT obj11;
+    obj11.frame_id_ = 1;
+    obj11.object_id_ = 1;
+
+    ObjectPoseGT obj12;
+    obj12.frame_id_ = 1;
+    obj12.object_id_ = 2;
+
+    GroundTruthInputPacket packet_0;
+    packet_0.frame_id_ = 0;
+    packet_0.object_poses_.push_back(obj01);
+    packet_0.object_poses_.push_back(obj02);
+    packet_0.object_poses_.push_back(obj03);
+
+    GroundTruthInputPacket packet_1;
+    packet_1.frame_id_ = 1;
+    //put in out of order compared to packet_1
+    packet_1.object_poses_.push_back(obj12);
+    packet_1.object_poses_.push_back(obj11);
+
+    ObjectPoseGT* obj;
+    const ObjectPoseGT* obj_other;
+    EXPECT_TRUE(packet_0.findAssociatedObject(2, packet_1, &obj, &obj_other));
+
+    EXPECT_TRUE(obj != nullptr);
+    EXPECT_TRUE(obj_other != nullptr);
+
+    EXPECT_EQ(obj->object_id_, 2);
+    EXPECT_EQ(obj_other->object_id_, 2);
+
+    EXPECT_EQ(obj->frame_id_, 0);
+    EXPECT_EQ(obj_other->frame_id_, 1);
+
 
 }

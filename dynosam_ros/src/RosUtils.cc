@@ -31,6 +31,9 @@
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 
+#include "geometry_msgs/msg/transform.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+
 
 
 
@@ -90,6 +93,29 @@ template <>
 bool dyno::convert(const gtsam::Pose3& pose, nav_msgs::msg::Odometry& odom)
 {
   return convert<gtsam::Pose3, geometry_msgs::msg::Pose>(pose, odom.pose.pose);
+}
+
+template <>
+bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::Transform& transform)
+{
+  transform.translation.x = pose.x();
+  transform.translation.y = pose.y();
+  transform.translation.z = pose.z();
+
+  const gtsam::Rot3& rotation = pose.rotation();
+  const gtsam::Quaternion& quaternion = rotation.toQuaternion();
+  transform.rotation.x = quaternion.x();
+  transform.rotation.y = quaternion.y();
+  transform.rotation.z = quaternion.z();
+  transform.rotation.w = quaternion.w();
+  return true;
+}
+
+
+template <>
+bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::TransformStamped& transform)
+{
+  return convert<gtsam::Pose3, geometry_msgs::msg::Transform>(pose, transform.transform);
 }
 
 

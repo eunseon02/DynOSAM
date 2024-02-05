@@ -54,7 +54,7 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
     CHECK(!img_size_.empty());
 }
 
-Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images, size_t& n_optical_flow, size_t& n_new_tracks) {
+Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images) {
     //take "copy" of tracking_images which is then given to the frame
     //this will mean that the tracking images (input) are not necessarily the same as the ones inside the returned frame
     TrackingInputImages input_images = tracking_images;
@@ -63,7 +63,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
         //intitial computation
         const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
         CHECK(!previous_frame_);
-        CHECK(img_size_.width == other_size.width && img_size_.height == other_size.height);
+        CHECK_EQ(img_size_.width, other_size.width);
+        CHECK_EQ(img_size_.height, other_size.height);
         initial_computation_ = false;
     }
     else {
@@ -75,17 +76,27 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     FeatureContainer static_features;
     {
       utils::TimingStatsCollector static_track_timer("static_feature_track");
-      trackStatic(frame_id, input_images, static_features, n_optical_flow, n_new_tracks);
+      trackStatic(
+        frame_id,
+        input_images,
+        static_features,
+        info_.static_track_optical_flow,
+        info_.static_track_detections);
     }
 
     FeatureContainer dynamic_features;
     {
       utils::TimingStatsCollector dynamic_track_timer("dynamic_feature_track");
-      trackDynamic(frame_id, input_images, dynamic_features);
+      trackDynamic(
+        frame_id,
+        input_images,
+        dynamic_features,
+        info_.dynamic_track);
     }
 
+    previous_tracked_frame_ = previous_frame_; // Update previous frame (previous to the newly created frame)
 
-    utils::TimingStatsCollector frame_timer("make_frame");
+
     auto new_frame = std::make_shared<Frame>(
       frame_id,
       timestamp,
@@ -94,6 +105,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       static_features,
       dynamic_features);
 
+    LOG(INFO) << "Tracked on frame " << frame_id << " t= " << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
     previous_frame_ = new_frame;
     return new_frame;
 
@@ -141,7 +153,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   }
 
   for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
-    CHECK(object_observation.marked_as_moving_);
+    // CHECK(object_observation.marked_as_moving_);
     //get average center of 2 object
     FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
 
@@ -222,16 +234,13 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   cv::Mat descriptors;
   KeypointsCV detected_keypoints;
   (*feature_detector_)(mono, cv::Mat(), detected_keypoints, descriptors);
-  // save detections
-  // orb_detections_.insert({ frame_id, detected_keypoints });
-  // cv::drawKeypoints(viz, detected_keypoints, viz, cv::Scalar(0, 0, 255));
+
 
  // assign tracked features to grid and add to static features
   static_features.clear();
-  std::vector<bool> detections_tracked(detected_keypoints.size(), false);
 
   const int& min_tracks = params_.max_tracking_points_bg;
-  // std::vector<std::size_t> grid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
+
   OccupandyGrid2D grid(params_.cell_size,
           std::ceil(static_cast<double>(img_size_.width)/params_.cell_size),
           std::ceil(static_cast<double>(img_size_.height)/params_.cell_size));
@@ -303,13 +312,9 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
           Feature::Ptr feature = constructStaticFeature(tracking_images, kp, age, tracklet_id, frame_id);
           if (feature)
           {
-
             tracklet_count++;
             grid.occupancy_[cell_idx] = true;
             static_features.add(feature);
-            // new_features.push_back(feature);
-            // draw an untracked kp
-            // utils::drawCircleInPlace(viz, utils::gtsamPointToCv(feature->keypoint_), cv::Scalar(0, 255, 0));
           }
         }
       // }
@@ -322,21 +327,21 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 }
 
 
-void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features) {
+void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features, gtsam::FastMap<ObjectId, size_t>& n_dynamic_track) {
   // first dectect dynamic points
   const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
+  //flow is going to take us from THIS frame to the next frame (which does not make sense for a realtime system)
   const cv::Mat& flow = tracking_images.get<ImageType::OpticalFlow>();
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
   ObjectIds instance_labels;
   dynamic_features.clear();
+  n_dynamic_track.clear();
 
   OccupandyGrid2D grid(FLAGS_semantic_mask_step_size,
           std::ceil(static_cast<double>(img_size_.width)/FLAGS_semantic_mask_step_size),
           std::ceil(static_cast<double>(img_size_.height)/FLAGS_semantic_mask_step_size));
 
-  // cv::Mat viz;
-  // rgb.copyTo(viz);
 
   // a mask to show which feature have been with optical flow from the previous frame
   // zeros mean have not been tracked
@@ -344,21 +349,24 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
   if (previous_frame_)
   {
+    const cv::Mat& previous_motion_mask = previous_frame_->tracking_images_.get<ImageType::MotionMask>();
     utils::TimingStatsCollector tracked_dynamic_features("tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature : previous_frame_->usableDynamicFeaturesBegin())
     {
       const TrackletId tracklet_id = previous_dynamic_feature->tracklet_id_;
       const size_t age = previous_dynamic_feature->age_;
-      const Keypoint kp = previous_dynamic_feature->predicted_keypoint_;
 
+      const Keypoint kp = previous_dynamic_feature->predicted_keypoint_;
+      ObjectId predicted_label = functional_keypoint::at<ObjectId>(kp, motion_mask);
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
 
-      ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
 
-      // previous_point.pt.x); bool same_propogated_label = previous_label == predicted_label;
-      // no need to check if usable since we already apply the filter
-      if(camera_->isKeypointContained(kp) && predicted_label != background_label) {
+      const Keypoint previous_kp = previous_dynamic_feature->keypoint_;
+      ObjectId previous_label = functional_keypoint::at<ObjectId>(previous_kp, previous_motion_mask);
+
+      //only include point if it is contained, it is not static and the previous label is the same as the predicted label
+      if(camera_->isKeypointContained(kp) && predicted_label != background_label && predicted_label == previous_label) {
         size_t new_age = age + 1;
         double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(y, x)[0]);
         double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(y, x)[1]);
@@ -377,13 +385,17 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->measured_flow_ = flow;
         feature->predicted_keypoint_ = Feature::CalculatePredictedKeypoint(kp, flow);
 
-        // propogate dynamic object label??
-        // feature->label_ = previous_dynamic_feature->label_;
 
-        // TODO: change to tracked
         dynamic_features.add(feature);
         tracked_feature_mask.at<uchar>(y, x) = 1;
         instance_labels.push_back(feature->instance_label_);
+
+        //update tracking info map
+        if(!n_dynamic_track.exists(feature->instance_label_)) {
+          n_dynamic_track.insert2(feature->instance_label_, 0);
+        }
+        n_dynamic_track.at(feature->instance_label_)++;
+
 
         const size_t cell_idx = grid.getCellIndex(kp);
         grid.occupancy_[cell_idx] = true;
@@ -416,7 +428,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
       // we are within the image bounds?
       if (j + flow_xe < rgb.cols && j + flow_xe > 0 && i + flow_ye < rgb.rows && i + flow_ye > 0)
       {
-        // // save correspondences
+        // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
 
         feature->instance_label_ = motion_mask.at<ObjectId>(i, j);
@@ -431,6 +443,13 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
         dynamic_features.add(feature);
         instance_labels.push_back(feature->instance_label_);
+
+        //update tracking info map
+        if(!n_dynamic_track.exists(feature->instance_label_)) {
+          n_dynamic_track.insert2(feature->instance_label_, 0);
+        }
+        n_dynamic_track.at(feature->instance_label_)++;
+
       }
     }
   }
@@ -458,6 +477,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   CHECK_EQ(instance_labels.size(), previous_frame_->numDynamicUsableFeatures());
   std::sort(instance_labels.begin(), instance_labels.end());
   instance_labels.erase(std::unique(instance_labels.begin(), instance_labels.end()), instance_labels.end());
+  //each row is correlated with a specific instance label and each column is the tracklet id associated with that label
   std::vector<TrackletIds> object_features(instance_labels.size());
 
   // collect the predicted labels and semantic labels in vector
@@ -479,9 +499,10 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   }
 
    // check each object label distribution in the coming frame
-  int updated_mask_points = 0;
   for (size_t i = 0; i < object_features.size(); i++)
   {
+    //labels at the current mask using the predicted keypoint from the previous frame
+    //each iteration is per label so temp_label should correspond to features within the same object
     ObjectIds temp_label;
     for (size_t j = 0; j < object_features[i].size(); j++)
     {
@@ -500,7 +521,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
 
     if (temp_label.size() < 100)
     {
-      LOG(WARNING) << "not enoug points to track object " << static_cast<int>(i) << " points size - "
+      LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
       //TODO:mark has static!!
       continue;
@@ -509,6 +530,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     // find label that appears most in LabTmp()
     // (1) count duplicates
     std::map<int, int> label_duplicates;
+    //k is object label
     for (int k : temp_label)
     {
       if (label_duplicates.find(k) == label_duplicates.end())
@@ -533,7 +555,16 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     std::sort(sorted.begin(), sorted.end(), sort_pair_int);
 
     // recover the missing mask (time consuming!)
+    // LOG(INFO) << sorted[0].first << " " << sorted[0].second << " " << instance_labels[i];
+    //  if (sorted[0].second < 30)
+    // {
+    //   LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
+    //                << sorted[0].second;
+    //   //TODO:mark has static!!
+    //   continue;
+    // }
     if (sorted[0].first == 0)  //?
+    // if (sorted[0].first == instance_labels[i])  //?
     {
       for (int j = 0; j < previous_rgb.rows; j++)
       {
@@ -547,7 +578,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
             if (k + flow_x < previous_rgb.cols && k + flow_x > 0 && j + flow_y < previous_rgb.rows && j + flow_y > 0)
             {
               current_mask.at<ObjectId>(j + flow_y, k + flow_x) = instance_labels[i];
-              updated_mask_points++;
+              // updated_mask_points++;
             }
           }
         }
@@ -555,32 +586,6 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     }
   }
 }
-
-
-// bool FeatureTracker::posInGrid(const Keypoint& kp, int& pos_x, int& pos_y) const {
-//   const int u = functional_keypoint::u(kp);
-//   const int v = functional_keypoint::v(kp);
-//   pos_x = round((u - min_x_) * grid_elements_width_inv_);
-//   pos_y = round((v - min_y_) * grid_elements_height_inv_);
-
-//   // Keypoint's coordinates are undistorted, which could cause to go out of the image
-//   if (pos_x < 0 || pos_x >= FRAME_GRID_COLS || pos_y < 0 || pos_y >= FRAME_GRID_ROWS)
-//     return false;
-
-//   return true;
-
-// }
-
-
-// void FeatureTracker::computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const {
-//     // TODO: distortion
-//     //see orbslam
-//     min_x = 0;
-//     max_x = size.width;
-//     min_y = 0;
-//     max_y = size.height;
-// }
-
 
 Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id, FrameId frame_id) const {
   //implicit double -> int cast for pixel location

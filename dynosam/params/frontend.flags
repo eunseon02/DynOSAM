@@ -1,0 +1,4 @@
+#!/bin/bash
+
+--init_object_pose_from_gt=false
+--use_frontend_logger=true

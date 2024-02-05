@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,21 +21,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/pipeline/PipelineParams.hpp"
-#include "dynosam/utils/YamlParser.hpp"
+#include "dynosam/backend/BackendParams.hpp"
 
-namespace dyno {
-
-DynoParams::DynoParams(const std::string& params_folder_path) {
-
-    //currently just camera params
-    camera_params_ = CameraParams::fromYamlFile(params_folder_path + "CameraParams.yaml");
-
-    YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
-    pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
-
-    pipeline_parser.getYamlParam("data_provider_type", &data_provider_type_);
-}
-
-
-}
+DEFINE_double(static_point_sigma, 2.0, "Isotropic pixel noise used on static points");
+DEFINE_double(dynamic_point_sigma, 8,"Isotropic pixel noise used on dynamic points");

@@ -23,7 +23,10 @@
 
 #pragma once
 
-#include <dynosam/visualizer/FrontendDisplay.hpp>
+#include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/DisplayRos.hpp"
+
+#include <dynosam/visualizer/Display.hpp>
 #include <dynosam/common/GroundTruthPacket.hpp>
 #include <dynosam/frontend/RGBDInstance-Definitions.hpp>
 
@@ -41,41 +44,41 @@
 
 namespace dyno {
 
-class FrontendDisplayRos : public FrontendDisplay {
+class FrontendDisplayRos : public FrontendDisplay, DisplayRos {
 public:
-    FrontendDisplayRos(rclcpp::Node::SharedPtr node);
+    FrontendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node);
 
     void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) override;
 
 private:
     void processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output);
 
-    void publishStaticCloud(const Landmarks& static_landmarks);
-    void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
+    // void publishStaticCloud(const Landmarks& static_landmarks);
+    // void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
 
-    /**
-     * @brief Draw propogated (composed) object poses as estimated with frame to frame motion from the frontend
-     *
-     * Also draw object paths (as separate topic) using LINE_LISTS.
-     *
-     * @param propogated_object_poses
-     * @param frame_id
-     */
-    void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
+    // /**
+    //  * @brief Draw propogated (composed) object poses as estimated with frame to frame motion from the frontend
+    //  *
+    //  * Also draw object paths (as separate topic) using LINE_LISTS.
+    //  *
+    //  * @param propogated_object_poses
+    //  * @param frame_id
+    //  */
+    // void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
 
-    /**
-     * @brief Draw object motion as arrows starting from the current object pose.
-     *
-     * This viz is slightly misleading as the motion is from t-t to t and the object pose is estimated for time t.
-     *
-     * @param motion_estimates
-     * @param propogated_object_poses
-     */
-    void publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
+    // /**
+    //  * @brief Draw object motion as arrows starting from the current object pose.
+    //  *
+    //  * This viz is slightly misleading as the motion is from t-t to t and the object pose is estimated for time t.
+    //  *
+    //  * @param motion_estimates
+    //  * @param propogated_object_poses
+    //  */
+    // void publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
 
-    // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
+    // // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
-    void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
+    // void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     void publishDebugImage(const cv::Mat& debug_image);
 
     void publishGroundTruthInfo(Timestamp timestamp, const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
@@ -104,6 +107,7 @@ private:
 
     //ground truth publishers
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_pose_pub_;
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr gt_object_path_pub_; //! Path of objects with gt
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr gt_odometry_pub_;
 
     rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr gt_odom_path_pub_;

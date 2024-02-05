@@ -163,7 +163,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 
   //we do the removal after the iteration so as not to mess up the loop
   for(const auto label : instance_labels_to_remove) {
-    // LOG(INFO) << "Removing label " << label;
+    VLOG(30) << "Removing label " << label;
     //TODO: this is really really slow!!
     current_frame->moveObjectToStatic(label);
     // LOG(INFO) << "Done Removing label " << label;
@@ -256,7 +256,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 
     }
 
-    LOG(INFO) << "Done tracking for instance label " << instance_label;
+    VLOG(20) << "Done tracking for instance label " << instance_label;
   }
   return std::vector<std::vector<int> >();
 }

@@ -6,7 +6,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
-
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 
 #include <functional>
@@ -75,6 +75,7 @@ public:
         return image_container;
     }
 
+
     /**
      * @brief Spins the dataset for one "step" of the dataset
      *
@@ -86,6 +87,9 @@ public:
 
     virtual void shutdown();
 
+
+
+
 protected:
     ImageContainerCallback image_container_callback_;
     ImuSingleInputCallback imu_single_input_callback_;
@@ -95,6 +99,7 @@ protected:
 
     // Shutdown switch to stop data provider.
     std::atomic_bool shutdown_ = {false};
+
 };
 
 } //dyno

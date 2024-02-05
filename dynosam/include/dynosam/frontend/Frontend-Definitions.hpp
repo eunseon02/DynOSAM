@@ -23,10 +23,20 @@
 
 #pragma once
 
+#include "dynosam/common/Types.hpp"
+
 namespace dyno {
 
+/**
+ * @brief Determines which frontend module to load.
+ *
+ *
+ *
+ */
 enum class FrontendType {
-    kRGBD = 0
+    kRGBD = 0,
+    kMono = 1
 };
+
 
 }

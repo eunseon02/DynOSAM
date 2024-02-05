@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/Numerical.hpp" //for hash pair
 
 #include <unordered_map>
 #include <vector>
@@ -32,7 +33,23 @@
 
 #include <glog/logging.h>
 
+template <class T1, class T2>
+using TemplatedPair = std::pair<T1, T2>;
+
+template <class T1, class T2>
+struct std::hash<TemplatedPair<T1, T2>>
+{
+  using TP = TemplatedPair<T1, T2>;
+
+  inline std::size_t operator()(const TP& k) const {
+    return dyno::hashPair(k);
+  }
+};
+
+
 namespace dyno {
+
+
 namespace internal {
 
 // T is the pointer to the type that is expected to be iterated over
@@ -149,6 +166,7 @@ using filter_iterator = filter_iterator_base<Container, typename Container::iter
 
 template<typename Container>
 using filter_const_iterator = filter_iterator_base<Container, typename Container::const_iterator>;
+
 
 
 

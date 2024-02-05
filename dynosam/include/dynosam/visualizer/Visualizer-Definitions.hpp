@@ -24,11 +24,10 @@
 #pragma once
 
 #include "dynosam/pipeline/PipelineBase-Definitions.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 
-#include <glog/logging.h>
 #include <opencv4/opencv2/opencv.hpp>
+#include <optional>
 
 namespace dyno {
 

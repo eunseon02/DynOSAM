@@ -1,10 +1,38 @@
 #!/bin/bash
 
---params_folder_path=/home/user/dev_ws/src/DynOSAM/dynosam/params/
---path_to_kitti=/root/data/vdo_slam/kitti/kitti/0000
+--test_flag=11
+--output_path=/root/results/DynoSAM/
 
-#RGBD instance
---frontend_type=0
+# backend parameters
+--max_opt_iterations=30
+--optimize_n_frame=15
+--static_point_sigma=2.0
+--dynamic_point_sigma=4.0
+--use_gt_camera_pose=true
 
+#if a sigma on the first set of object points should be added
+--use_first_seen_dynamic_point_prior=false
+# if use_first_seen_dynamic_point_prior==true, this will be the sigma used on the 3x3 noise model
+--first_seen_dynamic_point_sigma=3.0
 
---semantic_mask_step_size=100
+# 0: Initalise from perturbed gt pose 1: Initalise from gt depth with modified scale. 2: Init from road
+--dynamic_point_init_func_type=2
+
+--use_object_points_near_ground_prior=true
+--object_points_near_ground_sigma=10.0
+
+--use_motion_from_road_prior=false
+#if true, use the gt motion between frames, else, use estimated. Only used if use_motion_from_road_prior==true
+--use_gt_motion_from_road=true
+--motion_scale_prior_sigma=0.001
+
+# Used when Used when dynamic_point_init_func_type==0
+# Sigma to use on the gt object pose when initalising dynamic points near the pose.
+--dp_init_sigma_perturb=1.0
+# Used when dynamic_point_init_func_type==1
+# A uniform distribution is used (with these being a, b) to generate a scale value within this range
+# which is used to scale (multiply) the depth of the point directly
+--min_depth_scale=0.4
+--mmax_depth_scale=1.4
+
+--use_last_seen_dynamic_point_prior=false

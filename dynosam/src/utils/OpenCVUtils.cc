@@ -177,19 +177,18 @@ void flowToRgb(const cv::Mat& flow, cv::Mat& rgb) {
 }
 
 
-
-void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_viz) {
-  CHECK_EQ(rgb.size, mask.size) << "Input rgb and mask image must have the same size";
-  rgb.copyTo(mask_viz);
+cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label, const cv::Mat& rgb) {
   CHECK(mask.channels() == 1) << "Expecting mask input to have channels 1";
-  CHECK(mask.depth() == CV_32SC1);
+  CHECK(rgb.channels() == 3) << "Expecting rgb input to have channels 3";
+  cv::Mat mask_viz;
+  rgb.copyTo(mask_viz);
 
   for (int i = 0; i < mask.rows; i++)
   {
     for (int j = 0; j < mask.cols; j++)
     {
       // background is zero
-      if (mask.at<int>(i, j) != 0)
+      if (mask.at<int>(i, j) != background_label)
       {
         cv::Scalar color = ColourMap::getObjectColour(mask.at<int>(i, j));
         // rgb or bgr?
@@ -199,9 +198,19 @@ void semanticMaskToRgb(const cv::Mat& rgb, const cv::Mat& mask, cv::Mat& mask_vi
       }
     }
   }
+
+  return mask_viz;
 }
 
-void drawLabel(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
+
+cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label) {
+  cv::Mat rgb = cv::Mat::zeros(mask.size(), CV_8UC3);
+  return labelMaskToRGB(mask, background_label, rgb);
+}
+
+
+
+void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
   constexpr static double kFontScale = 0.5;
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 2;

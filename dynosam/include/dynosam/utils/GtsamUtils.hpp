@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "dynosam/utils/Numerical.hpp"
+
 #include <eigen3/Eigen/Core> //must be included before opencv
 #include <gtsam/geometry/Unit3.h>
 #include <gtsam/inference/Symbol.h>
@@ -33,6 +35,7 @@
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/inference/Key.h>
 #include <gtsam/nonlinear/NonlinearFactor.h>
+#include <gtsam/linear/Sampler.h>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -69,7 +72,22 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
 
+template<typename T>
+T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
+  CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());
+  //! Make static so that the generator (internal to the sampler) remains in memory during calls
+  //! and that we actually get a random distribution
+  static gtsam::Sampler sample(sigmas, seed);
 
+  gtsam::Vector delta(sample.sample()); //delta should be the tangent vector
+  return gtsam::traits<T>::Retract(t, delta);
+}
+
+template<typename T>
+T perturbWithNoise(const T& t, double sigma, int32_t seed = 42) {
+  gtsam::Vector sigmas = gtsam::Vector::Constant(gtsam::traits<T>::dimension, sigma);
+  return perturbWithNoise<T>(t, sigmas, seed);
+}
 
 
 template <typename T=double>
@@ -78,7 +96,7 @@ inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point)
   return gtsam::Point2(static_cast<double>(point.x), static_cast<double>(point.y));
 }
 
-template <typename T=double>
+template <typename T=float>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
   gtsam::Point2Vector gtsam_points;
   for (const auto& p : points)
@@ -88,12 +106,12 @@ gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
   return gtsam_points;
 }
 
-template<typename T=double>
+template<typename T=float>
 inline cv::Point_<T> gtsamPointToCv(const gtsam::Point2& point) {
   return cv::Point_<T>(static_cast<T>(point(0)), static_cast<T>(point(1)));
 }
 
-template<typename T=double>
+template<typename T=float>
 std::vector<cv::Point_<T>> gtsamPointsToCv(const gtsam::Point2Vector& points) {
   std::vector<cv::Point_<T>> cv_points;
   for(const auto& p : points) {
@@ -119,6 +137,12 @@ static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, 
     return false;
   }
 }
+
+inline bool saveNoiseModelAsUpperTriangular(std::ostream& os, const gtsam::noiseModel::Gaussian& noise_model) {
+  const gtsam::Matrix info = noise_model.information();
+  return saveMatrixAsUpperTriangular(os, info);
+}
+
 
 } //utils
 } //dyno

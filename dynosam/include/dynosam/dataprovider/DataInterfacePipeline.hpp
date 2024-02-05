@@ -38,6 +38,7 @@ public:
     virtual FrontendInputPacketBase::ConstPtr getInputPacket() override;
 
     //expects input packet
+    //TODO: I dont think should be vrtual?
     virtual inline void fillImageContainerQueue(ImageContainer::Ptr image_container) {
         if(image_container_preprocessor_) {
             packet_queue_.push(CHECK_NOTNULL(image_container_preprocessor_(image_container)));

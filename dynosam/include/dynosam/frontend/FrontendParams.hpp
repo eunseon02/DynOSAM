@@ -24,12 +24,13 @@
 #pragma once
 
 #include <string>
+#include <cmath>
 
 namespace dyno {
 
 struct FrontendParams {
 
-// tracking points params
+  // tracking points params
   int max_tracking_points_bg = 800;
   int max_tracking_points_obj = 800;
 
@@ -54,6 +55,11 @@ struct FrontendParams {
 
   //PnP outlier rejection options
 
+  ////https://github.com/laurentkneip/opengv/issues/121
+  double ransac_threshold = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+  double ransac_iterations = 500;
+  double ransac_probability = 0.995;
+  bool optimize_3d3d_pose_from_inliers = false;
 
   static FrontendParams fromYaml(const std::string& file_path);
 

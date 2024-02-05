@@ -25,29 +25,97 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/visualizer/FrontendDisplay.hpp"
+#include "dynosam/visualizer/Display.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
+#include "dynosam/backend/BackendOutputPacket.hpp"
+#include "dynosam/pipeline/ThreadSafeQueue.hpp"
+
+#include <glog/logging.h>
 
 
 namespace dyno {
 
-class FrontendVizPipeline : public SIMOPipelineModule<FrontendOutputPacketBase, NullPipelinePayload> {
+
+/**
+ * @brief Generic pipeline for display
+ *
+ * @tparam INPUT
+ */
+template<typename INPUT>
+class DisplayPipeline : public SIMOPipelineModule<INPUT, NullPipelinePayload> {
 
 public:
-    DYNO_POINTER_TYPEDEFS(FrontendVizPipeline)
+  using Input = INPUT;
+  using This = DisplayPipeline<Input>;
+  using Base =  SIMOPipelineModule<Input, NullPipelinePayload>;
+  using Display = DisplayBase<Input>;
+  DYNO_POINTER_TYPEDEFS(This)
 
-    using SIMO =
-      SIMOPipelineModule<FrontendOutputPacketBase, NullPipelinePayload>;
-    using InputQueue = typename SIMO::InputQueue;
+  using InputQueue = typename Base::InputQueue;
+  using InputConstPtr = typename Display::InputConstPtr;
 
-    FrontendVizPipeline(InputQueue* input_queue, FrontendDisplay::Ptr frontend_display);
 
-    NullPipelinePayload::ConstPtr process(const FrontendOutputPacketBase::ConstPtr& input) override;
+  DisplayPipeline(const std::string& name, InputQueue* input_queue, typename Display::Ptr display)
+    : Base(name, input_queue), display_(CHECK_NOTNULL(display)) {}
+
+  NullPipelinePayload::ConstPtr process(const InputConstPtr& input) override {
+    display_->spinOnce(CHECK_NOTNULL(input));
+    static auto null_payload = std::make_shared<NullPipelinePayload>();
+    return null_payload;
+  }
 
 private:
-    FrontendDisplay::Ptr frontend_display_;
+  typename Display::Ptr display_;
 
 };
+
+using FrontendVizPipeline = DisplayPipeline<FrontendOutputPacketBase>;
+using BackendVizPipeline = DisplayPipeline<BackendOutputPacket>;
+
+// struct VisualizerInput : public PipelinePayload {
+//   DYNO_POINTER_TYPEDEFS(VisualizerInput)
+//   DYNO_DELETE_COPY_CONSTRUCTORS(VisualizerInput)
+
+//   const FrontendOutputPacketBase::Ptr frontend_output_;
+//   const BackendOutputPacket::Ptr backend_output_;
+
+//   explicit VisualizerInput(
+//     const FrontendOutputPacketBase::Ptr& frontend_output,
+//     const BackendOutputPacket::Ptr& backend_output)
+//   : frontend_output_(frontend_output), backend_output_(backend_output) {}
+// };
+
+
+// class VisualizerPipeline : public MIMOPipelineModule<VisualizerInput, NullPipelinePayload> {
+
+// public:
+//     using Base =  MIMOPipelineModule<VisualizerInput, NullPipelinePayload>;
+//     using InputQueue = typename Base::InputQueue;
+
+//     VisualizerPipeline() = default;
+
+//     VisualizerInput::ConstPtr getInputPacket() override;
+
+//     void shutdownQueues() override;
+
+//     //! Checks if the module has work to do (should check input queues are empty)
+//     bool hasWork() const override;
+
+
+// protected:
+//   NullPipelinePayload::ConstPtr process(const VisualizerInput::ConstPtr& input) override;
+
+// private:
+//   //! Input Queues
+//   ThreadsafeQueue<FrontendOutputPacketBase::Ptr> frontend_queue_;
+//   ThreadsafeQueue<BackendOutputPacket::Ptr> backend_queue_;
+
+// };
+
+
+
+
+
 
 
 

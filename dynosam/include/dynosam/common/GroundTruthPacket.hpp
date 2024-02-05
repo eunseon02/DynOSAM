@@ -23,43 +23,77 @@
 
 #pragma once
 
-
+#include "dynosam/common/Types.hpp"
 #include "dynosam/pipeline/PipelinePayload.hpp"
 
 #include <opencv4/opencv2/opencv.hpp> //for cv::Rect
 #include <gtsam/geometry/Pose3.h> //for Pose3
 
-#include "dynosam/utils/OpenCVUtils.hpp"
-#include "dynosam/visualizer/ColourMap.hpp"
+#include <glog/log_severity.h>
+
 
 namespace dyno {
 
-
+//should only be included if visible??
 struct ObjectPoseGT {
     DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
 
-    FrameId frame_id_;
+    struct MotionInfo {
+        bool is_moving_;
+        bool has_stopped_; //has stopped since the previous frame. If true, then is_moving_ should be false
+    };
+
+    FrameId frame_id_; //k
     ObjectId object_id_;
     gtsam::Pose3 L_camera_; //!object pose in camera frame
+    gtsam::Pose3 L_world_; //!object pose in world frame
     cv::Rect bounding_box_; //!box of detection on image plane
 
     /// @brief 3D object 'dimensions' in meters. Not all datasets will contain. Used to represent a 3D bounding box.
     /// Expected order is {width, height, length}
     std::optional<gtsam::Vector3> object_dimensions_;
 
+    /// @brief Motion in the world frame that takes us from k-1 (frame_id -1) to k (frame_id)
+    std::optional<gtsam::Pose3> prev_H_current_world_;
+
+    /// @brief Motion in the (ground truth object) frame (^WL_{k-1}) that takes us from k-1 (frame_id -1) to k (frame_id)
+    std::optional<gtsam::Pose3> prev_H_current_L_;
+
+    /// @brief Motion in the (ground truth camera) frame (^WX_{k-1}) that takes us from k-1 (frame_id -1) to k (frame_id)
+    std::optional<gtsam::Pose3> prev_H_current_X_;
+
+    std::optional<MotionInfo> motion_info_;
+
     /**
      * @brief Draws the object label and bounding box on the provided image
      *
      * @param img
      */
-    inline void drawBoundingBox(cv::Mat& img) const {
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id_, true);
-        const std::string label = "Object: " + std::to_string(object_id_);
-        utils::drawLabel(img, label, colour, bounding_box_);
-    }
+    void drawBoundingBox(cv::Mat& img) const;
+
+    /**
+     * @brief Calculates and sets prev_*_current_world_ using ground truth object in the previous frame.
+     * Shoudl be used when constructed the gt packets in the various DataProviders
+     *
+     * This object is epxected to be at frame k, and the previous motion should be at frame k-1. The previous_object_gt
+     * should have the same object ID and an exception will be thrown if either of these checks fail.
+     *
+     * Both ObjectPoseGT are expected to have the L_world_ variable set correctly.
+     *
+     * @param previous_motion const ObjectPoseGT&
+     * @param prev_X_world const gtsam::Pose3& Camera pose at the previous frame (k-1).
+     * @param curr_X_world const gtsam::Pose3& Camera pose at the current frame (k).
+     */
+    void setMotions(const ObjectPoseGT& previous_object_gt, const gtsam::Pose3& prev_X_world, const gtsam::Pose3& curr_X_world);
+
+    operator std::string() const;
+
+    bool operator==(const ObjectPoseGT& other) const;
+    friend std::ostream &operator<<(std::ostream &os, const ObjectPoseGT& object_pose);
 };
 
-struct GroundTruthInputPacket : public PipelinePayload {
+class GroundTruthInputPacket : public PipelinePayload {
+public:
     DYNO_POINTER_TYPEDEFS(GroundTruthInputPacket)
 
     //must have a default constructor for dataset loading and IO
@@ -70,9 +104,101 @@ struct GroundTruthInputPacket : public PipelinePayload {
 
     FrameId frame_id_;
     gtsam::Pose3 X_world_; //camera pose in world frame
+    //! Vector of GT objects. This should contain all the objects in the sequence
     std::vector<ObjectPoseGT> object_poses_;
+
+    /**
+     * @brief Attempts to get the ObjectPoseGT with the requested id from the packet.
+     * If the object id does not exist, false is returned.
+     *
+     * Log severity indicates what should happen if the object id does NOT exist
+     * 0: nothing, and the function returns false
+     * 1: a GLOG(WARNING) message is thrown, and the function returns false
+     * 2: An exception is thrown, and the function returns false
+     *
+     * @param object_id
+     * @param object_pose_gt
+     * @param log_severity
+     * @return true
+     * @return false
+     */
+    bool getObject(ObjectId object_id, ObjectPoseGT& object_pose_gt, int log_severity = 0) const;
+
+    ObjectIds getObjectIds() const;
+
+    /**
+     * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
+     *
+     * If the query object is in both this and the other packet, true is returned and obj and other_obj are set
+     *
+     * We pass in a pointer to a pointer so we can modify the value of pointer itself
+     *
+     * @param label ObjectId
+     * @param other GroundTruthInputPacket&
+     * @param obj ObjectPoseGT** Pointer to the object in THIS packet. Pointer is passed in as address so the pointer can be changed.
+     * This points to the obejct contained in this vector.
+     * @param other_obj ObjectPoseGT** Pointer to the object in the OTHER packet. Pointer is passed in as address so the pointer can be changed.
+     * This points to the obejct contained in the OTHER vector.
+     * @return true
+     * @return false
+     */
+    bool findAssociatedObject(ObjectId label, GroundTruthInputPacket& other, ObjectPoseGT** obj, ObjectPoseGT** other_obj);
+    bool findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, ObjectPoseGT** obj, const ObjectPoseGT** other_obj);
+
+    /**
+     * @brief Query an ObjectPoseGT in this packet and anOTHER packet using a object label
+     *
+     * If the query object is in both this and the other packet, true is returned and the index location obj and other_obj are set.
+     * The index is the position in the object_poses_ vector (respectively) where the ObjectPoseGT can be found
+     *
+     * e.g.
+     *
+     * GroundTruthPacket packet, other_packet;
+     *
+     * size_t packet_idx, other_packet_idx;
+     * packet.findAssociatedObject(1u, other_packet, packet_idx, other_packet_idx);
+     *
+     * assert(packet.object_poses_.at(packet_idx).object_id == other_packet.object_poses_.at(other_packet_idx).object_id == 1u)
+     *
+     * @param label
+     * @param other
+     * @param obj_idx
+     * @param other_obj_idx
+     * @return true
+     * @return false
+     */
+    bool findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, size_t& obj_idx, size_t& other_obj_idx) const;
+    bool findAssociatedObject(ObjectId label, const GroundTruthInputPacket& other, const ObjectPoseGT** obj, const ObjectPoseGT** other_obj) const;
+
+
+    /**
+     * @brief Calcualtes and sets the object motion ground truth variables of this GroundTruthInputPacket using the previous object motions.
+     * This packet is considered to be time k and the previous object packet is k-1. This should only be used in some derived
+     * DataProvider/Loader when constructing the GroundTruthPacket.
+     *
+     * If the previous obejct packet is not at the right frame (k-1), false will be returned.
+     * Each object in the current packet will be queried in the previous packet, and, if exists, the motion will be calcuted at set.
+     *
+     * The vector of ObjectId's indicate which objects motions were calculated
+     *
+     * @param previous_object_packet
+     * @param motions_set
+     * @return size_t number of motions set
+     */
+    size_t calculateAndSetMotions(const GroundTruthInputPacket& previous_object_packet, ObjectIds& motions_set);
+    size_t calculateAndSetMotions(const GroundTruthInputPacket& previous_object_packet);
+
+    operator std::string() const;
+
+    friend std::ostream &operator<<(std::ostream &os, const GroundTruthInputPacket& gt_packet);
+
+private:
+
+
 };
 
+
+using GroundTruthPacketMap = gtsam::FastMap<FrameId,  GroundTruthInputPacket>;
 
 
 } //dyno
