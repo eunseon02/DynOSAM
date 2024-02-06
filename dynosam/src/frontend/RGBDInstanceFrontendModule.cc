@@ -255,7 +255,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        KeypointStatus kp_status = KeypointStatus::Static();
+        KeypointStatus kp_status = KeypointStatus::Static(frame.frame_id_);
         KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
         static_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
 
@@ -281,7 +281,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 const Keypoint kp = f->keypoint_;
                 const Landmark lmk = frame.backProjectToWorld(tracklet_id);
 
-                KeypointStatus kp_status = KeypointStatus::Dynamic(object_id);
+                KeypointStatus kp_status = KeypointStatus::Dynamic(object_id, frame.frame_id_);
                 KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
                 dynamic_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
 

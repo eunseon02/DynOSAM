@@ -132,8 +132,9 @@ struct LandmarkStatus {
 struct KeypointStatus {
   const KeyPointType kp_type_;
   const ObjectId label_; //! Will be 0 if background
+  const FrameId frame_id_;
 
-  KeypointStatus(KeyPointType kp_type, ObjectId label) : kp_type_(kp_type), label_(label) {}
+  KeypointStatus(KeyPointType kp_type, ObjectId label, FrameId frame_id) : kp_type_(kp_type), label_(label), frame_id_(frame_id) {}
 
   inline bool isStatic() const {
     const bool is_static = (kp_type_ == KeyPointType::STATIC);
@@ -144,13 +145,13 @@ struct KeypointStatus {
     return is_static;
   }
 
-  inline static KeypointStatus Static() {
-    return KeypointStatus(KeyPointType::STATIC, background_label);
+  inline static KeypointStatus Static(FrameId frame_id) {
+    return KeypointStatus(KeyPointType::STATIC, background_label, frame_id);
   }
 
-  inline static KeypointStatus Dynamic(ObjectId label) {
+  inline static KeypointStatus Dynamic(ObjectId label, FrameId frame_id) {
     CHECK(label != background_label);
-    return KeypointStatus(KeyPointType::DYNAMIC, label);
+    return KeypointStatus(KeyPointType::DYNAMIC, label, frame_id);
   }
 };
 

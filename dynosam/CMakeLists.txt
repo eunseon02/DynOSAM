@@ -67,6 +67,8 @@ add_library(${PROJECT_NAME} SHARED
   src/common/StructuredContainers.cc
   src/common/DynamicObjects.cc
   src/common/Exceptions.cc
+  src/common/Map.cc
+
 
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
@@ -99,7 +101,6 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/MonoBatchBackendModule.cc
   src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
-  src/backend/Map.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
@@ -251,6 +252,7 @@ if(BUILD_TESTING)
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/test_tools.cc
+    test/test_map.cc
     test/test_pipelines.cc
     test/test_structured_containers.cc
     test/test_triangulation.cc

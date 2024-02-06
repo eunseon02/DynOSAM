@@ -296,7 +296,7 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        KeypointStatus status = KeypointStatus::Static();
+        KeypointStatus status = KeypointStatus::Static(frame.frame_id_);
         KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
 
         static_keypoint_measurements.push_back(std::make_pair(status, measurement));
@@ -316,7 +316,7 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;
 
-                KeypointStatus status = KeypointStatus::Dynamic(object_id);
+                KeypointStatus status = KeypointStatus::Dynamic(object_id, frame.frame_id_);
                 KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
 
                 dynamic_keypoint_measurements.push_back(std::make_pair(status, measurement));
