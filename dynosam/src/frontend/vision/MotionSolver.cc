@@ -21,6 +21,8 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/frontend/vision/MotionSolver.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
@@ -28,126 +30,121 @@
 #include <opencv4/opencv2/core/eigen.hpp>
 #include <opencv4/opencv2/core.hpp>
 
-#include "dynosam/frontend/vision/MotionSolver.hpp"
+
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
-
-#include <opengv/absolute_pose/CentralAbsoluteAdapter.hpp>
-#include <opengv/absolute_pose/methods.hpp>
-
-#include <opengv/relative_pose/CentralRelativeAdapter.hpp>
-#include <opengv/relative_pose/methods.hpp>
-
-#include <opengv/point_cloud/PointCloudAdapter.hpp>
-#include <opengv/point_cloud/methods.hpp>
 #include <opengv/types.hpp>
 
 #include <glog/logging.h>
 
 namespace dyno {
 
-namespace motion_solver_tools {
+// RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
 
-/**
- * @brief Specalisation for 3D -> 2D absolute pose solving method
- *
- * @tparam
- * @param correspondences
- * @param params
- * @param camera_params
- * @return MotionResult
- */
-template<>
-MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Landmark, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
-    using MotionResult = MotionSolverResult<gtsam::Pose3>;
+//     const size_t& n_matches = correspondences.size();
+
+//     if(n_matches < 5u) {
+//         return MotionResult::NotEnoughCorrespondences();
+//     }
+
+
+//     std::vector<cv::Point2d> ref_kps, curr_kps;
+//     TrackletIds tracklets;
+//     for(size_t i = 0u; i < n_matches; i ++) {
+//         const auto& corres = correspondences.at(i);
+//         const Keypoint& ref_kp = corres.ref_;
+//         const Keypoint& cur_kp = corres.cur_;
+
+//         ref_kps.push_back(utils::gtsamPointToCv(ref_kp));
+//         curr_kps.push_back(utils::gtsamPointToCv(cur_kp));
+
+//         tracklets.push_back(corres.tracklet_id_);
+//     }
+
+//     constexpr int method = cv::RANSAC;
+//     constexpr double  prob = 0.999;
+// 	constexpr double threshold = 1.0;
+//     constexpr int max_iterations = 500;
+//     const cv::Mat K = camera_params_.getCameraMatrix();
+
+//     cv::Mat ransac_inliers;  // a [1 x N] vector
+
+//     const cv::Mat E = cv::findEssentialMat(
+//         ref_kps,
+//         curr_kps,
+//         K,
+//         method,
+//         prob,
+//         threshold,
+//         max_iterations,
+//         ransac_inliers); //ransac params?
+
+//     CHECK(ransac_inliers.rows == tracklets.size());
+
+//     cv::Mat R1, R2, t;
+//     try {
+//         cv::decomposeEssentialMat(E, R1, R2, t);
+//     }
+//     catch(const cv::Exception& e) {
+//         LOG(WARNING) << "decomposeEssentialMat failed with error " << e.what();
+//         return MotionResult::Unsolvable();
+//     }
+
+//     TrackletIds inliers, outliers;
+//     for (int i = 0; i < ransac_inliers.rows; i++)
+//     {
+//         if(ransac_inliers.at<int>(i)) {
+//             const auto& corres = correspondences.at(i);
+//             inliers.push_back(corres.tracklet_id_);
+//         }
+
+//     }
+
+//     determineOutlierIds(inliers, tracklets, outliers);
+//     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
+
+//     EssentialDecompositionResult result(
+//         utils::cvMatToGtsamRot3(R1),
+//         utils::cvMatToGtsamRot3(R2),
+//         utils::cvMatToGtsamPoint3(t)
+//     );
+
+//     // LOG(INFO) << "Solving RelativeObjectMotionSolver with inliers " << inliers.size() << " outliers " <<  outliers.size();
+//     return MotionResult(result, tracklets, inliers, outliers);
+// }
+
+EgoMotionSolver::EgoMotionSolver(const FrontendParams& params, const CameraParams& camera_params)
+    : params_(params), camera_params_(camera_params) {}
+
+Pose3SolverResult EgoMotionSolver::geometricOutlierRejection2d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref)
+{
+    //get correspondences
+    RelativePoseCorrespondences correspondences;
+    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
+    //bearing vectors are also not undistorted atm!!
+    {
+        utils::TimingStatsCollector track_dynamic_timer("mono_frame_correspondences");
+        frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->imageKeypointCorrespondance());
+    }
+
+    Pose3SolverResult result;
+
     const size_t& n_matches = correspondences.size();
 
     if(n_matches < 5u) {
-        return MotionResult::NotEnoughCorrespondences();
+        result.status = TrackingStatus::FEW_MATCHES;
+        return result;
     }
 
-    gtsam::Matrix K = gtsam::Matrix::Identity(3, 3);
-    cv::cv2eigen(camera_params.getCameraMatrix(), K);
-
+    gtsam::Matrix K = camera_params_.getCameraMatrixEigen();
     K = K.inverse();
 
-    TrackletIds tracklets, inliers, outliers;
-    //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
-    BearingVectors bearing_vectors;
-    Landmarks points;
-    for(size_t i = 0u; i < n_matches; i ++) {
-        const AbsolutePoseCorrespondence& corres = correspondences.at(i);
-        const Keypoint& kp = corres.cur_;
-        //make Bearing vector
-        gtsam::Vector3 versor = (K * gtsam::Vector3(kp(0), kp(1), 1.0));
-        versor = versor.normalized();
-        bearing_vectors.push_back(versor);
-
-        points.push_back(corres.ref_);
-        tracklets.push_back(corres.tracklet_id_);
-    }
-
-    opengv::absolute_pose::CentralAbsoluteAdapter adapter(bearing_vectors, points );
-
-    // (algorithm is selectable: KNEIP, GAO, or EPNP)
-    std::shared_ptr<AbsolutePoseProblem>
-        absposeproblem_ptr(
-        new AbsolutePoseProblem(
-        adapter, AbsolutePoseProblem::KNEIP ) );
-
-    gtsam::Pose3 opengv_transform;
-    std::vector<int> ransac_inliers;
-    if(!runRansac<AbsolutePoseProblem>(
-        absposeproblem_ptr,
-        params,
-        opengv_transform,
-        ransac_inliers
-    )) {
-        return MotionResult::Unsolvable();
-    }
-
-    CHECK(ransac_inliers.size() <= correspondences.size());
-    for(int inlier_idx : ransac_inliers) {
-        const auto& corres = correspondences.at(inlier_idx);
-        inliers.push_back(corres.tracklet_id_);
-    }
-
-    determineOutlierIds(inliers, tracklets, outliers);
-    CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-    CHECK_EQ(inliers.size(), ransac_inliers.size());
-
-
-    return MotionSolverResult<gtsam::Pose3>(opengv_transform, tracklets, inliers, outliers);
-}
-
-
-
-/**
- * @brief Specalisation for 2D -> 2D relative pose solving method
- *
- * @tparam
- * @param correspondences
- * @param params
- * @param camera_params
- * @return MotionResult
- */
-template<>
-MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Keypoint, Keypoint>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
-    using MotionResult = MotionSolverResult<gtsam::Pose3>;
-    const size_t& n_matches = correspondences.size();
-
-    if(n_matches < 5u) {
-        return MotionResult::NotEnoughCorrespondences();
-    }
-
-    gtsam::Matrix K = gtsam::Matrix::Identity(3, 3);
-    cv::cv2eigen(camera_params.getCameraMatrix(), K);
-
-    K = K.inverse();
-
-    TrackletIds tracklets, inliers, outliers;
-    //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
+    TrackletIds tracklets;
+    //NOTE: currently without distortion! the correspondences should be made into bearing vector elsewhere!
     BearingVectors ref_bearing_vectors, cur_bearing_vectors;
     for(size_t i = 0u; i < n_matches; i ++) {
         const auto& corres = correspondences.at(i);
@@ -166,204 +163,307 @@ MotionSolverResult<gtsam::Pose3> solveMotion(const GenericCorrespondences<Keypoi
         tracklets.push_back(corres.tracklet_id_);
     }
 
-    opengv::relative_pose::CentralRelativeAdapter adapter(ref_bearing_vectors, cur_bearing_vectors );
+    RelativePoseAdaptor adapter(ref_bearing_vectors, cur_bearing_vectors);
 
-    // create a Ransac object
-    std::shared_ptr<RelativePoseProblem>
-        relposeproblem_ptr(
-        new RelativePoseProblem(
-            adapter,
-            RelativePoseProblem::NISTER
-            )
-        );
+    const bool use_2point_mono = params_.ransac_use_2point_mono && R_curr_ref;
+    if(use_2point_mono) {
+        adapter.setR12((*R_curr_ref).matrix());
+    }
 
 
-    gtsam::Pose3 opengv_transform;
+
+    gtsam::Pose3 best_pose;
     std::vector<int> ransac_inliers;
-    if(!runRansac<RelativePoseProblem>(
-        relposeproblem_ptr,
-        params,
-        opengv_transform,
-        ransac_inliers
-    )) {
-        return MotionResult::Unsolvable();
+    bool success = false;
+    if(use_2point_mono) {
+        success = runRansac<RelativePoseProblemGivenRot>(
+                std::make_shared<RelativePoseProblemGivenRot>(
+                    adapter, params_.ransac_randomize
+                ),
+                params_.ransac_threshold_mono,
+                params_.ransac_iterations,
+                params_.ransac_probability,
+                params_.optimize_2d2d_pose_from_inliers,
+                best_pose,
+                ransac_inliers
+            );
+    }
+    else {
+        success = runRansac<RelativePoseProblem>(
+                std::make_shared<RelativePoseProblem>(
+                    adapter,
+                    RelativePoseProblem::NISTER,
+                    params_.ransac_randomize
+                ),
+                params_,
+                best_pose,
+                ransac_inliers
+            );
     }
 
-    CHECK(ransac_inliers.size() <= correspondences.size());
-    for(int inlier_idx : ransac_inliers) {
-        const auto& corres = correspondences.at(inlier_idx);
-        inliers.push_back(corres.tracklet_id_);
+    if(!success) {
+        result.status = TrackingStatus::INVALID;
     }
-
-    determineOutlierIds(inliers, tracklets, outliers);
-    CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-    CHECK_EQ(inliers.size(), ransac_inliers.size());
-
-
-    return MotionResult(opengv_transform, tracklets, inliers, outliers);
-}
-
-// /**
-//  * @brief Specalisation for 3D -> 3D using the point cloud alignment method
-//  *
-//  * @tparam
-//  * @param correspondences Should be points expressed in the ref and current frames
-//  * @param params
-//  * @param camera_params
-//  * @return MotionResult
-//  */
-// template<>
-// MotionResult solveMotion(const GenericCorrespondences<Landmark, Landmark>& correspondences, const FrontendParams& params, const CameraParams& camera_params) {
-//     const size_t& n_matches = correspondences.size();
-
-//     if(n_matches < 3u) {
-//         return MotionResult::NotEnoughCorrespondences();
-//     }
-
-//     TrackletIds tracklets, inliers, outliers;
-//     //NOTE: currently without distortion! the correspondances should be made into bearing vector elsewhere!
-//     Landmarks points_ref, point_curr;
-//     for(size_t i = 0u; i < n_matches; i ++) {
-//         const auto& corres = correspondences.at(i);
-
-//         points_ref.push_back(corres.ref_);
-//         point_curr.push_back(corres.cur_);
-//         tracklets.push_back(corres.tracklet_id_);
-//     }
-
-//     // create a 3D-3D adapter
-//     opengv::point_cloud::PointCloudAdapter adapter(
-//         points_ref, point_curr );
-//     // create a RANSAC object
-//     opengv::sac::Ransac<opengv::sac_problems::point_cloud::PointCloudSacProblem> ransac;
-//     // create the sample consensus problem
-//     std::shared_ptr<opengv::sac_problems::point_cloud::PointCloudSacProblem>
-//         relposeproblem_ptr(
-//         new opengv::sac_problems::point_cloud::PointCloudSacProblem(adapter) );
-//     // run ransac
-//     ransac.sac_model_ = relposeproblem_ptr;
-//     // ransac.threshold_ = threshold;
-//     // ransac.max_iterations_ = maxIterations;
-//     ransac.computeModel(0);
-
-//     transformation_t best_transformation =
-//         ransac.model_coefficients_;
-
-//     gtsam::Pose3 opengv_transform = utils::openGvTfToGtsamPose3(best_transformation);
-
-//     CHECK(ransac.inliers_.size() <= correspondences.size());
-//     for(int inlier_idx : ransac.inliers_) {
-//         const auto& corres = correspondences.at(inlier_idx);
-//         inliers.push_back(corres.tracklet_id_);
-//     }
-
-//     determineOutlierIds(inliers, tracklets, outliers);
-//     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-//     CHECK_EQ(inliers.size(), ransac.inliers_.size());
-
-//     MotionResult result(opengv_transform);
-//     result.inliers = inliers;
-//     result.outliers = outliers;
-//     result.ids_used = tracklets;
-//     return result;
-// }
-
-} // motion_solver_tools
-
-
-AbsoluteCameraMotionSolver::MotionResult AbsoluteCameraMotionSolver::solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const {
-    return motion_solver_tools::solveMotion<ResultType, Landmark, Keypoint>(correspondences, params_, camera_params_);
-}
-
-template<>
-MotionSolverResult<gtsam::Pose3> AbsoluteObjectMotionSolver<Landmark, Keypoint>::solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const {
-    const MotionResult result = motion_solver_tools::solveMotion<ResultType, Landmark, Keypoint>(correspondences, params_, camera_params_);
-        if(result.valid()) {
-            const gtsam::Pose3 G_w = result.get().inverse();
-            const gtsam::Pose3 H_w = T_world_camera_ * G_w;
-            return MotionResult(H_w, result.ids_used_, result.inliers_, result.outliers_);
+    else {
+        constructTrackletInliers(
+            result.inliers, result.outliers,
+            correspondences,
+            ransac_inliers,
+            tracklets
+        );
+        // NOTE: 2-point always returns the identity rotation, hence we have to
+        // substitute it:
+        if (use_2point_mono) {
+            CHECK(R_curr_ref->equals(best_pose.rotation()));
         }
+        result.status = TrackingStatus::VALID;
+        result.best_pose = best_pose;
 
-        //if not valid, return motion result as is
-        return result;
+    }
+
+    return result;
+
+
 }
 
-RelativeCameraMotionSolver::MotionResult RelativeCameraMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
-    return motion_solver_tools::solveMotion<ResultType, Keypoint, Keypoint>(correspondences, params_, camera_params_);
+
+
+Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref)
+{
+    AbsolutePoseCorrespondences correspondences;
+    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
+    //bearing vectors are also not undistorted atm!!
+    //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
+    {
+        utils::TimingStatsCollector("frame_correspondences");
+        frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->landmarkWorldKeypointCorrespondance());
+    }
+
+    return geometricOutlierRejection3d2d(correspondences, R_curr_ref);
 }
 
-RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
-
+Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
+                            const AbsolutePoseCorrespondences& correspondences,
+                            std::optional<gtsam::Rot3> R_curr_ref)
+{
+    Pose3SolverResult result;
     const size_t& n_matches = correspondences.size();
 
     if(n_matches < 5u) {
-        return MotionResult::NotEnoughCorrespondences();
+        result.status = TrackingStatus::FEW_MATCHES;
+        VLOG(5) << "3D2D tracking failed as there are to few matches" << n_matches;
+        return result;
     }
 
 
-    std::vector<cv::Point2d> ref_kps, curr_kps;
+    gtsam::Matrix K = camera_params_.getCameraMatrixEigen();
+    K = K.inverse();
+
+    TrackletIds tracklets, inliers, outliers;
+    //NOTE: currently without distortion! the correspondences should be made into bearing vector elsewhere!
+    BearingVectors bearing_vectors;
+    Landmarks points;
+    for(size_t i = 0u; i < n_matches; i ++) {
+        const AbsolutePoseCorrespondence& corres = correspondences.at(i);
+        const Keypoint& kp = corres.cur_;
+        //make Bearing vector
+        gtsam::Vector3 versor = (K * gtsam::Vector3(kp(0), kp(1), 1.0));
+        versor = versor.normalized();
+        bearing_vectors.push_back(versor);
+
+        points.push_back(corres.ref_);
+        tracklets.push_back(corres.tracklet_id_);
+    }
+
+    const double reprojection_error = params_.ransac_threshold_pnp;
+    const double avg_focal_length =
+        0.5 * static_cast<double>(camera_params_.fx() +
+                                  camera_params_.fy());
+    const double threshold =
+        1.0 - std::cos(std::atan(std::sqrt(2.0) * reprojection_error /
+                                 avg_focal_length));
+
+
+    AbsolutePoseAdaptor adapter(bearing_vectors, points);
+
+    gtsam::Pose3 best_pose;
+    std::vector<int> ransac_inliers;
+
+    bool success = runRansac<AbsolutePoseProblem>(
+        std::make_shared<AbsolutePoseProblem>(
+            adapter, AbsolutePoseProblem::KNEIP
+        ),
+        threshold,
+        params_.ransac_iterations,
+        params_.ransac_probability,
+        params_.optimize_3d2d_pose_from_inliers,
+        best_pose,
+        ransac_inliers
+    );
+
+    if(success) {
+        constructTrackletInliers(
+            result.inliers, result.outliers,
+            correspondences,
+            ransac_inliers,
+            tracklets
+        );
+
+        result.status = TrackingStatus::VALID;
+        result.best_pose = best_pose;
+    }
+    else {
+        result.status = TrackingStatus::INVALID;
+    }
+
+    return result;
+
+}
+
+
+Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d3d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref)
+{
+    PointCloudCorrespondences correspondences;
+    {
+        utils::TimingStatsCollector("pc_correspondences");
+        frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->landmarkWorldPointCloudCorrespondance());
+    }
+
+    return geometricOutlierRejection3d3d(correspondences, R_curr_ref);
+}
+
+
+Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d3d(
+                            const PointCloudCorrespondences& correspondences,
+                            std::optional<gtsam::Rot3> R_curr_ref)
+{
+    const size_t& n_matches = correspondences.size();
+
+    Pose3SolverResult result;
+    if(n_matches < 5) {
+        result.status = TrackingStatus::FEW_MATCHES;
+        return result;
+    }
+
     TrackletIds tracklets;
+    BearingVectors ref_bearing_vectors, cur_bearing_vectors;
+
     for(size_t i = 0u; i < n_matches; i ++) {
         const auto& corres = correspondences.at(i);
-        const Keypoint& ref_kp = corres.ref_;
-        const Keypoint& cur_kp = corres.cur_;
-
-        ref_kps.push_back(utils::gtsamPointToCv(ref_kp));
-        curr_kps.push_back(utils::gtsamPointToCv(cur_kp));
+        const Landmark& ref_lmk = corres.ref_;
+        const Landmark& cur_lmk = corres.cur_;
+        ref_bearing_vectors.push_back(ref_lmk);
+        cur_bearing_vectors.push_back(cur_lmk);
 
         tracklets.push_back(corres.tracklet_id_);
     }
 
-    constexpr int method = cv::RANSAC;
-    constexpr double  prob = 0.999;
-	constexpr double threshold = 1.0;
-    constexpr int max_iterations = 500;
-    const cv::Mat K = camera_params_.getCameraMatrix();
+    //! Setup adapter.
+    Adapter3d3d adapter(ref_bearing_vectors, cur_bearing_vectors);
 
-    cv::Mat ransac_inliers;  // a [1 x N] vector
-
-    const cv::Mat E = cv::findEssentialMat(
-        ref_kps,
-        curr_kps,
-        K,
-        method,
-        prob,
-        threshold,
-        max_iterations,
-        ransac_inliers); //ransac params?
-
-    CHECK(ransac_inliers.rows == tracklets.size());
-
-    cv::Mat R1, R2, t;
-    try {
-        cv::decomposeEssentialMat(E, R1, R2, t);
-    }
-    catch(const cv::Exception& e) {
-        LOG(WARNING) << "decomposeEssentialMat failed with error " << e.what();
-        return MotionResult::Unsolvable();
+    if(R_curr_ref) {
+        adapter.setR12((*R_curr_ref).matrix());
     }
 
-    TrackletIds inliers, outliers;
-    for (int i = 0; i < ransac_inliers.rows; i++)
-    {
-        if(ransac_inliers.at<int>(i)) {
-            const auto& corres = correspondences.at(i);
-            inliers.push_back(corres.tracklet_id_);
-        }
+    gtsam::Pose3 best_pose;
+    std::vector<int> ransac_inliers;
 
-    }
-
-    determineOutlierIds(inliers, tracklets, outliers);
-    CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-
-    EssentialDecompositionResult result(
-        utils::cvMatToGtsamRot3(R1),
-        utils::cvMatToGtsamRot3(R2),
-        utils::cvMatToGtsamPoint3(t)
+    bool success = runRansac<Problem3d3d>(
+        std::make_shared<Problem3d3d>(
+            adapter, params_.ransac_randomize
+        ),
+        params_.ransac_threshold_stereo,
+        params_.ransac_iterations,
+        params_.ransac_probability,
+        params_.optimize_3d3d_pose_from_inliers,
+        best_pose,
+        ransac_inliers
     );
 
-    // LOG(INFO) << "Solving RelativeObjectMotionSolver with inliers " << inliers.size() << " outliers " <<  outliers.size();
-    return MotionResult(result, tracklets, inliers, outliers);
+    if(success) {
+        constructTrackletInliers(
+            result.inliers, result.outliers,
+            correspondences,
+            ransac_inliers,
+            tracklets
+        );
+
+        result.status = TrackingStatus::VALID;
+        result.best_pose = best_pose;
+    }
+    else {
+        result.status = TrackingStatus::INVALID;
+    }
+
+    return result;
+}
+
+ObjectMotionSovler::ObjectMotionSovler(const FrontendParams& params, const CameraParams& camera_params) : EgoMotionSolver(params, camera_params) {}
+
+Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            const gtsam::Pose3& T_world_k,
+                            ObjectId object_id)
+{
+    AbsolutePoseCorrespondences dynamic_correspondences;
+    // get the corresponding feature pairs
+    bool corr_result = frame_k->getDynamicCorrespondences(
+        dynamic_correspondences,
+        *frame_k_1,
+        object_id,
+        frame_k->landmarkWorldKeypointCorrespondance());
+
+    const size_t& n_matches = dynamic_correspondences.size();
+
+    Pose3SolverResult result;
+    result = EgoMotionSolver::geometricOutlierRejection3d2d(dynamic_correspondences);
+
+    if(result.status == TrackingStatus::VALID) {
+        const gtsam::Pose3 G_w = result.best_pose.inverse();
+        const gtsam::Pose3 H_w = T_world_k * G_w;
+        result.best_pose = H_w;
+    }
+
+    //if not valid, return motion result as is
+    return result;
+
+}
+
+
+Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d3d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            const gtsam::Pose3& T_world_k,
+                            ObjectId object_id)
+{
+    PointCloudCorrespondences dynamic_correspondences;
+    // get the corresponding feature pairs
+    bool corr_result = frame_k->getDynamicCorrespondences(
+        dynamic_correspondences,
+        *frame_k_1,
+        object_id,
+        frame_k->landmarkWorldPointCloudCorrespondance());
+
+    const size_t& n_matches = dynamic_correspondences.size();
+
+    Pose3SolverResult result;
+    result = EgoMotionSolver::geometricOutlierRejection3d3d(dynamic_correspondences);
+
+    if(result.status == TrackingStatus::VALID) {
+        const gtsam::Pose3 G_w = result.best_pose.inverse();
+        const gtsam::Pose3 H_w = T_world_k * G_w;
+        result.best_pose = H_w;
+    }
+
+    //if not valid, return motion result as is
+    return result;
 }
 
 } //dyno

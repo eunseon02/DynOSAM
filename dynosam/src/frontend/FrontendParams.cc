@@ -32,21 +32,82 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
     YamlParser yaml_parser(file_path);
 
     FrontendParams params;
-    yaml_parser.getYamlParam("MaxTrackPointBG", &params.max_tracking_points_bg);
-    yaml_parser.getYamlParam("MaxTrackPointOBJ", &params.max_tracking_points_obj);
-    yaml_parser.getYamlParam("cell_size", &params.cell_size);
+    yaml_parser.getYamlParam("max_nr_static_points", &params.max_tracking_points_bg, params.max_tracking_points_bg);
+    yaml_parser.getYamlParam("max_nr_object_points", &params.max_tracking_points_obj, params.max_tracking_points_obj);
+    yaml_parser.getYamlParam("cell_size", &params.cell_size, params.cell_size);
 
-    yaml_parser.getYamlParam("SFMgThres", &params.scene_flow_magnitude);
-    yaml_parser.getYamlParam("SFDsThres", &params.scene_flow_percentage);
+    yaml_parser.getYamlParam("scene_flow_mag_threshold", &params.scene_flow_magnitude, params.scene_flow_magnitude);
+    yaml_parser.getYamlParam("scene_flow_dist_threshold", &params.scene_flow_percentage, params.scene_flow_percentage);
 
-    yaml_parser.getYamlParam("ThDepthBG", &params.depth_background_thresh);
-    yaml_parser.getYamlParam("ThDepthOBJ", &params.depth_obj_thresh);
+    yaml_parser.getYamlParam("max_depth_static", &params.depth_background_thresh, params.depth_background_thresh);
+    yaml_parser.getYamlParam("max_depth_object", &params.depth_obj_thresh, params.depth_obj_thresh);
 
-    yaml_parser.getYamlParam("ORBextractor.nFeatures", &params.n_features);
-    yaml_parser.getYamlParam("ORBextractor.scaleFactor", &params.scale_factor);
-    yaml_parser.getYamlParam("ORBextractor.nLevels", &params.n_levels);
-    yaml_parser.getYamlParam("ORBextractor.iniThFAST", &params.init_threshold_fast);
-    yaml_parser.getYamlParam("ORBextractor.minThFAST", &params.min_threshold_fast);
+    yaml_parser.getYamlParam("n_features", &params.n_features, params.n_features);
+    yaml_parser.getYamlParam("scale_factor", &params.scale_factor, params.scale_factor);
+    yaml_parser.getYamlParam("n_levels", &params.n_levels, params.n_levels);
+    yaml_parser.getYamlParam("init_threshold_fast", &params.init_threshold_fast, params.init_threshold_fast);
+    yaml_parser.getYamlParam("min_threshold_fast", &params.min_threshold_fast, params.min_threshold_fast);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_use_2point_mono",
+        &params.ransac_use_2point_mono,
+        params.ransac_use_2point_mono);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_randomize",
+        &params.ransac_randomize,
+        params.ransac_randomize);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_threshold_mono",
+        &params.ransac_threshold_mono,
+        params.ransac_threshold_mono);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "optimize_2d2d_pose_from_inliers",
+        &params.optimize_2d2d_pose_from_inliers,
+        params.optimize_2d2d_pose_from_inliers);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "use_ego_motion_pnp",
+        &params.use_ego_motion_pnp,
+        params.use_ego_motion_pnp);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "use_object_motion_pnp",
+        &params.use_object_motion_pnp,
+        params.use_object_motion_pnp);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_threshold_pnp",
+        &params.ransac_threshold_pnp,
+        params.ransac_threshold_pnp);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "optimize_3d2d_pose_from_inliers",
+        &params.optimize_3d2d_pose_from_inliers,
+        params.optimize_3d2d_pose_from_inliers);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_threshold_stereo",
+        &params.ransac_threshold_stereo,
+        params.ransac_threshold_stereo);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "optimize_3d3d_pose_from_inliers",
+        &params.optimize_3d3d_pose_from_inliers,
+        params.optimize_3d3d_pose_from_inliers);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_iterations",
+        &params.ransac_iterations,
+        params.ransac_iterations);
+
+    yaml_parser.getNestedYamlParam(
+        "tracker", "ransac_probability",
+        &params.ransac_probability,
+        params.ransac_probability);
+
 
     return params;
 

@@ -45,6 +45,21 @@ struct FeatureTrackerInfo {
     gtsam::FastMap<ObjectId, size_t> dynamic_track;
 };
 
+template<>
+inline std::string to_string(const FeatureTrackerInfo& info) {
+    std::stringstream ss;
+    ss << "FeatureTrackerInfo: \n"
+       << " - frame id: " << info.frame_id << "\n"
+       << "\t- # optical flow: " << info.static_track_optical_flow << "\n"
+       << "\t- # detections: " << info.static_track_detections << "\n";
+
+    for(const auto& [object_id, num_tracks] : info.dynamic_track) {
+        ss << "\t- Object: " << object_id << " # features " << num_tracks << "\n";
+    };
+    return ss.str();
+
+}
+
 
 class FeatureTracker
 {

@@ -1,0 +1,42 @@
+%YAML:1.0
+
+max_nr_static_points: 800
+max_nr_object_points: 800
+cell_size: 15
+scene_flow_mag_threshold: 0.12
+scene_flow_dist_threshold: 0.5
+max_depth_static: 40.0
+max_depth_object: 25.0
+
+#orb-extraction params
+n_features: 1200
+scale_factor: 1.2
+n_levels: 8
+init_threshold_fast: 20
+min_threshold_fast: 7
+
+tracker:
+  # When using mono-pipeline AND and additional inertial sensor is provided,
+  # Then 2-point ransac will be used (eg. 2d2d ransac with rotation), else 5-point 2d2d pnp will be used
+  ransac_use_2point_mono: 0
+  ransac_randomize: 1
+  # ransac_threshold_mono:
+  optimize_2d2d_pose_from_inliers: 0
+
+  # When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+  use_ego_motion_pnp: 1
+  # When using rgbd-pipeline, camera-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+  use_object_motion_pnp: 1
+
+  # 3d-2d PnP
+  # Equivalent to reprojection error in pixels
+  ransac_threshold_pnp: 1.0
+  optimize_3d2d_pose_from_inliers: 0
+
+  # 3d-3d PnP (stereo)
+  ransac_threshold_stereo: 0.002
+  optimize_3d3d_pose_from_inliers: 0
+
+  # Generic ransac params and used for all ransac+pnp solvers
+  ransac_iterations: 500
+  ransac_probability:  0.995

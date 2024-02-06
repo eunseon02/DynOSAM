@@ -55,4 +55,9 @@ using AbsolutePoseCorrespondences = std::vector<AbsolutePoseCorrespondence>;
 using RelativePoseCorrespondence =  TrackletCorrespondance<Keypoint, Keypoint>;
 using RelativePoseCorrespondences = std::vector<RelativePoseCorrespondence>;
 
+//! Correspondes format for a 3D->3D PnP solver. In the form of a 3D Landmark in the world frame
+using PointCloudCorrespondence =  TrackletCorrespondance<Landmark, Landmark>;
+using PointCloudCorrespondences = std::vector<PointCloudCorrespondence>;
+
+
 }

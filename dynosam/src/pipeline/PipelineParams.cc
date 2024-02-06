@@ -31,6 +31,8 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     //currently just camera params
     camera_params_ = CameraParams::fromYamlFile(params_folder_path + "CameraParams.yaml");
 
+    frontend_params_ = FrontendParams::fromYaml(params_folder_path + "FrontendParams.yaml");
+
     YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
     pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
 

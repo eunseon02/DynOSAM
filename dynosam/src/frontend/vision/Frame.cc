@@ -219,6 +219,23 @@ Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorl
     return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
 }
 
+Frame::ConstructCorrespondanceFunc<Landmark, Landmark> Frame::landmarkWorldPointCloudCorrespondance() const {
+     auto func = [&](const Frame& previous_frame, const Feature::Ptr& previous_feature, const Feature::Ptr& current_feature) {
+        if(!previous_feature->hasDepth()) {
+            throw std::runtime_error("Error in constructing Landmark (w) -> keypoint correspondences - previous feature does not have depth!");
+        }
+
+        //eventuall map?
+        Landmark lmk_w_k_1 = previous_frame.backProjectToWorld(previous_feature->tracklet_id_);
+        //eventuall map?
+        Landmark lmk_w_k = backProjectToWorld(current_feature->tracklet_id_);
+
+        return TrackletCorrespondance(previous_feature->tracklet_id_, lmk_w_k_1, lmk_w_k);
+    };
+
+    return std::bind(func, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3);
+}
+
 
 bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame& previous_frame, ObjectId object_id) const {
 

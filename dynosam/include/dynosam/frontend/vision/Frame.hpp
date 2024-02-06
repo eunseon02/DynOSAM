@@ -287,6 +287,17 @@ public:
      */
     ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> landmarkWorldProjectedBearingCorrespondance() const;
 
+
+    /**
+     * @brief Helper function ConstructCorrespondanceFunc which operates to return a
+     * TrackletCorrespondance where both types are Landmarks in the world frame (in the ref and cur frame respectively).
+     *
+     *  This is useful for 3D-3D correspondence types.
+     *
+     * @return ConstructCorrespondanceFunc<Landmark, Landmark>
+     */
+    ConstructCorrespondanceFunc<Landmark, Landmark> landmarkWorldPointCloudCorrespondance() const;
+
     template<typename RefType, typename CurType>
     bool getCorrespondences(
         GenericCorrespondences<RefType, CurType>& correspondences,

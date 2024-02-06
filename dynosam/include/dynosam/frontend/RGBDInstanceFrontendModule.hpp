@@ -41,6 +41,8 @@ public:
 
 private:
     Camera::Ptr camera_;
+    EgoMotionSolver motion_solver_;
+    ObjectMotionSovler object_motion_solver_;
     FeatureTracker::UniquePtr tracker_;
     FrontendLogger::UniquePtr logger_;
 
@@ -57,6 +59,8 @@ private:
      * the pose of the Frame::Ptr (frame_k) is updated, and the features marked as outliers
      * by PnP are set as outliers.
      *
+     * Depending on FrontendParams::use_ego_motion_pnp, a differnet solver will be used to estimate the pose
+     *
      * @param frame_k
      * @param frame_k_1
      * @return true
@@ -65,7 +69,7 @@ private:
     bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
 
 
-    bool solveObject3d2dMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1, ObjectId object_id, MotionEstimateMap& motion_estimates);
+    bool solveObjectMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1, ObjectId object_id, MotionEstimateMap& motion_estimates);
 
     RGBDInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,

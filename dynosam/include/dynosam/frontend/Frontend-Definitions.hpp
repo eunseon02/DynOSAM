@@ -38,5 +38,41 @@ enum class FrontendType {
     kMono = 1
 };
 
+enum class TrackingStatus {
+  VALID,
+  LOW_DISPARITY,
+  FEW_MATCHES,
+  INVALID,
+  DISABLED
+};
+
+template<>
+inline std::string to_string(const TrackingStatus& status) {
+  std::string status_str = "";
+  switch (status) {
+    case TrackingStatus::VALID: {
+      status_str = "VALID";
+      break;
+    }
+    case TrackingStatus::INVALID: {
+      status_str = "INVALID";
+      break;
+    }
+    case TrackingStatus::DISABLED: {
+      status_str = "DISABLED";
+      break;
+    }
+    case TrackingStatus::FEW_MATCHES: {
+      status_str = "FEW_MATCHES";
+      break;
+    }
+    case TrackingStatus::LOW_DISPARITY: {
+      status_str = "LOW_DISPARITY";
+      break;
+    }
+  }
+  return status_str;
+}
+
 
 }

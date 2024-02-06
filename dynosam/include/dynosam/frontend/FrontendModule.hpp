@@ -60,9 +60,44 @@ public:
     virtual ~FrontendModule() = default;
 
 
-
-
 protected:
+    /**
+     * @brief Estimates the pose of frame k given a reference frame at k-1 using 2d2d point correspondances.
+     *
+     * The frontend params will determine the type of pnp solver to use (1-point or 2-point ransac)
+     *
+     * @param frame_k_1
+     * @param frame_k
+     * @param R_curr_ref
+     */
+    void outlierRejectionMono(Frame::Ptr frame_k_1,
+                              Frame::Ptr frame_k,
+                              std::optional<gtsam::Rot3> R_curr_ref = {}) const;
+
+
+    /**
+     * @brief Estimates the pose of the frame k given a reference frame at k-1 using 3d3d point correspondances
+     *
+     * @param frame_k_1
+     * @param frame_k
+     * @param translation_info_matrix
+     * @param R_curr_ref
+     */
+    void outlierRejectionStereo(Frame::Ptr frame_k_1,
+                                Frame::Ptr frame_k,
+                                gtsam::Matrix3* translation_info_matrix,
+                                std::optional<gtsam::Rot3> R_curr_ref = {}) const;
+
+    /**
+     * @brief Estimates the pose of the frame k given a reference frame at k-1 using 3d2d point correspondances
+     *
+     * @param frame_k_1
+     * @param frame_k
+     */
+    void outlierRejectionPnP(Frame::Ptr frame_k_1,
+                             Frame::Ptr frame_k) const;
+
+
     /**
      * @brief Defines the result of checking the image container which is a done polymorphically per module (as
      * each module has its own requirements)

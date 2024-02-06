@@ -96,6 +96,31 @@ class YamlParser {
     file_handle_2 >> *CHECK_NOTNULL(output);
   }
 
+  template <class T>
+  void getNestedYamlParam(const std::string& id,
+                          const std::string& id_2,
+                          T* output,
+                          T default_value) const {
+    CHECK(!id.empty());
+    CHECK(!id_2.empty());
+    const cv::FileNode& file_handle = fs_[id];
+    CHECK_NE(file_handle.type(), cv::FileNode::NONE)
+        << "Missing parameter: " << id.c_str()
+        << " in file: " << filepath_.c_str();
+    const cv::FileNode& file_handle_2 = file_handle[id_2];
+    if(file_handle_2.type() == cv::FileNode::NONE) {
+      LOG(INFO) << id << " " << id_2;
+      *output = default_value;
+    }
+    else {
+      T v;
+      file_handle_2 >> v;
+       LOG(INFO) << id << " " << id_2 << " " << v;
+      file_handle_2 >> *output;
+    }
+
+  }
+
  private:
   void openFile(const std::string& filepath, cv::FileStorage* fs) const {
     CHECK(!filepath.empty()) << "Empty filepath!";

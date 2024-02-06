@@ -24,6 +24,7 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
+#include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -38,7 +39,9 @@ namespace dyno {
 
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : FrontendModule(frontend_params, display_queue),
-      camera_(camera)
+      camera_(camera),
+      motion_solver_(frontend_params, camera->getParams()),
+      object_motion_solver_(frontend_params, camera->getParams())
     {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -124,6 +127,8 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     CHECK(previous_frame);
 
+    LOG(INFO) << to_string(tracker_->getTrackerInfo());
+
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
 
     {
@@ -131,7 +136,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     }
-    //update frame->T_world_camera_
+    //updates frame->T_world_camera_
     if(!solveCameraMotion(frame, previous_frame)) {
         LOG(ERROR) << "Could not solve for camera";
     }
@@ -145,7 +150,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     MotionEstimateMap motion_estimates;
     for(const auto& [object_id, observations] : frame->object_observations_) {
 
-        if(!solveObject3d2dMotion(frame, previous_frame, object_id, motion_estimates)) {
+        if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
             VLOG(5) << "Could not solve motion for object " << object_id <<
                 " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
         }
@@ -169,65 +174,68 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
 
 bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1) {
-    AbsolutePoseCorrespondences correspondences;
-    //this does not create proper bearing vectors (at leas tnot for 3d-2d pnp solve)
-    //bearing vectors are also not undistorted atm!!
-    //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
-    {
-        utils::TimingStatsCollector("frame_correspondences");
-        frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->landmarkWorldKeypointCorrespondance());
+
+    Pose3SolverResult result;
+    if(base_params_.use_ego_motion_pnp) {
+        result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k);
+    }
+    else {
+        //TODO: untested
+        result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
     }
 
-    {
-        AbsoluteCameraMotionSolver camera_motion_solver(base_params_, camera_->getParams());
+    VLOG(5) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
+          << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
+          << "- Tracking Status: "
+          << to_string(result.status) << '\n'
+          << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
+          << "\t- # inliers: " << result.inliers.size() << '\n'
+          << "\t- # outliers: " << result.outliers.size() << '\n';
 
-
-        utils::TimingStatsCollector track_dynamic_timer("solve_camera_pose");
-        AbsoluteCameraMotionSolver::MotionResult camera_pose_result = camera_motion_solver.solve(correspondences);
-
-        if(camera_pose_result) {
-            frame_k->T_world_camera_ = camera_pose_result.get();
+    if(result.status == TrackingStatus::VALID) {
+        frame_k->T_world_camera_ = result.best_pose;
             TrackletIds tracklets = frame_k->static_features_.collectTracklets();
-            CHECK_GE(tracklets.size(), correspondences.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
+            CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
-            frame_k->static_features_.markOutliers(camera_pose_result.outliers_); //do we need to mark innliers? Should start as inliers
+            frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
             return true;
-        }
-        else {
-            frame_k->T_world_camera_ = gtsam::Pose3::Identity();
-            return false;
-        }
     }
-}
-
-bool RGBDInstanceFrontendModule::solveObject3d2dMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
-    utils::TimingStatsCollector object_motion_timer("solve_object_motion");
-    AbsolutePoseCorrespondences dynamic_correspondences;
-
-    AbsoluteObjectMotionSolver<Landmark, Keypoint> object_motion_solver(base_params_, camera_->getParams(), frame_k->T_world_camera_);
-
-    // get the corresponding feature pairs
-    bool result = frame_k->getDynamicCorrespondences(
-        dynamic_correspondences,
-        *frame_k_1,
-        object_id,
-        frame_k->landmarkWorldKeypointCorrespondance());
-
-    if(!result) {
+    else {
+        frame_k->T_world_camera_ = gtsam::Pose3::Identity();
         return false;
     }
 
-    const AbsoluteObjectMotionSolver<Landmark, Keypoint>::MotionResult object_motion_result = object_motion_solver.solve(
-            dynamic_correspondences);
+}
 
-    if(object_motion_result.valid()) {
-        frame_k->dynamic_features_.markOutliers(object_motion_result.outliers_);
+bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
 
-        ReferenceFrameEstimate<Motion3> estimate(object_motion_result, ReferenceFrame::WORLD);
+    Pose3SolverResult result;
+    if(base_params_.use_object_motion_pnp) {
+        result = object_motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
+    }
+    else {
+        result = object_motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
+    }
+
+    VLOG(5) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
+          << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
+          << "- Tracking Status: "
+          << to_string(result.status) << '\n'
+          << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
+          << "\t- # inliers: " << result.inliers.size() << '\n'
+          << "\t- # outliers: " << result.outliers.size() << '\n';
+
+
+    if(result.status == TrackingStatus::VALID) {
+        frame_k->dynamic_features_.markOutliers(result.outliers);
+
+        ReferenceFrameEstimate<Motion3> estimate(result.best_pose, ReferenceFrame::WORLD);
         motion_estimates.insert({object_id, estimate});
         return true;
     }
-    return false;
+    else {
+        return false;
+    }
 }
 
 

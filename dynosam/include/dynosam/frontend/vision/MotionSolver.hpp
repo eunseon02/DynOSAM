@@ -24,22 +24,47 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 
 
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
 #include <opengv/sac_problems/relative_pose/CentralRelativePoseSacProblem.hpp>
+#include <opengv/sac_problems/relative_pose/TranslationOnlySacProblem.hpp>
+#include <opengv/sac_problems/point_cloud/PointCloudSacProblem.hpp>
+
+
+#include <opengv/absolute_pose/CentralAbsoluteAdapter.hpp>
+#include <opengv/absolute_pose/methods.hpp>
+
+#include <opengv/relative_pose/CentralRelativeAdapter.hpp>
+#include <opengv/relative_pose/methods.hpp>
+
+#include <opengv/point_cloud/PointCloudAdapter.hpp>
+#include <opengv/point_cloud/methods.hpp>
+
 #include <opengv/sac/Ransac.hpp>
 
 #include <optional>
 #include <glog/logging.h>
 
+// PnP (3d2d)
 using AbsolutePoseProblem = opengv::sac_problems::absolute_pose::AbsolutePoseSacProblem;
-using AbsolutePoseSacProblem = opengv::sac::Ransac<AbsolutePoseProblem>;
+using AbsolutePoseAdaptor = opengv::absolute_pose::CentralAbsoluteAdapter;
 
+// Mono (2d2d) using 5-point ransac
 using RelativePoseProblem = opengv::sac_problems::relative_pose::CentralRelativePoseSacProblem;
-using RelativePoseSacProblem = opengv::sac::Ransac<RelativePoseProblem>;
+// Mono (2d2d, with given rotation) MonoTranslationOnly:
+// TranslationOnlySacProblem 2-point ransac
+using RelativePoseProblemGivenRot =
+    opengv::sac_problems::relative_pose::TranslationOnlySacProblem;
+using RelativePoseAdaptor = opengv::relative_pose::CentralRelativeAdapter;
+
+// Stereo (3d3d)
+// Arun's problem (3-point ransac)
+using Problem3d3d = opengv::sac_problems::point_cloud::PointCloudSacProblem;
+using Adapter3d3d = opengv::point_cloud::PointCloudAdapter;
 
 namespace dyno {
 
@@ -103,109 +128,95 @@ bool runRansac(
 {
     return runRansac<SampleConsensusProblem>(
         sample_consensus_problem_ptr,
-        params.ransac_threshold,
+        params.ransac_threshold_pnp,
         params.ransac_iterations,
         params.ransac_probability,
-        params.optimize_3d3d_pose_from_inliers,
+        params.optimize_3d2d_pose_from_inliers,
         best_pose,
         inliers
     );
 }
 
 
+class EssentialDecompositionResult; //forward declare
 
-template<typename Result>
-class MotionSolverResult : public std::optional<Result> {
-public:
-    using Base = std::optional<Result>;
-    using This = MotionSolverResult<Result>;
-    enum Status { VALID, NOT_ENOUGH_CORRESPONDENCES, NOT_ENOUGH_INLIERS, UNSOLVABLE };
-    Status status;
-
-    TrackletIds ids_used_;
-    TrackletIds inliers_;
-    TrackletIds outliers_;
-
-private:
-    MotionSolverResult(Status s) : status(s) {};
-
-public:
-    MotionSolverResult() {}
-
-    MotionSolverResult(
-        const Result& result,
-        const TrackletIds& ids_used,
-        const TrackletIds& inliers,
-        const TrackletIds& outliers)
-    : status(VALID),
-      ids_used_(ids_used),
-      inliers_(inliers),
-      outliers_(outliers)
-    {
-        Base::emplace(result);
-
-        {
-            //debug check
-            //inliers and outliers together should be the set of ids_used
-            CHECK_EQ(ids_used_.size(), inliers_.size() + outliers_.size());
-        }
-    }
-
-    operator const Result&() const { return get(); }
-
-    static This NotEnoughCorrespondences() { return This(NOT_ENOUGH_CORRESPONDENCES); }
-    static This NotEnoughInliers() { return This(NOT_ENOUGH_INLIERS); }
-    static This Unsolvable() { return This(UNSOLVABLE); }
-
-    inline bool valid() const { return status == VALID; }
-    inline bool notEnoughCorrespondences() const { return status == NOT_ENOUGH_CORRESPONDENCES; }
-    inline bool notEnoughInliers() const { return status == NOT_ENOUGH_INLIERS; }
-    inline bool unsolvable() const { return status == UNSOLVABLE; }
-
-    const Result& get() const {
-        if (!Base::has_value()) throw std::runtime_error("MotionSolverResult has no value");
-        return Base::value();
-    }
-
+template<typename T>
+struct SolverResult {
+    T best_pose;
+    TrackletIds inliers;
+    TrackletIds outliers;
+    TrackingStatus status;
 };
 
-
-namespace motion_solver_tools {
-
-/**
- * @brief Generic Motion solver free function called from the MotionSolver class
- *
- * Expects the result to be in left hand side multiply form so if solving for camera pose, the pose should be T_world_camera
- * where P_world = T_world_camera * P_camera
- *
- * @tparam RefType
- * @tparam CurrType
- * @param correspondences
- * @param params
- * @param camera_params
- * @return MotionResult
- */
-template<typename Result, typename RefType, typename CurrType>
-MotionSolverResult<Result> solveMotion(const GenericCorrespondences<RefType, CurrType>& correspondences, const FrontendParams& params, const CameraParams& camera_params);
-
-} //motion_solver_tools
+using Pose3SolverResult = SolverResult<gtsam::Pose3>;
 
 
-
-
-template<typename Result, typename RefType, typename CurrType>
-class MotionSolverBase {
-
+//TODO: eventually when we have a map, should we look up these values from there (the optimized versions, not the tracked ones?)
+class EgoMotionSolver {
 public:
-    using ResultType = Result;
-    using ReferenceType = RefType;
-    using CurrentType = CurrType;
-    using MotionResult = MotionSolverResult<ResultType>;
+    EgoMotionSolver(const FrontendParams& params, const CameraParams& camera_params);
+    virtual ~EgoMotionSolver() = default;
 
-    MotionSolverBase(const FrontendParams& params, const CameraParams& camera_params) : params_(params), camera_params_(camera_params) {}
-    virtual ~MotionSolverBase() = default;
+    /**
+     * @brief Runs 2d-2d PnP with optional Rotation (ie. from IMU)
+     *
+     * @param frame_k_1
+     * @param frame_k
+     * @param R_curr_ref Should rotate from ref -> curr
+     * @return Pose3SolverResult
+     */
+    Pose3SolverResult geometricOutlierRejection2d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref = {});
 
-    virtual MotionResult solve(const GenericCorrespondences<RefType, CurrType>& correspondences) const = 0;
+    /**
+     * @brief Runs 3d-2d PnP with optional Rotation (i.e from IMU)
+     *
+     * @param frame_k_1
+     * @param frame_k
+     * @param R_curr_ref
+     * @return Pose3SolverResult
+     */
+    Pose3SolverResult geometricOutlierRejection3d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref = {});
+
+    Pose3SolverResult geometricOutlierRejection3d2d(
+                            const AbsolutePoseCorrespondences& correspondences,
+                            std::optional<gtsam::Rot3> R_curr_ref = {});
+
+
+    Pose3SolverResult geometricOutlierRejection3d3d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            std::optional<gtsam::Rot3> R_curr_ref = {});
+
+    Pose3SolverResult geometricOutlierRejection3d3d(
+                            const PointCloudCorrespondences& correspondences,
+                            std::optional<gtsam::Rot3> R_curr_ref = {});
+
+
+protected:
+    template<typename Ref, typename Curr>
+    void constructTrackletInliers(TrackletIds& inliers, TrackletIds& outliers,
+        const GenericCorrespondences<Ref, Curr>& correspondences,
+        const std::vector<int>& ransac_inliers,
+        const TrackletIds tracklets)
+    {
+
+        CHECK_EQ(correspondences.size(), tracklets.size());
+        CHECK(ransac_inliers.size() <= correspondences.size());
+        for(int inlier_idx : ransac_inliers) {
+            const auto& corres = correspondences.at(inlier_idx);
+            inliers.push_back(corres.tracklet_id_);
+        }
+
+        determineOutlierIds(inliers, tracklets, outliers);
+        CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
+        CHECK_EQ(inliers.size(), ransac_inliers.size());
+    }
 
 protected:
     const FrontendParams params_;
@@ -213,83 +224,26 @@ protected:
 
 };
 
-
-template<typename Result, typename RefType, typename CurrType>
-class ObjectMotionSolverBase : public MotionSolverBase<Result, RefType, CurrType> {
+class ObjectMotionSovler : protected EgoMotionSolver {
 
 public:
-    using Base = MotionSolverBase<Result, RefType, CurrType>;
-    using MotionResult = typename Base::MotionResult;
+    ObjectMotionSovler(const FrontendParams& params, const CameraParams& camera_params);
 
-    ObjectMotionSolverBase(const FrontendParams& params, const CameraParams& camera_params,  const gtsam::Pose3& T_world_camera) : Base(params, camera_params), T_world_camera_(T_world_camera) {}
+    Pose3SolverResult geometricOutlierRejection3d2d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            const gtsam::Pose3& T_world_k,
+                            ObjectId object_id);
 
-protected:
-    const gtsam::Pose3 T_world_camera_;
+    Pose3SolverResult geometricOutlierRejection3d3d(
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            const gtsam::Pose3& T_world_k,
+                            ObjectId object_id);
+
+
 
 };
-
-
-class AbsoluteCameraMotionSolver : public MotionSolverBase<gtsam::Pose3, Landmark, Keypoint> {
-
-public:
-    using Base = MotionSolverBase<gtsam::Pose3, Landmark, Keypoint>;
-    using MotionResult = Base::MotionResult;
-
-    AbsoluteCameraMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
-
-    MotionResult solve(const GenericCorrespondences<Landmark, Keypoint>& correspondences) const override;
-
-};
-
-
-template<typename RefType, typename CurrType>
-class AbsoluteObjectMotionSolver : public ObjectMotionSolverBase<gtsam::Pose3, RefType, CurrType> {
-
-public:
-    using This = AbsoluteObjectMotionSolver<RefType, CurrType>;
-    using Base = ObjectMotionSolverBase<gtsam::Pose3, RefType, CurrType>;
-    using MotionResult = typename Base::MotionResult;
-
-    AbsoluteObjectMotionSolver(const FrontendParams& params, const CameraParams& camera_params, const gtsam::Pose3& T_world_camera) : Base(params, camera_params, T_world_camera) {}
-
-    MotionResult solve(const GenericCorrespondences<RefType, CurrType>& correspondences) const override;
-
-};
-
-class RelativeCameraMotionSolver : public MotionSolverBase<gtsam::Pose3, Keypoint, Keypoint> {
-
-public:
-    using Base = MotionSolverBase<gtsam::Pose3, Keypoint, Keypoint>;
-    using MotionResult = Base::MotionResult;
-
-    RelativeCameraMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
-
-    MotionResult solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const override;
-
-};
-
-class EssentialDecompositionResult; //forward declare
-
-class RelativeObjectMotionSolver : public MotionSolverBase<EssentialDecompositionResult, Keypoint, Keypoint> {
-
-public:
-    using Base = MotionSolverBase<EssentialDecompositionResult, Keypoint, Keypoint>;
-    using MotionResult = Base::MotionResult;
-
-    RelativeObjectMotionSolver(const FrontendParams& params, const CameraParams& camera_params) : Base(params, camera_params) {}
-
-    MotionResult solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const override;
-
-};
-
-
-
-
-class MotionSolver {
-
-
-
-}
 
 
 

@@ -52,14 +52,43 @@ struct FrontendParams {
   int init_threshold_fast = 20;
   int min_threshold_fast = 7;
 
+  //if the mono pipeline is selcted as the frontend then only mono related ransac variables will be used
+  //if the pipeline is RGBD then the user can select either the pnp (3d2d ransac) or stereo (3d3d) solvers
+  //for both object and ego motion
 
-  //PnP outlier rejection options
+  //! Mono (2d2d) related params
+  // if mono pipeline is used AND an additional inertial sensor is provided (e.g IMU)
+  // then 2d point ransac will be used to estimate the camera pose
+  bool ransac_use_2point_mono = false;
+  bool ransac_randomize = true;
+  //used for 2d2d
+  double ransac_threshold_mono = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+  bool optimize_2d2d_pose_from_inliers = false;
 
-  ////https://github.com/laurentkneip/opengv/issues/121
-  double ransac_threshold = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+  //!When using RGBD pipeline, ego-motion will be sovled using pnp (3d2d correspondences). Else, stereo
+  bool use_ego_motion_pnp = true;
+
+  //! When using RGBD pipeline, object motion will be sovled using pnp (3d2d correspondences). Else, stereo
+  bool use_object_motion_pnp = true;
+
+  //!PnP (3d2d) related params
+  //https://github.com/laurentkneip/opengv/issues/121
+  // double ransac_threshold = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+  //! equivalent to reprojection error in pixels
+  double ransac_threshold_pnp = 1.0;
+  //! Use 3D-2D tracking to remove outliers
+  bool optimize_3d2d_pose_from_inliers = false;
+
+
+  //! Stereo (3d3d) related params
+  //TODO: not sure what this error realtes to!!!
+  double ransac_threshold_stereo = 0.001;
+  //! Use 3D-3D tracking to remove outliers
+  bool optimize_3d3d_pose_from_inliers = false;
+
+  //! Generic rasac params
   double ransac_iterations = 500;
   double ransac_probability = 0.995;
-  bool optimize_3d3d_pose_from_inliers = false;
 
   static FrontendParams fromYaml(const std::string& file_path);
 
