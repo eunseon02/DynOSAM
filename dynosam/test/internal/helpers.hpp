@@ -45,6 +45,19 @@ namespace dyno_testing {
 
 using namespace dyno;
 
+inline StatusKeypointMeasurement makeStatusKeypointMeasurement(TrackletId tracklet_id, ObjectId object_id, FrameId frame_id, const Keypoint& keypoint = Keypoint()) {
+  KeyPointType kp_type;
+  if(object_id == background_label) {
+    kp_type = KeyPointType::STATIC;
+  }
+  else {
+    kp_type = KeyPointType::DYNAMIC;
+  }
+  KeypointStatus status(kp_type, object_id, frame_id);
+  auto estimate = std::make_pair(tracklet_id, keypoint);
+  return std::make_pair(status, estimate);
+}
+
 inline void compareLandmarks(const Landmarks& lmks_1,
                         const Landmarks& lmks_2,
                         const float& tol = 1e-9) {

@@ -47,74 +47,96 @@ void Map::updateObservations(const StatusKeypointMeasurements& keypoint_measurem
 bool Map::frameExists(FrameId frame_id) const {
     return frames_.exists(frame_id);
 }
-bool Map::trackletExists(TrackletId tracklet_id) const {
-    return tracklets_.exists(tracklet_id);
+bool Map::landmarkExists(TrackletId tracklet_id) const {
+    return landmarks_.exists(tracklet_id);
+}
+
+bool Map::objectExists(ObjectId object_id) const {
+    return objects_.exists(object_id);
+}
+
+ObjectNode::Ptr Map::getObject(ObjectId object_id) {
+    if(objectExists(object_id)) { return objects_.at(object_id);}
+    return nullptr;
+}
+
+FrameNode::Ptr Map::getFrame(FrameId frame_id) {
+    if(frameExists(frame_id)) { return frames_.at(frame_id);}
+    return nullptr;
+}
+LandmarkNode::Ptr Map::getLandmark(TrackletId tracklet_id) {
+    if(landmarkExists(tracklet_id)) { return landmarks_.at(tracklet_id);}
+    return nullptr;
 }
 
 TrackletIds Map::getStaticTrackletsByFrame(FrameId frame_id) const {
     //if frame does not exist?
     TrackletIds tracklet_ids;
     auto frame_node = frames_.at(frame_id);
-    for(const auto& tracklet_node : frame_node->static_tracklets) {
-        tracklet_ids.push_back(tracklet_node->tracklet_id);
+    for(const auto& landmark_node : frame_node->static_landmarks) {
+        tracklet_ids.push_back(landmark_node->tracklet_id);
     }
 
     return tracklet_ids;
 }
 
+size_t Map::numObjectsSeen() const {
+    return objects_.size();
+}
+
 void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
-    TrackletNodePtr tracklet_node = nullptr;
+    LandmarkNodePtr landmark_node = nullptr;
     FrameNodePtr frame_node = nullptr;
 
     CHECK((is_static && object_id == background_label) || (!is_static && object_id != background_label));
 
 
-    if(!tracklets_.exists(tracklet_id)) {
-        tracklet_node = std::make_shared<TrackletNode>();
-        tracklet_node->tracklet_id = tracklet_id;
-        tracklet_node->object_id = object_id;
-        tracklets_.insert2(tracklet_id, tracklet_node);
+    if(!landmarkExists(tracklet_id)) {
+        landmark_node = std::make_shared<LandmarkNode>();
+        landmark_node->tracklet_id = tracklet_id;
+        landmark_node->object_id = object_id;
+        landmarks_.insert2(tracklet_id, landmark_node);
     }
 
-    if(!frames_.exists(frame_id)) {
+    if(!frameExists(frame_id)) {
         frame_node = std::make_shared<FrameNode>();
         frame_node->frame_id = frame_id;
 
         frames_.insert2(frame_id, frame_node);
     }
 
-    tracklet_node = tracklets_.at(tracklet_id);
-    frame_node = frames_.at(frame_id);
+    landmark_node = getLandmark(tracklet_id);
+    frame_node = getFrame(frame_id);
 
-    CHECK(tracklet_node);
+    CHECK(landmark_node);
     CHECK(frame_node);
 
-    CHECK_EQ(tracklet_node->tracklet_id, tracklet_id);
+    CHECK_EQ(landmark_node->tracklet_id, tracklet_id);
     //this might fail of a tracklet get associated with a different object
-    CHECK_EQ(tracklet_node->object_id, object_id);
+    CHECK_EQ(landmark_node->object_id, object_id);
     CHECK_EQ(frame_node->frame_id, frame_id);
 
-    tracklet_node->frames_seen.insert(frame_node);
+    landmark_node->frames_seen.insert(frame_node);
 
     //add to frame
     if(is_static) {
-        frame_node->static_tracklets.insert(tracklet_node);
+        frame_node->static_landmarks.insert(landmark_node);
     }
     else {
         CHECK(object_id != background_label);
 
         ObjectNode::Ptr object_node = nullptr;
-        if(!objects_.exists(object_id)) {
+        if(!objectExists(object_id)) {
             object_node = std::make_shared<ObjectNode>();
             object_node->object_id = object_id;
             objects_.insert2(object_id, object_node);
         }
 
-        object_node = objects_.at(object_id);
+        object_node = getObject(object_id);
         CHECK(object_node);
 
-        object_node->dynamic_tracklets.insert(tracklet_node);
-        frame_node->dynamic_tracklets.insert(tracklet_node);
+        object_node->dynamic_landmarks.insert(landmark_node);
+        frame_node->dynamic_landmarks.insert(landmark_node);
 
     }
 
