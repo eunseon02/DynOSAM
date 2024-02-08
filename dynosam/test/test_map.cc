@@ -48,17 +48,17 @@ TEST(Map, basicAddOnlyStatic) {
         expected_tracklets.push_back(i);
     }
 
-    Map map;
-    map.updateObservations(measurements);
+    Map::Ptr map = Map::create();
+    map->updateObservations(measurements);
 
-    EXPECT_TRUE(map.frameExists(0));
-    EXPECT_FALSE(map.frameExists(1));
+    EXPECT_TRUE(map->frameExists(0));
+    EXPECT_FALSE(map->frameExists(1));
 
-    EXPECT_TRUE(map.landmarkExists(0));
-    EXPECT_TRUE(map.landmarkExists(9));
-    EXPECT_FALSE(map.landmarkExists(10));
+    EXPECT_TRUE(map->landmarkExists(0));
+    EXPECT_TRUE(map->landmarkExists(9));
+    EXPECT_FALSE(map->landmarkExists(10));
 
-    EXPECT_EQ(map.getStaticTrackletsByFrame(0), expected_tracklets);
+    EXPECT_EQ(map->getStaticTrackletsByFrame(0), expected_tracklets);
 
     //expected tracklets in frame 0
     TrackletIds expected_tracklets_f0 = expected_tracklets;
@@ -75,36 +75,36 @@ TEST(Map, basicAddOnlyStatic) {
     }
 
     //apply update
-    map.updateObservations(measurements);
+    map->updateObservations(measurements);
 
-    EXPECT_EQ(map.getStaticTrackletsByFrame(0), expected_tracklets_f0);
-    EXPECT_EQ(map.getStaticTrackletsByFrame(1), expected_tracklets_f1);
+    EXPECT_EQ(map->getStaticTrackletsByFrame(0), expected_tracklets_f0);
+    EXPECT_EQ(map->getStaticTrackletsByFrame(1), expected_tracklets_f1);
 
     //check for frames in some landmarks
     //should be seen in frames 0 and 1
-    LandmarkNode::Ptr lmk1 = map.getLandmark(0);
+    LandmarkNode::Ptr lmk1 = map->getLandmark(0);
     std::vector<FrameId> lmk_1_seen_frames = lmk1->frames_seen.collectIds<FrameId>();
     std::vector<FrameId> lmk_1_seen_frames_expected = {0, 1};
     EXPECT_EQ(lmk_1_seen_frames, lmk_1_seen_frames_expected);
 
     //should be seen in frames 0
-    LandmarkNode::Ptr lmk6 = map.getLandmark(6);
+    LandmarkNode::Ptr lmk6 = map->getLandmark(6);
     std::vector<FrameId> lmk_6_seen_frames = lmk6->frames_seen.collectIds<FrameId>();
     std::vector<FrameId> lmk_6_seen_frames_expected = {0};
     EXPECT_EQ(lmk_6_seen_frames, lmk_6_seen_frames_expected);
 
     //check that the frames here are the ones in the map
-    EXPECT_EQ(map.getFrame(lmk_1_seen_frames.at(0)), map.getFrame(lmk_6_seen_frames.at(0)));
+    EXPECT_EQ(map->getFrame(lmk_1_seen_frames.at(0)), map->getFrame(lmk_6_seen_frames.at(0)));
 
     //finally check that there are no objects
-    EXPECT_EQ(map.getFrame(lmk_1_seen_frames.at(0))->objects_seen.size(),0);
-    EXPECT_EQ(map.numObjectsSeen(), 0u);
+    EXPECT_EQ(map->getFrame(lmk_1_seen_frames.at(0))->objects_seen.size(),0);
+    EXPECT_EQ(map->numObjectsSeen(), 0u);
 }
 
 
 TEST(Map, setStaticOrdering) {
     //add frames out of order
-    Map map;
+    Map::Ptr map = Map::create();
 
     StatusKeypointMeasurements measurements;
     //frame 0
@@ -115,9 +115,9 @@ TEST(Map, setStaticOrdering) {
     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 0, 1));
     //frame 3
     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 0, 3));
-    map.updateObservations(measurements);
+    map->updateObservations(measurements);
 
-    auto lmk = map.getLandmark(1);
+    auto lmk = map->getLandmark(1);
     EXPECT_TRUE(lmk != nullptr);
 
     FrameIds expected_frame_ids = {0, 1, 2, 3};
@@ -129,7 +129,7 @@ TEST(Map, setStaticOrdering) {
 }
 
 TEST(Map, basicObjectAdd) {
-    Map map;
+    Map::Ptr map = Map::create();
     StatusKeypointMeasurements measurements;
     //add two dynamic points on object 1 and frames 0 and 1
     //tracklet 0, object 1 frame 0
@@ -137,18 +137,18 @@ TEST(Map, basicObjectAdd) {
     //tracklet 0, object 1 frame 1
     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 1, 1));
 
-    map.updateObservations(measurements);
-    EXPECT_EQ(map.numObjectsSeen(), 1u);
-    EXPECT_TRUE(map.objectExists(1));
+    map->updateObservations(measurements);
+    EXPECT_EQ(map->numObjectsSeen(), 1u);
+    EXPECT_TRUE(map->objectExists(1));
 
-    auto object1 = map.getObject(1);
+    auto object1 = map->getObject(1);
     //object 1 should have 1 point seen at frames 0 and 1
     EXPECT_EQ(object1->dynamic_landmarks.collectIds<TrackletId>(), TrackletIds{0});
     EXPECT_EQ(object1->dynamic_landmarks.size(), 1u);
 
     //now check that the frames also have these measurements
-    auto frame_0 = map.getFrame(0);
-    auto frame_1 = map.getFrame(1);
+    auto frame_0 = map->getFrame(0);
+    auto frame_1 = map->getFrame(1);
     EXPECT_TRUE(frame_0 != nullptr);
     EXPECT_TRUE(frame_1 != nullptr);
 
@@ -161,7 +161,7 @@ TEST(Map, basicObjectAdd) {
 
 
     //check object id and seen frames
-    auto lmk_0 = map.getLandmark(0);
+    auto lmk_0 = map->getLandmark(0);
     EXPECT_EQ(lmk_0->object_id, 1); //object Id 1;
     EXPECT_EQ(lmk_0->frames_seen.collectIds<FrameId>(), FrameIds({0, 1})); //seen frames
 
@@ -184,7 +184,7 @@ TEST(Map, basicObjectAdd) {
 }
 
 TEST(Map, objectSeenFrames) {
-    Map map;
+    Map::Ptr map = Map::create();
     StatusKeypointMeasurements measurements;
 
     //add 2 objects
@@ -212,25 +212,25 @@ TEST(Map, objectSeenFrames) {
     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(3, 3, 2));
     //tracklet 3 has 3 observations
 
-    map.updateObservations(measurements);
-    EXPECT_EQ(map.numObjectsSeen(), 3u);
+    map->updateObservations(measurements);
+    EXPECT_EQ(map->numObjectsSeen(), 3u);
 
-    auto object1 = map.getObject(1);
-    auto object2 = map.getObject(2);
-    auto object3 = map.getObject(3);
+    auto object1 = map->getObject(1);
+    auto object2 = map->getObject(2);
+    auto object3 = map->getObject(3);
 
     FrameNodePtrSet expected_frame_set_object1;
-    expected_frame_set_object1.insert(CHECK_NOTNULL(map.getFrame(0)));
-    expected_frame_set_object1.insert(CHECK_NOTNULL(map.getFrame(1)));
+    expected_frame_set_object1.insert(CHECK_NOTNULL(map->getFrame(0)));
+    expected_frame_set_object1.insert(CHECK_NOTNULL(map->getFrame(1)));
 
     FrameNodePtrSet expected_frame_set_object2;
-    expected_frame_set_object2.insert(CHECK_NOTNULL(map.getFrame(1)));
-    expected_frame_set_object2.insert(CHECK_NOTNULL(map.getFrame(2)));
+    expected_frame_set_object2.insert(CHECK_NOTNULL(map->getFrame(1)));
+    expected_frame_set_object2.insert(CHECK_NOTNULL(map->getFrame(2)));
 
     FrameNodePtrSet expected_frame_set_object3;
-    expected_frame_set_object3.insert(CHECK_NOTNULL(map.getFrame(0)));
-    expected_frame_set_object3.insert(CHECK_NOTNULL(map.getFrame(1)));
-    expected_frame_set_object3.insert(CHECK_NOTNULL(map.getFrame(2)));
+    expected_frame_set_object3.insert(CHECK_NOTNULL(map->getFrame(0)));
+    expected_frame_set_object3.insert(CHECK_NOTNULL(map->getFrame(1)));
+    expected_frame_set_object3.insert(CHECK_NOTNULL(map->getFrame(2)));
 
     EXPECT_EQ(object1->getSeenFrames(), expected_frame_set_object1);
     EXPECT_EQ(object2->getSeenFrames(), expected_frame_set_object2);
@@ -240,7 +240,7 @@ TEST(Map, objectSeenFrames) {
 }
 
 TEST(Map, getLandmarksSeenAtFrame) {
-    Map map;
+    Map::Ptr map = Map::create();
     StatusKeypointMeasurements measurements;
 
     //add 2 objects
@@ -265,29 +265,29 @@ TEST(Map, getLandmarksSeenAtFrame) {
     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(4, 3, 1));
     //tracklet 3 has 3 observations
 
-    map.updateObservations(measurements);
-    EXPECT_EQ(map.numObjectsSeen(), 3u);
+    map->updateObservations(measurements);
+    EXPECT_EQ(map->numObjectsSeen(), 3u);
 
-    auto object1 = map.getObject(1);
-    auto object2 = map.getObject(2);
-    auto object3 = map.getObject(3);
+    auto object1 = map->getObject(1);
+    auto object2 = map->getObject(2);
+    auto object3 = map->getObject(3);
 
     LandmarkNodePtrSet expected_lmk_set_object1_frame0;
-    expected_lmk_set_object1_frame0.insert(CHECK_NOTNULL(map.getLandmark(0)));
+    expected_lmk_set_object1_frame0.insert(CHECK_NOTNULL(map->getLandmark(0)));
 
     LandmarkNodePtrSet expected_lmk_set_object1_frame1;
-    expected_lmk_set_object1_frame1.insert(CHECK_NOTNULL(map.getLandmark(0)));
+    expected_lmk_set_object1_frame1.insert(CHECK_NOTNULL(map->getLandmark(0)));
 
     LandmarkNodePtrSet expected_lmk_set_object2_frame1;
-    expected_lmk_set_object2_frame1.insert(CHECK_NOTNULL(map.getLandmark(1)));
-    expected_lmk_set_object2_frame1.insert(CHECK_NOTNULL(map.getLandmark(2)));
+    expected_lmk_set_object2_frame1.insert(CHECK_NOTNULL(map->getLandmark(1)));
+    expected_lmk_set_object2_frame1.insert(CHECK_NOTNULL(map->getLandmark(2)));
 
     LandmarkNodePtrSet expected_lmk_set_object3_frame0;
-    expected_lmk_set_object3_frame0.insert(CHECK_NOTNULL(map.getLandmark(3)));
+    expected_lmk_set_object3_frame0.insert(CHECK_NOTNULL(map->getLandmark(3)));
 
     LandmarkNodePtrSet expected_lmk_set_object3_frame1;
-    expected_lmk_set_object3_frame1.insert(CHECK_NOTNULL(map.getLandmark(3)));
-    expected_lmk_set_object3_frame1.insert(CHECK_NOTNULL(map.getLandmark(4)));
+    expected_lmk_set_object3_frame1.insert(CHECK_NOTNULL(map->getLandmark(3)));
+    expected_lmk_set_object3_frame1.insert(CHECK_NOTNULL(map->getLandmark(4)));
 
     EXPECT_EQ(object1->getLandmarksSeenAtFrame(0), expected_lmk_set_object1_frame0);
     EXPECT_EQ(object1->getLandmarksSeenAtFrame(1), expected_lmk_set_object1_frame1);
@@ -296,5 +296,41 @@ TEST(Map, getLandmarksSeenAtFrame) {
     EXPECT_EQ(object3->getLandmarksSeenAtFrame(0), expected_lmk_set_object3_frame0);
     EXPECT_EQ(object3->getLandmarksSeenAtFrame(1), expected_lmk_set_object3_frame1);
 
+
+}
+
+
+TEST(Map, testSimpleEstimateAccess) {
+    Map::Ptr map = Map::create();
+    StatusKeypointMeasurements measurements;
+
+    //frame cannot be 0? what is invalid frame then?
+    EXPECT_EQ(map->lastEstimateUpdate(), 0u);
+
+    //tracklet 0, static, frame
+    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 0));
+    map->updateObservations(measurements);
+
+    auto frame_0 = map->getFrame(0);
+    auto pose_0_query = frame_0->getPoseEstimate();
+    EXPECT_FALSE(pose_0_query);
+    EXPECT_FALSE(pose_0_query.isValid());
+
+    gtsam::Values estimate;
+
+    //some random pose
+    gtsam::Rot3 R = gtsam::Rot3::Rodrigues(0.3,0.4,-0.5);
+    gtsam::Point3 t(3.5,-8.2,4.2);
+    gtsam::Pose3 pose_0_actual(R,t);
+    gtsam::Key pose_0_key = CameraPoseSymbol(0);
+    estimate.insert(pose_0_key, pose_0_actual);
+
+    map->updateEstimates(estimate, gtsam::NonlinearFactorGraph{}, 0);
+    pose_0_query = frame_0->getPoseEstimate();
+
+    EXPECT_TRUE(pose_0_query);
+    EXPECT_TRUE(pose_0_query.isValid());
+    EXPECT_TRUE(gtsam::assert_equal(pose_0_query.get(), pose_0_actual));
+    EXPECT_EQ(pose_0_query.key_, pose_0_key);
 
 }

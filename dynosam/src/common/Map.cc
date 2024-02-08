@@ -44,6 +44,12 @@ void Map::updateObservations(const StatusKeypointMeasurements& keypoint_measurem
 
 }
 
+void Map::updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id) {
+    values_.insert_or_assign(values);
+    graph_ = graph;
+    last_estimate_update_ = frame_id;
+}
+
 bool Map::frameExists(FrameId frame_id) const {
     return frames_.exists(frame_id);
 }
@@ -69,6 +75,19 @@ LandmarkNode::Ptr Map::getLandmark(TrackletId tracklet_id) {
     return nullptr;
 }
 
+const ObjectNode::Ptr Map::getObject(ObjectId object_id) const {
+    if(objectExists(object_id)) { return objects_.at(object_id);}
+    return nullptr;
+}
+const FrameNode::Ptr Map::getFrame(FrameId frame_id) const {
+    if(frameExists(frame_id)) { return frames_.at(frame_id);}
+    return nullptr;
+}
+const LandmarkNode::Ptr Map::getLandmark(TrackletId tracklet_id) const {
+    if(landmarkExists(tracklet_id)) { return landmarks_.at(tracklet_id);}
+    return nullptr;
+}
+
 TrackletIds Map::getStaticTrackletsByFrame(FrameId frame_id) const {
     //if frame does not exist?
     TrackletIds tracklet_ids;
@@ -84,6 +103,23 @@ size_t Map::numObjectsSeen() const {
     return objects_.size();
 }
 
+const FrameNode::Ptr Map::lastFrame() const {
+    return frames_.crbegin()->second;
+}
+
+FrameId Map::lastEstimateUpdate() const {
+    return last_estimate_update_;
+}
+
+bool Map::getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const {
+    const auto lmk = getLandmark(tracklet_id);
+
+    if(!lmk) { return false; }
+
+    object_id = lmk->getObjectId();
+    return true;
+}
+
 void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
     LandmarkNodePtr landmark_node = nullptr;
     FrameNodePtr frame_node = nullptr;
@@ -92,14 +128,14 @@ void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, Obj
 
 
     if(!landmarkExists(tracklet_id)) {
-        landmark_node = std::make_shared<LandmarkNode>();
+        landmark_node = std::make_shared<LandmarkNode>(getptr());
         landmark_node->tracklet_id = tracklet_id;
         landmark_node->object_id = object_id;
         landmarks_.insert2(tracklet_id, landmark_node);
     }
 
     if(!frameExists(frame_id)) {
-        frame_node = std::make_shared<FrameNode>();
+        frame_node = std::make_shared<FrameNode>(getptr());
         frame_node->frame_id = frame_id;
 
         frames_.insert2(frame_id, frame_node);
@@ -127,7 +163,7 @@ void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, Obj
 
         ObjectNode::Ptr object_node = nullptr;
         if(!objectExists(object_id)) {
-            object_node = std::make_shared<ObjectNode>();
+            object_node = std::make_shared<ObjectNode>(getptr());
             object_node->object_id = object_id;
             objects_.insert2(object_id, object_node);
         }

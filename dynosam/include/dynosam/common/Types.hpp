@@ -120,6 +120,11 @@ struct LandmarkStatus {
       return LandmarkStatus(background_label, method);
     }
 
+    inline static LandmarkStatus Dynamic(Method method, ObjectId label) {
+      CHECK(label != background_label);
+      return LandmarkStatus(label, method);
+    }
+
 
 };
 

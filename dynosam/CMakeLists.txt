@@ -68,6 +68,7 @@ add_library(${PROJECT_NAME} SHARED
   src/common/DynamicObjects.cc
   src/common/Exceptions.cc
   src/common/Map.cc
+  src/common/MapNodes.cc
 
 
   src/dataprovider/DataInterfacePipeline.cc
