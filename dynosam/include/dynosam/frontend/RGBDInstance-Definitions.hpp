@@ -42,8 +42,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
 public:
     DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
 
-    const StatusLandmarkEstimates static_landmarks_; //! in the world frame
-    const StatusLandmarkEstimates dynamic_landmarks_; //! in the world frame
+    const StatusLandmarkEstimates static_landmarks_; //! in the camera frame
+    const StatusLandmarkEstimates dynamic_landmarks_; //! in the camera frame
     const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
     const ObjectPoseMap propogated_object_poses_; //! Propogated poses using the esimtate from the frontend
     const gtsam::Pose3Vector camera_poses_; //! Vector of ego-motion poses (drawn everytime)

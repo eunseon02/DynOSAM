@@ -196,6 +196,41 @@ using StatusKeypointMeasurement = GenericStatusMEstimate<KeypointStatus, Keypoin
 /// @brief A vector of StatusKeypointMeasurements
 using StatusKeypointMeasurements = GenericStatusMEstimates<KeypointStatus, Keypoint>;
 
+template<typename M>
+inline GenericMTrack<M> makeTrack(TrackletId tracklet_id, const M& m) {
+  return std::pair(tracklet_id, m);
+}
+
+template<typename MStatus, typename M>
+inline GenericStatusMEstimate<MStatus, M> makeStatusEstimate(const MStatus& status, TrackletId tracklet_id, const M& m) {
+  return std::make_pair(status, makeTrack(tracklet_id, m));
+}
+
+template<typename MStatus, typename M>
+inline GenericStatusMEstimates<MStatus, M>& appendStatusEstimate(GenericStatusMEstimates<MStatus, M>& estimates, const MStatus& status, TrackletId tracklet_id, const M& m) {
+  estimates.push_back(makeStatusEstimate(status, tracklet_id, m));
+  return estimates;
+}
+
+
+template<typename MStatus, typename M>
+inline MStatus retrieveStatus(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
+  return status_estimate.first;
+}
+
+template<typename MStatus, typename M>
+inline TrackletId retrieveTrackletId(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
+  //get the GenericMTrack<M> with status_estimate.first
+  //get the tracklet with .first;
+  return status_estimate.second.first;
+}
+
+template<typename MStatus, typename M>
+inline M retrieveEstimate(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
+  //get the GenericMTrack<M> with status_estimate.first
+  //get the measurement/estimate with .second;
+  return status_estimate.second.second;
+}
 
 // /**
 //  * @brief Reference wrapper for a type T with operating casting

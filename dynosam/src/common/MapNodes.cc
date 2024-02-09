@@ -60,13 +60,22 @@ StatusLandmarkEstimates FrameNode::getAllDynamicLandmarkEstimates() const {
     for(const auto& lmk_ptr : dynamic_landmarks) {
         StateQuery<Landmark> lmk_status_query = getDynamicLandmarkEstimate(lmk_ptr->getId());
         if(lmk_status_query) {
-            LandmarkStatus lmk_status = LandmarkStatus::Dynamic(
-                LandmarkStatus::Method::OPTIMIZED,
-                lmk_ptr->getObjectId()
-            );
+            // LandmarkStatus lmk_status = LandmarkStatus::Dynamic(
+            //     LandmarkStatus::Method::OPTIMIZED,
+            //     lmk_ptr->getObjectId()
+            // );
 
-            auto estimate = std::make_pair(lmk_ptr->getId(), lmk_status_query.get());
-            estimates.push_back(std::make_pair(lmk_status, estimate));
+            // auto estimate = std::make_pair(lmk_ptr->getId(), lmk_status_query.get());
+            // estimates.push_back(std::make_pair(lmk_status, estimate));
+            appendStatusEstimate(
+                estimates,
+                LandmarkStatus::Dynamic(
+                    LandmarkStatus::Method::OPTIMIZED,
+                    lmk_ptr->getObjectId()
+                ), //status
+                lmk_ptr->getId(), //tracklet id
+                lmk_status_query.get() //estimate
+            );
 
         }
     }
@@ -74,12 +83,34 @@ StatusLandmarkEstimates FrameNode::getAllDynamicLandmarkEstimates() const {
     return estimates;
 }
 
-StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const {
+StatusLandmarkEstimates FrameNode::getDynamicLandmarkEstimates(ObjectId object_id) const {
     CHECK(objectObserved(object_id)); //TODO: handle exception?
 
     //not sure what will be faster? going through all landmarks and finding object id
-    //or going to this object and iterating over lmks there. Doing the latter requires
-    //a call to
+    //or going to this object and iterating over lmks there.
+    //Doing the former requires iterating over all the seen lmks (which should be in this frame)
+    //and then just checking if the lmk has the right object
+    //Doing the latter requires a call to getSeenFrames() and THEN finding the right frame in that set. This means
+    //iterating over all the lmks for that dynamic object...
+
+    StatusLandmarkEstimates estimates;
+    for(const auto& lmk_ptr : dynamic_landmarks) {
+        if(lmk_ptr->getObjectId() == object_id) {
+            StateQuery<Landmark> lmk_status_query = getDynamicLandmarkEstimate(lmk_ptr->getId());
+            if(lmk_status_query) {
+                appendStatusEstimate(
+                    estimates,
+                    LandmarkStatus::Dynamic(
+                        LandmarkStatus::Method::OPTIMIZED,
+                        lmk_ptr->getObjectId()
+                    ), //status
+                    lmk_ptr->getId(), //tracklet id
+                    lmk_status_query.get() //estimate
+                );
+            }
+        }
+    }
+    return estimates;
 }
 
 

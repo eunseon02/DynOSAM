@@ -251,17 +251,23 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
         const TrackletId tracklet_id = f->tracklet_id_;
         const Keypoint kp = f->keypoint_;
-        const Landmark lmk = frame.backProjectToWorld(tracklet_id);
+        const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        KeypointStatus kp_status = KeypointStatus::Static(frame.frame_id_);
-        KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
-        static_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
+        appendStatusEstimate(
+            static_keypoint_measurements,
+            KeypointStatus::Static(frame.frame_id_), //status
+            tracklet_id, //tracklet id
+            kp //measurement
+        );
 
-        LandmarkStatus lmk_status = LandmarkStatus::Static(LandmarkStatus::Method::MEASURED);
-        LandmarkEstimate lmk_estimate = std::make_pair(tracklet_id, lmk);
-        static_landmarks.push_back(std::make_pair(lmk_status, lmk_estimate));
+         appendStatusEstimate(
+            static_landmarks,
+            LandmarkStatus::Static(LandmarkStatus::Method::MEASURED), //status
+            tracklet_id, //tracklet id
+            lmk_camera //measurement
+        );
     }
 
 
@@ -279,15 +285,21 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;
-                const Landmark lmk = frame.backProjectToWorld(tracklet_id);
+                const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
 
-                KeypointStatus kp_status = KeypointStatus::Dynamic(object_id, frame.frame_id_);
-                KeypointMeasurement kp_measurement = std::make_pair(tracklet_id, kp);
-                dynamic_keypoint_measurements.push_back(std::make_pair(kp_status, kp_measurement));
+                appendStatusEstimate(
+                    dynamic_keypoint_measurements,
+                    KeypointStatus::Static(frame.frame_id_), //status
+                    tracklet_id, //tracklet id
+                    kp //measurement
+                );
 
-                LandmarkStatus lmk_status(object_id, LandmarkStatus::Method::MEASURED);
-                LandmarkEstimate lmk_estimate = std::make_pair(tracklet_id, lmk);
-                dynamic_landmarks.push_back(std::make_pair(lmk_status, lmk_estimate));
+                appendStatusEstimate(
+                    static_landmarks,
+                    LandmarkStatus::Static(LandmarkStatus::Method::MEASURED), //status
+                    tracklet_id, //tracklet id
+                    lmk_camera //measurement
+                );
             }
         }
 
