@@ -85,8 +85,63 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
 
 void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
     CHECK(rgbd_frontend_output);
-    publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_);
-    publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_);
+    // publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_);
+    // publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_);
+
+    {
+        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+        for(const auto& status_estimate : rgbd_frontend_output->static_landmarks_) {
+            const LandmarkStatus& status =  status_estimate.first;
+            const LandmarkEstimate& estimate = status_estimate.second;
+            const Landmark& lmk = rgbd_frontend_output->T_world_camera_ * estimate.second;
+
+            pcl::PointXYZRGB pt;
+            if(status.label_ == background_label) {
+                // publish static lmk's as white
+                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+            }
+            else {
+                const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+            }
+            cloud.points.push_back(pt);
+        }
+
+
+        sensor_msgs::msg::PointCloud2 pc2_msg;
+        pcl::toROSMsg(cloud, pc2_msg);
+        pc2_msg.header.frame_id = params_.world_frame_id_;
+        static_tracked_points_pub_->publish(pc2_msg);
+    }
+
+    {
+        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+        for(const auto& status_estimate :  rgbd_frontend_output->dynamic_landmarks_) {
+            const LandmarkStatus& status =  status_estimate.first;
+            const LandmarkEstimate& estimate = status_estimate.second;
+            const Landmark& lmk = rgbd_frontend_output->T_world_camera_ * estimate.second;
+
+            pcl::PointXYZRGB pt;
+            if(status.label_ == background_label) {
+                // publish static lmk's as white
+                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+            }
+            else {
+                const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+            }
+            cloud.points.push_back(pt);
+        }
+
+
+        sensor_msgs::msg::PointCloud2 pc2_msg;
+        pcl::toROSMsg(cloud, pc2_msg);
+        pc2_msg.header.frame_id = params_.world_frame_id_;
+        dynamic_tracked_points_pub_->publish(pc2_msg);
+    }
+
     // publishStaticCloud(rgbd_frontend_output->static_landmarks_);
     // publishObjectCloud(rgbd_frontend_output->dynamic_keypoint_measurements_, rgbd_frontend_output->dynamic_landmarks_);
     publishObjectPositions(

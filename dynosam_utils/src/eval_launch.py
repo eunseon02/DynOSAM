@@ -6,6 +6,8 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 from ament_index_python.packages import get_package_share_directory
 
+import evaluation.evaluation_lib as eval
+
 from typing import Optional, List
 import logging as log
 import errno
@@ -87,6 +89,10 @@ def parser():
                                  " such that the output file path will be output_path/name",
                                  default="test")
 
+    evaluation_opts.add_argument("-a", "--run_analysis",
+                                 help="Runs analysis on the output files, expected to be found in the output_path/name folder ",
+                                 action="store_true")
+
     main_parser = argparse.ArgumentParser(description="{}".format(basic_desc))
     sub_parsers = main_parser.add_subparsers(dest="subcommand")
     sub_parsers.required = True
@@ -123,14 +129,29 @@ def main(parsed_args, unknown_args):
     print('Starting launch of launch description...')
     print('')
 
-    # parse arguments down to the actual launch file
-    # these will be appended to the Node(arguments=...) parameter and can be used
-    # to directly change things like FLAG_ options etc...
-    ls = LaunchService(argv=unknown_args)
-    ls.include_launch_description(ld)
-    return ls.run()
+    running_success = True
+    run_pipeline = parsed_args.run_pipeline
+    if run_pipeline:
+        # parse arguments down to the actual launch file
+        # these will be appended to the Node(arguments=...) parameter and can be used
+        # to directly change things like FLAG_ options etc...
+        ls = LaunchService(argv=unknown_args)
+        ls.include_launch_description(ld)
+        running_success = ls.run()
+
+
+    run_analysis = parsed_args.run_analysis
+    if run_analysis:
+        evaluator =  eval.DatasetEvaluator(output_folder_path, parsed_args)
+        evaluator.run_analysis()
+
+    return running_success
+
+#python3 eval_launch.py --dataset_path=/root/data/vdo_slam/kitti/kitti/0004 --name logging
 
 import argcomplete
+
+
 if __name__ == '__main__':
     ###
     parser = parser()
@@ -140,3 +161,5 @@ if __name__ == '__main__':
     # the user wants to parse to the LaunchService as real args to be used as GFLAGS.
     args, unknown = parser.parse_known_args()
     sys.exit(main(args, unknown))
+
+    # from evaluation.evaluation_lib import hello

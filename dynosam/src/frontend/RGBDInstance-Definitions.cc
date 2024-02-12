@@ -29,22 +29,44 @@
 namespace dyno {
 
 FrontendLogger::FrontendLogger() {
-    object_motion_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+    object_motion_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
             "t_err", "r_err"));
 
-    camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+
+    object_points_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "object_id",
+            "tracklet_id",
+            "x_world", "y_world", "z_world"));
+
+    camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "t_abs_err", "r_abs_err",
             "t_rel_err", "r_rel_err"));
+
+    camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "x", "y", "z",
+            "roll", "pitch" , "yaw"));
+
+    object_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "object_id",
+            "x", "y", "z",
+            "roll", "pitch" , "yaw"));
+
 }
 
 FrontendLogger::~FrontendLogger() {
     LOG(INFO) << "Writing out frontend logger...";
 
-    OfstreamWrapper::WriteOutCsvWriter(*object_motion_csv_, "frontend_motion_error_log.csv");
-    OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, "frontend_camera_pose_error_log.csv");
+    OfstreamWrapper::WriteOutCsvWriter(*object_motion_errors_csv_, "frontend_motion_error_log.csv");
+    OfstreamWrapper::WriteOutCsvWriter(*camera_pose_errors_csv_, "frontend_camera_pose_error_log.csv");
+    OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, "frontend_camera_pose_log.csv");
+    OfstreamWrapper::WriteOutCsvWriter(*object_pose_csv_, "frontend_object_pose_log.csv");
+    OfstreamWrapper::WriteOutCsvWriter(*object_points_csv_, "frontend_object_points_log.csv");
 }
 
 void FrontendLogger::logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates) {
@@ -69,10 +91,25 @@ void FrontendLogger::logObjectMotion(const GroundTruthPacketMap& gt_packets, Fra
         }
 
         //frame_id, object_id, t_err, r_error
-        *object_motion_csv_ << frame_id << object_id << motion_error.translation_ << motion_error.rot_;
+        *object_motion_errors_csv_ << frame_id << object_id << motion_error.translation_ << motion_error.rot_;
 
     }
 }
+
+void FrontendLogger::logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses) {
+    //assume object poses get logged in frame order!!!
+    for(const auto&[object_id, poses_map] : propogated_poses) {
+        //do not draw if in current frame
+        if(!poses_map.exists(frame_id)) {
+            continue;
+        }
+
+        const gtsam::Pose3& pose = poses_map.at(frame_id);
+        const auto rot = pose.rotation();
+        *object_pose_csv_ << frame_id << object_id << pose.x() << pose.y() << pose.z() << rot.roll() << rot.pitch() << rot.yaw();
+    }
+}
+
 
 void FrontendLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera, std::optional<const gtsam::Pose3> T_world_camera_k_1) {
     if(!gt_packets.exists(frame_id)) {
@@ -98,8 +135,26 @@ void FrontendLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, Frame
 
 
     //frame_id, t_abs_err, r_abs_error, t_rel_error, r_rel_error
-    *camera_pose_csv_ << frame_id << absolute_pose_error.translation_ << absolute_pose_error.rot_ << relative_pose_error.translation_ << relative_pose_error.rot_;
+    *camera_pose_errors_csv_ << frame_id << absolute_pose_error.translation_ << absolute_pose_error.rot_ << relative_pose_error.translation_ << relative_pose_error.rot_;
 
+    const auto rot = T_world_camera.rotation();
+    *camera_pose_csv_ << frame_id << T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.roll() << rot.pitch() << rot.yaw();
+
+}
+
+void FrontendLogger::logObjectPoints(FrameId frame_id, const gtsam::Pose3& T_world_camera_k, const StatusLandmarkEstimates& dynamic_landmarks) {
+    for(const auto& status_lmks : dynamic_landmarks) {
+        const LandmarkStatus& status = retrieveStatus(status_lmks);
+        const TrackletId tracklet_id = retrieveTrackletId(status_lmks);
+        Landmark lmk_camera = retrieveEstimate(status_lmks);
+
+        ObjectId object_id = status.label_;
+
+        //assume measurement is in camera frame
+        Landmark lmk_world = T_world_camera_k * lmk_camera;
+
+        *object_points_csv_ << frame_id << object_id << tracklet_id << lmk_world(0) << lmk_world(1) << lmk_world(2);
+    }
 }
 
 }

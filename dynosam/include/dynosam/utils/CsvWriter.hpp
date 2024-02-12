@@ -44,6 +44,7 @@ InvalidCsvHeaderException(const std::string& what) : DynosamException(what) {}
 
 
 //cannot be constructed with num args < 1
+//TODO: missing a , between header definitions e.g "h1" "h2" and not "h1","h2" works and gives weird behavioru
 class CsvHeader : public std::vector<std::string> {
 
 public:

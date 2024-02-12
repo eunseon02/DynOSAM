@@ -169,6 +169,12 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
 
     auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
+
+    if(logger_) {
+        logger_->logObjectPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
+        //object_poses_ are in frontend module
+        logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
+    }
     return {State::Nominal, output};
 }
 
@@ -289,14 +295,14 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 
                 appendStatusEstimate(
                     dynamic_keypoint_measurements,
-                    KeypointStatus::Static(frame.frame_id_), //status
+                    KeypointStatus::Dynamic(object_id, frame.frame_id_), //status
                     tracklet_id, //tracklet id
                     kp //measurement
                 );
 
                 appendStatusEstimate(
-                    static_landmarks,
-                    LandmarkStatus::Static(LandmarkStatus::Method::MEASURED), //status
+                    dynamic_landmarks,
+                    LandmarkStatus::Dynamic(LandmarkStatus::Method::MEASURED, object_id), //status
                     tracklet_id, //tracklet id
                     lmk_camera //measurement
                 );
