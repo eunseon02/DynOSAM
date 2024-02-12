@@ -230,6 +230,7 @@ public:
     //all tracklets
     LandmarkNodePtrSet dynamic_landmarks;
 
+    //returns object_id
     int getId() const override;
 
     //this could take a while?

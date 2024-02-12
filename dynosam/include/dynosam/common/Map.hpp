@@ -27,6 +27,7 @@
 #include "dynosam/common/MapNodes.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp" //for all the chr's used in the keys
 #include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>

@@ -60,13 +60,6 @@ StatusLandmarkEstimates FrameNode::getAllDynamicLandmarkEstimates() const {
     for(const auto& lmk_ptr : dynamic_landmarks) {
         StateQuery<Landmark> lmk_status_query = getDynamicLandmarkEstimate(lmk_ptr->getId());
         if(lmk_status_query) {
-            // LandmarkStatus lmk_status = LandmarkStatus::Dynamic(
-            //     LandmarkStatus::Method::OPTIMIZED,
-            //     lmk_ptr->getObjectId()
-            // );
-
-            // auto estimate = std::make_pair(lmk_ptr->getId(), lmk_status_query.get());
-            // estimates.push_back(std::make_pair(lmk_status, estimate));
             appendStatusEstimate(
                 estimates,
                 LandmarkStatus::Dynamic(
@@ -136,7 +129,7 @@ StateQuery<Landmark> LandmarkNode::getStaticLandmarkEstimate() const {
     const gtsam::Key lmk_key = StaticLandmarkSymbol(tracklet_id);
 
     if(!isStatic()) {
-        throw InvalidLandmarkQuery(lmk_key, "static estimate requested but landmark is dynamic!");
+        throw InvalidLandmarkQuery(lmk_key, "Static estimate requested but landmark is dynamic!");
     }
 
     return queryWeakMap<Landmark>(map_ptr_, lmk_key);
