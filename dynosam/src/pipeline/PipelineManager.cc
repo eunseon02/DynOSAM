@@ -25,7 +25,9 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
 #include "dynosam/backend/MonoBatchBackendModule.hpp"
+#include "dynosam/common/Map.hpp"
 #include "dynosam/backend/MonoBackendModule.hpp"
+#include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 #include <glog/logging.h>
@@ -68,6 +70,8 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     FrontendModule::Ptr frontend = nullptr;
     BackendModule::Ptr backend = nullptr;
 
+    Map::Ptr map = Map::create();
+
     const CameraParams& camera_params = params_.camera_params_;
     //eventually from actual params
     switch (params_.frontend_type_)
@@ -76,6 +80,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
             LOG(INFO) << "Making RGBDInstance frontend";
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
+            backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, camera, map, &display_queue_);
         }   break;
         case FrontendType::kMono: {
             LOG(INFO) << "Making MonoInstance frontend";

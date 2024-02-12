@@ -24,13 +24,17 @@
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/Types.hpp"
 #include "internal/helpers.hpp"
-
+#include "dynosam/frontend/vision/Frame.hpp"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <exception>
 
 using namespace dyno;
+
+Frame makeFrameForTesting(FrameId frame_id) {
+    return Frame(frame_id, 0, nullptr, TrackingInputImages{}, FeatureContainer{}, FeatureContainer{});
+}
 
 
 TEST(Map, basicAddOnlyStatic) {
@@ -40,7 +44,6 @@ TEST(Map, basicAddOnlyStatic) {
     //10 measurements with unique tracklets at frame 0
     for(size_t i = 0; i < 10; i++) {
         KeypointStatus status = KeypointStatus::Static(0);
-        auto estimate = std::make_pair(i, Keypoint());
         measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(
             i, background_label, 0
         ));
@@ -235,6 +238,14 @@ TEST(Map, objectSeenFrames) {
     EXPECT_EQ(object1->getSeenFrames(), expected_frame_set_object1);
     EXPECT_EQ(object2->getSeenFrames(), expected_frame_set_object2);
     EXPECT_EQ(object3->getSeenFrames(), expected_frame_set_object3);
+
+    //frame 0 has seen object 1 and 3 -the reverse of the above testt
+    EXPECT_EQ(map->getFrame(0)->objects_seen, ObjectNodePtrSet({object1, object3}));
+    //frame 1 has seen object 1, 2 and 3
+    EXPECT_EQ(map->getFrame(1)->objects_seen, ObjectNodePtrSet({object1, object3, object2}));
+    //frame 2 has seen object 2 and 3
+    EXPECT_EQ(map->getFrame(2)->objects_seen, ObjectNodePtrSet({object2, object3}));
+
 
 
 }

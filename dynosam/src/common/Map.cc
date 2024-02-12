@@ -23,7 +23,9 @@
 
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/backend/DynamicPointSymbol.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 
 #include <glog/logging.h>
 
@@ -38,7 +40,6 @@ void Map::updateObservations(const StatusKeypointMeasurements& keypoint_measurem
         const FrameId frame_id = status.frame_id_;
         const ObjectId object_id = status.label_;
         const bool is_static = status.isStatic();
-
         addOrUpdateMapStructures(tracklet_id, frame_id, object_id, is_static);
     }
 
@@ -48,6 +49,10 @@ void Map::updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFac
     values_.insert_or_assign(values);
     graph_ = graph;
     last_estimate_update_ = frame_id;
+}
+
+void Map::updateFrame(const Frame& frame) {
+    tracked_frames_.insert2(frame.frame_id_, frame);
 }
 
 bool Map::frameExists(FrameId frame_id) const {
@@ -107,6 +112,14 @@ const FrameNode::Ptr Map::lastFrame() const {
     return frames_.crbegin()->second;
 }
 
+const Frame& Map::getTrackedFrame(FrameId frame_id) const {
+    if(tracked_frames_.exists(frame_id)) {
+        return tracked_frames_.at(frame_id);
+    }
+
+    throw DynosamException("Cannot get tracked map at frame " + std::to_string(frame_id) + "! Was it added with Map::updateFrame?");
+}
+
 FrameId Map::lastEstimateUpdate() const {
     return last_estimate_update_;
 }
@@ -137,7 +150,6 @@ void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, Obj
     if(!frameExists(frame_id)) {
         frame_node = std::make_shared<FrameNode>(getptr());
         frame_node->frame_id = frame_id;
-
         frames_.insert2(frame_id, frame_node);
     }
 
@@ -172,7 +184,9 @@ void Map::addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, Obj
         CHECK(object_node);
 
         object_node->dynamic_landmarks.insert(landmark_node);
+
         frame_node->dynamic_landmarks.insert(landmark_node);
+        frame_node->objects_seen.insert(object_node);
 
     }
 

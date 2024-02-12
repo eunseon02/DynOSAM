@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/common/Exceptions.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendParams.hpp"
@@ -37,6 +38,7 @@
 
 namespace dyno {
 
+//TODO: should do like RGBD/MonBackendModuleBase...
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
  *
@@ -61,6 +63,9 @@ protected:
 
 protected:
     const BackendParams base_params_;
+
+    //NOTE: this is copied directly from the frontend module.
+    GroundTruthPacketMap gt_packet_map_; //! Updated in the frontend module base via InputCallback (see FrontendModule constructor)
 
     //! Camera related parameters
     Camera::Ptr camera_;

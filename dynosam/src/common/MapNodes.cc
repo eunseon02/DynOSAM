@@ -24,6 +24,7 @@
 #include "dynosam/common/MapNodes.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 
 
 namespace dyno {
@@ -42,6 +43,14 @@ StateQuery<gtsam::Pose3> FrameNode::getPoseEstimate() const {
     const gtsam::Key pose_key = CameraPoseSymbol(frame_id);
     return queryWeakMap<gtsam::Pose3>(map_ptr_, pose_key);
 
+}
+
+const Frame& FrameNode::getTrackedFrame() const {
+    if(auto map = map_ptr_.lock()) {
+        return map->getTrackedFrame(frame_id);
+    }
+
+   throw InvalidMapException();
 }
 
 StateQuery<gtsam::Pose3> FrameNode::getObjectMotionEstimate(ObjectId object_id) const {

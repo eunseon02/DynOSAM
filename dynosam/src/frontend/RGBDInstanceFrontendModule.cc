@@ -58,7 +58,6 @@ RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& im
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
-    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
 
     ImageContainer::Ptr image_container = input->image_container_;
 
@@ -94,7 +93,6 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
-    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
     ImageContainer::Ptr image_container = input->image_container_;
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
@@ -257,7 +255,9 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
         const TrackletId tracklet_id = f->tracklet_id_;
         const Keypoint kp = f->keypoint_;
-        const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
+        // const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
+        Landmark lmk_camera;
+        camera_->backProject(kp, f->depth_, &lmk_camera);
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
@@ -291,7 +291,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;
-                const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
+                Landmark lmk_camera;
+                camera_->backProject(kp, f->depth_, &lmk_camera);
 
                 appendStatusEstimate(
                     dynamic_keypoint_measurements,

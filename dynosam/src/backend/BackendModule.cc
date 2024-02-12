@@ -40,6 +40,12 @@ BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, Im
 
     CHECK(gtsam_calibration_);
     setFactorParams(params);
+
+    //create callback to update gt_packet_map_ values so the derived classes dont need to manage this
+    //TODO: this logic is exactly the same as in FrontendModule - functionalise!!
+    registerInputCallback([=](BackendInputPacket::ConstPtr input) {
+        if(input->gt_packet_) gt_packet_map_.insert2(input->getFrameId(), *input->gt_packet_);
+    });
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {

@@ -25,6 +25,9 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+
+
 #include <gtsam/base/FastSet.h>
 #include <type_traits>
 #include <set>
@@ -34,6 +37,10 @@ namespace dyno {
 
 //forward declare map
 class Map;
+
+struct InvalidMapException : public DynosamException {
+    InvalidMapException() : DynosamException("The Map could not be accessed as it is no longer valid. Has the object gone out of scope?") {}
+};
 
 class MapNodeBase {
 public:
@@ -202,6 +209,8 @@ public:
 
     int getId() const override;
     bool objectObserved(ObjectId object_id) const;
+
+    const Frame& getTrackedFrame() const;
 
     //get pose estimate
     StateQuery<gtsam::Pose3> getPoseEstimate() const;

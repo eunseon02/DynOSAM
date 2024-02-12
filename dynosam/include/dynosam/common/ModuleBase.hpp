@@ -168,6 +168,9 @@ public:
 
     using SpinReturn = std::pair<State, OutputConstPtr>;
 
+    using InputCallback = std::function<void(InputConstPtr)>;
+    using OutputCallback = std::function<void(OutputConstPtr)>;
+
     ModuleBase(const std::string& name) : name_(name), module_state_(State::Boostrap) {}
     virtual ~ModuleBase() = default;
 
@@ -176,6 +179,8 @@ public:
         validateInput(input);
 
         SpinReturn spin_return{State::Boostrap, nullptr};
+
+        if(input_callback_) input_callback_(input);
 
         switch (module_state_)
             {
@@ -191,9 +196,20 @@ public:
             }
         }
 
+        if(output_callback_) output_callback_(spin_return.second);
+
         module_state_ = spin_return.first;
         return spin_return.second;
     }
+
+    inline void registerInputCallback(const InputCallback& input_callback) {
+        input_callback_ = input_callback;
+    }
+
+    inline void registerOutputCallback(const OutputCallback& output_callback) {
+        output_callback_ = output_callback;
+    }
+
 
 protected:
     /**
@@ -208,11 +224,12 @@ protected:
     virtual SpinReturn boostrapSpin(InputConstPtr input) = 0;
     virtual SpinReturn nominalSpin(InputConstPtr input) = 0;
 
-
-
 private:
     const std::string name_;
     std::atomic<State> module_state_;
+
+    InputCallback input_callback_;
+    OutputCallback output_callback_;
 
 };
 

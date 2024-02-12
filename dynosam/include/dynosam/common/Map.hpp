@@ -39,9 +39,8 @@
 
 namespace dyno {
 
-
-
 //TODO: state node
+class Frame;
 
 //Implemented as Best from https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
 //So that constructor is only usable by this class. Instead, use create
@@ -68,6 +67,8 @@ public:
     void updateObservations(const StatusKeypointMeasurements& keypoint_measurements);
     void updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id);
 
+    void updateFrame(const Frame& frame);
+
     bool frameExists(FrameId frame_id) const;
     bool landmarkExists(TrackletId tracklet_id) const;
     bool objectExists(ObjectId object_id) const;
@@ -90,6 +91,9 @@ public:
     //TODO:test
     const FrameNode::Ptr lastFrame() const;
 
+    //or exception
+    const Frame& getTrackedFrame(FrameId frame_id) const;
+
     FrameId lastEstimateUpdate() const;
 
 
@@ -109,6 +113,24 @@ public:
     const gtsam::Values& getValues() const;
     const gtsam::NonlinearFactorGraph& getGraph() const;
 
+    bool exists(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
+        return (values_.exists(key) || new_values.exists(key));
+    }
+
+    template<typename ValueType>
+    ValueType at(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
+        StateQuery<ValueType> query = query(key);
+        if(query) {
+            return query.get();
+        }
+
+        if(new_values.exists(key)) {
+            return new_values.at<ValueType>(key);
+        }
+
+        throw gtsam::ValuesKeyDoesNotExist("Requesting value from dyno::Map::at", key);
+    }
+
 
 
 
@@ -126,6 +148,9 @@ private:
     gtsam::Values values_;
     gtsam::NonlinearFactorGraph graph_;
     FrameId last_estimate_update_{0};
+
+    //frontend
+    gtsam::FastMap<FrameId,Frame> tracked_frames_;
 };
 
 

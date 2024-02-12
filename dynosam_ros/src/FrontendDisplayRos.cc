@@ -87,7 +87,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
     CHECK(rgbd_frontend_output);
     // publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_);
     // publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_);
-
+    // LOG(WARNING) << rgbd_frontend_output->T_world_camera_;
     {
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
 

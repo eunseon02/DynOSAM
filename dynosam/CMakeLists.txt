@@ -102,6 +102,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/MonoBatchBackendModule.cc
   src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
+  src/backend/RGBDBackendModule.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
