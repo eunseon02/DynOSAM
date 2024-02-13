@@ -29,7 +29,7 @@
 
 namespace dyno {
 
-RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera, Map::Ptr map, ImageDisplayQueue* display_queue)
+RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera, Map3d::Ptr map, ImageDisplayQueue* display_queue)
     : BackendModule(backend_params, camera, display_queue), map_(CHECK_NOTNULL(map)) {}
 
 RGBDBackendModule::~RGBDBackendModule() {}
@@ -55,10 +55,9 @@ RGBDBackendModule::rgbdBoostrapSpin(RGBDInstanceOutputPacket::ConstPtr input) {
 
     {
         utils::TimingStatsCollector("map.update_observations");
-        map_->updateObservations(input->static_keypoint_measurements_);
-        map_->updateObservations(input->dynamic_keypoint_measurements_);
+        map_->updateObservations(input->static_landmarks_);
+        map_->updateObservations(input->dynamic_landmarks_);
     }
-    map_->updateFrame(input->frame_);
 
     return {State::Nominal, nullptr};
 }
@@ -68,10 +67,9 @@ RGBDBackendModule::rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input) {
 
     {
         utils::TimingStatsCollector("map.update_observations");
-        map_->updateObservations(input->static_keypoint_measurements_);
-        map_->updateObservations(input->dynamic_keypoint_measurements_);
+        map_->updateObservations(input->static_landmarks_);
+        map_->updateObservations(input->dynamic_landmarks_);
     }
-    map_->updateFrame(input->frame_);
 
     return {State::Nominal, nullptr};
 }

@@ -38,7 +38,6 @@
 #include <type_traits>
 #include <string_view>
 
-
 namespace dyno
 {
 
@@ -98,7 +97,40 @@ enum ReferenceFrame {
 };
 
 
+//TODO: should make variables private
+template<typename VALUE>
+struct TrackedValueStatus {
+  using Value = VALUE;
+  Value value_;
+  FrameId frame_id_;
+  TrackletId tracklet_id_;
+  ObjectId label_; //! Will be 0 if background
 
+  TrackedValueStatus(
+    const Value& value,
+    FrameId frame_id,
+    TrackletId tracklet_id,
+    ObjectId label)
+    : value_(value),
+      frame_id_(frame_id),
+      tracklet_id_(tracklet_id),
+      label_(label) {}
+
+  virtual ~TrackedValueStatus() = default;
+
+  inline bool isStatic() const {
+    return label_ == background_label;
+  }
+};
+
+/// @brief Check if derived DERIVEDSTATUS us in factor derived from Status<Value>
+/// @tparam DERIVEDSTATUS derived type
+/// @tparam VALUE expected value to templated base Status on
+template<typename DERIVEDSTATUS, typename VALUE>
+inline constexpr bool IsDerivedTrackedValueStatus = std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
+// template<typename DERIVEDSTATUS, typename VALUE>
+// using IsDerivedTrackedValueStatus = typename std::enable_if<
+//       std::is_base_of<TrackedValueStatus<VALUE>, DERIVEDSTATUS>::value>::type;
 
 /**
  * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
@@ -107,22 +139,31 @@ enum ReferenceFrame {
  * Also includes information on how the landamrk was estimated, age etc...
  *
  */
-struct LandmarkStatus {
-
+struct LandmarkStatus : public TrackedValueStatus<Landmark> {
+    using Base = TrackedValueStatus<Landmark>;
+    using Base::Value;
     enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
+    Method method_;
 
-    ObjectId label_; //! Will be 0 if background
-    Method method_; //! How the landmark was constructed
+    /**
+     * @brief Construct a new Landmark Status object
+     *
+     * @param lmk
+     * @param frame_id
+     * @param tracklet_id
+     * @param label
+     * @param method
+     */
+    LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, Method method)
+    : Base(lmk, frame_id, tracklet_id, label), method_(method) {}
 
-    LandmarkStatus(ObjectId label, Method method) : label_(label), method_(method) {}
-
-    inline static LandmarkStatus Static(Method method) {
-      return LandmarkStatus(background_label, method);
+    inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, method);
     }
 
-    inline static LandmarkStatus Dynamic(Method method, ObjectId label) {
+    inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
       CHECK(label != background_label);
-      return LandmarkStatus(label, method);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, method);
     }
 
 
@@ -134,103 +175,69 @@ struct LandmarkStatus {
  * Label may be background at which point the KeyPointType should be background_label
  *
  */
-struct KeypointStatus {
-  const KeyPointType kp_type_;
-  const ObjectId label_; //! Will be 0 if background
-  const FrameId frame_id_;
+struct KeypointStatus : public TrackedValueStatus<Keypoint> {
+  using Base = TrackedValueStatus<Keypoint>;
+  using Base::Value;
+  KeyPointType kp_type_;
 
-  KeypointStatus(KeyPointType kp_type, ObjectId label, FrameId frame_id) : kp_type_(kp_type), label_(label), frame_id_(frame_id) {}
+  /**
+   * @brief Construct a new Keypoint Status object
+   *
+   * @param kp
+   * @param frame_id
+   * @param tracklet_id
+   * @param label
+   * @param kp_type
+   */
+  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label,KeyPointType kp_type)
+  : Base(kp, frame_id, tracklet_id, label), kp_type_(kp_type) {}
 
-  inline bool isStatic() const {
-    const bool is_static = (kp_type_ == KeyPointType::STATIC);
-    {
-      //sanity check
-      if(is_static) CHECK_EQ(label_, background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
-    }
-    return is_static;
+  inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id) {
+    return KeypointStatus(kp, frame_id, background_label, tracklet_id, KeyPointType::STATIC);
   }
 
-  inline static KeypointStatus Static(FrameId frame_id) {
-    return KeypointStatus(KeyPointType::STATIC, background_label, frame_id);
-  }
-
-  inline static KeypointStatus Dynamic(ObjectId label, FrameId frame_id) {
+  inline static KeypointStatus Dynamic(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label) {
     CHECK(label != background_label);
-    return KeypointStatus(KeyPointType::DYNAMIC, label, frame_id);
+    return KeypointStatus(kp, frame_id, tracklet_id, label, KeyPointType::DYNAMIC);
   }
 };
 
-/// @brief A generic tracked estimate/measurement, associated with a trackletId
-/// @tparam M An estimate or measurement
-template<typename M>
-using GenericMTrack = std::pair<TrackletId, M>;
 
+template<class DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
+struct IsStatus {
+  static_assert(IsDerivedTrackedValueStatus<DERIVEDSTATUS, VALUE>, "DERIVEDSTATUS does not derive from Status<Value>");
+  using type = DERIVEDSTATUS;
+  using value = VALUE;
+};
 
-/// @brief A generic tracked tracked estimate/measurement, associated with some
-/// status type
-/// @tparam MStatus An associated status obejct
-/// @tparam M An estimate or measurement
-template<typename MStatus, typename M>
-using GenericStatusMEstimate = std::pair<MStatus, GenericMTrack<M>>;
+template<typename DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
+class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
+public:
 
-/// @brief A vector of GenericStatusMEstimate, indicating tracked estimates/measurements
-/// and associated status types
-/// @tparam MStatus An associated status obejct
-/// @tparam M An estimate or measurement
-template<typename MStatus, typename M>
-using GenericStatusMEstimates = std::vector<GenericStatusMEstimate<MStatus, M>>;
+  //check if the DERIVEDSTATUS meets requirements
+  //and alias to the value type of the status
+  using Value = typename IsStatus<DERIVEDSTATUS, VALUE>::value;
 
-/// @brief A pair relating a tracklet ID with an estiamted landmark
-using LandmarkEstimate = GenericMTrack<Landmark>;
-/// @brief A pair relating a Landmark estimate (TrackletId + Landmark) with a status - inidicating type and the object label
-using StatusLandmarkEstimate = GenericStatusMEstimate<LandmarkStatus, Landmark>;
+  using Base = std::vector<DERIVEDSTATUS>;
+  using Base::Base;
+
+  /** Conversion to a standard STL container */
+  operator std::vector<DERIVEDSTATUS>() const {
+    return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
+  }
+
+};
+
+using StatusLandmarkEstimate = IsStatus<LandmarkStatus>::type;
 /// @brief A vector of StatusLandmarkEstimate
-using StatusLandmarkEstimates = GenericStatusMEstimates<LandmarkStatus, Landmark>;
+using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
 
 
-
-/// @brief A pair relating a tracklet ID with an observed keypoint
-using KeypointMeasurement = GenericMTrack<Keypoint>;
-/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
-using StatusKeypointMeasurement = GenericStatusMEstimate<KeypointStatus, Keypoint>;
+using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
 /// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = GenericStatusMEstimates<KeypointStatus, Keypoint>;
-
-template<typename M>
-inline GenericMTrack<M> makeTrack(TrackletId tracklet_id, const M& m) {
-  return std::pair(tracklet_id, m);
-}
-
-template<typename MStatus, typename M>
-inline GenericStatusMEstimate<MStatus, M> makeStatusEstimate(const MStatus& status, TrackletId tracklet_id, const M& m) {
-  return std::make_pair(status, makeTrack(tracklet_id, m));
-}
-
-template<typename MStatus, typename M>
-inline GenericStatusMEstimates<MStatus, M>& appendStatusEstimate(GenericStatusMEstimates<MStatus, M>& estimates, const MStatus& status, TrackletId tracklet_id, const M& m) {
-  estimates.push_back(makeStatusEstimate(status, tracklet_id, m));
-  return estimates;
-}
+using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
 
 
-template<typename MStatus, typename M>
-inline MStatus retrieveStatus(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  return status_estimate.first;
-}
-
-template<typename MStatus, typename M>
-inline TrackletId retrieveTrackletId(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  //get the GenericMTrack<M> with status_estimate.first
-  //get the tracklet with .first;
-  return status_estimate.second.first;
-}
-
-template<typename MStatus, typename M>
-inline M retrieveEstimate(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  //get the GenericMTrack<M> with status_estimate.first
-  //get the measurement/estimate with .second;
-  return status_estimate.second.second;
-}
 
 // /**
 //  * @brief Reference wrapper for a type T with operating casting

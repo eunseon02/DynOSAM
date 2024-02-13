@@ -32,10 +32,12 @@
 
 namespace dyno {
 
+//TODO: nice to do some tempalting so that the module knows the expected input type to cast to which also knows the measurement type!!!
+//so we can use this to define the map<M> type
 class RGBDBackendModule : public BackendModule {
 
 public:
-    RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera, Map::Ptr map, ImageDisplayQueue* display_queue = nullptr);
+    RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera, Map3d::Ptr map, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
     using SpinReturn = BackendModule::SpinReturn;
@@ -50,7 +52,7 @@ private:
 
 
 protected:
-    Map::Ptr map_;
+    Map3d::Ptr map_;
 
 
 };

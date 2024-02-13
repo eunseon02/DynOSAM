@@ -261,18 +261,22 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        appendStatusEstimate(
-            static_keypoint_measurements,
-            KeypointStatus::Static(frame.frame_id_), //status
-            tracklet_id, //tracklet id
-            kp //measurement
+
+        static_keypoint_measurements.push_back(
+            KeypointStatus::Static(
+                kp,
+                frame.frame_id_,
+                tracklet_id
+            )
         );
 
-         appendStatusEstimate(
-            static_landmarks,
-            LandmarkStatus::Static(LandmarkStatus::Method::MEASURED), //status
-            tracklet_id, //tracklet id
-            lmk_camera //measurement
+        static_landmarks.push_back(
+            LandmarkStatus::Static(
+                lmk_camera,
+                frame.frame_id_,
+                tracklet_id,
+                LandmarkStatus::Method::MEASURED
+            )
         );
     }
 
@@ -294,18 +298,23 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 Landmark lmk_camera;
                 camera_->backProject(kp, f->depth_, &lmk_camera);
 
-                appendStatusEstimate(
-                    dynamic_keypoint_measurements,
-                    KeypointStatus::Dynamic(object_id, frame.frame_id_), //status
-                    tracklet_id, //tracklet id
-                    kp //measurement
+                dynamic_keypoint_measurements.push_back(
+                    KeypointStatus::Dynamic(
+                        kp,
+                        frame.frame_id_,
+                        tracklet_id,
+                        object_id
+                    )
                 );
 
-                appendStatusEstimate(
-                    dynamic_landmarks,
-                    LandmarkStatus::Dynamic(LandmarkStatus::Method::MEASURED, object_id), //status
-                    tracklet_id, //tracklet id
-                    lmk_camera //measurement
+                dynamic_landmarks.push_back(
+                    LandmarkStatus::Dynamic(
+                        lmk_camera,
+                        frame.frame_id_,
+                        tracklet_id,
+                        object_id,
+                        LandmarkStatus::Method::MEASURED
+                    )
                 );
             }
         }

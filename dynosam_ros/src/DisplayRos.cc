@@ -32,17 +32,15 @@ void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLa
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
     for(const auto& status_estimate : landmarks) {
-        const LandmarkStatus& status =  status_estimate.first;
-        const LandmarkEstimate& estimate = status_estimate.second;
-        const Landmark& lmk = estimate.second;
+        const Landmark& lmk = status_estimate.value_;
 
         pcl::PointXYZRGB pt;
-        if(status.label_ == background_label) {
+        if(status_estimate.label_ == background_label) {
             // publish static lmk's as white
             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
         }
         else {
-            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
         }
         cloud.points.push_back(pt);

@@ -25,8 +25,6 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
-
 
 #include <gtsam/base/FastSet.h>
 #include <type_traits>
@@ -36,15 +34,18 @@
 namespace dyno {
 
 //forward declare map
+template<typename MEASUREMENT>
 class Map;
 
 struct InvalidMapException : public DynosamException {
     InvalidMapException() : DynosamException("The Map could not be accessed as it is no longer valid. Has the object gone out of scope?") {}
 };
 
+
+template<typename MEASUREMENT>
 class MapNodeBase {
 public:
-    MapNodeBase(const std::shared_ptr<Map>& map) : map_ptr_(map) {}
+    MapNodeBase(const std::shared_ptr<Map<MEASUREMENT>>& map) : map_ptr_(map) {}
     virtual ~MapNodeBase() = default;
     virtual int getId() const = 0;
 
@@ -53,7 +54,7 @@ public:
 
 
 protected:
-    std::weak_ptr<Map> map_ptr_;
+    std::shared_ptr<Map<MEASUREMENT>> map_ptr_;
 };
 
 //TODO: unused due to circular dependancies
@@ -136,6 +137,11 @@ class FastMapNodeSet : public std::set<NODE, MapNodePtrComparison<NODE>,
                 [index](const NODE& node) { return getIndexSafe<Index>(node) == index;});
         }
 
+        template<typename Index = int>
+        bool exists(Index index) const {
+            return this->find(index) != this->end();
+        }
+
         void merge(const FastMapNodeSet<NODE>& other) {
             Base::insert(other.begin(), other.end());
         }
@@ -150,19 +156,29 @@ class FastMapNodeSet : public std::set<NODE, MapNodePtrComparison<NODE>,
 
 
 //forward delcare structs
+
+template<typename MEASUREMENT>
 struct FrameNode;
+template<typename MEASUREMENT>
 struct ObjectNode;
+template<typename MEASUREMENT>
 struct LandmarkNode;
 
-using FrameNodePtr = std::shared_ptr<FrameNode>;
-using ObjectNodePtr = std::shared_ptr<ObjectNode>;
-using LandmarkNodePtr = std::shared_ptr<LandmarkNode>;
+template<typename MEASUREMENT>
+using FrameNodePtr = std::shared_ptr<FrameNode<MEASUREMENT>>;
+template<typename MEASUREMENT>
+using ObjectNodePtr = std::shared_ptr<ObjectNode<MEASUREMENT>>;
+template<typename MEASUREMENT>
+using LandmarkNodePtr = std::shared_ptr<LandmarkNode<MEASUREMENT>>;
 
 //TODO: using std::set, prevents the same object being added multiple times
 //while this is what we want, it may hide a bug, as we never want this situation to actually occur
-using FrameNodePtrSet = FastMapNodeSet<FrameNodePtr>;
-using LandmarkNodePtrSet = FastMapNodeSet<LandmarkNodePtr>;
-using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr>;
+template<typename MEASUREMENT>
+using FrameNodePtrSet = FastMapNodeSet<FrameNodePtr<MEASUREMENT>>;
+template<typename MEASUREMENT>
+using LandmarkNodePtrSet = FastMapNodeSet<LandmarkNodePtr<MEASUREMENT>>;
+template<typename MEASUREMENT>
+using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 
 template<typename ValueType>
 class StateQuery : public std::optional<ValueType> {
@@ -190,27 +206,28 @@ public:
 };
 
 
-class FrameNode : public MapNodeBase {
+template<typename MEASUREMENT>
+class FrameNode : public MapNodeBase<MEASUREMENT> {
 
 public:
-    DYNO_POINTER_TYPEDEFS(FrameNode)
+    using Base = MapNodeBase<MEASUREMENT>;
+    using This = FrameNode<MEASUREMENT>;
+    DYNO_POINTER_TYPEDEFS(This)
 
-    FrameNode(const std::shared_ptr<Map>& map) : MapNodeBase(map) {}
+    FrameNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : MapNodeBase<MEASUREMENT>(map) {}
 
     FrameId frame_id;
     //TODO: check consistency between dynamic lmks existing in the values, and a motion existing
     //all dynamic lmks landmarks that have observations at this frame
-    LandmarkNodePtrSet dynamic_landmarks;
+    LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;
     //all static landmarks that have observations at this frame
-    LandmarkNodePtrSet static_landmarks;
+    LandmarkNodePtrSet<MEASUREMENT> static_landmarks;
     //this means that we have a point measurement on this object at this frame,
     //not necessarily that we have a motion at this frame
-    ObjectNodePtrSet objects_seen;
+    ObjectNodePtrSet<MEASUREMENT> objects_seen;
 
     int getId() const override;
     bool objectObserved(ObjectId object_id) const;
-
-    const Frame& getTrackedFrame() const;
 
     //get pose estimate
     StateQuery<gtsam::Pose3> getPoseEstimate() const;
@@ -218,37 +235,43 @@ public:
     StateQuery<gtsam::Pose3> getObjectMotionEstimate(ObjectId object_id) const;
     //get dynamic point estimate (at this frame)??
     StateQuery<Landmark> getDynamicLandmarkEstimate(TrackletId tracklet_id) const;
-
     //TODO: need testing
-    //all in this frame
+    // //all in this frame
     StatusLandmarkEstimates getAllDynamicLandmarkEstimates() const;
     StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const;
+
+    StateQuery<Landmark> getStaticLandmarkEstimate(TrackletId tracklet_id) const;
+
 
 
 private:
 };
 
-class ObjectNode  : public MapNodeBase {
+
+template<typename MEASUREMENT>
+class ObjectNode : public MapNodeBase<MEASUREMENT> {
 
 public:
-    DYNO_POINTER_TYPEDEFS(ObjectNode)
+    using Base = MapNodeBase<MEASUREMENT>;
+    using This = ObjectNode<MEASUREMENT>;
+    DYNO_POINTER_TYPEDEFS(This)
 
-    ObjectNode(const std::shared_ptr<Map>& map) : MapNodeBase(map) {}
+    ObjectNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : MapNodeBase<MEASUREMENT>(map) {}
 
     ObjectId object_id;
     //all tracklets
-    LandmarkNodePtrSet dynamic_landmarks;
+    LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;
 
     //returns object_id
     int getId() const override;
 
     //this could take a while?
     //for all the lmks we have for this object, find the frames of those lmks
-    FrameNodePtrSet getSeenFrames() const;
+    FrameNodePtrSet<MEASUREMENT> getSeenFrames() const;
     FrameIds getSeenFrameIds() const;
     //The landmarks might have been seen at multiple frames but we know this is the subset of lmks at
     //this requested frame
-    LandmarkNodePtrSet getLandmarksSeenAtFrame(FrameId frame_id) const;
+    LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(FrameId frame_id) const;
 
 };
 
@@ -257,27 +280,85 @@ struct InvalidLandmarkQuery : public DynosamException {
         : DynosamException("Landmark estimate query failed with key " + DynoLikeKeyFormatter(key) + ", reason: " + string) {}
 };
 
-//could either be static or dynamic. Is there a better way to handle this?
-//Use inheritance?
-class LandmarkNode : public MapNodeBase {
-public:
-    DYNO_POINTER_TYPEDEFS(LandmarkNode)
 
-    LandmarkNode(const std::shared_ptr<Map>& map) : MapNodeBase(map) {}
+
+
+template<typename MEASUREMENT>
+class LandmarkNode : public MapNodeBase<MEASUREMENT> {
+public:
+    using Base = MapNodeBase<MEASUREMENT>;
+    using This = LandmarkNode<MEASUREMENT>;
+
+
+    //Map of measurements, via the frame this measurement was seen in
+    using Measurements = gtsam::FastMap<FrameNodePtr<MEASUREMENT>, MEASUREMENT>;
+    DYNO_POINTER_TYPEDEFS(This)
+
+    LandmarkNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : MapNodeBase<MEASUREMENT>(map) {}
+    virtual ~LandmarkNode() = default;
 
     TrackletId tracklet_id;
     ObjectId object_id; //will this change ever?
-    FrameNodePtrSet frames_seen;
 
     //returns tracklet id
     int getId() const override;
     ObjectId getObjectId() const;
     bool isStatic() const;
-
     size_t numObservations() const;
 
+    inline const FrameNodePtrSet<MEASUREMENT>& getSeenFrames() const {
+        return frames_seen_;
+    }
+
+    inline const MEASUREMENT& getMeasurements() const {
+        return measurements_;
+    }
+
+    bool hasMeasurement(FrameId frame_id) const;
+    const MEASUREMENT& getMeasurement(FrameId frame_id) const;
+
+    //TODO: test
+    void add(FrameNodePtr<MEASUREMENT> frame_node, const MEASUREMENT& measurement);
+
+    //THROWS exception when wrong type... is there a cleaner way to handle this?
+    //TODO: there are some tests
     StateQuery<Landmark> getStaticLandmarkEstimate() const;
+    StateQuery<Landmark> getDynamicLandmarkEstimate(FrameId frame_id) const;
+
+protected:
+    FrameNodePtrSet<MEASUREMENT> frames_seen_;
+    Measurements measurements_;
+
 };
+
+// //TODO: overwrites need test
+// template<typename MEASUREMENT>
+// class StaticLandmarkNode : public LandmarkNode<MEASUREMENT> {
+// public:
+//     using Base = LandmarkNode<MEASUREMENT>;
+//     using This = StaticLandmarkNode<MEASUREMENT>;
+//     DYNO_POINTER_TYPEDEFS(This)
+
+//     StaticLandmarkNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : Base(map) {}
+
+//     StateQuery<Landmark> getStaticLandmarkEstimate() const;
+//     StateQuery<Landmark> getLandmarkEstimate(FrameId frame_id) const;
+// };
+
+// template<typename MEASUREMENT>
+// class DynamicLandmarkNode : public LandmarkNode<MEASUREMENT> {
+// public:
+//     using Base = LandmarkNode<MEASUREMENT>;
+//     using This = DynamicLandmarkNode<MEASUREMENT>;
+//     DYNO_POINTER_TYPEDEFS(This)
+
+
+//     DynamicLandmarkNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : Base(map) {}
+
+//     StateQuery<Landmark> getLandmarkEstimate(FrameId frame_id) const;
+// };
 
 
 } //dyno
+
+#include "dynosam/common/MapNodes-inl.hpp"

@@ -144,11 +144,9 @@ void FrontendLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, Frame
 
 void FrontendLogger::logObjectPoints(FrameId frame_id, const gtsam::Pose3& T_world_camera_k, const StatusLandmarkEstimates& dynamic_landmarks) {
     for(const auto& status_lmks : dynamic_landmarks) {
-        const LandmarkStatus& status = retrieveStatus(status_lmks);
-        const TrackletId tracklet_id = retrieveTrackletId(status_lmks);
-        Landmark lmk_camera = retrieveEstimate(status_lmks);
-
-        ObjectId object_id = status.label_;
+        const TrackletId tracklet_id = status_lmks.tracklet_id_;
+        const Landmark& lmk_camera = status_lmks.value_;
+        ObjectId object_id = status_lmks.label_;
 
         //assume measurement is in camera frame
         Landmark lmk_world = T_world_camera_k * lmk_camera;

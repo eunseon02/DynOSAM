@@ -53,9 +53,7 @@ inline StatusKeypointMeasurement makeStatusKeypointMeasurement(TrackletId trackl
   else {
     kp_type = KeyPointType::DYNAMIC;
   }
-  KeypointStatus status(kp_type, object_id, frame_id);
-  auto estimate = std::make_pair(tracklet_id, keypoint);
-  return std::make_pair(status, estimate);
+  return KeypointStatus(keypoint, frame_id, tracklet_id, object_id, kp_type);
 }
 
 inline void compareLandmarks(const Landmarks& lmks_1,

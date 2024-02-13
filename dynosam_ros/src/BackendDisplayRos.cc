@@ -74,12 +74,10 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
 
         for(size_t i = 0; i < num_measurements; i++) {
             const StatusLandmarkEstimate& sle = backend_output->dynamic_lmks_.at(i);
-            const LandmarkStatus& status = sle.first;
-            const LandmarkEstimate& le = sle.second;
 
-            const Landmark lmk = le.second;
+            const Landmark lmk = sle.value_;
 
-            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            const cv::Scalar colour = ColourMap::getObjectColour(sle.label_);
             pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
             cloud.points.push_back(pt);
         }
@@ -97,12 +95,9 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
 
         for(size_t i = 0; i < num_measurements; i++) {
             const StatusLandmarkEstimate& sle = backend_output->initial_dynamic_lmks_.at(i);
-            const LandmarkStatus& status = sle.first;
-            const LandmarkEstimate& le = sle.second;
+            const Landmark lmk = sle.value_;
 
-            const Landmark lmk = le.second;
-
-            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            const cv::Scalar colour = ColourMap::getObjectColour(sle.label_);
             pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
             cloud.points.push_back(pt);
         }
@@ -119,12 +114,9 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
 
         for(size_t i = 0; i < num_measurements; i++) {
             const StatusLandmarkEstimate& sle = backend_output->scaled_dynamic_lmk_estimate_.at(i);
-            const LandmarkStatus& status = sle.first;
-            const LandmarkEstimate& le = sle.second;
+            const Landmark lmk = sle.value_;
 
-            const Landmark lmk = le.second;
-
-            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
+            const cv::Scalar colour = ColourMap::getObjectColour(sle.label_);
             pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
             cloud.points.push_back(pt);
         }

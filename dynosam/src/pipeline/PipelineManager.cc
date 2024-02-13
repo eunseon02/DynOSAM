@@ -70,14 +70,15 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     FrontendModule::Ptr frontend = nullptr;
     BackendModule::Ptr backend = nullptr;
 
-    Map::Ptr map = Map::create();
-
     const CameraParams& camera_params = params_.camera_params_;
     //eventually from actual params
     switch (params_.frontend_type_)
     {
         case FrontendType::kRGBD: {
             LOG(INFO) << "Making RGBDInstance frontend";
+
+            Map3d::Ptr map = Map3d::create();
+
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
             backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, camera, map, &display_queue_);
