@@ -242,7 +242,9 @@ public:
 
     StateQuery<Landmark> getStaticLandmarkEstimate(TrackletId tracklet_id) const;
 
-
+    inline size_t numObjects() const { return objects_seen.size(); }
+    inline size_t numDynamicPoints() const { return dynamic_landmarks.size(); }
+    inline size_t numStaticPoints() const { return static_landmarks.size(); }
 
 private:
 };
