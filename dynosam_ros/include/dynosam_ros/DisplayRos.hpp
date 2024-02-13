@@ -78,4 +78,7 @@ protected:
     const DisplayParams params_;
 };
 
+// Axis Aligned Bounding Box (AABB)
+pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(pcl::PointXYZ min_point_AABB, pcl::PointXYZ max_point_AABB);
+
 } //dyno

@@ -37,6 +37,14 @@
 
 #include "geometry_msgs/msg/transform_stamped.hpp"
 
+#include <pcl/common/common.h>
+#include <pcl/common/centroid.h>
+#include <pcl/features/moment_of_inertia_estimation.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+#include <pcl/memory.h>
+
+#include <string>
+
 namespace dyno {
 
 FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params), node_(CHECK_NOTNULL(node)) {
@@ -50,6 +58,7 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
     object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
     object_motion_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_motions", 1);
+    object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx", 1);
 
     gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 1);
     gt_object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_poses", 1);
@@ -115,6 +124,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         static_tracked_points_pub_->publish(pc2_msg);
     }
 
+    std::map<ObjectId, pcl::PointCloud<pcl::PointXYZ> > clouds_per_obj;
     {
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
@@ -124,6 +134,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             const Landmark& lmk = rgbd_frontend_output->T_world_camera_ * estimate.second;
 
             pcl::PointXYZRGB pt;
+            pcl::PointXYZ pt_xyz;
             if(status.label_ == background_label) {
                 // publish static lmk's as white
                 pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
@@ -131,8 +142,10 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             else {
                 const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
                 pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+                pt_xyz = pcl::PointXYZ(lmk(0), lmk(1), lmk(2));
             }
             cloud.points.push_back(pt);
+            clouds_per_obj[status.label_].push_back(pt_xyz);
         }
 
 
@@ -141,6 +154,236 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         pc2_msg.header.frame_id = params_.world_frame_id_;
         dynamic_tracked_points_pub_->publish(pc2_msg);
     }
+
+    {
+        visualization_msgs::msg::MarkerArray object_bbx_marker_array;
+        static visualization_msgs::msg::Marker delete_marker;
+        delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+        object_bbx_marker_array.markers.push_back(delete_marker);
+
+        for (const auto& [object_id, obj_cloud] : clouds_per_obj){
+            pcl::PointXYZ centroid;
+            pcl::computeCentroid(obj_cloud, centroid);
+
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+
+            visualization_msgs::msg::Marker txt_marker;
+            txt_marker.header.frame_id = "world";
+            txt_marker.ns = "object_id";
+            txt_marker.id = object_id;
+            txt_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+            txt_marker.action = visualization_msgs::msg::Marker::ADD;
+            txt_marker.header.stamp = node_->now();
+            txt_marker.scale.z = 2.0;
+            txt_marker.color.r = colour(0)/255.0;
+            txt_marker.color.g = colour(1)/255.0;
+            txt_marker.color.b = colour(2)/255.0;
+            txt_marker.color.a = 1;
+            txt_marker.text = "obj "+std::to_string(object_id);
+            txt_marker.pose.position.x = centroid.x;
+            txt_marker.pose.position.y = centroid.y-2.0;
+            txt_marker.pose.position.z = centroid.z-1.0;
+            object_bbx_marker_array.markers.push_back(txt_marker);
+
+            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud);
+            pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
+
+            pcl::StatisticalOutlierRemoval<pcl::PointXYZ> outlier_remover;
+            outlier_remover.setInputCloud(obj_cloud_ptr);
+            outlier_remover.setMeanK(100);
+            outlier_remover.setStddevMulThresh(1.0);
+            outlier_remover.filter(filtered_cloud);
+
+            pcl::MomentOfInertiaEstimation<pcl::PointXYZ> bbx_extractor;
+            bbx_extractor.setInputCloud(pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(filtered_cloud));
+            bbx_extractor.compute();
+
+            pcl::PointXYZ min_point_AABB;
+            pcl::PointXYZ max_point_AABB;
+            bbx_extractor.getAABB(min_point_AABB, max_point_AABB);
+
+            visualization_msgs::msg::Marker marker;
+            marker.header.frame_id = "world";
+            marker.ns = "object_bbx";
+            marker.id = object_id;
+            marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+            marker.action = visualization_msgs::msg::Marker::ADD;
+            marker.header.stamp = node_->now();
+            marker.scale.x = 0.1;
+
+            marker.pose.orientation.x = 0;
+            marker.pose.orientation.y = 0;
+            marker.pose.orientation.z = 0;
+            marker.pose.orientation.w = 1;
+
+            marker.color.r = colour(0)/255.0;
+            marker.color.g = colour(1)/255.0;
+            marker.color.b = colour(2)/255.0;
+            marker.color.a = 1;
+
+            for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(min_point_AABB, max_point_AABB)){
+                geometry_msgs::msg::Point p;
+                p.x = this_line_list_point.x;
+                p.y = this_line_list_point.y;
+                p.z = this_line_list_point.z;
+                marker.points.push_back(p);
+            }
+
+            // // bottom
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = min_point_AABB.y;
+            //     p1.z = min_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = min_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = min_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = max_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = min_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = max_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = min_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+
+            // // top
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = max_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = min_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = max_point_AABB.z;
+            //     p1.x = min_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = max_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = max_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = max_point_AABB.y;
+            //     p0.z = max_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+
+            // // vertical lines
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = min_point_AABB.x;
+            //     p1.y = min_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = max_point_AABB.x;
+            //     p0.y = min_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = min_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = min_point_AABB.x;
+            //     p0.y = max_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = min_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+            // {
+            //     geometry_msgs::msg::Point p0;
+            //     geometry_msgs::msg::Point p1;
+            //     p0.x = max_point_AABB.x;
+            //     p0.y = max_point_AABB.y;
+            //     p0.z = min_point_AABB.z;
+            //     p1.x = max_point_AABB.x;
+            //     p1.y = max_point_AABB.y;
+            //     p1.z = max_point_AABB.z;
+            //     marker.points.push_back(p0);
+            //     marker.points.push_back(p1);
+            // }
+
+            object_bbx_marker_array.markers.push_back(marker);
+        }
+        object_bbx_pub_->publish(object_bbx_marker_array);
+    }
+
 
     // publishStaticCloud(rgbd_frontend_output->static_landmarks_);
     // publishObjectCloud(rgbd_frontend_output->dynamic_keypoint_measurements_, rgbd_frontend_output->dynamic_landmarks_);
