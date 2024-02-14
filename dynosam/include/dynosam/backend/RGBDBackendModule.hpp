@@ -59,8 +59,12 @@ private:
     void addOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
     void updateStaticObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
+    void updateDynamicObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
+
+
 
     void optimize(FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
 
 
 protected:
@@ -73,9 +77,14 @@ protected:
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)
     //TODO: really need a rgbd and mono base class for this reason
-
     gtsam::SharedNoiseModel static_point_noise_; //! 3d isotropic pixel noise on static points
     gtsam::SharedNoiseModel dynamic_point_noise_; //! 3d isotropic pixel noise on dynamic points
+
+    //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
+    //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
+    gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
+
+    DebugInfo debug_info_;
 
 
 

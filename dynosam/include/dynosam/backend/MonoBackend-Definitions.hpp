@@ -93,8 +93,8 @@ public:
 };
 
 
-
-class DebugInfo {
+//TODO: depricate
+class MonoDebugInfo {
     public:
         FrameId frame_id;
         std::set<ObjectId> objects_motions_added; //with frame =k, so motions are k-1 to k
@@ -108,7 +108,7 @@ class DebugInfo {
         inline void incrementNewlyTrackedObjectPoints(ObjectId object_id) { incrementMap(num_newly_tracked_object_points_, object_id);}
         inline void incrementExistingTrackedObjectPoints(ObjectId object_id) { incrementMap(num_existing_tracked_object_points_, object_id);}
 
-        friend std::ostream& operator<<(std::ostream& os, const DebugInfo& info) {
+        friend std::ostream& operator<<(std::ostream& os, const MonoDebugInfo& info) {
 
             auto print_map =[](const gtsam::FastMap<ObjectId, int>& fast_map) {
                 std::stringstream ss;
@@ -141,8 +141,8 @@ class DebugInfo {
 
 };
 
-using DebugInfos = std::vector<DebugInfo>;
-using DebugInfoMap = gtsam::FastMap<FrameId, DebugInfo>;
+using MonoDebugInfos = std::vector<MonoDebugInfo>;
+using MonoDebugInfoMap = gtsam::FastMap<FrameId, MonoDebugInfo>;
 
 
 //TODO: tidy up!! MonoBackendLogger?
@@ -333,7 +333,7 @@ struct BackendLogger {
         }
     }
 
-    void log(const std::string& name, const DebugInfoMap& infos) {
+    void log(const std::string& name, const MonoDebugInfoMap& infos) {
         CsvWriter debug_info(CsvHeader(
             "frame_id",
             "object_id",

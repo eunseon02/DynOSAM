@@ -49,6 +49,7 @@ bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& fram
 
   char label = as_labeled_symbol.label();
   object_label = label - '0';
+  return true;
 }
 
 std::string DynoLikeKeyFormatter(gtsam::Key key)
@@ -57,11 +58,6 @@ std::string DynoLikeKeyFormatter(gtsam::Key key)
   if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
     //if used as motion
     if(asLabeledSymbol.chr() == kObjectMotionSymbolChar) {
-      const auto object_label = asLabeledSymbol.label();
-      const auto frame_id = asLabeledSymbol.index();
-
-      std::stringstream ss;
-      ss << " (label: " << object_label << " frames: " << frame_id - 1 << " -> " << frame_id << ")";
       return (std::string) asLabeledSymbol;
     }
     return (std::string) asLabeledSymbol;
@@ -72,6 +68,44 @@ std::string DynoLikeKeyFormatter(gtsam::Key key)
     if(asLabeledSymbol.chr() == kDynamicLandmarkSymbolChar) {
       const DynamicPointSymbol asDynamicPointSymbol(key);
       return (std::string) asDynamicPointSymbol;
+    }
+    else {
+      return (std::string) asSymbol;
+    }
+
+  }
+  else {
+    return std::to_string(key);
+  }
+}
+
+std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
+   const gtsam::LabeledSymbol asLabeledSymbol(key);
+  if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
+    //if used as motion
+    if(asLabeledSymbol.chr() == kObjectMotionSymbolChar) {
+      ObjectId object_label;
+      FrameId frame_id;
+      CHECK(reconstructMotionInfo(asLabeledSymbol, object_label, frame_id));
+
+      std::stringstream ss;
+      ss << "H: label" << object_label << ", frames: " << frame_id - 1 << " -> " << frame_id;
+      return ss.str();
+    }
+    return (std::string) asLabeledSymbol;
+  }
+
+  const gtsam::Symbol asSymbol(key);
+  if (asLabeledSymbol.chr() > 0) {
+    if(asLabeledSymbol.chr() == kDynamicLandmarkSymbolChar) {
+      const DynamicPointSymbol asDynamicPointSymbol(key);
+
+      FrameId frame_id = asDynamicPointSymbol.frameId();
+      TrackletId tracklet_id = asDynamicPointSymbol.trackletId();
+      std::stringstream ss;
+      ss << kDynamicLandmarkSymbolChar << ": frame " << frame_id << ", tracklet " << tracklet_id;
+      return ss.str();
+
     }
     else {
       return (std::string) asSymbol;

@@ -161,6 +161,11 @@ StatusLandmarkEstimates Map<MEASUREMENT>::getFullStaticMap() const {
 }
 
 template<typename MEASUREMENT>
+StatusLandmarkEstimates Map<MEASUREMENT>::getDynamicMap(FrameId frame_id) const {
+    return this->getFrame(frame_id)->getAllDynamicLandmarkEstimates();
+}
+
+template<typename MEASUREMENT>
 void Map<MEASUREMENT>::addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
     typename LandmarkNodeM::Ptr  landmark_node = nullptr;
     typename FrameNodeM::Ptr frame_node = nullptr;

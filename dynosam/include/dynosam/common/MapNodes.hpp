@@ -146,6 +146,16 @@ class FastMapNodeSet : public std::set<NODE, MapNodePtrComparison<NODE>,
             Base::insert(other.begin(), other.end());
         }
 
+        // bool continuousIndex() const {
+        //     auto ids = collectIds();
+        //     if(ids.size() < 2) return true;
+
+        //     bool is_continuous = true;
+        //     for(size_t i = 1; i < ids.size(); i++) {
+        //         is_continuous &= (ids.at(i-1) ==
+        //     }
+        // }
+
     private:
         template<typename Index>
         static inline Index getIndexSafe(const NODE& node) {
@@ -253,6 +263,8 @@ public:
 
     gtsam::Key makePoseKey() const;
 
+    gtsam::Key makeObjectMotionKey(ObjectId object_id) const;
+
     //get pose estimate
     StateQuery<gtsam::Pose3> getPoseEstimate() const;
     //get object motion estimate
@@ -320,6 +332,19 @@ public:
     //this requested frame
     LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(FrameId frame_id) const;
 
+    /// @brief A pair of Const LandmarkNodePtr's
+    using LandmarkNodePair = std::pair<const LandmarkNodePtr<MEASUREMENT>, const LandmarkNodePtr<MEASUREMENT>>;
+
+    // /**
+    //  * @brief Constructs a set of landmark node pointers that have measurements in the requested frame
+    //  * and the previous frame (frame_id - 1u) and therefore are valid to be used for constructing a motion
+    //  * pairs
+    //  *
+    //  * @param frame_id
+    //  * @return LandmarkNodePtrSet<MEASUREMENT>
+    //  */
+    // LandmarkNodePtrSet<MEASUREMENT> getMotionLandmarsSeenAtFrame(FrameId frame_id) const;
+
 };
 
 struct InvalidLandmarkQuery : public DynosamException {
@@ -363,6 +388,8 @@ public:
     inline const FrameNodePtrSet<MEASUREMENT>& getSeenFrames() const {
         return frames_seen_;
     }
+
+    FrameIds getSeenFrameIds() const;
 
     inline const Measurements& getMeasurements() const {
         return measurements_;

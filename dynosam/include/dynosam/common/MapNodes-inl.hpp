@@ -54,6 +54,15 @@ gtsam::Key FrameNode<MEASUREMENT>::makePoseKey() const {
     return CameraPoseSymbol(frame_id);
 }
 
+
+template<typename MEASUREMENT>
+gtsam::Key FrameNode<MEASUREMENT>::makeObjectMotionKey(ObjectId object_id) const {
+    if(!objectObserved(object_id)) {
+        throw DynosamException("Object motion key requested" + std::to_string(object_id) + " at frame " +  std::to_string(frame_id) + " but object is not observed in this frame");
+    }
+    return ObjectMotionSymbol(object_id, this->frame_id);
+}
+
 template<typename MEASUREMENT>
 bool FrameNode<MEASUREMENT>::objectMotionExpected(ObjectId object_id) const {
     return objectObserved(object_id) && objectObservedInPrevious(object_id);
@@ -67,8 +76,7 @@ StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getPoseEstimate() const {
 
 template<typename MEASUREMENT>
 StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getObjectMotionEstimate(ObjectId object_id) const {
-    const gtsam::Key motion_key = ObjectMotionSymbol(object_id, frame_id);
-    return this->map_ptr_->template query<gtsam::Pose3>(motion_key);
+    return this->map_ptr_->template query<gtsam::Pose3>(makeObjectMotionKey(object_id));
 }
 
 template<typename MEASUREMENT>
@@ -328,6 +336,7 @@ FrameNodePtrSet<MEASUREMENT> ObjectNode<MEASUREMENT>::getSeenFrames() const {
     }
     return seen_frames;
 }
+
 
 template<typename MEASUREMENT>
 FrameIds ObjectNode<MEASUREMENT>::getSeenFrameIds() const {

@@ -120,6 +120,7 @@ public:
     //landmark related queries
     //TODO: test
     StatusLandmarkEstimates getFullStaticMap() const;
+    StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const;
 
 
     template<typename ValueType>
