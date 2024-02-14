@@ -46,6 +46,7 @@ struct traits;
 
 static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 
+
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
 
@@ -106,6 +107,14 @@ struct TrackedValueStatus {
   TrackletId tracklet_id_;
   ObjectId label_; //! Will be 0 if background
 
+  //Constexpr value used for the frame_id when it is NA (not applicable)
+  //this may be the case when the TrackedValueStatus object represents a time-invariant
+  //value (e.g a static point) and the value of the frame_id is therefore meaingless
+  //NOTE:this is possibly dangerous if we are not careful with casting (e.g. int to FrameId) since
+  //the overflow coulld land us at a meaningless frame
+  static constexpr auto MeaninglessFrame = std::numeric_limits<FrameId>::max();
+
+  //not we will have implicit casting of all other frame_ids to int here which could be dangerous
   TrackedValueStatus(
     const Value& value,
     FrameId frame_id,
@@ -121,6 +130,17 @@ struct TrackedValueStatus {
   inline bool isStatic() const {
     return label_ == background_label;
   }
+
+  /**
+   * @brief Returns true if frame_id is equal to MeaninglessFrame (e.g. std::numeric_limits<FrameId>::quiet_NaN)
+   * and should indicatate that the value represented by this TrackedValueStatus is time-invariant, e.g. for a static point
+   * which does not change overtime.
+   * @return true
+   * @return false
+   */
+  inline bool isTimeInvariant() const {
+    return frame_id_ == MeaninglessFrame;
+  }
 };
 
 /// @brief Check if derived DERIVEDSTATUS us in factor derived from Status<Value>
@@ -128,9 +148,7 @@ struct TrackedValueStatus {
 /// @tparam VALUE expected value to templated base Status on
 template<typename DERIVEDSTATUS, typename VALUE>
 inline constexpr bool IsDerivedTrackedValueStatus = std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
-// template<typename DERIVEDSTATUS, typename VALUE>
-// using IsDerivedTrackedValueStatus = typename std::enable_if<
-//       std::is_base_of<TrackedValueStatus<VALUE>, DERIVEDSTATUS>::value>::type;
+
 
 /**
  * @brief Metadata of a landmark. Includes type (static/dynamic) and label.

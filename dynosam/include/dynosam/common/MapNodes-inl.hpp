@@ -41,9 +41,27 @@ bool FrameNode<MEASUREMENT>::objectObserved(ObjectId object_id) const {
 }
 
 template<typename MEASUREMENT>
+bool FrameNode<MEASUREMENT>::objectObservedInPrevious(ObjectId object_id) const {
+    const auto frame_id_k_1 = frame_id - 1u;
+    FrameNodePtr<MEASUREMENT> frame_node_k_1 = this->map_ptr_->template getFrame(frame_id_k_1);
+
+    if(!frame_node_k_1) { return false;}
+    return frame_node_k_1->objectObserved(object_id);
+}
+
+template<typename MEASUREMENT>
+gtsam::Key FrameNode<MEASUREMENT>::makePoseKey() const {
+    return CameraPoseSymbol(frame_id);
+}
+
+template<typename MEASUREMENT>
+bool FrameNode<MEASUREMENT>::objectMotionExpected(ObjectId object_id) const {
+    return objectObserved(object_id) && objectObservedInPrevious(object_id);
+}
+
+template<typename MEASUREMENT>
 StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getPoseEstimate() const {
-    const gtsam::Key pose_key = CameraPoseSymbol(frame_id);
-    return this->map_ptr_->template query<gtsam::Pose3>(pose_key);
+    return this->map_ptr_->template query<gtsam::Pose3>(makePoseKey());
 
 }
 
@@ -56,12 +74,9 @@ StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getObjectMotionEstimate(ObjectI
 template<typename MEASUREMENT>
 StateQuery<Landmark> FrameNode<MEASUREMENT>::getDynamicLandmarkEstimate(TrackletId tracklet_id) const {
     auto iter = dynamic_landmarks.find(tracklet_id);
-    CHECK(iter != dynamic_landmarks.end()) << "Requested dynamic landmark with id " << tracklet_id << " does not exist at frame " << frame_id;
-
+    checkAndThrow<MissingLandmarkException>(iter != dynamic_landmarks.end(), tracklet_id, frame_id, false);
     const LandmarkNodePtr<MEASUREMENT> lmk_node = *iter;
-
     return lmk_node->getDynamicLandmarkEstimate(frame_id);
-
 }
 
 template<typename MEASUREMENT>
@@ -70,19 +85,7 @@ StatusLandmarkEstimates FrameNode<MEASUREMENT>::getAllDynamicLandmarkEstimates()
     //in this frame
     StatusLandmarkEstimates estimates;
     for(const auto& lmk_ptr : dynamic_landmarks) {
-        StateQuery<Landmark> lmk_status_query = lmk_ptr->getDynamicLandmarkEstimate(frame_id);
-        if(lmk_status_query) {
-            estimates.push_back(
-                LandmarkStatus::Dynamic(
-                    lmk_status_query.get(), //estimate
-                    frame_id,
-                    lmk_ptr->getId(), //tracklet id
-                    lmk_ptr->getObjectId(),
-                    LandmarkStatus::Method::OPTIMIZED
-                ) //status
-            );
-
-        }
+        lmk_ptr->appendDynamicLandmarkEstimate(estimates, this->frame_id);
     }
 
     return estimates;
@@ -101,18 +104,7 @@ StatusLandmarkEstimates FrameNode<MEASUREMENT>::getDynamicLandmarkEstimates(Obje
     StatusLandmarkEstimates estimates;
     for(const auto& lmk_ptr : dynamic_landmarks) {
         if(lmk_ptr->getObjectId() == object_id) {
-            StateQuery<Landmark> lmk_status_query = lmk_ptr->getDynamicLandmarkEstimate(frame_id);
-            if(lmk_status_query) {
-                estimates.push_back(
-                    LandmarkStatus::Dynamic(
-                        lmk_status_query.get(), //estimate
-                        frame_id,
-                        lmk_ptr->getId(), //tracklet id
-                        lmk_ptr->getObjectId(),
-                        LandmarkStatus::Method::OPTIMIZED
-                    ) //status
-                );
-            }
+            lmk_ptr->appendDynamicLandmarkEstimate(estimates, this->frame_id);
         }
     }
     return estimates;
@@ -121,11 +113,64 @@ StatusLandmarkEstimates FrameNode<MEASUREMENT>::getDynamicLandmarkEstimates(Obje
 template<typename MEASUREMENT>
 StateQuery<Landmark> FrameNode<MEASUREMENT>::getStaticLandmarkEstimate(TrackletId tracklet_id) const {
     auto iter = static_landmarks.find(tracklet_id);
-    CHECK(iter != static_landmarks.end()) << "Requested static landmark with id " << tracklet_id << " does not exist at frame " << frame_id;
-
+    checkAndThrow<MissingLandmarkException>(iter != static_landmarks.end(), tracklet_id, frame_id, true);
     const LandmarkNodePtr<MEASUREMENT> lmk_node = *iter;
-
     return lmk_node->getStaticLandmarkEstimate();
+}
+
+
+template<typename MEASUREMENT>
+StatusLandmarkEstimates FrameNode<MEASUREMENT>::getAllStaticLandmarkEstimates() const {
+    StatusLandmarkEstimates estimates;
+    for(const auto& lmk_ptr : static_landmarks) {
+        lmk_ptr->appendStaticLandmarkEstimate(estimates);
+    }
+    return estimates;
+}
+
+template<typename MEASUREMENT>
+std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair> FrameNode<MEASUREMENT>::getStaticMeasurements() const {
+    std::vector<LandmarkMeasurementPair> measurements;
+    for(const auto& lmk_ptr : static_landmarks) {
+        MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
+        measurements.push_back(std::make_pair(lmk_ptr, m));
+    }
+    return measurements;
+}
+
+template<typename MEASUREMENT>
+std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair> FrameNode<MEASUREMENT>::getDynamicMeasurements() const {
+    std::vector<LandmarkMeasurementPair> measurements;
+    for(const auto& lmk_ptr : dynamic_landmarks) {
+        MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
+        measurements.push_back(std::make_pair(lmk_ptr, m));
+    }
+    return measurements;
+
+}
+
+template<typename MEASUREMENT>
+std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair> FrameNode<MEASUREMENT>::getDynamicMeasurements(ObjectId object_id) const {
+    std::vector<LandmarkMeasurementPair> measurements;
+    for(const auto& lmk_ptr : dynamic_landmarks) {
+        if(lmk_ptr->getObjectId() == object_id) {
+            MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
+            measurements.push_back(std::make_pair(lmk_ptr, m));
+        }
+
+    }
+    return measurements;
+}
+
+template<typename MEASUREMENT>
+StatusLandmarkEstimates FrameNode<MEASUREMENT>::getAllLandmarkEstimates() const {
+    StatusLandmarkEstimates static_landmarks = getAllStaticLandmarkEstimates();
+    StatusLandmarkEstimates dynamic_landmarks = getAllDynamicLandmarkEstimates();
+
+    //add all dynamic lmks to the static ones
+    static_landmarks.insert(static_landmarks.end(), dynamic_landmarks.begin(), dynamic_landmarks.end());
+    return static_landmarks;
+
 }
 
 
@@ -168,12 +213,7 @@ void LandmarkNode<MEASUREMENT>::add(FrameNodePtr<MEASUREMENT> frame_node, const 
 
 template<typename MEASUREMENT>
 StateQuery<Landmark> LandmarkNode<MEASUREMENT>::getStaticLandmarkEstimate() const {
-    const gtsam::Key lmk_key = StaticLandmarkSymbol(this->tracklet_id);
-
-    if(!this->isStatic()) {
-        throw InvalidLandmarkQuery(lmk_key, "Static estimate requested but landmark is dynamic!");
-    }
-
+    const gtsam::Key lmk_key = makeStaticKey();
     return this->map_ptr_->template query<Landmark>(lmk_key);
 }
 
@@ -181,26 +221,97 @@ template<typename MEASUREMENT>
 StateQuery<Landmark> LandmarkNode<MEASUREMENT>::getDynamicLandmarkEstimate(FrameId frame_id) const {
     auto iter = frames_seen_.find(frame_id);
     CHECK(iter != frames_seen_.end()) << "Requested dynamic landmark with id " << this->tracklet_id << " does not exist at frame " << frame_id;
-    const gtsam::Key lmk_key = DynamicLandmarkSymbol(frame_id, this->tracklet_id);
-
-    if(this->isStatic()) {
-        throw InvalidLandmarkQuery(lmk_key, "Dynamic estimate requested but landmark is static!");
-    }
-
+    const gtsam::Key lmk_key = makeDynamicKey(frame_id);
     return this->map_ptr_->template query<Landmark>(lmk_key);
 }
 
 template<typename MEASUREMENT>
+bool LandmarkNode<MEASUREMENT>::seenAtFrame(FrameId frame_id) const {
+    return frames_seen_.exists(frame_id);
+}
+
+template<typename MEASUREMENT>
 bool LandmarkNode<MEASUREMENT>::hasMeasurement(FrameId frame_id) const {
-    return measurements_.exists(frame_id);
+    return this->seenAtFrame(frame_id);
+}
+
+template<typename MEASUREMENT>
+const MEASUREMENT& LandmarkNode<MEASUREMENT>::getMeasurement(FrameNodePtr<MEASUREMENT> frame_node) const {
+    CHECK_NOTNULL(frame_node);
+    if(!hasMeasurement(frame_node->frame_id)) {
+        throw DynosamException("Missing measurement in landmark node with id " + std::to_string(tracklet_id) + " at frame " +  std::to_string(frame_node->frame_id));
+    }
+    return measurements_.at(frame_node);
 }
 
 template<typename MEASUREMENT>
 const MEASUREMENT& LandmarkNode<MEASUREMENT>::getMeasurement(FrameId frame_id) const {
-    if(!hasMeasurement(frame_id)) {
+    if(!seenAtFrame(frame_id)) {
         throw DynosamException("Missing measurement in landmark node with id " + std::to_string(tracklet_id) + " at frame " +  std::to_string(frame_id));
     }
-    return measurements_.at(frame_id);
+    return getMeasurement(this->map_ptr_->template getFrame(frame_id));
+}
+
+template<typename MEASUREMENT>
+gtsam::Key LandmarkNode<MEASUREMENT>::makeStaticKey() const {
+    const auto key = StaticLandmarkSymbol(this->tracklet_id);
+    if(!this->isStatic()) {
+        throw InvalidLandmarkQuery(key, "Static estimate requested but landmark is dynamic!");
+    }
+    return key;
+}
+
+
+template<typename MEASUREMENT>
+gtsam::Key LandmarkNode<MEASUREMENT>::makeDynamicKey(FrameId frame_id) const {
+    return (gtsam::Key)makeDynamicSymbol(frame_id);
+
+}
+
+template<typename MEASUREMENT>
+DynamicPointSymbol LandmarkNode<MEASUREMENT>::makeDynamicSymbol(FrameId frame_id) const {
+    const auto key = DynamicLandmarkSymbol(frame_id, this->tracklet_id);
+    if(this->isStatic()) {
+        throw InvalidLandmarkQuery(key, "Dynamic estimate requested but landmark is static!");
+    }
+    return key;
+
+}
+
+template<typename MEASUREMENT>
+bool LandmarkNode<MEASUREMENT>::appendStaticLandmarkEstimate(StatusLandmarkEstimates& estimates) const {
+    StateQuery<Landmark> lmk_status_query = this->getStaticLandmarkEstimate();
+    if(lmk_status_query) {
+        estimates.push_back(
+            LandmarkStatus::Static(
+                lmk_status_query.get(), //estimate
+                LandmarkStatus::MeaninglessFrame,
+                this->getId(), //tracklet id
+                LandmarkStatus::Method::OPTIMIZED
+            ) //status
+        );
+        return true;
+    }
+    return false;
+
+}
+
+template<typename MEASUREMENT>
+bool LandmarkNode<MEASUREMENT>::appendDynamicLandmarkEstimate(StatusLandmarkEstimates& estimates, FrameId frame_id) const {
+    StateQuery<Landmark> lmk_status_query = this->getDynamicLandmarkEstimate(frame_id);
+    if(lmk_status_query) {
+        estimates.push_back(
+            LandmarkStatus::Dynamic(
+                lmk_status_query.get(), //estimate
+                frame_id,
+                this->getId(), //tracklet id
+                this->getObjectId(),
+                LandmarkStatus::Method::OPTIMIZED
+            ) //status
+        );
+        return true;
+    }
+    return false;
 }
 
 /// ObjectNode

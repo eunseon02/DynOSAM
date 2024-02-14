@@ -205,6 +205,17 @@ public:
 
 };
 
+struct InvalidLandmarkException : public DynosamException {
+    InvalidLandmarkException(TrackletId tracklet_id, const std::string& reason = std::string())
+    : DynosamException("Landmark with tracklet id" + std::to_string(tracklet_id) + " is invalid" + (reason.empty() ? "." : " with reason " + reason)) {}
+};
+
+struct MissingLandmarkException : InvalidLandmarkException {
+    MissingLandmarkException(TrackletId tracklet_id, FrameId frame_id, bool is_static)
+    : InvalidLandmarkException(tracklet_id, (is_static ? "static" : "dynamic") + std::string(" landmark is missing from frame ") + std::to_string(frame_id)) {}
+};
+
+
 
 template<typename MEASUREMENT>
 class FrameNode : public MapNodeBase<MEASUREMENT> {
@@ -226,27 +237,57 @@ public:
     //not necessarily that we have a motion at this frame
     ObjectNodePtrSet<MEASUREMENT> objects_seen;
 
+    /**
+     * @brief Returns the frame_id
+     *
+     * @return int
+     */
     int getId() const override;
     bool objectObserved(ObjectId object_id) const;
+    //TODO: test
+    bool objectObservedInPrevious(ObjectId object_id) const;
+
+    //object appears in both this and previous frame so we expect a motion from k-1 to k
+    //TODO: test
+    bool objectMotionExpected(ObjectId object_id) const;
+
+    gtsam::Key makePoseKey() const;
 
     //get pose estimate
     StateQuery<gtsam::Pose3> getPoseEstimate() const;
     //get object motion estimate
     StateQuery<gtsam::Pose3> getObjectMotionEstimate(ObjectId object_id) const;
     //get dynamic point estimate (at this frame)??
+    //O(logN)
     StateQuery<Landmark> getDynamicLandmarkEstimate(TrackletId tracklet_id) const;
     //TODO: need testing
     // //all in this frame
     StatusLandmarkEstimates getAllDynamicLandmarkEstimates() const;
     StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const;
 
+    //O(logN)
     StateQuery<Landmark> getStaticLandmarkEstimate(TrackletId tracklet_id) const;
+    StatusLandmarkEstimates getAllStaticLandmarkEstimates() const;
+
+    /// @brief Const LandmarkNodePtr with corresponding Measurement value
+    using LandmarkMeasurementPair = std::pair<const LandmarkNodePtr<MEASUREMENT>, MEASUREMENT>;
+
+    //vector of measurements taken at this frame
+    std::vector<LandmarkMeasurementPair> getStaticMeasurements() const;
+    std::vector<LandmarkMeasurementPair> getDynamicMeasurements() const;
+    std::vector<LandmarkMeasurementPair> getDynamicMeasurements(ObjectId object_id) const;
+
+    //static and dynamic
+    StatusLandmarkEstimates getAllLandmarkEstimates() const;
 
     inline size_t numObjects() const { return objects_seen.size(); }
     inline size_t numDynamicPoints() const { return dynamic_landmarks.size(); }
     inline size_t numStaticPoints() const { return static_landmarks.size(); }
 
 private:
+    /// @brief
+    using GenericGetLandmarkEstimateFunc = std::function<StateQuery<Landmark>(LandmarkNodePtr<MEASUREMENT>)>;
+
 };
 
 
@@ -264,7 +305,11 @@ public:
     //all tracklets
     LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;
 
-    //returns object_id
+    /**
+     * @brief Returns the object_id
+     *
+     * @return int
+     */
     int getId() const override;
 
     //this could take a while?
@@ -302,9 +347,16 @@ public:
     TrackletId tracklet_id;
     ObjectId object_id; //will this change ever?
 
-    //returns tracklet id
+    /**
+     * @brief Returns the tracklet_id
+     *
+     * @return int
+     */
     int getId() const override;
     ObjectId getObjectId() const;
+
+    //simply checks the background label
+    //dangernous if the label changes as now it will attempt to retrieve a static point
     bool isStatic() const;
     size_t numObservations() const;
 
@@ -312,12 +364,17 @@ public:
         return frames_seen_;
     }
 
-    inline const MEASUREMENT& getMeasurements() const {
+    inline const Measurements& getMeasurements() const {
         return measurements_;
     }
 
+
+    bool seenAtFrame(FrameId frame_id) const;
+    //should exist if also at frame
     bool hasMeasurement(FrameId frame_id) const;
+    const MEASUREMENT& getMeasurement(FrameNodePtr<MEASUREMENT> frame_node) const;
     const MEASUREMENT& getMeasurement(FrameId frame_id) const;
+
 
     //TODO: test
     void add(FrameNodePtr<MEASUREMENT> frame_node, const MEASUREMENT& measurement);
@@ -326,6 +383,15 @@ public:
     //TODO: there are some tests
     StateQuery<Landmark> getStaticLandmarkEstimate() const;
     StateQuery<Landmark> getDynamicLandmarkEstimate(FrameId frame_id) const;
+
+    gtsam::Key makeStaticKey() const;
+    gtsam::Key makeDynamicKey(FrameId frame_id) const;
+    DynamicPointSymbol makeDynamicSymbol(FrameId frame_id) const;
+
+    bool appendStaticLandmarkEstimate(StatusLandmarkEstimates& estimates) const;
+    bool appendDynamicLandmarkEstimate(StatusLandmarkEstimates& estimates, FrameId frame_id) const;
+
+private:
 
 protected:
     FrameNodePtrSet<MEASUREMENT> frames_seen_;

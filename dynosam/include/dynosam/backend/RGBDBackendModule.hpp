@@ -29,6 +29,7 @@
 
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/ISAM2.h>
 
 namespace dyno {
 
@@ -50,9 +51,32 @@ private:
     SpinReturn rgbdBoostrapSpin(RGBDInstanceOutputPacket::ConstPtr input);
     SpinReturn rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input);
 
+    //TODO: taken from MonoBackendModule
+     //adds pose to the new values and a prior on this pose to the new_factors
+    void addInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+    //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
+    void addOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+    void updateStaticObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
+
+    void optimize(FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
 
 protected:
     Map3d::Ptr map_;
+
+    std::unique_ptr<gtsam::ISAM2> smoother_;
+
+    gtsam::Values new_values_;
+    gtsam::NonlinearFactorGraph new_factors_;
+
+    //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)
+    //TODO: really need a rgbd and mono base class for this reason
+
+    gtsam::SharedNoiseModel static_point_noise_; //! 3d isotropic pixel noise on static points
+    gtsam::SharedNoiseModel dynamic_point_noise_; //! 3d isotropic pixel noise on dynamic points
+
 
 
 };

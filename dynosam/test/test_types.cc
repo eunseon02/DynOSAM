@@ -562,3 +562,21 @@ TEST(GroundTruthInputPacket, findAssociatedObjectWithPtr) {
 
 
 }
+
+
+TEST(TrackedValueStatus, testIsTimeInvariant) {
+    TrackedValueStatus<Keypoint> status_time_invariant(
+        Keypoint(),
+        TrackedValueStatus<Keypoint>::MeaninglessFrame,
+        0,
+        0);
+
+    EXPECT_TRUE(status_time_invariant.isTimeInvariant());
+
+    TrackedValueStatus<Keypoint> status_time_variant(
+        Keypoint(),
+        0, //use zero
+        0,
+        0);
+    EXPECT_FALSE(status_time_variant.isTimeInvariant());
+}

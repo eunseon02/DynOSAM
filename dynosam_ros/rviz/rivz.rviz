@@ -25,7 +25,6 @@ Panels:
         - /Dynamic Points Init1
         - /Dynamic Points Init1/Status1
         - /Newly Scaled Dynamic Points1
-        - /Newly Scaled Dynamic Points1/Status1
       Splitter Ratio: 0.5
     Tree Height: 636
   - Class: rviz_common/Selection
@@ -45,7 +44,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Dynamic Point Cloud (Optimized)
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -319,7 +318,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -340,7 +339,7 @@ Visualization Manager:
         Value: /dynosam/backend/static
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -353,7 +352,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -374,12 +373,12 @@ Visualization Manager:
         Value: /dynosam/backend/dynamic
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Composed object poses (opt)
       Namespaces:
-        backend_composed_object_positions: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -403,7 +402,7 @@ Visualization Manager:
       Enabled: true
       Name: Object Paths (GT)
       Namespaces:
-        gt_frontend_composed_object_path: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile

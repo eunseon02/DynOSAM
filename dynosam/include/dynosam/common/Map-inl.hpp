@@ -147,6 +147,20 @@ bool Map<MEASUREMENT>::getLandmarkObjectId(ObjectId& object_id, TrackletId track
 }
 
 template<typename MEASUREMENT>
+StatusLandmarkEstimates Map<MEASUREMENT>::getFullStaticMap() const {
+    //dont go over the frames as this contains references to the landmarks multiple times
+    //e.g. the ones seen in that frame
+    StatusLandmarkEstimates estimates;
+    for(const auto&[tracklet_id, landmark_node] : landmarks_) {
+        (void)tracklet_id;
+        if(landmark_node->isStatic()) {
+            landmark_node->appendStaticLandmarkEstimate(estimates);
+        }
+    }
+    return estimates;
+}
+
+template<typename MEASUREMENT>
 void Map<MEASUREMENT>::addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
     typename LandmarkNodeM::Ptr  landmark_node = nullptr;
     typename FrameNodeM::Ptr frame_node = nullptr;

@@ -108,11 +108,19 @@ public:
 
     const typename FrameNodeM::Ptr lastFrame() const;
 
-
     FrameId lastEstimateUpdate() const;
+
+    StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) {
+        return frames_.at(frame_id)->getPoseEstimate();
+    }
 
     //TODo: test
     bool getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const;
+
+    //landmark related queries
+    //TODO: test
+    StatusLandmarkEstimates getFullStaticMap() const;
+
 
     template<typename ValueType>
     StateQuery<ValueType> query(gtsam::Key key) const {
@@ -124,8 +132,8 @@ public:
         }
     }
 
-    const gtsam::Values& getValues() const;
-    const gtsam::NonlinearFactorGraph& getGraph() const;
+    inline const gtsam::Values& getValues() const { return values_; }
+    inline const gtsam::NonlinearFactorGraph& getGraph() const { return graph_; }
 
     bool exists(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
         return (values_.exists(key) || new_values.exists(key));
@@ -133,9 +141,9 @@ public:
 
     template<typename ValueType>
     ValueType at(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
-        StateQuery<ValueType> query = query(key);
-        if(query) {
-            return query.get();
+        StateQuery<ValueType> state_query = this->query(key);
+        if(state_query) {
+            return state_query.get();
         }
 
         if(new_values.exists(key)) {
@@ -145,13 +153,22 @@ public:
         throw gtsam::ValuesKeyDoesNotExist("Requesting value from dyno::Map::at", key);
     }
 
+    template<typename ValueType>
+    bool safeGet(ValueType& value, gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) {
+        if(!this->exists(key, new_values)) {
+            return false;
+        }
+
+        value = this->at<ValueType>(key, new_values);
+        return true;
+    }
+
 
 
 
 private:
     void addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static);
 
-//TODO: for now
 private:
     //nodes
     gtsam::FastMap<FrameId, typename FrameNodeM::Ptr> frames_;

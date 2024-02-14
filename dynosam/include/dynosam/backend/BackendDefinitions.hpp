@@ -134,6 +134,15 @@ private:
 };
 
 
+class DebugInfo {
+public:
+    int num_static_factors = 0; //num new static factors added
+    int num_dynamic_factors = 0;
+    int num_object_motion_factors = 0;
+
+};
+
+
 
 class DynamicObjectManager {
 public:

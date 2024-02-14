@@ -35,13 +35,21 @@ namespace dyno {
 
 struct BackendParams {
 
+    //! Only Mono
     double static_smart_projection_noise_sigma_ = FLAGS_static_point_sigma; //! Isotropic noise used for the smart projection factor (mono) on static points
     double dynamic_smart_projection_noise_sigma_ = FLAGS_dynamic_point_sigma; //! Isotropic noise used for the smart projection factor (mono) on dynamic points
+
+    //! RGBD/Stereo
+    bool use_robust_kernals_ = true;
+    bool k_huber_3d_points_ = 0.001; //! Huber constant used for robust kernal on dynamic points
+    double static_point_noise_sigma_ = 0.3; //! Isotropic noise used on PoseToPointFactor for static points
+    double dynamic_point_noise_sigma_ = 0.3; //! Isotropic noise used on PoseToPointFactor for dynamic points
+
 
     double odometry_rotation_sigma_ = 0.02; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = 0.01; //! sigma used to construct the noise model on the translation component of the odomety (between factor)
 
-    double constant_object_motion_rotation_sigma_ = 0.001;
+    double constant_object_motion_rotation_sigma_ = 0.01;
     double constant_object_motion_translation_sigma_ = 0.1;
 
     double motion_ternary_factor_noise_sigma_ = 0.1;

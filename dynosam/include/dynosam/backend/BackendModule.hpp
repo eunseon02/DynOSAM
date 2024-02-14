@@ -38,7 +38,7 @@
 
 namespace dyno {
 
-//TODO: should do like RGBD/MonBackendModuleBase...
+//TODO: should do like RGBD/MonoBackendModuleBase... which also knows about the map. Means we can move a lot of common functionality to the base class
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
  *

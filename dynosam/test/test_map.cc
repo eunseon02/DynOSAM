@@ -182,6 +182,29 @@ TEST(Map, basicObjectAdd) {
     EXPECT_EQ(lmk_0, *lmk_itr_frame_1);
 }
 
+TEST(Map, framesSeenDuplicates) {
+    Map2d::Ptr map = Map2d::create();
+    LandmarkNode2d::Ptr  landmark_node = std::make_shared<LandmarkNode2d>(map->getptr());
+    landmark_node->tracklet_id = 0;
+    landmark_node->object_id = 0;
+
+    EXPECT_EQ(landmark_node->numObservations(), 0);
+
+    FrameNode2d::Ptr frame_node = std::make_shared<FrameNode2d>(map->getptr());
+    frame_node->frame_id = 0;
+
+    landmark_node->add(frame_node, Keypoint());
+
+    EXPECT_EQ(landmark_node->numObservations(), 1);
+    EXPECT_EQ(*landmark_node->getSeenFrames().begin(), frame_node);
+    EXPECT_EQ(landmark_node->getMeasurements().size(), 1);
+
+
+    //now add the same frame again
+    EXPECT_THROW({landmark_node->add(frame_node, Keypoint());}, DynosamException);
+
+}
+
 TEST(Map, objectSeenFrames) {
     Map2d::Ptr map = Map2d::create();
     StatusKeypointMeasurements measurements;
