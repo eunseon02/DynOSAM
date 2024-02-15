@@ -44,7 +44,7 @@ private:
     EgoMotionSolver motion_solver_;
     ObjectMotionSovler object_motion_solver_;
     FeatureTracker::UniquePtr tracker_;
-    FrontendLogger::UniquePtr logger_;
+    RGBDFrontendLogger::UniquePtr logger_;
 
 private:
 

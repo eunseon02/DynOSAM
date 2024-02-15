@@ -124,7 +124,7 @@ RGBDBackendModule::rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input) {
 
     // gtsam::Values new_dyn_values;
     // gtsam::NonlinearFactorGraph new_dyn_factors;
-    updateDynamicObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
+    // updateDynamicObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
 
     optimize(frame_k, new_values, new_factors);
     // map_->updateEstimates(new_values_, new_factors_, frame_k);

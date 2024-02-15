@@ -21,12 +21,28 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/common/Types.hpp"
 
 #include <string>
 #include <cxxabi.h>
 
 namespace dyno {
+
+
+template<>
+std::string to_string(const ReferenceFrame& reference_frame) {
+  switch (reference_frame)
+  {
+  case ReferenceFrame::LOCAL:
+    return "local";
+  case ReferenceFrame::GLOBAL:
+    return "global";
+  case ReferenceFrame::OBJECT:
+    return "object";
+  default:
+    return "Unknown reference frame";
+  }
+};
 
 std::string demangle(const char* name)
 {

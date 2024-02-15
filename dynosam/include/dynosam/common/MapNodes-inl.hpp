@@ -286,12 +286,13 @@ DynamicPointSymbol LandmarkNode<MEASUREMENT>::makeDynamicSymbol(FrameId frame_id
 
 }
 
+//TODO: coded in estiamtes are in global frame!!
 template<typename MEASUREMENT>
 bool LandmarkNode<MEASUREMENT>::appendStaticLandmarkEstimate(StatusLandmarkEstimates& estimates) const {
     StateQuery<Landmark> lmk_status_query = this->getStaticLandmarkEstimate();
     if(lmk_status_query) {
         estimates.push_back(
-            LandmarkStatus::Static(
+            LandmarkStatus::StaticInGlobal(
                 lmk_status_query.get(), //estimate
                 LandmarkStatus::MeaninglessFrame,
                 this->getId(), //tracklet id
@@ -304,12 +305,13 @@ bool LandmarkNode<MEASUREMENT>::appendStaticLandmarkEstimate(StatusLandmarkEstim
 
 }
 
+//TODO: coded in estiamtes are in global frame!!
 template<typename MEASUREMENT>
 bool LandmarkNode<MEASUREMENT>::appendDynamicLandmarkEstimate(StatusLandmarkEstimates& estimates, FrameId frame_id) const {
     StateQuery<Landmark> lmk_status_query = this->getDynamicLandmarkEstimate(frame_id);
     if(lmk_status_query) {
         estimates.push_back(
-            LandmarkStatus::Dynamic(
+            LandmarkStatus::DynamicInGLobal(
                 lmk_status_query.get(), //estimate
                 frame_id,
                 this->getId(), //tracklet id

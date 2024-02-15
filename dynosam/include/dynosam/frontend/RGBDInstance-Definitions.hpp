@@ -85,26 +85,10 @@ public:
 
 //write to file on destructor
 //TODO: currently FrontendLogger really is RGBDLogger?
-class FrontendLogger {
+class RGBDFrontendLogger : public EstimationModuleLogger {
 public:
-    DYNO_POINTER_TYPEDEFS(FrontendLogger)
-    FrontendLogger();
-    //write to file on destructor
-    ~FrontendLogger();
-
-    void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
-    void logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses);
-    void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera_k, std::optional<const gtsam::Pose3> T_world_camera_k_1 = {});
-    void logObjectPoints(FrameId frame_id, const gtsam::Pose3& T_world_camera_k, const StatusLandmarkEstimates& dynamic_landmarks);
-    // void logFrontendStats(const FeatureTrackerInfo& tracking_info);
-
-private:
-    CsvWriter::UniquePtr object_motion_errors_csv_;
-    CsvWriter::UniquePtr camera_pose_errors_csv_;
-    CsvWriter::UniquePtr camera_pose_csv_;
-    CsvWriter::UniquePtr object_pose_csv_;
-    CsvWriter::UniquePtr object_points_csv_;
-
+    DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)
+    RGBDFrontendLogger() : EstimationModuleLogger("frontend") {}
 };
 
 } //dymo

@@ -146,7 +146,7 @@ using MonoDebugInfoMap = gtsam::FastMap<FrameId, MonoDebugInfo>;
 
 
 //TODO: tidy up!! MonoBackendLogger?
-struct BackendLogger {
+struct MonoBackendLogger {
 
 
     void log(const std::string& name, const gtsam::Values& values, const GroundTruthPacketMap& packet_map) {

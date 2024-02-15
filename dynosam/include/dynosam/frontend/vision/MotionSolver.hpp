@@ -146,6 +146,8 @@ struct SolverResult {
     TrackletIds inliers;
     TrackletIds outliers;
     TrackingStatus status;
+    double iterations; //current iterations
+    double probability; // current probability
 };
 
 using Pose3SolverResult = SolverResult<gtsam::Pose3>;

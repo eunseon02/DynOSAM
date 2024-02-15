@@ -47,7 +47,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 
     if(FLAGS_use_frontend_logger) {
-        logger_ = std::make_unique<FrontendLogger>();
+        logger_ = std::make_unique<RGBDFrontendLogger>();
     }
 }
 
@@ -169,7 +169,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
 
     if(logger_) {
-        logger_->logObjectPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
+        logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
         //object_poses_ are in frontend module
         logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
     }
@@ -188,7 +188,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
         result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
     }
 
-    VLOG(5) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
+    VLOG(15) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
           << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
           << "- Tracking Status: "
           << to_string(result.status) << '\n'
@@ -221,7 +221,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
         result = object_motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
     }
 
-    VLOG(5) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
+    VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
           << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
           << "- Tracking Status: "
           << to_string(result.status) << '\n'
@@ -233,7 +233,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
 
-        ReferenceFrameEstimate<Motion3> estimate(result.best_pose, ReferenceFrame::WORLD);
+        ReferenceFrameEstimate<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
         motion_estimates.insert({object_id, estimate});
         return true;
     }
@@ -271,7 +271,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         );
 
         static_landmarks.push_back(
-            LandmarkStatus::Static(
+            LandmarkStatus::StaticInLocal(
                 lmk_camera,
                 frame.frame_id_,
                 tracklet_id,
@@ -308,7 +308,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 );
 
                 dynamic_landmarks.push_back(
-                    LandmarkStatus::Dynamic(
+                    LandmarkStatus::DynamicInLocal(
                         lmk_camera,
                         frame.frame_id_,
                         tracklet_id,

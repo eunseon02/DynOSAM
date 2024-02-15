@@ -569,7 +569,8 @@ TEST(TrackedValueStatus, testIsTimeInvariant) {
         Keypoint(),
         TrackedValueStatus<Keypoint>::MeaninglessFrame,
         0,
-        0);
+        0,
+        ReferenceFrame::GLOBAL);
 
     EXPECT_TRUE(status_time_invariant.isTimeInvariant());
 
@@ -577,6 +578,7 @@ TEST(TrackedValueStatus, testIsTimeInvariant) {
         Keypoint(),
         0, //use zero
         0,
-        0);
+        0,
+        ReferenceFrame::GLOBAL);
     EXPECT_FALSE(status_time_variant.isTimeInvariant());
 }

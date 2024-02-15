@@ -27,7 +27,7 @@
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue, bool use_logger)
     :   Base("backend"),
         base_params_(params),
         camera_(CHECK_NOTNULL(camera)),
@@ -46,6 +46,11 @@ BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, Im
     registerInputCallback([=](BackendInputPacket::ConstPtr input) {
         if(input->gt_packet_) gt_packet_map_.insert2(input->getFrameId(), *input->gt_packet_);
     });
+
+    if(use_logger) {
+        VLOG(5) << "Using backend logger";
+        logger_ = std::make_unique<BackendLogger>();
+    }
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {

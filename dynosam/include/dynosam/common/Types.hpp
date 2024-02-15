@@ -91,11 +91,12 @@ enum KeyPointType {
 };
 
 
-enum ReferenceFrame {
-  WORLD,
-  CAMERA,
+enum class ReferenceFrame {
+  GLOBAL,
+  LOCAL,
   OBJECT
 };
+
 
 
 //TODO: should make variables private
@@ -106,6 +107,7 @@ struct TrackedValueStatus {
   FrameId frame_id_;
   TrackletId tracklet_id_;
   ObjectId label_; //! Will be 0 if background
+  ReferenceFrame reference_frame_;
 
   //Constexpr value used for the frame_id when it is NA (not applicable)
   //this may be the case when the TrackedValueStatus object represents a time-invariant
@@ -119,11 +121,13 @@ struct TrackedValueStatus {
     const Value& value,
     FrameId frame_id,
     TrackletId tracklet_id,
-    ObjectId label)
+    ObjectId label,
+    ReferenceFrame reference_frame)
     : value_(value),
       frame_id_(frame_id),
       tracklet_id_(tracklet_id),
-      label_(label) {}
+      label_(label),
+      reference_frame_(reference_frame) {}
 
   virtual ~TrackedValueStatus() = default;
 
@@ -160,7 +164,7 @@ inline constexpr bool IsDerivedTrackedValueStatus = std::is_base_of_v<TrackedVal
 struct LandmarkStatus : public TrackedValueStatus<Landmark> {
     using Base = TrackedValueStatus<Landmark>;
     using Base::Value;
-    enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
+    enum class Method { MEASURED, TRIANGULATED, OPTIMIZED };
     Method method_;
 
     /**
@@ -172,16 +176,34 @@ struct LandmarkStatus : public TrackedValueStatus<Landmark> {
      * @param label
      * @param method
      */
-    LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, Method method)
-    : Base(lmk, frame_id, tracklet_id, label), method_(method) {}
+    LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, ReferenceFrame reference_frame, Method method)
+    : Base(lmk, frame_id, tracklet_id, label, reference_frame), method_(method) {}
 
-    inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
-      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, method);
+    inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ReferenceFrame reference_frame, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, reference_frame, method);
     }
 
-    inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
+    inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, ReferenceFrame reference_frame, Method method) {
       CHECK(label != background_label);
-      return LandmarkStatus(lmk, frame_id, tracklet_id, label, method);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, reference_frame, method);
+    }
+
+    inline static LandmarkStatus StaticInLocal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, ReferenceFrame::LOCAL, method);
+    }
+
+    inline static LandmarkStatus DynamicInLocal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
+      CHECK(label != background_label);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, ReferenceFrame::LOCAL, method);
+    }
+
+    inline static LandmarkStatus StaticInGlobal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, ReferenceFrame::GLOBAL, method);
+    }
+
+    inline static LandmarkStatus DynamicInGLobal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
+      CHECK(label != background_label);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, ReferenceFrame::GLOBAL, method);
     }
 
 
@@ -201,14 +223,16 @@ struct KeypointStatus : public TrackedValueStatus<Keypoint> {
   /**
    * @brief Construct a new Keypoint Status object
    *
+   * Since the object is Keypoint, the reference frame is set to be in camera in the base class
+   *
    * @param kp
    * @param frame_id
    * @param tracklet_id
    * @param label
    * @param kp_type
    */
-  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label,KeyPointType kp_type)
-  : Base(kp, frame_id, tracklet_id, label), kp_type_(kp_type) {}
+  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, KeyPointType kp_type)
+  : Base(kp, frame_id, tracklet_id, label, ReferenceFrame::LOCAL), kp_type_(kp_type) {}
 
   inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id) {
     return KeypointStatus(kp, frame_id, background_label, tracklet_id, KeyPointType::STATIC);

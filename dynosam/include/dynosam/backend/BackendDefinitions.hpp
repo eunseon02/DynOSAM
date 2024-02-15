@@ -27,7 +27,7 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/backend/DynamicPointSymbol.hpp"
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/logger/Logger.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
@@ -166,8 +166,16 @@ public:
 
 };
 
+//TODO: currently FrontendLogger really is RGBDLogger?
+class BackendLogger : public EstimationModuleLogger {
+public:
+    DYNO_POINTER_TYPEDEFS(BackendLogger)
+    BackendLogger() : EstimationModuleLogger("backend") {}
+};
 
 
+
+//TODO: depricate
 class DynamicObjectManager {
 public:
     using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;

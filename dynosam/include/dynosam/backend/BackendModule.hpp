@@ -52,7 +52,7 @@ public:
     using Base::SpinReturn;
 
 
-    BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue, bool use_logger = true);
     ~BackendModule() = default;
 
 
@@ -66,6 +66,8 @@ protected:
 
     //NOTE: this is copied directly from the frontend module.
     GroundTruthPacketMap gt_packet_map_; //! Updated in the frontend module base via InputCallback (see FrontendModule constructor)
+
+    BackendLogger::UniquePtr logger_;
 
     //! Camera related parameters
     Camera::Ptr camera_;
