@@ -97,17 +97,39 @@ enum class ReferenceFrame {
   OBJECT
 };
 
+/**
+ * @brief Estimate with a reference frame and operator casting
+ *
+ * If the estimate E should be const, template on const E
+ * If estimate E should be a reference, can template on E&
+ *
+ * @tparam E
+ */
+template<typename E>
+struct ReferenceFrameValue {
+  using Estimate = E;
+
+  using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
+
+  Estimate estimate_;
+  const ReferenceFrame frame_;
+
+  ReferenceFrameValue() {}
+  ReferenceFrameValue(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
+
+  operator Estimate&() { return estimate_; }
+  operator const Estimate&() const { return estimate_; }
+  operator const ReferenceFrame&() const { return frame_; }
+
+};
+
 
 
 //TODO: should make variables private
 template<typename VALUE>
-struct TrackedValueStatus {
+class TrackedValueStatus {
+public:
   using Value = VALUE;
-  Value value_;
-  FrameId frame_id_;
-  TrackletId tracklet_id_;
-  ObjectId label_; //! Will be 0 if background
-  ReferenceFrame reference_frame_;
 
   //Constexpr value used for the frame_id when it is NA (not applicable)
   //this may be the case when the TrackedValueStatus object represents a time-invariant
@@ -123,13 +145,26 @@ struct TrackedValueStatus {
     TrackletId tracklet_id,
     ObjectId label,
     ReferenceFrame reference_frame)
-    : value_(value),
+    : value_(value, reference_frame),
       frame_id_(frame_id),
       tracklet_id_(tracklet_id),
-      label_(label),
-      reference_frame_(reference_frame) {}
+      label_(label) {}
 
   virtual ~TrackedValueStatus() = default;
+
+  const Value& value() const { return value_; }
+  Value& value() { return value_; }
+
+  TrackletId trackletId() const { return tracklet_id_; }
+  ObjectId objectId() const { return label_; }
+  FrameId frameId() const { return frame_id_; }
+
+  const ReferenceFrame& referenceFrame() const { return value_; }
+  ReferenceFrame& referenceFrame() { return value_; }
+
+  ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
+  const ReferenceFrameValue<Value>& referenceFrameValue() const { return value_; }
+
 
   inline bool isStatic() const {
     return label_ == background_label;
@@ -145,6 +180,13 @@ struct TrackedValueStatus {
   inline bool isTimeInvariant() const {
     return frame_id_ == MeaninglessFrame;
   }
+
+protected:
+  ReferenceFrameValue<Value> value_;
+  FrameId frame_id_;
+  TrackletId tracklet_id_;
+  ObjectId label_; //! Will be 0 if background
+
 };
 
 /// @brief Check if derived DERIVEDSTATUS us in factor derived from Status<Value>
@@ -280,47 +322,6 @@ using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
 using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
 
 
-
-// /**
-//  * @brief Reference wrapper for a type T with operating casting
-//  *
-//  * @tparam T
-//  */
-// template<typename T>
-// struct Ref {
-//   using Type = T;
-
-//   Type& value;
-//   operator Type&() { return value; }
-//   operator const Type&() const { return value; }
-// };
-
-/**
- * @brief Estimate with a reference frame and operator casting
- *
- * If the estimate E should be const, template on const E
- * If estimate E should be a reference, can template on E&
- *
- * @tparam E
- */
-template<typename E>
-struct ReferenceFrameEstimate {
-  using Estimate = E;
-
-  using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
-
-  Estimate estimate_;
-  const ReferenceFrame frame_;
-
-  ReferenceFrameEstimate() {}
-  ReferenceFrameEstimate(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
-
-  operator Estimate&() { return estimate_; }
-  operator const Estimate&() const { return estimate_; }
-  operator const ReferenceFrame&() const { return frame_; }
-
-};
-
 /**
  * @brief Map of key to an estimate containting a reference frame
  *
@@ -328,9 +329,9 @@ struct ReferenceFrameEstimate {
  * @tparam Estimate
  */
 template<typename Key, typename Estimate>
-using EstimateMap = gtsam::FastMap<Key, ReferenceFrameEstimate<Estimate>>;
+using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 
-/// @brief Map of object ids to ReferenceFrameEstimate's of motions
+/// @brief Map of object ids to ReferenceFrameValue's of motions
 using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
 
 /// @brief Map of object poses per frame per object

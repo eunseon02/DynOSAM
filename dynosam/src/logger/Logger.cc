@@ -42,7 +42,7 @@ OfstreamWrapper::OfstreamWrapper(const std::string& filename,
 // This destructor will directly close the log file when the wrapper is
 // destructed. So no need to explicitly call .close();
 OfstreamWrapper::~OfstreamWrapper() {
-  LOG(INFO) << "Closing output file: " << filename_.c_str();
+  VLOG(20) << "Closing output file: " << filename_.c_str();
   ofstream_.flush();
   ofstream_.close();
 }
@@ -222,7 +222,6 @@ void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packet
     if(gt_packets.exists(frame_id_k_1) && T_world_camera_k_1) {
         const GroundTruthInputPacket& gt_packet_k_1 = gt_packets.at(frame_id_k_1);
         const gtsam::Pose3 gt_T_world_camera_k_1 = gt_packet_k_1.X_world_;
-
         relative_pose_error = utils::TRErrorPair::CalculateRelativePoseError(T_world_camera_k_1.value(), T_world_camera, gt_T_world_camera_k_1, gt_T_world_camera_k);
     }
 
@@ -236,15 +235,14 @@ void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packet
 
 void EstimationModuleLogger::logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks) {
   for(const auto& status_lmks : landmarks) {
-      const TrackletId tracklet_id = status_lmks.tracklet_id_;
-      ObjectId object_id = status_lmks.label_;
+      const TrackletId tracklet_id = status_lmks.trackletId();
+      ObjectId object_id = status_lmks.objectId();
+      Landmark lmk_world = status_lmks.value();
 
-      Landmark lmk_world = status_lmks.value_;
-
-      if(status_lmks.reference_frame_ == ReferenceFrame::LOCAL) {
-        lmk_world = T_world_local_k * status_lmks.value_;
+      if(status_lmks.referenceFrame() == ReferenceFrame::LOCAL) {
+        lmk_world = T_world_local_k * status_lmks.value();
       }
-      else if(status_lmks.reference_frame_ == ReferenceFrame::OBJECT) {
+      else if(status_lmks.referenceFrame() == ReferenceFrame::OBJECT) {
         throw DynosamException("Cannot log object point in the object reference frame");
       }
 

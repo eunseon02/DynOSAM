@@ -24,6 +24,7 @@
 
 #include "dynosam_ros/Display-Definitions.hpp"
 
+#include <dynosam/common/Exceptions.hpp>
 #include <dynosam/common/Types.hpp>
 
 #include "image_transport/image_transport.hpp"
@@ -50,7 +51,7 @@ public:
     using MarkerArrayPub = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
 
 
-    virtual void publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks);
+    virtual void publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
     virtual void publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     virtual void publishOdometryPath(PathPub::SharedPtr pub, const gtsam::Pose3Vector& poses, Timestamp latest_timestamp);
 

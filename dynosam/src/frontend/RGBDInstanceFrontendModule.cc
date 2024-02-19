@@ -233,7 +233,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
 
-        ReferenceFrameEstimate<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
+        ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
         motion_estimates.insert({object_id, estimate});
         return true;
     }

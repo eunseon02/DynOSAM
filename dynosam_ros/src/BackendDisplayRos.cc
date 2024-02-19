@@ -35,7 +35,7 @@
 
 namespace dyno {
 
-BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
+BackendDisplayRos::BackendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params){
     // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
     static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
     dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
@@ -50,55 +50,56 @@ BackendDisplayRos::BackendDisplayRos(rclcpp::Node::SharedPtr node) {
 
 
 void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_output) {
+    publishPointCloud(static_tracked_points_pub_, backend_output->static_landmarks_, backend_output->T_world_camera_);
+    publishPointCloud(dynamic_tracked_points_pub_, backend_output->dynamic_landmarks_, backend_output->T_world_camera_);
+    // {
+    //     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
-    {
-        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    //     for(const auto& status_estimate : backend_output->static_landmarks_) {
+    //         const Landmark& lmk = status_estimate.value_;
 
-        for(const auto& status_estimate : backend_output->static_landmarks_) {
-            const Landmark& lmk = status_estimate.value_;
-
-            pcl::PointXYZRGB pt;
-            if(status_estimate.label_ == background_label) {
-                // publish static lmk's as white
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
-            }
-            else {
-                const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
-            }
-            cloud.points.push_back(pt);
-        }
+    //         pcl::PointXYZRGB pt;
+    //         if(status_estimate.label_ == background_label) {
+    //             // publish static lmk's as white
+    //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+    //         }
+    //         else {
+    //             const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
+    //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+    //         }
+    //         cloud.points.push_back(pt);
+    //     }
 
 
-        sensor_msgs::msg::PointCloud2 pc2_msg;
-        pcl::toROSMsg(cloud, pc2_msg);
-        pc2_msg.header.frame_id = "world";
-        static_tracked_points_pub_->publish(pc2_msg);
-    }
+    //     sensor_msgs::msg::PointCloud2 pc2_msg;
+    //     pcl::toROSMsg(cloud, pc2_msg);
+    //     pc2_msg.header.frame_id = "world";
+    //     static_tracked_points_pub_->publish(pc2_msg);
+    // }
 
-    {
-        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    // {
+    //     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
-        for(const auto& status_estimate : backend_output->dynamic_landmarks_) {
-            const Landmark& lmk = status_estimate.value_;
+    //     for(const auto& status_estimate : backend_output->dynamic_landmarks_) {
+    //         const Landmark& lmk = status_estimate.value_;
 
-            pcl::PointXYZRGB pt;
-            if(status_estimate.label_ == background_label) {
-                // publish static lmk's as white
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
-            }
-            else {
-                const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
-            }
-            cloud.points.push_back(pt);
-        }
+    //         pcl::PointXYZRGB pt;
+    //         if(status_estimate.label_ == background_label) {
+    //             // publish static lmk's as white
+    //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+    //         }
+    //         else {
+    //             const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
+    //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+    //         }
+    //         cloud.points.push_back(pt);
+    //     }
 
-        sensor_msgs::msg::PointCloud2 pc2_msg;
-        pcl::toROSMsg(cloud, pc2_msg);
-        pc2_msg.header.frame_id = "world";
-        dynamic_tracked_points_pub_->publish(pc2_msg);
-    }
+    //     sensor_msgs::msg::PointCloud2 pc2_msg;
+    //     pcl::toROSMsg(cloud, pc2_msg);
+    //     pc2_msg.header.frame_id = "world";
+    //     dynamic_tracked_points_pub_->publish(pc2_msg);
+    // }
 
     // {
     //     pcl::PointCloud<pcl::PointXYZRGB> cloud;

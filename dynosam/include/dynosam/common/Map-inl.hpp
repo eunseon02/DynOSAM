@@ -40,10 +40,10 @@ template<typename DERIVEDSTATUS>
 void Map<MEASUREMENT>::updateObservations(const MeasurementStatusVector<DERIVEDSTATUS>& measurements) {
     for(const DERIVEDSTATUS& status_measurement : measurements) {
         const TrackedValueStatus<MEASUREMENT>& status = static_cast<const TrackedValueStatus<MEASUREMENT>&>(status_measurement);
-        const MEASUREMENT& measurement = status_measurement.value_;
-        const TrackletId tracklet_id = status.tracklet_id_;
-        const FrameId frame_id = status.frame_id_;
-        const ObjectId object_id = status.label_;
+        const MEASUREMENT& measurement = status_measurement.value();
+        const TrackletId tracklet_id = status.trackletId();
+        const FrameId frame_id = status.frameId();
+        const ObjectId object_id = status.objectId();
         const bool is_static = status.isStatic();
         addOrUpdateMapStructures(measurement, tracklet_id, frame_id, object_id, is_static);
     }

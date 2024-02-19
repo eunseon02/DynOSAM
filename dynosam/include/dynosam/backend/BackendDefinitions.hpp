@@ -99,7 +99,7 @@ using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gts
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
 
-
+//TODO: depricate
 /**
  * @brief Definition of a tracklet - a tracket point seen at multiple frames.
  *

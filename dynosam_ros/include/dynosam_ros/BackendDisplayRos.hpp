@@ -23,6 +23,9 @@
 
 #pragma once
 
+#include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/DisplayRos.hpp"
+
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/point_cloud2.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -35,9 +38,9 @@
 
 namespace dyno {
 
-class BackendDisplayRos : public BackendDisplay {
+class BackendDisplayRos : public BackendDisplay, DisplayRos {
 public:
-    BackendDisplayRos(rclcpp::Node::SharedPtr node);
+    BackendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node);
 
     void spinOnce(const BackendOutputPacket::ConstPtr& backend_output) override;
 
