@@ -229,156 +229,6 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 marker.points.push_back(p);
             }
 
-            // // bottom
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = min_point_AABB.y;
-            //     p1.z = min_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = min_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = min_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = max_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = min_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = max_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = min_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-
-            // // top
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = max_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = min_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = max_point_AABB.z;
-            //     p1.x = min_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = max_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = max_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = max_point_AABB.y;
-            //     p0.z = max_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-
-            // // vertical lines
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = min_point_AABB.x;
-            //     p1.y = min_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = max_point_AABB.x;
-            //     p0.y = min_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = min_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = min_point_AABB.x;
-            //     p0.y = max_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = min_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-            // {
-            //     geometry_msgs::msg::Point p0;
-            //     geometry_msgs::msg::Point p1;
-            //     p0.x = max_point_AABB.x;
-            //     p0.y = max_point_AABB.y;
-            //     p0.z = min_point_AABB.z;
-            //     p1.x = max_point_AABB.x;
-            //     p1.y = max_point_AABB.y;
-            //     p1.z = max_point_AABB.z;
-            //     marker.points.push_back(p0);
-            //     marker.points.push_back(p1);
-            // }
-
             object_bbx_marker_array.markers.push_back(marker);
         }
         object_bbx_pub_->publish(object_bbx_marker_array);
@@ -402,6 +252,157 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         "frontend",
         60
     );
+
+    // Predict 3D object poses
+    gtsam::FastMap<ObjectId, std::vector<gtsam::Pose3> > obj_predicted_poses;
+    {
+        int prediction_length = 3;
+        FrameId current_frame_id = rgbd_frontend_output->frame_.frame_id_;
+        ObjectPoseMap obj_poses = rgbd_frontend_output->propogated_object_poses_;
+        MotionEstimateMap obj_motions = rgbd_frontend_output->estimated_motions_;
+        for (const auto& [object_id, this_obj_traj] : obj_poses){
+            if(this_obj_traj.exists(current_frame_id)){
+                gtsam::Pose3 current_obj_pose = this_obj_traj.at(current_frame_id);
+                if (obj_motions.exists(object_id)){
+                    gtsam::Pose3 current_obj_motion = obj_motions.at(object_id);
+
+                    gtsam::Pose3 last_object_pose = current_obj_pose;
+                    std::vector<gtsam::Pose3> predicted_poses;
+
+                    for (int i_prediction = 0; i_prediction < prediction_length; i_prediction++){
+                        predicted_poses.push_back(last_object_pose);
+                        last_object_pose = current_obj_motion * last_object_pose;
+                        last_object_pose = current_obj_motion * last_object_pose;
+                        // last_object_pose = current_obj_motion * last_object_pose;
+                    }
+
+                    obj_predicted_poses.insert2(object_id, predicted_poses);
+                }
+            }
+        }
+    }
+
+    // 2D image visualisation using opencv
+    {
+        // 2D bounding box
+        cv::Mat rgb_with_bbx = rgbd_frontend_output->frame_.drawDetectedObjectBoxes();
+
+        StatusKeypointMeasurements obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
+        for(const StatusKeypointMeasurement& this_px : obj_px) {
+            KeypointStatus status = retrieveStatus(this_px);
+            ObjectId object_id = status.label_;
+            gtsam::Point2 px_coordinate = retrieveEstimate(this_px);
+
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+            // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
+            cv::Point centre(functional_keypoint::u(px_coordinate), functional_keypoint::v(px_coordinate));
+            int radius = 1;
+            int thickness = 1;
+            cv::circle(rgb_with_bbx, centre, radius, colour, thickness);
+            // functional_keypoint::at<cv::Scalar>(px_coordinate, rgb_with_bbx) = colour;
+        }
+
+        // object history and prediction
+        ObjectPoseMap obj_poses = rgbd_frontend_output->propogated_object_poses_;
+        gtsam::Pose3 cam_pose = rgbd_frontend_output->T_world_camera_;
+        int line_thinkness = 3;
+        for (const auto& [object_id, this_obj_traj] : obj_poses){
+            cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+            // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
+            std::vector<cv::Point> cv_line; 
+            for (const auto& [frame_id, this_obj_pose] : this_obj_traj){
+                gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
+                Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
+                Keypoint this_obj_px_in_cam;
+                bool is_lmk_contained = rgbd_frontend_output->frame_.camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                if (is_lmk_contained){
+                    cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+                }
+            }
+            int line_length = cv_line.size();
+            for (int i_line = 0; i_line < line_length-1; i_line++){
+                cv::line(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], colour, line_thinkness, cv::LINE_AA);
+            }
+
+            if(!obj_predicted_poses.exists(object_id)) {continue;}
+
+            cv_line.clear();
+            std::vector<gtsam::Pose3> this_obj_predicted_poses = obj_predicted_poses.at(object_id);
+            for (const auto& this_obj_pose : this_obj_predicted_poses){
+                gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
+                Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
+                Keypoint this_obj_px_in_cam;
+                bool is_lmk_contained = rgbd_frontend_output->frame_.camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                if (is_lmk_contained){
+                    cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+                }
+            }
+            line_length = cv_line.size();
+            for (int i_line = 0; i_line < line_length-1; i_line++){
+                double alpha = (double) i_line / ((double) line_length);
+                cv::Scalar grad_colour = colour;
+                grad_colour[0] = (255.0 - colour[0]) * alpha + colour[0];
+                grad_colour[1] = (255.0 - colour[0]) * alpha + colour[1];
+                grad_colour[2] = (255.0 - colour[0]) * alpha + colour[2];
+                cv::arrowedLine(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], grad_colour, line_thinkness-1, cv::LINE_AA, 0, 0.3);
+            }
+
+        }
+
+        cv::imshow("RGB with object bounding boxes", rgb_with_bbx);
+
+        // int frame_id = rgbd_frontend_output->frame_.frame_id_;
+        // cv::Mat rgb_objects;
+        // rgbd_frontend_output->frame_.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+
+        // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+".png", rgb_objects);
+        // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+"_bbx.png", rgb_with_bbx);
+    }
+
+    {
+        visualization_msgs::msg::MarkerArray object_pred_marker_array;
+        // static visualization_msgs::msg::Marker delete_marker;
+        // delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+        // object_pred_marker_array.markers.push_back(delete_marker);
+
+        for (const auto& [object_id, this_obj_predicted_poses] : obj_predicted_poses){
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            int pose_length = this_obj_predicted_poses.size();
+            for (int i_pose = 0; i_pose < pose_length - 1; i_pose++){
+                gtsam::Point3 point_0 = this_obj_predicted_poses[i_pose].translation();
+                gtsam::Point3 point_1 = this_obj_predicted_poses[i_pose+1].translation();
+
+                visualization_msgs::msg::Marker arrow_marker;
+                arrow_marker.header.frame_id = "world";
+                arrow_marker.ns = "object_pred";
+                arrow_marker.id = object_id*10+i_pose;
+                arrow_marker.type = visualization_msgs::msg::Marker::ARROW;
+                arrow_marker.action = visualization_msgs::msg::Marker::ADD;
+                arrow_marker.header.stamp = node_->now();
+                arrow_marker.scale.x = 0.3;
+                arrow_marker.scale.y = 0.5;
+                arrow_marker.scale.z = 0.8;
+
+                double alpha = (double) i_pose / ((double) pose_length);
+                arrow_marker.color.r = ((255.0 - colour[0]) * alpha + colour[0])/255.0;
+                arrow_marker.color.g = ((255.0 - colour[1]) * alpha + colour[1])/255.0;
+                arrow_marker.color.b = ((255.0 - colour[2]) * alpha + colour[2])/255.0;
+                arrow_marker.color.a = 1;
+
+                geometry_msgs::msg::Point p0, p1;
+                p0.x = point_0.x();
+                p0.y = point_0.y();
+                p0.z = point_0.z();
+                p1.x = point_1.x();
+                p1.y = point_1.y();
+                p1.z = point_1.z();
+                arrow_marker.points.push_back(p0);
+                arrow_marker.points.push_back(p1);
+                object_pred_marker_array.markers.push_back(arrow_marker);
+            }
+        }
+        object_bbx_pub_->publish(object_pred_marker_array);
+    }
 
 
 }
@@ -715,7 +716,7 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
         line_list_marker.ns = "gt_frontend_composed_object_path";
         line_list_marker.id = object_id;
         line_list_marker.header.stamp = node_->now();
-        line_list_marker.scale.x = 0.3;
+        line_list_marker.scale.x = 0.5;
 
         line_list_marker.pose.orientation.x = 0;
         line_list_marker.pose.orientation.y = 0;
