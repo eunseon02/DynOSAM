@@ -253,6 +253,7 @@ if(BUILD_TESTING)
     test/test_camera.cc
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
+    test/internal/simulator.cc
     test/test_tools.cc
     test/test_map.cc
     test/test_pipelines.cc

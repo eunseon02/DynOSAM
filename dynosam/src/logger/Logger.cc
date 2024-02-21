@@ -27,10 +27,18 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <filesystem>
+
 
 DEFINE_string(output_path, "./", "Path where to store dynosam's log output.");
 
 namespace dyno {
+
+std::string getOutputFilePath(const std::string& file_name) {
+  namespace fs = std::filesystem;
+  fs::path out_path(FLAGS_output_path);
+  return out_path / file_name;
+}
 
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,

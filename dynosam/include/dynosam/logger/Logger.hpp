@@ -39,6 +39,18 @@
 
 namespace dyno {
 
+/**
+ * @brief Constructs a file path (using the file name) where the root of the path is
+ * defined by the FLAGS_output_path param.
+ *
+ * This flag defines the output folder of all output log/debug files.
+ * The resulting file path with then be FLAGS_output_path/file_name
+ *
+ * @param file_name
+ * @return std::string
+ */
+std::string getOutputFilePath(const std::string& file_name);
+
 // Open files with name output_filename, and checks that it is valid
 static inline void OpenFile(const std::string& output_filename,
                             std::ofstream* output_file,

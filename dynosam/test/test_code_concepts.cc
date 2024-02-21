@@ -24,151 +24,161 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <exception>
+#include <opencv4/opencv2/opencv.hpp>
 
 #include <optional>
 #include <atomic>
 
-//forward
-struct ExcpetionHook;
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Cal3_S2Stereo.h>
+#include <gtsam/nonlinear/Values.h>
+#include <gtsam/nonlinear/utilities.h>
+#include <gtsam/nonlinear/NonlinearEquality.h>
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/slam/StereoFactor.h>
+#include <gtsam/slam/dataset.h>
 
-// class ExceptionStream {
+#include <string>
+#include <fstream>
+#include <iostream>
 
+cv::Mat GetSquareImage( const cv::Mat& img, int target_width = 500 )
+{
+    int width = img.cols,
+       height = img.rows;
 
-// public:
-//     template<typename Exception = std::runtime_error>
-//     ExceptionStream() {
-//         throw_exception_ = [=]() {
-//             throw Exception(ss_.str());
-//         };
-//     }
+    cv::Mat square = cv::Mat::zeros( target_width, target_width, img.type() );
 
-//     ~ExceptionStream() {
-//         LOG(INFO) << "Destructor";
-//         throw_exception_();
-//     }
+    int max_dim = ( width >= height ) ? width : height;
+    float scale = ( ( float ) target_width ) / max_dim;
+    cv::Rect roi;
+    if ( width >= height )
+    {
+        roi.width = target_width;
+        roi.x = 0;
+        roi.height = height * scale;
+        roi.y = ( target_width - roi.height ) / 2;
+    }
+    else
+    {
+        roi.y = 0;
+        roi.height = target_width;
+        roi.width = width * scale;
+        roi.x = ( target_width - roi.width ) / 2;
+    }
 
-//     ExceptionStream(const ExceptionStream& other) {
-//         //copy
-//         LOG(INFO) << "copy";
-//         ss_ << other.ss_.str();
-//         throw_exception_ = other.throw_exception_;
-//     }
+    cv::resize( img, square( roi ), roi.size() );
 
-//     ExceptionStream& operator=(const ExceptionStream& other) {
-//         LOG(INFO) << "Assignment";
-//         //we want copy and swap idiom
-//         ss_.clear();
-//         ExceptionStream tmp_other(other);
-//         tmp_other.swap(*this);
-//         return *this;
-//     }
+    return square;
+}
 
-//     template<typename T>
-//     ExceptionStream& operator<<(const T& t){
-//         ss_ << t;
-//         return *this;
-//     }
+TEST(CodeConcepts, drawInformationMatrix) {
+    // std::string g2oFile = gtsam::findExampleDataFile("pose3example.txt");
+    // gtsam::NonlinearFactorGraph::shared_ptr graph;
+    // gtsam::Values::shared_ptr initial;
+    // bool is3D = true;
+    // std::tie(graph, initial) = gtsam::readG2o(g2oFile, is3D);
 
+    // auto gfg = graph->linearize(*initial);
 
-//     void swap(ExceptionStream& other) {
-//         using std::swap;
-//         swap(ss_, other.ss_);
-//         swap(throw_exception_, other.throw_exception_);
-//     }
+    // gtsam::Matrix jacobian = gfg->jacobian().first;
 
-// private:
+    gtsam::Values initial_estimate;
+    gtsam::NonlinearFactorGraph graph;
+    const auto model = gtsam::noiseModel::Isotropic::Sigma(3, 1);
 
-// private:
-//     std::stringstream ss_;
-//     std::function<void()> throw_exception_;
+    std::string calibration_loc = gtsam::findExampleDataFile("VO_calibration.txt");
+    std::string pose_loc = gtsam::findExampleDataFile("VO_camera_poses_large.txt");
+    std::string factor_loc = gtsam::findExampleDataFile("VO_stereo_factors_large.txt");
 
-// };
+    // read camera calibration info from file
+    // focal lengths fx, fy, skew s, principal point u0, v0, baseline b
+    double fx, fy, s, u0, v0, b;
+    std::ifstream calibration_file(calibration_loc.c_str());
+    std::cout << "Reading calibration info" << std::endl;
+    calibration_file >> fx >> fy >> s >> u0 >> v0 >> b;
 
-// class D {
-// public:
-//     D() { LOG(INFO) << "Makign D"; }
-//     ~D() { LOG(INFO) << ss.str(); }
+    // create stereo camera calibration object
+    const gtsam::Cal3_S2Stereo::shared_ptr K(new gtsam::Cal3_S2Stereo(fx, fy, s, u0, v0, b));
 
-//     template<typename T>
-//     D& operator<<(const T& t){
-//         ss << t;
-//         return *this;
-//     }
+    std::ifstream pose_file(pose_loc.c_str());
+    std::cout << "Reading camera poses" << std::endl;
+    int pose_id;
+    gtsam::MatrixRowMajor m(4, 4);
+    // read camera pose parameters and use to make initial estimates of camera
+    // poses
+    while (pose_file >> pose_id) {
+        for (int i = 0; i < 16; i++) {
+            pose_file >> m.data()[i];
+        }
+        initial_estimate.insert(gtsam::Symbol('x', pose_id), gtsam::Pose3(m));
+    }
 
-//     D& operator=(const D& d) {
-//         //we want copy and swap idiom
-//         LOG(INFO) << "assignment";
-//         ss.clear();
-//         D(d).swap(*this);
-//         // //first clear
-//         // ss.clear();
-//         // //copy
-//         // //swap
-//         // ss.str(d.ss.str());
-//         return *this;
-//     }
+    // camera and landmark keys
+    size_t x, l;
 
-//     D(D&& d) {
-//         LOG(INFO) << "move";
-//         D(d).swap(*this);
-//     }
+    // pixel coordinates uL, uR, v (same for left/right images due to
+    // rectification) landmark coordinates X, Y, Z in camera frame, resulting from
+    // triangulation
+    double uL, uR, v, X, Y, Z;
+    std::ifstream factor_file(factor_loc.c_str());
+    std::cout << "Reading stereo factors" << std::endl;
+    // read stereo measurement details from file and use to create and add
+    // GenericStereoFactor objects to the graph representation
+    while (factor_file >> x >> l >> uL >> uR >> v >> X >> Y >> Z) {
+        graph.emplace_shared<gtsam::GenericStereoFactor<gtsam::Pose3, gtsam::Point3> >(
+            gtsam::StereoPoint2(uL, uR, v), model, gtsam::Symbol('x', x), gtsam::Symbol('l', l), K);
+        // if the landmark variable included in this factor has not yet been added
+        // to the initial variable value estimate, add it
+        if (!initial_estimate.exists(gtsam::Symbol('l', l))) {
+            gtsam::Pose3 camPose = initial_estimate.at<gtsam::Pose3>(gtsam::Symbol('x', x));
+            // transformFrom() transforms the input Point3 from the camera pose space,
+            // camPose, to the global space
+            gtsam::Point3 worldPoint = camPose.transformFrom(gtsam::Point3(X, Y, Z));
+            initial_estimate.insert(gtsam::Symbol('l', l), worldPoint);
+        }
+    }
 
-//     D& operator=(D&& d) {
-//         LOG(INFO) << "move assignment";
-//         D(std::move(d)).swap(*this);
-//         return *this;
-//     }
+    auto gfg = graph.linearize(initial_estimate);
+    // gtsam::Matrix jacobian = gfg->jacobian().first;
 
-//     D(const D& d) {
-//         //copy
-//         LOG(INFO) << "copy";
-//         ss << d.ss.str();
-//     }
+    gtsam::Ordering natural_ordering = gtsam::Ordering::Natural(*gfg);
+    gtsam::JacobianFactor jf(*gfg, natural_ordering);
+    gtsam::Matrix J = jf.jacobian().first;
 
-//     void swap(D& d) {
-//         using std::swap;
-//         swap(ss, d.ss);
-//     }
+    cv::Mat J_img(cv::Size(J.rows(), J.cols()), CV_8UC3, cv::Scalar(255, 255, 255));
+    for (int i = 0; i < J.rows(); ++i) {
+        for (int j = 0; j < J.cols(); ++j) {
+            if (std::fabs(J(i, j)) > 1e-15) {
+                // make non zero elements blue
+                J_img.at<cv::Vec3b>(i, j) = cv::Vec3b(255, 0, 0);
+            }
+        }
+    }
 
-//     std::stringstream ss;
-// };
+    // gtsam::Matrix I = jf.information();
+    // cv::Mat I_img(cv::Size(I.rows(), I.cols()), CV_8UC3, cv::Scalar(255, 255, 255));
+    // for (int i = 0; i < I.rows(); ++i) {
+    //     for (int j = 0; j < I.cols(); ++j) {
+    //         if (std::fabs(I(i, j)) > 1e-15) {
+    //             // make non zero elements blue
+    //             I_img.at<cv::Vec3b>(i, j) = cv::Vec3b(255, 0, 0);
+    //         }
+    //     }
+    // }
 
-// D throwOnCondition(bool condition) {
-//     if(condition) {
+    //resize for viz
+    cv::resize(J_img, J_img, cv::Size(480, 480), 0, 0, cv::INTER_CUBIC);
+    // cv::resize(I_img, I_img, cv::Size(480, 480), 0, 0, cv::INTER_CUBIC);
 
-//     }
-// }
+    cv::imshow("Jacobian", J_img);
+    // cv::imshow("Information", I_img);
+    cv::waitKey(0);
 
-// struct ExcpetionHook {
+}
 
-//     // template<typename T>
-//     // Exceptions& operator<<(const T& t){
-//     //     return this->add(t);
-//     // }
-
-//     ExceptionStream make() {
-//         LOG(INFO) << "here";
-//         ExceptionStream d;
-//         d << "yes hello " << 10;
-//         LOG(INFO) << "now here";
-//         return d;
-//     }
-
-//     // D make() {
-//     //     D d;
-//     //     d << "In make ";
-//     //     return d;
-//     // }
-
-// };
-
-
-// TEST(CodeConcepts, exceptionsWithStream) {
-//     ExcpetionHook e;
-//     e.make() << " bad error";
-//     LOG(INFO) << "tmp obj";
-//     // D d1(d);
-// }
 
 TEST(CodeConcepts, testModifyOptionalString) {
 
