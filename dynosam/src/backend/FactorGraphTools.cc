@@ -81,44 +81,139 @@ void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_facto
     smart_factor->add(measurement, CameraPoseSymbol(frame_id));
 }
 
+SparsityStats computeHessianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering) {
+    if(ordering) {
+        return SparsityStats(gaussian_fg->hessian(*ordering).first);
+    }
 
-size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactorGraph::iterator>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
-    associated_factors.clear();
+    return SparsityStats(gaussian_fg->hessian().first);
+}
 
-    for(auto it = graph.begin(); it != graph.end(); it++) {
-        auto factor = *it;
-        if(factor->find(query_key) != factor->end()) {
-            associated_factors.push_back(it);
+SparsityStats computeJacobianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering) {
+    //NOTE: GaussianFactorGraph::jacobian(Ordering) SHOULD be the same as calling gtsam::JacobianFactor(GaussianFactorGraph, ordering)
+    //and it is in the code when this was tested but I guess this could change, leading to consistencies with how the Jacobain factor is constructed
+    //in differnet fg_tool functions
+    if(ordering) {
+        return SparsityStats(gaussian_fg->jacobian(*ordering).first);
+    }
+
+    return SparsityStats(gaussian_fg->jacobian().first);
+}
+
+cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering& ordering, const DrawBlockJacobiansOptions& options) {
+    const gtsam::JacobianFactor jacobian_factor(*gaussian_fg, ordering);
+    const gtsam::Matrix J = jacobian_factor.jacobian().first;
+
+    //each cv::mat will be the drawing of a column block (associated with one variable) in the jacobian
+    //Each block will have dimensions determiend by dim of the variable (determiend by the key)
+    //and number of rows of the full jacobian matrix, J
+    std::vector<std::pair<gtsam::Key, cv::Mat>> column_blocks;
+
+    static const cv::Scalar White(255, 255, 255);
+    static const cv::Scalar Black(0, 0, 0);
+
+    for(gtsam::Key key : ordering) {
+        //this will have rows = J.rows(), cols = dimension of the variable
+        const gtsam::VerticalBlockMatrix::constBlock Ablock = jacobian_factor.getA(jacobian_factor.find(key));
+        const int var_dimensions = Ablock.cols();
+        CHECK_EQ(Ablock.rows(), J.rows());
+
+        //drawn image of each vertical block
+        cv::Mat b_img(cv::Size(var_dimensions, Ablock.rows()), CV_8UC3, White);
+        for (int i = 0; i < Ablock.rows(); ++i) {
+            for (int j = 0; j < var_dimensions; ++j) {
+                //only draw if non zero
+                if (std::fabs(Ablock(i, j)) > 1e-15) {
+                    const auto colour = options.colour_selector(key);
+                    b_img.at<cv::Vec3b>(i, j) =  cv::Vec3b(colour[0], colour[1], colour[2]);
+                }
+            }
+        }
+
+        column_blocks.push_back(std::make_pair(key, b_img));
+    }
+
+    CHECK(!options.desired_size.empty()); //cannot be empty
+
+    const cv::Size& desired_size = options.desired_size;
+
+    const int current_cols = J.cols();
+    const int desired_cols = desired_size.width;
+    const int desired_rows = desired_size.height;
+
+    //define a ratio which which to scale each block (viz) individually
+    //since we're going to add things like spacing we want to scale
+    //up each block so its visible but dont want to scale up the line spacing etc.
+    //the ratio ensures we get close to the final desired size of the TOTAL image
+    double ratio;
+    //want positive ratio
+    if(current_cols < desired_cols) {
+        ratio = (double)desired_cols/(double)current_cols;
+    }
+    else {
+        ratio = (double)current_cols/(double)desired_cols;
+    }
+
+    auto scale_and_draw_label = [&options, &ratio, &desired_rows](cv::Mat& current_block, gtsam::Key key) {
+        //we all each jacobiab horizintally so only need to scale the columns
+        const int scaled_cols = ratio * (int)current_block.cols;
+
+        //scale current block to the desired size with INTER_NEAREST - this keeps the pixels looking clear and visible
+        cv::resize(current_block, current_block, cv::Size(scaled_cols, desired_rows), 0, 0, cv::INTER_NEAREST);
+
+        if(options.draw_label) {
+            //draw text info
+            cv::Mat text_box(cv::Size(current_block.cols, options.text_box_height), CV_8UC3, White);
+
+            constexpr static double kFontScale = 0.5;
+            constexpr static int kFontFace = cv::FONT_HERSHEY_DUPLEX;
+            constexpr static int kThickness = 1;
+            //draw text mid way in box
+            cv::putText(text_box, options.label_formatter(key), cv::Point(text_box.cols/2, text_box.rows/2), kFontFace, kFontScale, Black, kThickness);
+            //add text box ontop of jacobian block
+            cv::vconcat(text_box, current_block, current_block);
+        }
+    }; //end scale_and_draw_label
+
+
+    if(column_blocks.size() == 1) {
+        gtsam::Key key = column_blocks.at(0).first;
+        cv::Mat current_block = column_blocks.at(0).second;
+        scale_and_draw_label(current_block, key);
+        return current_block;
+    }
+
+    //the final drawn image
+    cv::Mat concat_column_blocks;
+
+    for(size_t i = 1; i < column_blocks.size(); i++) {
+        gtsam::Key key = column_blocks.at(i).first;
+        cv::Mat current_block = column_blocks.at(i).second;
+        scale_and_draw_label(current_block, key);
+
+
+        if(i == 1) {
+            cv::Mat first_block = column_blocks.at(0).second;
+            gtsam::Key key_0 = column_blocks.at(0).first;
+            scale_and_draw_label(first_block, key_0);
+            //concat current jacobian block with other blocks
+            cv::hconcat(first_block, current_block, concat_column_blocks);
+
+        }
+        else {
+            //concat current jacobian block with other blocks
+            cv::hconcat(concat_column_blocks, current_block, concat_column_blocks);
+        }
+
+        //if not last, add vertical line
+        if(i < column_blocks.size() - 1) {
+            cv::Mat vert_line(cv::Size(2, concat_column_blocks.rows), CV_8UC3, Black);
+            //concat blocks with vertial line
+            cv::hconcat(concat_column_blocks, vert_line, concat_column_blocks);
         }
     }
-
-    return associated_factors.size();
+    return concat_column_blocks;
 }
-
-size_t getAssociatedFactors(gtsam::FactorIndices& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
-    associated_factors.clear();
-    std::vector<gtsam::NonlinearFactorGraph::iterator> associated_factor_iters;
-    size_t result = getAssociatedFactors(associated_factor_iters, graph, query_key);
-
-    for(const gtsam::NonlinearFactorGraph::iterator& iter : associated_factor_iters) {
-        //index in graph
-        associated_factors.push_back(std::distance(graph.begin(), iter));
-    }
-    return result;
-}
-
-size_t getAssociatedFactors(std::vector<gtsam::NonlinearFactor::shared_ptr>& associated_factors, gtsam::NonlinearFactorGraph& graph, gtsam::Key query_key) {
-    associated_factors.clear();
-    std::vector<gtsam::NonlinearFactorGraph::iterator> associated_factor_iters;
-    size_t result = getAssociatedFactors(associated_factor_iters, graph, query_key);
-
-    for(const gtsam::NonlinearFactorGraph::iterator& iter : associated_factor_iters) {
-        associated_factors.push_back(*iter);
-    }
-    return result;
-}
-
-
 
 } //factor_graph_tools
 } //dyno

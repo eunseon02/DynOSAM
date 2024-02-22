@@ -85,8 +85,9 @@ inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, Fram
 }
 
 std::string DynoLikeKeyFormatter(gtsam::Key);
-
 std::string DynoLikeKeyFormatterVerbose(gtsam::Key);
+SymbolChar DynoChrExtractor(gtsam::Key);
+
 
 using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
@@ -134,7 +135,7 @@ private:
 
 };
 
-
+//TODO: depricate
 class DebugInfo {
 public:
     int num_static_factors = 0; //num new static factors added
@@ -293,7 +294,7 @@ protected:
 
 };
 
-
+//TODO: depricate
 template<typename MEASUREMENT>
 class DynamicObjectTrackletManager : public DynamicObjectManager {
 

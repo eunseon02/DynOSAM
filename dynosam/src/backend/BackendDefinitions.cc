@@ -79,8 +79,26 @@ std::string DynoLikeKeyFormatter(gtsam::Key key)
   }
 }
 
-std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
+//TODO: not actually sure if this is necessary
+//in this sytem we mix Symbol and LabelledSymbol so I just check which one the correct cast is
+//and use that label, This will
+SymbolChar DynoChrExtractor(gtsam::Key key) {
    const gtsam::LabeledSymbol asLabeledSymbol(key);
+  if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
+    return asLabeledSymbol.chr();
+  }
+  const gtsam::Symbol asSymbol(key);
+  if (asLabeledSymbol.chr() > 0) {
+    return asSymbol.chr();
+  }
+  else {
+    return '\0';
+  }
+
+}
+
+std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
+  const gtsam::LabeledSymbol asLabeledSymbol(key);
   if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
     //if used as motion
     if(asLabeledSymbol.chr() == kObjectMotionSymbolChar) {
@@ -116,8 +134,6 @@ std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
     return std::to_string(key);
   }
 }
-
-
 
 
 }
