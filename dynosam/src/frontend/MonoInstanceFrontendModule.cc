@@ -325,7 +325,8 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         frame.T_world_camera_,
-        frame,
+        frame.timestamp_,
+        frame.frame_id_,
         estimated_motions,
         debug_image,
         gt_packet

@@ -68,8 +68,9 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
     publishDebugImage(frontend_output->debug_image_);
 
     if(frontend_output->gt_packet_) {
-        const auto& rgb_image = frontend_output->frame_.tracking_images_.get<ImageType::RGBMono>();
-        publishGroundTruthInfo(frontend_output->getTimestamp(), frontend_output->gt_packet_.value(), rgb_image);
+        //TODO: put tracking images back into frontend output
+        // const auto& rgb_image = frontend_output->frame_.tracking_images_.get<ImageType::RGBMono>();
+        // publishGroundTruthInfo(frontend_output->getTimestamp(), frontend_output->gt_packet_.value(), rgb_image);
     }
 
     RGBDInstanceOutputPacket::ConstPtr rgbd_output = safeCast<FrontendOutputPacketBase, RGBDInstanceOutputPacket>(frontend_output);

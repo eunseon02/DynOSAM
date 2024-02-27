@@ -25,7 +25,6 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 
@@ -54,7 +53,8 @@ public:
         const StatusLandmarkEstimates& static_landmarks,
         const StatusLandmarkEstimates& dynamic_landmarks,
         const gtsam::Pose3 T_world_camera,
-        const Frame& frame,
+        const Timestamp timestamp,
+        const FrameId frame_id,
         const MotionEstimateMap& estimated_motions,
         const ObjectPoseMap propogated_object_poses = {},
         const gtsam::Pose3Vector camera_poses = {},
@@ -67,7 +67,8 @@ public:
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         T_world_camera,
-        frame,
+        timestamp,
+        frame_id,
         debug_image,
         gt_packet),
     static_landmarks_(static_landmarks),

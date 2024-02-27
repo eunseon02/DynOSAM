@@ -261,6 +261,7 @@ if(BUILD_TESTING)
     test/test_triangulation.cc
     test/test_backend_structures.cc
     test/test_csvwriter.cc
+    test/test_rgbd_backend.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

@@ -81,6 +81,39 @@ using KeypointsCV = std::vector<KeypointCV>;
 using Motion3 = gtsam::Pose3;
 using MotionMap = gtsam::FastMap<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
+/**
+ * @brief Get demangled class name
+ *
+ * @param name
+ * @return std::string
+ */
+std::string demangle(const char* name);
+
+/**
+ * @brief Get demangled class name of type T from an instance
+ * @tparam T
+ * @param t
+ * @return std::string
+ */
+template <class T>
+std::string type_name(const T& t)
+{
+  return demangle(typeid(t).name());
+}
+
+
+/**
+ * @brief Get a demangled class name of type T from a templated type
+ *
+ * @tparam T
+ * @return std::string
+ */
+template <class T>
+constexpr std::string type_name()
+{
+  return demangle(typeid(T).name());
+}
+
 
 //! Expected label for the background in a semantic or motion mask
 constexpr static ObjectId background_label = 0u;
@@ -121,6 +154,7 @@ struct ReferenceFrameValue {
   operator const Estimate&() const { return estimate_; }
   operator const ReferenceFrame&() const { return frame_; }
 
+
 };
 
 
@@ -130,6 +164,7 @@ template<typename VALUE>
 class TrackedValueStatus {
 public:
   using Value = VALUE;
+  using This = TrackedValueStatus<Value>;
 
   //Constexpr value used for the frame_id when it is NA (not applicable)
   //this may be the case when the TrackedValueStatus object represents a time-invariant
@@ -164,6 +199,14 @@ public:
 
   ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
   const ReferenceFrameValue<Value>& referenceFrameValue() const { return value_; }
+
+  friend std::ostream &operator<<(std::ostream &os, const This& t) {
+    os << type_name<Value>() << ": " << t.value() << "\n";
+    os << "frame id: " << t.frameId() << "\n";
+    os << "tracklet id: " << t.trackletId() << "\n";
+    os << "object id: " << t.objectId() << "\n";
+    return os;
+  }
 
 
   inline bool isStatic() const {
@@ -312,6 +355,8 @@ public:
 
 };
 
+
+//TODO: really should be values or something, not estimate as these can be measurements OR values
 using StatusLandmarkEstimate = IsStatus<LandmarkStatus>::type;
 /// @brief A vector of StatusLandmarkEstimate
 using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
@@ -346,13 +391,6 @@ using ObjectPoseMap = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Po
 //This is to overcome the fact that the stdlib does not support std::optional<T&> directly
 using OptionalString = std::optional<std::reference_wrapper<std::string>>;
 
-/**
- * @brief Get demangled class name
- *
- * @param name
- * @return std::string
- */
-std::string demangle(const char* name);
 
 template<typename T>
 std::string to_string(const T& t);
@@ -371,32 +409,6 @@ inline std::string container_to_string(const Container& container) {
   return ss.str();
 }
 
-
-
-/**
- * @brief Get demangled class name of type T from an instance
- * @tparam T
- * @param t
- * @return std::string
- */
-template <class T>
-std::string type_name(const T& t)
-{
-  return demangle(typeid(t).name());
-}
-
-
-/**
- * @brief Get a demangled class name of type T from a templated type
- *
- * @tparam T
- * @return std::string
- */
-template <class T>
-constexpr std::string type_name()
-{
-  return demangle(typeid(T).name());
-}
 
 
 

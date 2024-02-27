@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -26,7 +26,6 @@
 #include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 
 namespace dyno {
@@ -35,13 +34,14 @@ struct FrontendOutputPacketBase {
 public:
     DYNO_POINTER_TYPEDEFS(FrontendOutputPacketBase)
 
-
+//TODO: put tracking images back into frontend output
 public:
     const FrontendType frontend_type_;
     const StatusKeypointMeasurements static_keypoint_measurements_;
     const StatusKeypointMeasurements dynamic_keypoint_measurements_;
     const gtsam::Pose3 T_world_camera_;
-    const Frame frame_;
+    const Timestamp timestamp_;
+    const FrameId frame_id_;
     const cv::Mat debug_image_;
     const GroundTruthInputPacket::Optional gt_packet_;
 
@@ -50,7 +50,8 @@ public:
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const gtsam::Pose3& T_world_camera,
-        const Frame& frame,
+        const Timestamp timestamp,
+        const FrameId frame_id,
         const cv::Mat& debug_image = cv::Mat(),
         const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
     )
@@ -58,16 +59,16 @@ public:
         static_keypoint_measurements_(static_keypoint_measurements),
         dynamic_keypoint_measurements_(dynamic_keypoint_measurements),
         T_world_camera_(T_world_camera),
-        frame_(frame),
+        timestamp_(timestamp),
+        frame_id_(frame_id),
         debug_image_(debug_image),
         gt_packet_(gt_packet)
     {}
 
     virtual ~FrontendOutputPacketBase() {}
 
-    inline Timestamp getTimestamp() const { return frame_.timestamp_; }
-    inline FrameId getFrameId() const { return frame_.frame_id_; }
+    inline Timestamp getTimestamp() const { return timestamp_; }
+    inline FrameId getFrameId() const { return frame_id_; }
 };
-
 
 } //dyno

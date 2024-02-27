@@ -128,109 +128,109 @@ TEST(CodeConcepts, drawInformationMatrix) {
     // initial_estimate.insert(L(2), gtsam::Point3(-1, 1, 5));
     // initial_estimate.insert(L(3), gtsam::Point3(1, -0.5, 5));
 
-    std::string calibration_loc = gtsam::findExampleDataFile("VO_calibration.txt");
-    std::string pose_loc = gtsam::findExampleDataFile("VO_camera_poses_large.txt");
-    std::string factor_loc = gtsam::findExampleDataFile("VO_stereo_factors_large.txt");
+    // std::string calibration_loc = gtsam::findExampleDataFile("VO_calibration.txt");
+    // std::string pose_loc = gtsam::findExampleDataFile("VO_camera_poses_large.txt");
+    // std::string factor_loc = gtsam::findExampleDataFile("VO_stereo_factors_large.txt");
 
-    // read camera calibration info from file
-    // focal lengths fx, fy, skew s, principal point u0, v0, baseline b
-    double fx, fy, s, u0, v0, b;
-    std::ifstream calibration_file(calibration_loc.c_str());
-    std::cout << "Reading calibration info" << std::endl;
-    calibration_file >> fx >> fy >> s >> u0 >> v0 >> b;
+    // // read camera calibration info from file
+    // // focal lengths fx, fy, skew s, principal point u0, v0, baseline b
+    // double fx, fy, s, u0, v0, b;
+    // std::ifstream calibration_file(calibration_loc.c_str());
+    // std::cout << "Reading calibration info" << std::endl;
+    // calibration_file >> fx >> fy >> s >> u0 >> v0 >> b;
 
-    // create stereo camera calibration object
-    const gtsam::Cal3_S2Stereo::shared_ptr K(new gtsam::Cal3_S2Stereo(fx, fy, s, u0, v0, b));
+    // // create stereo camera calibration object
+    // const gtsam::Cal3_S2Stereo::shared_ptr K(new gtsam::Cal3_S2Stereo(fx, fy, s, u0, v0, b));
 
-    std::ifstream pose_file(pose_loc.c_str());
-    std::cout << "Reading camera poses" << std::endl;
-    int pose_id;
-    gtsam::MatrixRowMajor m(4, 4);
-    // read camera pose parameters and use to make initial estimates of camera
-    // poses
-    while (pose_file >> pose_id) {
-        for (int i = 0; i < 16; i++) {
-            pose_file >> m.data()[i];
-        }
-        initial_estimate.insert(gtsam::Symbol('x', pose_id), gtsam::Pose3(m));
-    }
+    // std::ifstream pose_file(pose_loc.c_str());
+    // std::cout << "Reading camera poses" << std::endl;
+    // int pose_id;
+    // gtsam::MatrixRowMajor m(4, 4);
+    // // read camera pose parameters and use to make initial estimates of camera
+    // // poses
+    // while (pose_file >> pose_id) {
+    //     for (int i = 0; i < 16; i++) {
+    //         pose_file >> m.data()[i];
+    //     }
+    //     initial_estimate.insert(gtsam::Symbol('x', pose_id), gtsam::Pose3(m));
+    // }
 
-    // camera and landmark keys
-    size_t x, l;
+    // // camera and landmark keys
+    // size_t x, l;
 
-    // pixel coordinates uL, uR, v (same for left/right images due to
-    // rectification) landmark coordinates X, Y, Z in camera frame, resulting from
-    // triangulation
-    double uL, uR, v, X, Y, Z;
-    std::ifstream factor_file(factor_loc.c_str());
-    std::cout << "Reading stereo factors" << std::endl;
-    // read stereo measurement details from file and use to create and add
-    // GenericStereoFactor objects to the graph representation
-    while (factor_file >> x >> l >> uL >> uR >> v >> X >> Y >> Z) {
-        graph.emplace_shared<gtsam::GenericStereoFactor<gtsam::Pose3, gtsam::Point3> >(
-            gtsam::StereoPoint2(uL, uR, v), model, gtsam::Symbol('x', x), gtsam::Symbol('l', l), K);
-        // if the landmark variable included in this factor has not yet been added
-        // to the initial variable value estimate, add it
-        if (!initial_estimate.exists(gtsam::Symbol('l', l))) {
-            gtsam::Pose3 camPose = initial_estimate.at<gtsam::Pose3>(gtsam::Symbol('x', x));
-            // transformFrom() transforms the input Point3 from the camera pose space,
-            // camPose, to the global space
-            gtsam::Point3 worldPoint = camPose.transformFrom(gtsam::Point3(X, Y, Z));
-            initial_estimate.insert(gtsam::Symbol('l', l), worldPoint);
-        }
-    }
+    // // pixel coordinates uL, uR, v (same for left/right images due to
+    // // rectification) landmark coordinates X, Y, Z in camera frame, resulting from
+    // // triangulation
+    // double uL, uR, v, X, Y, Z;
+    // std::ifstream factor_file(factor_loc.c_str());
+    // std::cout << "Reading stereo factors" << std::endl;
+    // // read stereo measurement details from file and use to create and add
+    // // GenericStereoFactor objects to the graph representation
+    // while (factor_file >> x >> l >> uL >> uR >> v >> X >> Y >> Z) {
+    //     graph.emplace_shared<gtsam::GenericStereoFactor<gtsam::Pose3, gtsam::Point3> >(
+    //         gtsam::StereoPoint2(uL, uR, v), model, gtsam::Symbol('x', x), gtsam::Symbol('l', l), K);
+    //     // if the landmark variable included in this factor has not yet been added
+    //     // to the initial variable value estimate, add it
+    //     if (!initial_estimate.exists(gtsam::Symbol('l', l))) {
+    //         gtsam::Pose3 camPose = initial_estimate.at<gtsam::Pose3>(gtsam::Symbol('x', x));
+    //         // transformFrom() transforms the input Point3 from the camera pose space,
+    //         // camPose, to the global space
+    //         gtsam::Point3 worldPoint = camPose.transformFrom(gtsam::Point3(X, Y, Z));
+    //         initial_estimate.insert(gtsam::Symbol('l', l), worldPoint);
+    //     }
+    // }
 
-    auto gfg = graph.linearize(initial_estimate);
-    // gtsam::Matrix jacobian = gfg->jacobian().first;
+    // auto gfg = graph.linearize(initial_estimate);
+    // // gtsam::Matrix jacobian = gfg->jacobian().first;
 
-    gtsam::Ordering natural_ordering = gtsam::Ordering::Natural(*gfg);
-    gtsam::JacobianFactor jf(*gfg, natural_ordering);
-    gtsam::Matrix J = jf.jacobian().first;
+    // gtsam::Ordering natural_ordering = gtsam::Ordering::Natural(*gfg);
+    // gtsam::JacobianFactor jf(*gfg, natural_ordering);
+    // gtsam::Matrix J = jf.jacobian().first;
 
-    {
-        gtsam::Values pose_only_values;
-        pose_only_values.insert(0, gtsam::Pose3::Identity());
-        pose_only_values.insert(1, gtsam::Pose3::Identity());
-        gtsam::NonlinearFactorGraph pose_only_graph;
-        pose_only_graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(0, gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Sigma(6, 1));
-        pose_only_graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(1, gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Sigma(6, 1));
+    // {
+    //     gtsam::Values pose_only_values;
+    //     pose_only_values.insert(0, gtsam::Pose3::Identity());
+    //     pose_only_values.insert(1, gtsam::Pose3::Identity());
+    //     gtsam::NonlinearFactorGraph pose_only_graph;
+    //     pose_only_graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(0, gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Sigma(6, 1));
+    //     pose_only_graph.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(1, gtsam::Pose3::Identity(), gtsam::noiseModel::Isotropic::Sigma(6, 1));
 
 
-        gtsam::Ordering natural_ordering_pose = gtsam::Ordering::Natural(pose_only_graph);
-        auto gfg_pose = pose_only_graph.linearize(pose_only_values);
-        gtsam::JacobianFactor jf_pose(*gfg_pose, natural_ordering_pose);
+    //     gtsam::Ordering natural_ordering_pose = gtsam::Ordering::Natural(pose_only_graph);
+    //     auto gfg_pose = pose_only_graph.linearize(pose_only_values);
+    //     gtsam::JacobianFactor jf_pose(*gfg_pose, natural_ordering_pose);
 
-            // auto size = natural_ordering.size();
-            // auto size1 = jf_pose.cols() * 6;
-        //cols should be num variables * 6 as each pose has dimenstions variables
-        EXPECT_EQ(natural_ordering_pose.size() * 6,(jf_pose.getA().cols()));
+    //         // auto size = natural_ordering.size();
+    //         // auto size1 = jf_pose.cols() * 6;
+    //     //cols should be num variables * 6 as each pose has dimenstions variables
+    //     EXPECT_EQ(natural_ordering_pose.size() * 6,(jf_pose.getA().cols()));
 
-        //this just a view HORIZONTALLY, vertically it is the entire matrix
-        const gtsam::VerticalBlockMatrix::constBlock Ablock = jf_pose.getA(jf_pose.find(0));
-        //in this example there should be 2? blocks
-        // LOG(INFO) << "Num blocks " << Ablock.nBlocks();
-        LOG(INFO) << Ablock;
+    //     //this just a view HORIZONTALLY, vertically it is the entire matrix
+    //     const gtsam::VerticalBlockMatrix::constBlock Ablock = jf_pose.getA(jf_pose.find(0));
+    //     //in this example there should be 2? blocks
+    //     // LOG(INFO) << "Num blocks " << Ablock.nBlocks();
+    //     LOG(INFO) << Ablock;
 
-        for(gtsam::Key key : natural_ordering_pose) {
-        //this will have rows = J.rows(), cols = dimension of the variable
-        const gtsam::VerticalBlockMatrix::constBlock Ablock = jf_pose.getA(jf_pose.find(key));
-        const size_t var_dimensions = Ablock.cols();cv::Vec3b(255, 0, 0);
-        EXPECT_EQ(Ablock.rows(), jf_pose.rows());
+    //     for(gtsam::Key key : natural_ordering_pose) {
+    //     //this will have rows = J.rows(), cols = dimension of the variable
+    //     const gtsam::VerticalBlockMatrix::constBlock Ablock = jf_pose.getA(jf_pose.find(key));
+    //     const size_t var_dimensions = Ablock.cols();cv::Vec3b(255, 0, 0);
+    //     EXPECT_EQ(Ablock.rows(), jf_pose.rows());
 
-        LOG(INFO) << "Start Col " << Ablock.startCol() << " Start row " << Ablock.startRow() << " dims " << var_dimensions;
-        //eachs start col shoudl be dim(key) apart
-        // for (int i = 0; i < J.rows(); ++i) {
-        //     for (int j = 0; j < J.cols(); ++j) {
-        //         if (std::fabs(J(i, j)) > 1e-15) {
-        //             // make non zero elements blue
-        //             J_img.at<cv::Vec3b>(i, j) = cv::Vec3b(255, 0, 0);
-        //         }
-        //     }
-        // }
+    //     LOG(INFO) << "Start Col " << Ablock.startCol() << " Start row " << Ablock.startRow() << " dims " << var_dimensions;
+    //     //eachs start col shoudl be dim(key) apart
+    //     // for (int i = 0; i < J.rows(); ++i) {
+    //     //     for (int j = 0; j < J.cols(); ++j) {
+    //     //         if (std::fabs(J(i, j)) > 1e-15) {
+    //     //             // make non zero elements blue
+    //     //             J_img.at<cv::Vec3b>(i, j) = cv::Vec3b(255, 0, 0);
+    //     //         }
+    //     //     }
+    //     // }
 
-        }
+    //     }
 
-    }
+    // }
 
     // graph.saveGraph(dyno::getOutputFilePath("test_graph.dot"));
 
