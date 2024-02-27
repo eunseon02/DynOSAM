@@ -257,7 +257,7 @@ public:
     RGBDScenario(ScenarioBody::Ptr camera_body) : Scenario(camera_body) {}
 
 
-    RGBDInstanceOutputPacket getOutput(FrameId frame_id) const {
+    RGBDInstanceOutputPacket::Ptr getOutput(FrameId frame_id) const {
         StatusLandmarkEstimates static_landmarks, dynamic_landmarks;
         StatusKeypointMeasurements static_keypoint_measurements, dynamic_keypoint_measurements;
 
@@ -301,7 +301,7 @@ public:
             }
         }
 
-        return RGBDInstanceOutputPacket(
+        return std::make_shared<RGBDInstanceOutputPacket>(
             static_keypoint_measurements,
             dynamic_keypoint_measurements,
             static_landmarks,

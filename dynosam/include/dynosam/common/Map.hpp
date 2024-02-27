@@ -62,7 +62,6 @@ public:
 
     using ObjectNodeM = ObjectNode<Measurement>;
     using FrameNodeM = FrameNode<Measurement>;
-
     using LandmarkNodeM = LandmarkNode<Measurement>;
     // using StaticLandmarkNodeM = StaticLandmarkNode<Measurement>;
     // using DynamicLandmarkNodeM = DynamicLandmarkNode<Measurement>;

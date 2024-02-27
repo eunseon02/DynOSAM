@@ -22,6 +22,7 @@
  */
 
 #include "internal/simulator.hpp"
+#include "internal/helpers.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 
 
@@ -57,14 +58,25 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
     scenario.addObjectBody(1, object1);
 
-    for(size_t i = 0; i < 4; i++) {
+    dyno::Map3d::Ptr map = dyno::Map3d::create();
+    dyno::RGBDBackendModule backend(
+        dyno::BackendParams{},
+        dyno_testing::makeDefaultCameraPtr(),
+        map);
+
+    for(size_t i = 0; i < 6; i++) {
         auto output = scenario.getOutput(i);
 
         std::stringstream ss;
-        ss << output.T_world_camera_ << "\n";
-        ss << dyno::container_to_string(output.dynamic_landmarks_);
+        ss << output->T_world_camera_ << "\n";
+        ss << dyno::container_to_string(output->dynamic_landmarks_);
 
         LOG(INFO) << ss.str();
+        backend.spinOnce(output);
+
+        backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
+        backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
+
 
 }

@@ -43,7 +43,11 @@ public:
 
     using SpinReturn = BackendModule::SpinReturn;
 
-private:
+    void saveGraph(const std::string& file = "rgbd_graph.dot");
+    void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
+
+//TODO: for now
+public:
     //TODO: this is exactly the same as the monobackend module. functionalise!!
     SpinReturn boostrapSpin(BackendInputPacket::ConstPtr input) override;
     SpinReturn nominalSpin(BackendInputPacket::ConstPtr input) override;

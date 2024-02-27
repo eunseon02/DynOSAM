@@ -33,9 +33,10 @@ DEFINE_string(test_data_path, getTestDataPath(), "Path to data for unit tests.")
 
 int main(int argc, char** argv)
 {
-  rclcpp::init(argc, argv);
+  // rclcpp::init(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   google::InitGoogleLogging(argv[0]);
+  google::ParseCommandLineFlags(&argc, &argv, true);
   FLAGS_logtostderr = 1;
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;

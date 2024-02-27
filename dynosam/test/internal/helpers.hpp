@@ -93,4 +93,8 @@ inline Camera makeDefaultCamera() {
   return Camera(makeDefaultCameraParams());
 }
 
+inline Camera::Ptr makeDefaultCameraPtr() {
+  return std::make_shared<Camera>(makeDefaultCameraParams());
+}
+
 } //dyno_testing

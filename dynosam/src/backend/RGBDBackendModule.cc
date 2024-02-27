@@ -25,6 +25,7 @@
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/TimingStats.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
@@ -43,7 +44,7 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Camera
 {
     gtsam::ISAM2Params isam_params;
     isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
-    isam_params.relinearizeThreshold = 0.01;
+    // isam_params.relinearizeThreshold = 0.01;
 
     smoother_ = std::make_unique<gtsam::ISAM2>(isam_params);
 
@@ -124,7 +125,7 @@ RGBDBackendModule::rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input) {
 
     // gtsam::Values new_dyn_values;
     // gtsam::NonlinearFactorGraph new_dyn_factors;
-    // updateDynamicObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
+    updateDynamicObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
 
     optimize(frame_k, new_values, new_factors);
     // map_->updateEstimates(new_values_, new_factors_, frame_k);
@@ -133,8 +134,8 @@ RGBDBackendModule::rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input) {
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
-    backend_output->T_world_camera_ = map_->getPoseEstimate(frame_k).get();
-    backend_output->static_landmarks_ = map_->getFullStaticMap();
+    // backend_output->T_world_camera_ = map_->getPoseEstimate(frame_k).get();
+    // backend_output->static_landmarks_ = map_->getFullStaticMap();
     // backend_output->dynamic_landmarks_ = map_->getD
 
     debug_info_ = DebugInfo();
@@ -437,8 +438,12 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, gtsam::Values& new_values, 
     }
 
 
-    gtsam::Values estimate = smoother_->calculateBestEstimate();
+    // gtsam::Values estimate = smoother_->calculateBestEstimate();
     gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+    // gtsam::Values all_values = smoother_->
+
+    gtsam::Values all_values = map_->getValues();
+    all_values.insert_or_assign(new_values);
 
     // double error_before = graph.error(old_state);
     // double error_after = graph.error(estimate);
@@ -448,7 +453,17 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, gtsam::Values& new_values, 
     //          << '\n'
     //          << " - Error after  :" << error_after;
 
-    map_->updateEstimates(estimate, graph, frame_id_k);
+    // map_->updateEstimates(estimate, graph, frame_id_k);
+    map_->updateEstimates(all_values, graph, frame_id_k);
+}
+
+
+void RGBDBackendModule::saveGraph(const std::string& file) {
+    gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+    graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+}
+void RGBDBackendModule::saveTree(const std::string& file) {
+    smoother_->saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
 }
 
 
