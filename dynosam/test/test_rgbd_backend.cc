@@ -47,7 +47,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //TODO: how can we do 1 point but with lots of overlap (even infinity overlap?)
     dyno_testing::RGBDScenario scenario(
         camera,
-        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(4, 3)
+        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(8, 3)
     );
 
     //add one obect

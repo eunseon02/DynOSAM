@@ -235,7 +235,7 @@ private:
 
 };
 
-
+// I think this only ever means that a point can be seen by a max o
 class SimpleStaticPointsGenerator : public StaticPointGeneratorVisitor {
 
 public:

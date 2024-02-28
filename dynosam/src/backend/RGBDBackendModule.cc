@@ -424,13 +424,37 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
 
 void RGBDBackendModule::optimize(FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
     gtsam::ISAM2UpdateParams isam_update_params;
+    // isam_update_params.
+
+    //create an ordering putting motions last?
+    gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+    //for each object
+    const FrameNode3d::Ptr frame_node_k = map_->getFrame(frame_id_k);
+    for(const ObjectNode3d::Ptr& object_node : frame_node_k->objects_seen) {
+        const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(object_node->getId());
+
+        if(new_values.exists(object_motion_key_k)) {
+            constrainedKeys.insert2(object_motion_key_k, 1);
+        }
+    }
+    isam_update_params.constrainedKeys = constrainedKeys;
 
     LOG(INFO) << "Starting optimization for " << frame_id_k;
 
     gtsam::Values old_state = map_->getValues();
+    gtsam::Values all_values = old_state;
+    all_values.insert_or_assign(new_values);
 
     try {
         gtsam::ISAM2Result result = smoother_->update(new_factors, new_values, isam_update_params);
+        // smoother_->print("isam2 ", DynoLikeKeyFormatter);
+        result.print();
+        LOG(INFO) << "Num total vars: " << all_values.size() << " num new vars " << new_values.size();
+        //keys that were part of the bayes tree that is removed before conversion to a factor graph
+        LOG(INFO) << "Num marked keys: " << result.markedKeys.size();
+        LOG(INFO) << "Num total factors: " << smoother_->getFactorsUnsafe().size() << " num new factors " << new_factors.size();
+
+        // bool did_batch = result.
     }
     catch(const gtsam::ValuesKeyAlreadyExists& e) {
         new_factors.saveGraph(FLAGS_output_path + "/isam2_graph.dot", DynoLikeKeyFormatter);
@@ -445,9 +469,6 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, gtsam::Values& new_values, 
     // gtsam::Values estimate = smoother_->calculateBestEstimate();
     gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
     // gtsam::Values all_values = smoother_->
-
-    gtsam::Values all_values = map_->getValues();
-    all_values.insert_or_assign(new_values);
 
     // double error_before = graph.error(old_state);
     // double error_after = graph.error(estimate);
