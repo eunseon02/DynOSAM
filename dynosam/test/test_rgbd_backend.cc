@@ -43,7 +43,12 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
             gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.1, 0, 0))
         )
     );
-    dyno_testing::RGBDScenario scenario(camera);
+    //needs to be at least 3 overlap so we can meet requirements in graph
+    //TODO: how can we do 1 point but with lots of overlap (even infinity overlap?)
+    dyno_testing::RGBDScenario scenario(
+        camera,
+        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(4, 3)
+    );
 
     //add one obect
     const size_t num_points = 5;
@@ -53,7 +58,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
             //motion only in x
             gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))
         ),
-        std::make_unique<dyno_testing::ConstantPointsVisitor>(num_points)
+        std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(num_points)
     );
 
     scenario.addObjectBody(1, object1);
@@ -69,14 +74,17 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
         std::stringstream ss;
         ss << output->T_world_camera_ << "\n";
-        ss << dyno::container_to_string(output->dynamic_landmarks_);
+        ss << dyno::container_to_string(output->static_landmarks_);
 
         LOG(INFO) << ss.str();
         backend.spinOnce(output);
 
-        backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
-        backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
+        // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
+        // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
+
+    backend.saveGraph();
+    backend.saveTree();
 
 
 }

@@ -26,6 +26,4 @@
 
 namespace dyno_testing {
 
-TrackletId ObjectPointGeneratorVisitor::global_dynamic_tracklet{0};
-
 } //dyno_testing

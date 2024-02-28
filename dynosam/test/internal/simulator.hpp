@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 
 #include <gtsam/geometry/Pose3.h>
@@ -50,7 +51,6 @@ public:
 };
 
 
-//TODO: probably doesnt need the constructor here as the dervied classes can figure out how to initalise the pose/motion
 class ScenarioBodyVisitor : public ScenarioBodyBase {
 
 public:
@@ -92,6 +92,29 @@ protected:
 using TrackedPoint = std::pair<TrackletId, gtsam::Point3>;
 using TrackedPoints = std::vector<TrackedPoint>;
 
+struct PointsGenerator {
+    /**
+     * @brief Static function to generate a unique tracklet for any generator. If increment is true,
+     * the global tracklet id will be incremented
+     *
+     * @param increment
+     * @return TrackletId
+     */
+    static TrackletId getTracklet(bool increment = true) {
+        static TrackletId global_tracklet = 0;
+
+        auto tracklet_id = global_tracklet;
+
+        if(increment) global_tracklet++;
+        return tracklet_id;
+    }
+
+    static TrackedPoint generateNewPoint(const gtsam::Point3& mean, double sigma, int32_t seed = 42) {
+        gtsam::Point3 point = dyno::utils::perturbWithNoise(mean, sigma, seed);
+        return std::make_pair(PointsGenerator::getTracklet(true), point);
+    }
+};
+
 /**
  * @brief Base class that knows how to generate points given the ScenarioBodyVisitor for an object
  *
@@ -102,18 +125,16 @@ public:
     DYNO_POINTER_TYPEDEFS(ObjectPointGeneratorVisitor)
 
     virtual ~ObjectPointGeneratorVisitor() = default;
-
     virtual TrackedPoints getPointsWorld(const ScenarioBodyVisitor::UniquePtr& body_visitor, FrameId frame_id) const = 0;
 
-    static TrackletId getTracklet(bool increment = false) {
-        auto tracklet_id = global_dynamic_tracklet;
+};
 
-        if(increment) global_dynamic_tracklet++;
-        return tracklet_id;
-    }
+class StaticPointGeneratorVisitor {
+public:
+    DYNO_POINTER_TYPEDEFS(StaticPointGeneratorVisitor)
 
-private:
-    static TrackletId global_dynamic_tracklet;
+    virtual ~StaticPointGeneratorVisitor() = default;
+    virtual TrackedPoints getPointsWorld(FrameId frame_id) const = 0;
 };
 
 class ObjectBody : public ScenarioBody {
@@ -127,7 +148,7 @@ public:
 
     ObjectBody(ScenarioBodyVisitor::UniquePtr body_visitor, ObjectPointGeneratorVisitor::UniquePtr points_visitor) : ScenarioBody(std::move(body_visitor)), points_visitor_(std::move(points_visitor)) {}
 
-    virtual FrameId entersScenario() const { return 0.0; };
+    virtual FrameId entersScenario() const { return 0; };
     virtual FrameId leavesScenario() const { return std::numeric_limits<FrameId>::max(); };
     virtual TrackedPoints getPointsWorld(FrameId frame_id) const { return points_visitor_->getPointsWorld(body_visitor_, frame_id); };
 
@@ -165,15 +186,15 @@ private:
 
 
 //Points generator visitor
-class ConstantPointsVisitor : public ObjectPointGeneratorVisitor {
+class ConstantObjectPointsVisitor : public ObjectPointGeneratorVisitor {
 
 public:
-    using ObjectPointGeneratorVisitor::getTracklet;
 
-    ConstantPointsVisitor(size_t num_points) : num_points_(num_points) {}
-//TODO: this assumes that the points we get from the object are ALWAYS the same
-        //and ALWAYS the same. Should get the ObjectPointGeneratorVisitor to generate the tracklet IDs
-        //
+    ConstantObjectPointsVisitor(size_t num_points) : num_points_(num_points) {}
+
+    //TODO: this assumes that the points we get from the object are ALWAYS the same
+    //and ALWAYS the same order
+    //
     TrackedPoints getPointsWorld(const ScenarioBodyVisitor::UniquePtr& body_visitor, FrameId frame_id) const override {
         if(!is_init) {
             initalisePoints(body_visitor->pose(0));
@@ -196,10 +217,11 @@ private:
 
             for(size_t i = 0; i < num_points_; i++) {
                  // generate around pose0 with a normal distrubution around the translation component
-                gtsam::Point3 p(P0.x() + normal(engine), P0.y() + normal(engine),
-                          P0.z() + normal(engine));
+                // gtsam::Point3 p(P0.x() + normal(engine), P0.y() + normal(engine),
+                //           P0.z() + normal(engine));
 
-                points_world_0_.push_back(std::make_pair(getTracklet(true), p));
+                // points_world_0_.push_back(std::make_pair(PointsGenerator::getTracklet(true), p));
+                points_world_0_.push_back(PointsGenerator::generateNewPoint(P0.translation(), 1.0));
             }
 
             is_init = true;
@@ -211,6 +233,62 @@ private:
     mutable TrackedPoints points_world_0_; //points in the world frame at time 0
     mutable bool is_init {false};
 
+};
+
+
+class SimpleStaticPointsGenerator : public StaticPointGeneratorVisitor {
+
+public:
+    SimpleStaticPointsGenerator(size_t num_points_per_frame, size_t overlap)
+    : num_points_per_frame_(num_points_per_frame),
+      overlap_(overlap),
+      has_overlap_(overlap < num_points_per_frame) {}
+
+    TrackedPoints getPointsWorld(FrameId frame_id) const override {
+        //expect we always start at zero
+        if(frame_id == 0) {
+            generateNewPoints(num_points_per_frame_);
+            return points_world_0_;
+        }
+        else {
+            //must have at least this many points after the first (zeroth) frame
+            CHECK_GE(points_world_0_.size(), num_points_per_frame_);
+
+            CHECK(has_overlap_) << "not implemented";
+            int diff = (int)num_points_per_frame_ - (int)overlap_;
+            CHECK(diff > 0);
+            generateNewPoints((size_t)diff);
+
+            size_t start_i = frame_id * ((size_t)diff);
+            CHECK_GT(start_i, 0);
+
+            size_t end_i = start_i + num_points_per_frame_ - 1;
+            CHECK_LT(end_i, points_world_0_.size());
+
+            TrackedPoints points_in_window;
+            for(size_t i = start_i; i <= end_i; i++) {
+                points_in_window.push_back(points_world_0_.at(i));
+            }
+
+            return points_in_window;
+        }
+
+
+    }
+
+private:
+    void generateNewPoints(size_t num_new) const {
+        //points can be distributed over this distance
+        constexpr double point_distance_sigma = 40;
+        for(size_t i = 0; i < num_new; i++) {
+            points_world_0_.push_back(PointsGenerator::generateNewPoint(gtsam::Point3(0, 0, 0), point_distance_sigma));
+        }
+    }
+
+    const size_t num_points_per_frame_;
+    const size_t overlap_;
+    const bool has_overlap_;
+    mutable TrackedPoints points_world_0_; //all points in the world frame at time 0. This may be uppdated overtime within the getPointsWorld
 
 };
 
@@ -218,7 +296,7 @@ private:
 class Scenario {
 
 public:
-    Scenario(ScenarioBody::Ptr camera_body) : camera_body_(camera_body) {}
+    Scenario(ScenarioBody::Ptr camera_body, StaticPointGeneratorVisitor::Ptr static_points_generator) : camera_body_(camera_body), static_points_generator_(static_points_generator) {}
 
     void addObjectBody(ObjectId object_id, ObjectBody::Ptr object_body) {
         CHECK_GT(object_id, background_label);
@@ -247,6 +325,7 @@ public:
 
 protected:
     ScenarioBody::Ptr camera_body_;
+    StaticPointGeneratorVisitor::Ptr static_points_generator_;
     gtsam::FastMap<ObjectId, ObjectBody::Ptr> object_bodies_;
 
 };
@@ -254,7 +333,7 @@ protected:
 class RGBDScenario : public Scenario {
 
 public:
-    RGBDScenario(ScenarioBody::Ptr camera_body) : Scenario(camera_body) {}
+    RGBDScenario(ScenarioBody::Ptr camera_body, StaticPointGeneratorVisitor::Ptr static_points_generator) : Scenario(camera_body, static_points_generator) {}
 
 
     RGBDInstanceOutputPacket::Ptr getOutput(FrameId frame_id) const {
@@ -299,6 +378,34 @@ public:
                     dynamic_keypoint_measurements.push_back(keypoint_status);
                 }
             }
+        }
+
+        //add static points
+        const TrackedPoints static_points_world = static_points_generator_->getPointsWorld(frame_id);
+
+        //convert to status vectors
+        for(const TrackedPoint& tracked_p_world : static_points_world) {
+            auto tracklet_id = tracked_p_world.first;
+            auto p_world = tracked_p_world.second;
+            const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+
+            auto landmark_status = dyno::LandmarkStatus::StaticInLocal(
+                p_camera,
+                frame_id,
+                tracklet_id,
+                dyno::LandmarkStatus::Method::MEASURED
+            );
+            static_landmarks.push_back(landmark_status);
+
+            //the keypoint sttatus should be unused in the RGBD case but
+            //we need it to fill out the data structures
+            auto keypoint_status = dyno::KeypointStatus::Static(
+                dyno::Keypoint(),
+                frame_id,
+                tracklet_id
+            );
+            static_keypoint_measurements.push_back(keypoint_status);
+
         }
 
         return std::make_shared<RGBDInstanceOutputPacket>(

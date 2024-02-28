@@ -76,8 +76,8 @@ protected:
 
     std::unique_ptr<gtsam::ISAM2> smoother_;
 
-    gtsam::Values new_values_;
-    gtsam::NonlinearFactorGraph new_factors_;
+    // gtsam::Values new_values_;
+    // gtsam::NonlinearFactorGraph new_factors_;
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)
     //TODO: really need a rgbd and mono base class for this reason

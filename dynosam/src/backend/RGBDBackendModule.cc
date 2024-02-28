@@ -121,7 +121,7 @@ RGBDBackendModule::rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input) {
     gtsam::Values new_values;
     gtsam::NonlinearFactorGraph new_factors;
     addOdometry(T_world_cam_k_frontend, frame_k, frame_k_1, new_values, new_factors);
-    updateStaticObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors_);
+    updateStaticObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
 
     // gtsam::Values new_dyn_values;
     // gtsam::NonlinearFactorGraph new_dyn_factors;
@@ -167,7 +167,7 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
     const FrameNode3d::Ptr frame_node_k = map_->getFrame(frame_id_k);
     CHECK_NOTNULL(frame_node_k);
 
-    constexpr static size_t kMinObservations = 3u;
+    constexpr static size_t kMinObservations = 2u;
     for(const LandmarkNode3d::Ptr& lmk_node : frame_node_k->static_landmarks) {
         const gtsam::Key point_key = lmk_node->makeStaticKey();
         //check if lmk node is already in map (which should mean it is equivalently in isam)
@@ -181,7 +181,8 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
                 static_point_noise_
             );
 
-            // LOG(INFO) << "Adding new factors for static point " << DynoLikeKeyFormatter(point_key) << " at frame " << frame_id_k;
+            debug_info_.num_static_factors++;
+
         }
         else {
             //see if we have enough observations to add this lmk
@@ -206,9 +207,12 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
             const Landmark lmk_world = T_world_camera * measured;
             new_values.insert(point_key, lmk_world);
 
-            // LOG(INFO) << "Adding new value for static point " << DynoLikeKeyFormatter(point_key) << " at frame " << frame_id_k;
+            debug_info_.num_new_static_points++;
+
         }
     }
+
+    LOG(INFO) << "Num new static points: " << debug_info_.num_new_static_points << "\n" << "Num new static factors " << debug_info_.num_static_factors;
 }
 
 void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors) {

@@ -135,7 +135,7 @@ private:
 
 };
 
-//TODO: depricate
+
 class DebugInfo {
 public:
     int num_static_factors = 0; //num new static factors added
