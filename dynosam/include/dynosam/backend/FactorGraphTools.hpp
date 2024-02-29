@@ -31,8 +31,11 @@
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/linear/GaussianFactorGraph.h>
+#include <gtsam/base/treeTraversal-inst.h>
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <opencv4/opencv2/viz/types.hpp>
+
 #include <glog/logging.h>
 
 namespace dyno {
@@ -59,10 +62,6 @@ void addBetweenFactor(
 
 void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_factor, Keypoint measurement, FrameId frame_id);
 
-//TODO: should be templated on DERIVDFACTOR
-//needs to be parse by ref so that we can return iterator (not const_iterator) which allows us to remove factors if necessary
-//could do const and non const versions
-//should not try and remove factors by iterator as graph.erase(itr) will reaarrange the graph but graph.remove(index) will not
 
 template<typename GRAPH>
 size_t getAssociatedFactors(std::vector<typename GRAPH::const_iterator>& associated_factors, const GRAPH& graph, gtsam::Key query_key) {
@@ -102,6 +101,100 @@ size_t getAssociatedFactors(std::vector<typename GRAPH::sharedFactor>& associate
     return result;
 }
 
+//wrapper on the gtsam tree traversal functions to make life easier
+struct travsersal {
+
+public:
+    template<typename CLQUE>
+    using CliqueVisitor = std::function<void(const boost::shared_ptr<CLQUE>&)>;
+
+    //Do nothing
+    template<typename CLQUE>
+    inline static void NoopCliqueVisitor(const boost::shared_ptr<CLQUE>&) {}
+
+private:
+    //helper data structures
+    struct Data {};
+
+    /**
+     * @brief Definition of VISITOR_PRE struct as per gtsam::treeTraversal
+     *
+     * Simply contains a user defined function which takes a shared_ptr to the CLIQUE
+     * as an argument. Simplies the interface through which a tree can be traversed
+     *
+     * @tparam CLQUE
+     */
+    template<typename CLQUE>
+    struct NodeVisitor {
+        using Visitor = CliqueVisitor<CLQUE>;
+
+        NodeVisitor(const Visitor& visitor) : visitor_(visitor) {}
+
+        //This operator can be used for both pre and post order traversal since the templated search does
+        //not care about the (existance of) return type in the pre-vis case
+        Data operator()(
+            const boost::shared_ptr<CLQUE>& clique,
+            Data&)
+            {
+                visitor_(clique);
+                return Data{};
+            }
+
+        const Visitor visitor_;
+    };
+
+
+public:
+    /**
+     * @brief Traverses a tree and calls the user defined visitor function at every pre-visit.
+     *
+     *
+     * @tparam CLIQUE
+     * @param bayes_tree
+     * @param pre_op_visitor
+     */
+    template<typename CLIQUE>
+    static void depthFirstTraversal(
+        const gtsam::BayesTree<CLIQUE>& bayes_tree, const CliqueVisitor<CLIQUE>& post_op_visitor, const CliqueVisitor<CLIQUE>& pre_op_visitor) {
+        Data rootdata;
+        NodeVisitor<CLIQUE> post_visitor(post_op_visitor);
+        NodeVisitor<CLIQUE> pre_visitor(pre_op_visitor);
+        //TODO: see gtsam/inference/inference-inst.h where the elimate function is actually called
+        //they have both post and pre order traversal and i'm not sure which one is used...
+        //the bayes tree paper talkes about solving where a parse up from the leaves is computed and then a pass down where the optimal assignment
+        //is retrieved
+        //I believe that the pass up (which must be post-order) is also equivalent to the elimination ordering
+
+        // NOTE: not using threaded version
+        // TbbOpenMPMixedScope threadLimiter; // Limits OpenMP threads since we're mixing TBB and OpenMP
+        // treeTraversal::DepthFirstForestParallel(bayesTree, rootData, preVisitor, postVisitor);
+        gtsam::treeTraversal::DepthFirstForest(bayes_tree, rootdata, pre_visitor, post_visitor);
+    }
+
+    template<typename CLIQUE>
+    static void depthFirstTraversalEliminiationOrder(const gtsam::BayesTree<CLIQUE>& bayes_tree, const CliqueVisitor<CLIQUE>& visitor) {
+        depthFirstTraversal(bayes_tree, visitor, NoopCliqueVisitor<CLIQUE>);
+    }
+
+    ///Gets keys in elimination order by traversing the tree in post-order
+    template<typename CLIQUE>
+    static gtsam::KeySet getEliminatonOrder(const gtsam::BayesTree<CLIQUE>& bayes_tree) {
+        gtsam::KeySet keys;
+        CliqueVisitor<CLIQUE> visitor = [&keys](const boost::shared_ptr<CLIQUE>& clique) -> void {
+            auto conditional = clique->conditional();
+            //it is FACTOR::const_iterator
+            for(auto it = conditional->beginFrontals(); it != conditional->endFrontals(); it++) {
+                keys.insert(*it);
+            }
+        };
+
+        depthFirstTraversalEliminiationOrder(bayes_tree, visitor);
+
+        return keys;
+    }
+
+};
+
 
 
 
@@ -119,6 +212,7 @@ struct SparsityStats {
                     nr_zero_elements += 1;
                 }
             }
+
         }
     }
 
@@ -135,6 +229,10 @@ struct SparsityStats {
 SparsityStats computeHessianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering = {});
 SparsityStats computeJacobianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering = {});
 
+
+std::pair<SparsityStats, cv::Mat> computeRFactor(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering ordering);
+
+
 struct DrawBlockJacobiansOptions {
     cv::Size desired_size = cv::Size(480, 480);
 
@@ -147,8 +245,7 @@ struct DrawBlockJacobiansOptions {
     using ColourSelector = std::function<cv::Scalar(gtsam::Key)>;
 
     inline static cv::Scalar DefaultColourSelector(gtsam::Key) {
-        static const cv::Scalar Black(0, 0, 0);
-        return Black;
+        return cv::viz::Color::black();
     }
 
     ColourSelector colour_selector = DefaultColourSelector;
@@ -171,7 +268,7 @@ struct DrawBlockJacobiansOptions {
 
         auto dyno_sam_colour_selector = [](gtsam::Key key) {
             SymbolChar chr = DynoChrExtractor(key);
-            //but gross to use an obejct related function but this just gets us a nice colour
+            //bit gross to use an obejct related function but this just gets us a nice colour
             return ColourMap::getObjectColour((int)chr);
         };
 

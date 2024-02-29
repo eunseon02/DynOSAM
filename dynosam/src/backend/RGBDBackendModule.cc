@@ -437,6 +437,9 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, gtsam::Values& new_values, 
             constrainedKeys.insert2(object_motion_key_k, 1);
         }
     }
+
+    constrainedKeys.insert2(CameraPoseSymbol(frame_id_k), 1);
+
     isam_update_params.constrainedKeys = constrainedKeys;
 
     LOG(INFO) << "Starting optimization for " << frame_id_k;

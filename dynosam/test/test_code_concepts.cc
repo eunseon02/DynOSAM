@@ -30,6 +30,7 @@
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 
 #include <optional>
 #include <atomic>
@@ -46,12 +47,51 @@
 #include <gtsam/slam/dataset.h>
 
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
+#include <gtsam/base/treeTraversal-inst.h>
 
+#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/base/Matrix.h>
+
+
 
 #include <string>
 #include <fstream>
 #include <iostream>
+
+
+std::vector<gtsam::Point3> createPoints() {
+
+  // Create the set of ground-truth landmarks
+  std::vector<gtsam::Point3> points;
+  points.push_back(gtsam::Point3(10.0,10.0,10.0));
+  points.push_back(gtsam::Point3(-10.0,10.0,10.0));
+  points.push_back(gtsam::Point3(-10.0,-10.0,10.0));
+  points.push_back(gtsam::Point3(10.0,-10.0,10.0));
+  points.push_back(gtsam::Point3(10.0,10.0,-10.0));
+  points.push_back(gtsam::Point3(-10.0,10.0,-10.0));
+  points.push_back(gtsam::Point3(-10.0,-10.0,-10.0));
+  points.push_back(gtsam::Point3(10.0,-10.0,-10.0));
+
+  return points;
+}
+
+/* ************************************************************************* */
+std::vector<gtsam::Pose3> createPoses(
+            const gtsam::Pose3& init = gtsam::Pose3(gtsam::Rot3::Ypr(M_PI/2,0,-M_PI/2), gtsam::Point3(30, 0, 0)),
+            const gtsam::Pose3& delta = gtsam::Pose3(gtsam::Rot3::Ypr(0,-M_PI/4,0), gtsam::Point3(sin(M_PI/4)*30, 0, 30*(1-sin(M_PI/4)))),
+            int steps = 8) {
+
+  // Create the set of ground-truth poses
+  // Default values give a circular trajectory, radius 30 at pi/4 intervals, always facing the circle center
+  std::vector<gtsam::Pose3> poses;
+  int i = 1;
+  poses.push_back(init);
+  for(; i < steps; ++i) {
+    poses.push_back(poses[i-1].compose(delta));
+  }
+
+  return poses;
+}
 
 cv::Mat GetSquareImage( const cv::Mat& img, int target_width = 500 )
 {
@@ -82,6 +122,115 @@ cv::Mat GetSquareImage( const cv::Mat& img, int target_width = 500 )
 
     return square;
 }
+
+
+//previsitor
+struct Node {
+    void operator()(
+        const boost::shared_ptr<gtsam::ISAM2Clique>& clique) {
+            auto conditional = clique->conditional();
+            //it is FACTOR::const_iterator
+            for(auto it = conditional->beginFrontals(); it != conditional->endFrontals(); it++) {
+                LOG(INFO) << dyno::DynoLikeKeyFormatter(*it);
+            }
+        }
+};
+
+
+// TEST(CodeConcepts, getISAM2Ordering) {
+//     using namespace gtsam;
+//     Cal3_S2::shared_ptr K(new Cal3_S2(50.0, 50.0, 0.0, 50.0, 50.0));
+
+//   // Define the camera observation noise model, 1 pixel stddev
+//   auto measurementNoise = noiseModel::Isotropic::Sigma(2, 1.0);
+
+//   // Create the set of ground-truth landmarks
+//   std::vector<Point3> points = createPoints();
+
+//   // Create the set of ground-truth poses
+//   std::vector<Pose3> poses = createPoses();
+
+//   // Create an iSAM2 object. Unlike iSAM1, which performs periodic batch steps
+//   // to maintain proper linearization and efficient variable ordering, iSAM2
+//   // performs partial relinearization/reordering at each step. A parameter
+//   // structure is available that allows the user to set various properties, such
+//   // as the relinearization threshold and type of linear solver. For this
+//   // example, we we set the relinearization threshold small so the iSAM2 result
+//   // will approach the batch result.
+//   ISAM2Params parameters;
+//   parameters.relinearizeThreshold = 0.01;
+//   parameters.relinearizeSkip = 1;
+//   ISAM2 isam(parameters);
+
+//   // Create a Factor Graph and Values to hold the new data
+//   NonlinearFactorGraph graph;
+//   Values initialEstimate;
+
+//   // Loop over the poses, adding the observations to iSAM incrementally
+//   for (size_t i = 0; i < poses.size(); ++i) {
+//     // Add factors for each landmark observation
+//     for (size_t j = 0; j < points.size(); ++j) {
+//       PinholeCamera<Cal3_S2> camera(poses[i], *K);
+//       Point2 measurement = camera.project(points[j]);
+//       graph.emplace_shared<GenericProjectionFactor<Pose3, Point3, Cal3_S2> >(
+//           measurement, measurementNoise, Symbol('x', i), Symbol('l', j), K);
+//     }
+
+//     // Add an initial guess for the current pose
+//     // Intentionally initialize the variables off from the ground truth
+//     static Pose3 kDeltaPose(Rot3::Rodrigues(-0.1, 0.2, 0.25),
+//                             Point3(0.05, -0.10, 0.20));
+//     initialEstimate.insert(Symbol('x', i), poses[i] * kDeltaPose);
+
+//     // If this is the first iteration, add a prior on the first pose to set the
+//     // coordinate frame and a prior on the first landmark to set the scale Also,
+//     // as iSAM solves incrementally, we must wait until each is observed at
+//     // least twice before adding it to iSAM.
+//     if (i == 0) {
+//       // Add a prior on pose x0, 30cm std on x,y,z and 0.1 rad on roll,pitch,yaw
+//       static auto kPosePrior = noiseModel::Diagonal::Sigmas(
+//           (Vector(6) << Vector3::Constant(0.1), Vector3::Constant(0.3))
+//               .finished());
+//       graph.addPrior(Symbol('x', 0), poses[0], kPosePrior);
+
+//       // Add a prior on landmark l0
+//       static auto kPointPrior = noiseModel::Isotropic::Sigma(3, 0.1);
+//       graph.addPrior(Symbol('l', 0), points[0], kPointPrior);
+
+//       // Add initial guesses to all observed landmarks
+//       // Intentionally initialize the variables off from the ground truth
+//       static Point3 kDeltaPoint(-0.25, 0.20, 0.15);
+//       for (size_t j = 0; j < points.size(); ++j)
+//         initialEstimate.insert<Point3>(Symbol('l', j), points[j] + kDeltaPoint);
+
+//     } else {
+//       // Update iSAM with the new factors
+//       isam.update(graph, initialEstimate);
+//       // Each call to iSAM2 update(*) performs one iteration of the iterative
+//       // nonlinear solver. If accuracy is desired at the expense of time,
+//       // update(*) can be called additional times to perform multiple optimizer
+//       // iterations every step.
+//       isam.update();
+//       Values currentEstimate = isam.calculateEstimate();
+
+//       // Clear the factor graph and values for the next iteration
+//       graph.resize(0);
+//       initialEstimate.clear();
+//     }
+//   }
+
+//     // isam.saveGraph(dyno::getOutputFilePath("test_bayes_tree.dot"));
+
+//     std::function<void(const boost::shared_ptr<gtsam::ISAM2Clique>&)> node_func = Node();
+//     // dyno::factor_graph_tools::travsersal::depthFirstTraversalEliminiationOrder(isam, node_func);
+//     LOG(INFO) << dyno::container_to_string(dyno::factor_graph_tools::travsersal::getEliminatonOrder(isam));
+//     // Data rootdata;
+//     // Node preVisitor;
+//     // no_op postVisitor;
+//     // gtsam::treeTraversal::DepthFirstForest(isam, rootdata, preVisitor, postVisitor);
+
+// }
+
 
 TEST(CodeConcepts, drawInformationMatrix) {
     gtsam::Values initial_estimate;

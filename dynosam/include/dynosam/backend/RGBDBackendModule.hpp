@@ -71,7 +71,7 @@ public:
 
 
 
-protected:
+public:
     Map3d::Ptr map_;
 
     std::unique_ptr<gtsam::ISAM2> smoother_;

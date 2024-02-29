@@ -24,6 +24,9 @@
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 
+#include "gtsam/linear/GaussianConditional.h"
+
+#include <opencv4/opencv2/viz/types.hpp>
 #include <gtsam/slam/BetweenFactor.h>
 
 
@@ -100,6 +103,37 @@ SparsityStats computeJacobianSparsityStats(gtsam::GaussianFactorGraph::shared_pt
     return SparsityStats(gaussian_fg->jacobian().first);
 }
 
+std::pair<SparsityStats, cv::Mat> computeRFactor(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering ordering) {
+    //TODO: why do we need to specify the ordering twice?
+    gtsam::JacobianFactor jacobian_factor(*gaussian_fg, ordering);
+
+    gtsam::GaussianConditional::shared_ptr conditional;
+    gtsam::JacobianFactor::shared_ptr joint_factor;
+
+    /// Not entirely sure the difference between the joint factor we get out and the inital jacobian factor we get in
+    /// I believe the difference is in the ordering which we do NOT apply when constructing the jacobian_factor. I'm not sure this is correct.
+    std::tie(conditional, joint_factor) = jacobian_factor.eliminate(ordering);
+    CHECK(conditional);
+
+    const gtsam::VerticalBlockMatrix::constBlock R = conditional->R();
+
+    //drawn image
+    cv::Mat R_img(cv::Size(R.cols(), R.rows()), CV_8UC3, cv::viz::Color::white());
+    for (int i = 0; i < R.rows(); ++i) {
+        for (int j = 0; j < R.cols(); ++j) {
+            //only draw if non zero
+            if (std::fabs(R(i, j)) > 1e-15) {
+                R_img.at<cv::Vec3b>(i, j) =  (cv::Vec3b)cv::viz::Color::black();
+            }
+        }
+    }
+
+    cv::imshow("R", R_img);
+    cv::waitKey(0);
+
+
+}
+
 cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering& ordering, const DrawBlockJacobiansOptions& options) {
     const gtsam::JacobianFactor jacobian_factor(*gaussian_fg, ordering);
     const gtsam::Matrix J = jacobian_factor.jacobian().first;
@@ -109,8 +143,6 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
     //and number of rows of the full jacobian matrix, J
     std::vector<std::pair<gtsam::Key, cv::Mat>> column_blocks;
 
-    static const cv::Scalar White(255, 255, 255);
-    static const cv::Scalar Black(0, 0, 0);
 
     for(gtsam::Key key : ordering) {
         //this will have rows = J.rows(), cols = dimension of the variable
@@ -119,7 +151,7 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
         CHECK_EQ(Ablock.rows(), J.rows());
 
         //drawn image of each vertical block
-        cv::Mat b_img(cv::Size(var_dimensions, Ablock.rows()), CV_8UC3, White);
+        cv::Mat b_img(cv::Size(var_dimensions, Ablock.rows()), CV_8UC3, cv::viz::Color::white());
         for (int i = 0; i < Ablock.rows(); ++i) {
             for (int j = 0; j < var_dimensions; ++j) {
                 //only draw if non zero
@@ -163,13 +195,13 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
 
         if(options.draw_label) {
             //draw text info
-            cv::Mat text_box(cv::Size(current_block.cols, options.text_box_height), CV_8UC3, White);
+            cv::Mat text_box(cv::Size(current_block.cols, options.text_box_height), CV_8UC3, cv::viz::Color::white());
 
             constexpr static double kFontScale = 0.5;
             constexpr static int kFontFace = cv::FONT_HERSHEY_DUPLEX;
             constexpr static int kThickness = 1;
             //draw text mid way in box
-            cv::putText(text_box, options.label_formatter(key), cv::Point(text_box.cols/2, text_box.rows/2), kFontFace, kFontScale, Black, kThickness);
+            cv::putText(text_box, options.label_formatter(key), cv::Point(text_box.cols/2, text_box.rows/2), kFontFace, kFontScale, cv::viz::Color::black(), kThickness);
             //add text box ontop of jacobian block
             cv::vconcat(text_box, current_block, current_block);
         }
@@ -207,7 +239,7 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
 
         //if not last, add vertical line
         if(i < column_blocks.size() - 1) {
-            cv::Mat vert_line(cv::Size(2, concat_column_blocks.rows), CV_8UC3, Black);
+            cv::Mat vert_line(cv::Size(2, concat_column_blocks.rows), CV_8UC3, cv::viz::Color::black());
             //concat blocks with vertial line
             cv::hconcat(concat_column_blocks, vert_line, concat_column_blocks);
         }

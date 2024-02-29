@@ -23,6 +23,8 @@
 
 #include "internal/simulator.hpp"
 #include "internal/helpers.hpp"
+
+#include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 
 
@@ -61,7 +63,17 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(num_points)
     );
 
+    dyno_testing::ObjectBody::Ptr object2 = std::make_shared<dyno_testing::ObjectBody>(
+        std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
+            //motion only in x
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))
+        ),
+        std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(num_points)
+    );
+
     scenario.addObjectBody(1, object1);
+    scenario.addObjectBody(2, object2);
 
     dyno::Map3d::Ptr map = dyno::Map3d::create();
     dyno::RGBDBackendModule backend(
@@ -83,8 +95,18 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
 
-    backend.saveGraph();
-    backend.saveTree();
+    auto graph = backend.map_->getGraph();
+    auto estimates = backend.map_->getValues();
+
+    auto gfg = graph.linearize(estimates);
+
+    gtsam::Ordering isam2_ordering(dyno::factor_graph_tools::travsersal::getEliminatonOrder(*backend.smoother_));
+
+    //this ordering is not right. how do we get the ordering used by the bayes tree?
+    //OH DUH, the bayes tree IS the order!!! So which tree traversal algorithm do we use?
+    //Do we not start at the roots and check the frontal variables?
+    dyno::factor_graph_tools::computeRFactor(gfg, isam2_ordering);
+
 
 
 }

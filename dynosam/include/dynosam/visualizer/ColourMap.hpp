@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/viz/types.hpp>
 #include <glog/logging.h>
 
 namespace dyno {
