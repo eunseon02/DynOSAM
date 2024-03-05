@@ -211,7 +211,7 @@ cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label) {
 
 
 void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
-  constexpr static double kFontScale = 0.5;
+  constexpr static double kFontScale = 0.7;
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 2;
   // Display the label at the top of the bounding box.
@@ -220,16 +220,16 @@ void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, cons
   // Top left corner.
   const cv::Point& tlc = bounding_box.tl();
   const auto left = tlc.x;
-  const auto top = tlc.y;
+  const auto top = tlc.y - label_size.height - base_line;
   // Bottom right corner.
-  cv::Point brc = cv::Point(left + label_size.width, top + label_size.height + base_line);
+  cv::Point brc = cv::Point(left + label_size.width, top);
   // Draw white rectangle.
-  cv::rectangle(image, tlc, brc, colour);
+  // cv::rectangle(image, tlc, brc, colour, kThickness);
   // Put the label on the black rectangle.
   cv::putText(image, label, cv::Point(left, top + label_size.height), kFontFace, kFontScale, colour, kThickness);
 
-  //draw bounding box
-  cv::rectangle(image, bounding_box, colour);
+  //draw bounding box with line thickness kThickness
+  cv::rectangle(image, bounding_box, colour, kThickness);
 }
 
 

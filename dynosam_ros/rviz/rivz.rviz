@@ -21,7 +21,8 @@ Panels:
         - /Odometry (OPT)1/Shape1
         - /Dynamic Points Init1/Status1
         - /Newly Scaled Dynamic Points1
-      Splitter Ratio: 0.5
+        - /Composed object paths (opt)1
+      Splitter Ratio: 0.6119691133499146
     Tree Height: 636
   - Class: rviz_common/Selection
     Name: Selection
@@ -75,17 +76,17 @@ Visualization Manager:
         Value: /dynosam/composed_object_paths
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: Object Poses (Composed)
       Namespaces:
-        {}
+        frontend_object_positions: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep All
         Reliability Policy: Best Effort
         Value: /dynosam/composed_object_poses
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -543,7 +544,7 @@ Visualization Manager:
       Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: Composed object paths (opt)
       Namespaces:
         backend_object_path: true
       Topic:
@@ -599,25 +600,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 40.30058288574219
+      Distance: 45.672237396240234
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -9.160134315490723
-        Y: 6.039384365081787
-        Z: 31.47877311706543
+        X: -0.6360437273979187
+        Y: 9.619660377502441
+        Z: 27.983922958374023
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.6897983551025391
+      Pitch: -0.3997986316680908
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.660369873046875
+      Yaw: 4.610373020172119
     Saved: ~
 Window Geometry:
   Displays:
