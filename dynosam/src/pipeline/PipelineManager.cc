@@ -81,7 +81,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, camera, map, &display_queue_);
+            backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, &display_queue_);
         }   break;
         case FrontendType::kMono: {
             LOG(INFO) << "Making MonoInstance frontend";

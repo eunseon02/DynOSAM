@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -23,30 +23,24 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/backend/Optimizer.hpp"
 
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
 namespace dyno {
 
-struct BackendOutputPacket {
+class FixedLagOptimizer : public Optimizer {
 
-DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
+public:
+    FixedLagOptimizer();
 
-    StatusLandmarkEstimates static_landmarks_; //all frames?
-    StatusLandmarkEstimates dynamic_landmarks_; //only this frame?
-    // LandmarkMap static_lmks_;
-    // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-    // StatusLandmarkEstimates initial_dynamic_lmks_;
-    // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-    gtsam::Pose3 T_world_camera_;
-    DebugInfo debug_info_;
-    FrameId frame_id_;
-    Timestamp timestamp_;
-    ObjectPoseMap composed_object_poses;
-    // gtsam::Pose3Vector optimized_poses_;
+    gtsam::Values getBestEstimate() const override;
+    gtsam::NonlinearFactorGraph getFullGraph() const override;
 
-    // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+    bool update(FrameId frame_id_k, Timestamp timestamp, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors) override;
+
+private:
+    std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
 };
 

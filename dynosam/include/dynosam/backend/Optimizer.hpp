@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -24,30 +24,22 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-#include "dynosam/backend/BackendDefinitions.hpp"
 
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/Values.h>
 
 namespace dyno {
 
-struct BackendOutputPacket {
+class Optimizer {
 
-DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
+public:
+    Optimizer() = default;
+    virtual ~Optimizer() = default;
 
-    StatusLandmarkEstimates static_landmarks_; //all frames?
-    StatusLandmarkEstimates dynamic_landmarks_; //only this frame?
-    // LandmarkMap static_lmks_;
-    // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-    // StatusLandmarkEstimates initial_dynamic_lmks_;
-    // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-    gtsam::Pose3 T_world_camera_;
-    DebugInfo debug_info_;
-    FrameId frame_id_;
-    Timestamp timestamp_;
-    ObjectPoseMap composed_object_poses;
-    // gtsam::Pose3Vector optimized_poses_;
+    virtual gtsam::Values getBestEstimate() const = 0;
+    virtual gtsam::NonlinearFactorGraph getFullGraph() const = 0;
 
-    // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
-
+    virtual bool update(FrameId frame_id_k, Timestamp timestamp, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors) = 0;
 };
 
 } //dyno

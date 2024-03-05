@@ -155,6 +155,8 @@ template<typename INPUT, typename OUTPUT>
 class ModuleBase {
 
 public:
+    using Input = INPUT;
+    using Output = OUTPUT;
     using InputConstPtr = typename INPUT::ConstPtr; //! ConstPtr to an INPUT type
     using OutputConstPtr = typename OUTPUT::ConstPtr; //! ConstPtr to an OUTPUT type
     using This = ModuleBase<INPUT, OUTPUT>;

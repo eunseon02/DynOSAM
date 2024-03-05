@@ -11,18 +11,14 @@ Panels:
         - /Object Poses (Composed)1/Topic1
         - /Dynamic Point Cloud1/Status1
         - /Odometry1/Shape1
-        - /Odometry Path1
         - /Static Point Cloud1/Status1
         - /Static Point Cloud1/Topic1
         - /Odometry (GT)1/Shape1
-        - /Dynamic Point Cloud (Optimized)1
-        - /Dynamic Point Cloud (Optimized)1/Status1
         - /Composed object poses (opt)1/Status1
         - /Composed object poses (opt)1/Topic1
         - /Object Poses (GT)1/Topic1
         - /Object Paths (GT)1
         - /Odometry (OPT)1/Shape1
-        - /Dynamic Points Init1
         - /Dynamic Points Init1/Status1
         - /Newly Scaled Dynamic Points1
       Splitter Ratio: 0.5
@@ -44,7 +40,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Static Point Cloud (Optimized)
 Visualization Manager:
   Class: ""
   Displays:
@@ -67,7 +63,7 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Object Paths (Composed)
       Namespaces:
         {}
@@ -77,9 +73,9 @@ Visualization Manager:
         History Policy: Keep All
         Reliability Policy: Best Effort
         Value: /dynosam/composed_object_paths
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Object Poses (Composed)
       Namespaces:
         {}
@@ -89,7 +85,7 @@ Visualization Manager:
         History Policy: Keep All
         Reliability Policy: Best Effort
         Value: /dynosam/composed_object_poses
-      Value: true
+      Value: false
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -102,7 +98,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -123,7 +119,7 @@ Visualization Manager:
         Value: /dynosam/dynamic
       Use Fixed Frame: true
       Use rainbow: true
-      Value: true
+      Value: false
     - Angle Tolerance: 0.10000000149011612
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -352,7 +348,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -373,12 +369,12 @@ Visualization Manager:
         Value: /dynosam/backend/dynamic
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Composed object poses (opt)
       Namespaces:
-        {}
+        backend_object_positions: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -545,6 +541,18 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        backend_object_path: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/backend/composed_object_paths
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -591,25 +599,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 56.10725784301758
+      Distance: 40.30058288574219
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 4.4046549797058105
-        Y: 13.266343116760254
-        Z: 25.045005798339844
+        X: -9.160134315490723
+        Y: 6.039384365081787
+        Z: 31.47877311706543
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.5497984886169434
+      Pitch: -0.6897983551025391
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.600367069244385
+      Yaw: 4.660369873046875
     Saved: ~
 Window Geometry:
   Displays:

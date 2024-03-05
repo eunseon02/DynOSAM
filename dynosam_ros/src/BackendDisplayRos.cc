@@ -45,6 +45,8 @@ BackendDisplayRos::BackendDisplayRos(const DisplayParams params, rclcpp::Node::S
 
     odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_poses", 1);
+    object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_paths", 1);
+
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/backend/odom_path", 2);
 }
 
@@ -191,6 +193,22 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
 
     //     object_pose_pub_->publish(object_pose_marker_array);
     // }
+    publishObjectPositions(
+        object_pose_pub_,
+        backend_output->composed_object_poses,
+        backend_output->frame_id_,
+        backend_output->timestamp_,
+        "backend");
+
+    publishObjectPaths(
+        object_pose_path_pub_,
+        backend_output->composed_object_poses,
+        backend_output->frame_id_,
+        backend_output->timestamp_,
+        "backend",
+        60
+    );
+
 
     {
         nav_msgs::msg::Odometry odom_msg;

@@ -331,6 +331,19 @@ int ObjectNode<MEASUREMENT>::getId() const {
 }
 
 template<typename MEASUREMENT>
+StateQuery<gtsam::Pose3> ObjectNode<MEASUREMENT>::getMotionEstimate(FrameId frame_id) const {
+    const auto seen_frames = this->getSeenFrames();
+
+    auto frame_itr = seen_frames.find(frame_id);
+    if(frame_itr == seen_frames.end()) {
+        throw DynosamException("Motion estimate query failed: object " + std::to_string(getId()) + " was not seen at frame " + std::to_string(frame_id));
+    }
+
+    const auto& frame_ptr = *frame_itr;
+    return frame_ptr->getObjectMotionEstimate(this->getId());
+}
+
+template<typename MEASUREMENT>
 FrameNodePtrSet<MEASUREMENT> ObjectNode<MEASUREMENT>::getSeenFrames() const {
     FrameNodePtrSet<MEASUREMENT> seen_frames;
     for(const auto& lmks : dynamic_landmarks) {

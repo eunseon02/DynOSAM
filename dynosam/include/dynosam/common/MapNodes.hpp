@@ -332,6 +332,8 @@ public:
     //this requested frame
     LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(FrameId frame_id) const;
 
+    StateQuery<gtsam::Pose3> getMotionEstimate(FrameId frame_id) const;
+
     /// @brief A pair of Const LandmarkNodePtr's
     using LandmarkNodePair = std::pair<const LandmarkNodePtr<MEASUREMENT>, const LandmarkNodePtr<MEASUREMENT>>;
 

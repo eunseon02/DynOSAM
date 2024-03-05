@@ -27,18 +27,17 @@
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue, bool use_logger)
+BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue, bool use_logger)
     :   Base("backend"),
         base_params_(params),
-        camera_(CHECK_NOTNULL(camera)),
         display_queue_(display_queue)
 
 {
-    const auto& camera_params = camera_->getParams();
-    gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(
-        camera_params.constructGtsamCalibration<Camera::CalibrationType>());
+    // const auto& camera_params = camera_->getParams();
+    // gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(
+    //     camera_params.constructGtsamCalibration<Camera::CalibrationType>());
 
-    CHECK(gtsam_calibration_);
+    // CHECK(gtsam_calibration_);
     setFactorParams(params);
 
     //create callback to update gt_packet_map_ values so the derived classes dont need to manage this

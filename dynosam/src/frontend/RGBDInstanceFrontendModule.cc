@@ -229,6 +229,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
           << "\t- # inliers: " << result.inliers.size() << '\n'
           << "\t- # outliers: " << result.outliers.size() << '\n';
 
+    //sanity check
 
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
@@ -255,11 +256,15 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
         const TrackletId tracklet_id = f->tracklet_id_;
         const Keypoint kp = f->keypoint_;
-        // const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
         Landmark lmk_camera;
         camera_->backProject(kp, f->depth_, &lmk_camera);
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
+
+        //dont include features that have only been seen once as we havent had a chance to validate it yet
+        if(f->age_ < 1) {
+            continue;
+        }
 
 
         static_keypoint_measurements.push_back(
@@ -292,6 +297,11 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 const Feature::Ptr f = frame.at(tracklet);
                 CHECK(!f->isStatic());
                 CHECK_EQ(f->instance_label_, object_id);
+
+                //dont include features that have only been seen once as we havent had a chance to validate it yet
+                if(f->age_ < 1) {
+                    continue;
+                }
 
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;

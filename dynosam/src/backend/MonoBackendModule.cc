@@ -1015,6 +1015,8 @@ bool MonoBackendModule::safeAddConstantObjectVelocityFactor(FrameId current_fram
         CHECK(object_smoothing_noise_);
         CHECK_EQ(object_smoothing_noise_->dim(), 6u);
 
+        if(map_->exists(object_motion_key_k_1, new_values)) {
+
         factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
             prev_object_motion_key,
             curr_object_motion_key,

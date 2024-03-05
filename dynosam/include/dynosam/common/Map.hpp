@@ -134,6 +134,7 @@ public:
 
     inline const gtsam::Values& getValues() const { return values_; }
     inline const gtsam::NonlinearFactorGraph& getGraph() const { return graph_; }
+    inline const gtsam::Values& getInitialValues() const { return values_; }
 
     bool exists(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
         return (values_.exists(key) || new_values.exists(key));
@@ -178,27 +179,12 @@ private:
     //estimates
     gtsam::Values values_;
     gtsam::NonlinearFactorGraph graph_;
+    //initial estimate for each value
+    gtsam::Values initial_;
     FrameId last_estimate_update_{0};
 };
 
 
-// /**
-//  * @brief Free helper function to query the Map using a weak_ptr.
-//  *
-//  * Useful as the MapNodes carry a weak_ptr to the map.
-//  *
-//  * @tparam ValueType
-//  * @param map_ptr
-//  * @param key
-//  * @return std::optional<ValueType>
-//  */
-// template<typename ValueType, typename MEASUREMENT>
-// StateQuery<ValueType> queryWeakMap(const std::weak_ptr<Map<MEASUREMENT>> map_ptr, gtsam::Key key) {
-//     if(auto map = map_ptr.lock()) {
-//         return map->template query<ValueType>(key);
-//     }
-//     return StateQuery<ValueType>::InvalidMap();
-// }
 
 using Map3d = Map<Landmark>;
 using ObjectNode3d = Map3d::ObjectNodeM;

@@ -31,29 +31,31 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/ISAM2.h>
 
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
+
 namespace dyno {
+
+
+using RGBDBackendModuleTraits = BackendModuleTraits<RGBDInstanceOutputPacket, Landmark>;
 
 //TODO: nice to do some tempalting so that the module knows the expected input type to cast to which also knows the measurement type!!!
 //so we can use this to define the map<M> type
-class RGBDBackendModule : public BackendModule {
+class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
 public:
-    RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera, Map3d::Ptr map, ImageDisplayQueue* display_queue = nullptr);
+    using Base = BackendModuleType<RGBDBackendModuleTraits>;
+    RGBDBackendModule(const BackendParams& backend_params, Map3d::Ptr map, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
-    using SpinReturn = BackendModule::SpinReturn;
+    using SpinReturn = Base::SpinReturn;
 
     void saveGraph(const std::string& file = "rgbd_graph.dot");
     void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
 
 //TODO: for now
 public:
-    //TODO: this is exactly the same as the monobackend module. functionalise!!
-    SpinReturn boostrapSpin(BackendInputPacket::ConstPtr input) override;
-    SpinReturn nominalSpin(BackendInputPacket::ConstPtr input) override;
-
-    SpinReturn rgbdBoostrapSpin(RGBDInstanceOutputPacket::ConstPtr input);
-    SpinReturn rgbdNominalSpin(RGBDInstanceOutputPacket::ConstPtr input);
+    SpinReturn boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
+    SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
     //TODO: taken from MonoBackendModule
      //adds pose to the new values and a prior on this pose to the new_factors
@@ -67,17 +69,25 @@ public:
 
 
 
-    void optimize(FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    void optimize(FrameId frame_id_k, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors);
+
+    const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
+
+    //helper factor graph functions
+
 
 
 
 public:
-    Map3d::Ptr map_;
-
     std::unique_ptr<gtsam::ISAM2> smoother_;
+    // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
+    using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;
+    KeyTimestampMap timestamp_map_;
     // gtsam::Values new_values_;
     // gtsam::NonlinearFactorGraph new_factors_;
+
+    ObjectPoseMap composed_object_poses_;
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)
     //TODO: really need a rgbd and mono base class for this reason

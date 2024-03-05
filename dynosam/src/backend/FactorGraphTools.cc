@@ -105,7 +105,8 @@ SparsityStats computeJacobianSparsityStats(gtsam::GaussianFactorGraph::shared_pt
 
 std::pair<SparsityStats, cv::Mat> computeRFactor(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering ordering) {
     //TODO: why do we need to specify the ordering twice?
-    gtsam::JacobianFactor jacobian_factor(*gaussian_fg, ordering);
+    //I think we should probaly construct the graph with native ordeing but then elimate with provided ordering?
+    gtsam::JacobianFactor jacobian_factor(*gaussian_fg);
 
     gtsam::GaussianConditional::shared_ptr conditional;
     gtsam::JacobianFactor::shared_ptr joint_factor;

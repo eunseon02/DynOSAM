@@ -55,6 +55,14 @@ void Map<MEASUREMENT>::updateEstimates(const gtsam::Values& values, const gtsam:
     values_.insert_or_assign(values);
     graph_ = graph;
     last_estimate_update_ = frame_id;
+
+    //loop over values and add new ones to initial
+    for(const auto& [key, new_value] : values) {
+        if(!initial_.exists(key)) {
+            initial_.insert(key, new_value);
+        }
+    }
+
 }
 
 
