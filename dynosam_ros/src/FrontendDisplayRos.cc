@@ -73,7 +73,6 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
     //TODO: does frontend or backend publish tf transform?
-    publishOdometry(frontend_output->T_world_camera_, frontend_output->getTimestamp());
     publishDebugImage(frontend_output->debug_image_);
 
     if(frontend_output->gt_packet_) {
@@ -86,6 +85,7 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
         processRGBDOutputpacket(rgbd_output);
         //TODO:currently only with RGBDInstanceOutputPacket becuase camera poses is in RGBDInstanceOutputPacket but should be in base (FrontendOutputPacketBase)
         publishOdometryPath(odometry_path_pub_,rgbd_output->camera_poses_, frontend_output->getTimestamp());
+        publishOdometry(frontend_output->T_world_camera_, frontend_output->getTimestamp());
     }
 
 }
@@ -97,6 +97,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
     // publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_);
     // publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_);
 
+    // publishOdometry(rgbd_frontend_output->T_world_camera_, rgbd_frontend_output->getTimestamp());
     {
         pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
@@ -573,8 +574,15 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
 void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
     DisplayRos::publishOdometry(odometry_pub_, T_world_camera, timestamp);
     geometry_msgs::msg::TransformStamped t;
-    utils::convertWithHeader(T_world_camera, t, timestamp, params_.world_frame_id_, params_.camera_frame_id_);
+    // utils::convertWithHeader(T_world_camera, t, timestamp, params_.world_frame_id_, params_.camera_frame_id_);
     // Send the transformation
+    dyno::convert<gtsam::Pose3, geometry_msgs::msg::TransformStamped>(T_world_camera, t);
+
+    t.header.stamp = node_->now();
+    t.header.frame_id = params_.world_frame_id_;
+    t.child_frame_id = params_.camera_frame_id_;
+
+
     tf_broadcaster_->sendTransform(t);
 
 }
