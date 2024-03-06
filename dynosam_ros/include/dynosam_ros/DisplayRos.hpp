@@ -79,6 +79,11 @@ protected:
 };
 
 // Axis Aligned Bounding Box (AABB)
+void findAABBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB);
 pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(pcl::PointXYZ min_point_AABB, pcl::PointXYZ max_point_AABB);
+
+// // TODO: Not yet implemented
+// // Oriented Bounding Box
+// void findOBBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB);
 
 } //dyno

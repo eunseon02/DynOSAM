@@ -26,6 +26,9 @@
 
 #include <dynosam/visualizer/ColourMap.hpp>
 
+#include <pcl/features/moment_of_inertia_estimation.h>
+#include <pcl/filters/statistical_outlier_removal.h>
+
 namespace dyno {
 
 void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks) {
@@ -239,6 +242,23 @@ void DisplayRos::publishObjectPaths(
     pub->publish(object_path_marker_array);
 }
 
+void findAABBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB){
+    pcl::PointCloud<pcl::PointXYZ> filtered_cloud;
+
+    // statistical outlier removal
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> outlier_remover;
+    outlier_remover.setInputCloud(obj_cloud_ptr);
+    outlier_remover.setMeanK(100);
+    outlier_remover.setStddevMulThresh(1.0);
+    outlier_remover.filter(filtered_cloud);
+
+    // axis aligned bounding box
+    pcl::MomentOfInertiaEstimation<pcl::PointXYZ> bbx_extractor;
+    bbx_extractor.setInputCloud(pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(filtered_cloud));
+    bbx_extractor.compute();
+
+    bbx_extractor.getAABB(min_point_AABB, max_point_AABB);
+}
 
 pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(pcl::PointXYZ min_point_AABB, pcl::PointXYZ max_point_AABB){
     pcl::PointCloud<pcl::PointXYZ> line_list_points;

@@ -53,32 +53,7 @@ public:
 private:
     void processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output);
 
-    // void publishStaticCloud(const Landmarks& static_landmarks);
-    // void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
-
-    // /**
-    //  * @brief Draw propogated (composed) object poses as estimated with frame to frame motion from the frontend
-    //  *
-    //  * Also draw object paths (as separate topic) using LINE_LISTS.
-    //  *
-    //  * @param propogated_object_poses
-    //  * @param frame_id
-    //  */
-    // void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
-
-    // /**
-    //  * @brief Draw object motion as arrows starting from the current object pose.
-    //  *
-    //  * This viz is slightly misleading as the motion is from t-t to t and the object pose is estimated for time t.
-    //  *
-    //  * @param motion_estimates
-    //  * @param propogated_object_poses
-    //  */
-    // void publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
-
-    // // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
-    // void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     void publishDebugImage(const cv::Mat& debug_image);
 
     void publishGroundTruthInfo(Timestamp timestamp, const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
@@ -116,7 +91,6 @@ private:
 
     image_transport::Publisher gt_bounding_box_pub_;
 
-    //
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
 
