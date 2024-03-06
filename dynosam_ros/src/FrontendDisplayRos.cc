@@ -144,7 +144,9 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             txt_marker.pose.position.z = centroid.z-1.0;
             object_bbx_marker_array.markers.push_back(txt_marker);
 
-            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud);
+            pcl::PointCloud<pcl::PointXYZ> obj_cloud_xyz;
+            pcl::copyPointCloud(obj_cloud, obj_cloud_xyz);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud_xyz);
             pcl::PointXYZ min_point_AABB;
             pcl::PointXYZ max_point_AABB;
             findAABBFromCloud(obj_cloud_ptr, min_point_AABB, max_point_AABB);
