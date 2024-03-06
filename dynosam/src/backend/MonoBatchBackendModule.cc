@@ -305,10 +305,8 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         const TrackletId tracklet_id = dps.trackletId();
         const auto object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
 
-        auto estimate = std::make_pair(tracklet_id, point);
-
-        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
-        initial_dynamic_lmks.push_back(std::make_pair(status, estimate));
+        LandmarkStatus status(point, current_frame_id, tracklet_id, object_id, LandmarkStatus::Method::TRIANGULATED);
+        initial_dynamic_lmks.push_back(status);
 
     }
 
@@ -325,10 +323,9 @@ MonoBatchBackendModule::SpinReturn MonoBatchBackendModule::monoNominalSpin(Monoc
         if(frame_id % 10 != 0) {continue;}
         const auto object_id = do_tracklet_manager_.getObjectIdByTracklet(tracklet_id);
 
-        auto estimate = std::make_pair(tracklet_id, point);
 
-        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
-        all_dynamic_object_triangulation.push_back(std::make_pair(status, estimate));
+        LandmarkStatus status(point, current_frame_id,tracklet_id, object_id, LandmarkStatus::Method::TRIANGULATED);
+        all_dynamic_object_triangulation.push_back(status);
 
     }
     gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed;
@@ -625,15 +622,13 @@ void MonoBatchBackendModule::runStaticUpdate(
 
     //static points
     for(const StatusKeypointMeasurement& static_measurement : static_keypoint_measurements) {
-        const KeypointStatus& status = static_measurement.first;
-        const KeyPointType kp_type = status.kp_type_;
-        const KeypointMeasurement& measurement = static_measurement.second;
+        const KeyPointType kp_type = static_measurement.kp_type_;
 
-        const ObjectId object_id = status.label_;
+        const ObjectId object_id = static_measurement.label_;
 
         CHECK(kp_type == KeyPointType::STATIC);
-        const TrackletId tracklet_id = measurement.first;
-        const Keypoint& kp = measurement.second;
+        const TrackletId tracklet_id = static_measurement.tracklet_id_;
+        const Keypoint& kp = static_measurement.value_;
 
         const gtsam::Symbol lmk_symbol = StaticLandmarkSymbol(tracklet_id);
         //first attempt to triangulate on this point before seeing if we can turn it ino a 3d lmk
@@ -747,16 +742,13 @@ void MonoBatchBackendModule::runDynamicUpdate(
     //dynamic measurements
     std::set<TrackletId> set_tracklets;
     for(const StatusKeypointMeasurement& dynamic_measurement : dynamic_keypoint_measurements) {
+        const KeyPointType kp_type = dynamic_measurement.kp_type_;
 
-        const KeypointStatus& status = dynamic_measurement.first;
-        const KeyPointType kp_type = status.kp_type_;
-        const KeypointMeasurement& measurement = dynamic_measurement.second;
-
-        const ObjectId object_id = status.label_;
+        const ObjectId object_id = dynamic_measurement.label_;
 
         CHECK(kp_type == KeyPointType::DYNAMIC);
-        const TrackletId tracklet_id = measurement.first;
-        const Keypoint& kp = measurement.second;
+        const TrackletId tracklet_id = dynamic_measurement.tracklet_id_;
+        const Keypoint& kp = dynamic_measurement.value_;
 
         set_tracklets.insert(tracklet_id);
 
@@ -1225,10 +1217,8 @@ void MonoBatchBackendModule::checkStateForScaleEstimation(const gtsam::Values& v
                             object_id
                         );
 
-                        auto estimate = std::make_pair(tracklet_id, lmk);
-
-                        LandmarkStatus status(object_id, LandmarkStatus::Method::TRIANGULATED);
-                        new_estimates.push_back(std::make_pair(status, estimate));
+                        LandmarkStatus status(lmk, current_frame_id, tracklet_id, object_id, LandmarkStatus::Method::TRIANGULATED);
+                        new_estimates.push_back(status);
                     }
                 }
 
@@ -1483,9 +1473,8 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
 
 
                     for(const auto& lmk : lmks_ground_plane_k) {
-                        auto estimate = std::make_pair(-1, lmk);
-                        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
-                        new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                        LandmarkStatus status(lmk, frame_id_k, -1, object_id,  LandmarkStatus::Method::TRIANGULATED);
+                        new_scaled_estimates_.push_back(status);
                     }
 
                     //  for(const auto& lmk : lmks_ground_plane_k_1) {
@@ -1570,11 +1559,10 @@ void MonoBatchBackendModule::checkForScalePriors(FrameId current_frame_id, const
                         }
 
                         for(const auto& pt : cloud_icp->points) {
-                            auto estimate = std::make_pair(-1, gtsam::Point3(
-                                pt.x, pt.y, pt.z
-                            ));
-                            LandmarkStatus status(object_id + 10,  LandmarkStatus::Method::TRIANGULATED);
-                            new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                            LandmarkStatus status(gtsam::Point3(
+                                pt.x, pt.y, pt.z),
+                                frame_id_k, -1, object_id + 10,  LandmarkStatus::Method::TRIANGULATED);
+                            new_scaled_estimates_.push_back(status);
                         }
 
                         // Landmarks testing_points;
@@ -1977,10 +1965,9 @@ Landmark MonoBatchBackendModule::initaliseFromNearbyRoad(FrameId frame_id, Track
                         //since we use the tracket point for initalisation
                         gtsam::noiseModel::Isotropic::Sigma(3, FLAGS_object_points_near_ground_sigma));
 
-                auto estimate = std::make_pair(tracklet_id, lmk_on_object);
-                LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
+                LandmarkStatus status(lmk_on_object, frame_id, tracklet_id, object_id,  LandmarkStatus::Method::TRIANGULATED);
 
-                new_scaled_estimates_.push_back(std::make_pair(status, estimate));
+                new_scaled_estimates_.push_back(status);
             }
 
 

@@ -39,6 +39,7 @@
   typedef std::weak_ptr<TypeName> WeakPtr;                \
   typedef std::weak_ptr<const TypeName> WeakConstPtr;     \
   typedef std::optional<TypeName> Optional;               \
+  typedef std::optional<const TypeName> ConstOptional;     \
   typedef std::optional<const TypeName&> ConstRefOptional;  \
   typedef std::optional<TypeName&> RefOptional;
 

@@ -24,7 +24,9 @@
 
 #include "dynosam_ros/Display-Definitions.hpp"
 
+#include <dynosam/common/Exceptions.hpp>
 #include <dynosam/common/Types.hpp>
+#include <dynosam/common/Camera.hpp>
 
 #include "image_transport/image_transport.hpp"
 
@@ -49,8 +51,10 @@ public:
     using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
     using MarkerArrayPub = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
 
+    using CloudPerObject = gtsam::FastMap<ObjectId,  pcl::PointCloud<pcl::PointXYZRGB>>;
 
-    virtual void publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks);
+
+    virtual CloudPerObject publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
     virtual void publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     virtual void publishOdometryPath(PathPub::SharedPtr pub, const gtsam::Pose3Vector& poses, Timestamp latest_timestamp);
 

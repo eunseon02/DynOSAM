@@ -286,8 +286,8 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         const Frame& frame,
         const DecompositionRotationEstimates& estimated_motions,
-        const cv::Mat& debug_image,
-        const GroundTruthInputPacket::Optional& gt_packet)
+        const GroundTruthInputPacket::Optional& gt_packet,
+        const DebugImagery::Optional& debug_imagery)
 {
     StatusKeypointMeasurements static_keypoint_measurements;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
@@ -296,10 +296,8 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        KeypointStatus status = KeypointStatus::Static(frame.frame_id_);
-        KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
-
-        static_keypoint_measurements.push_back(std::make_pair(status, measurement));
+        KeypointStatus status = KeypointStatus::Static(kp, frame.frame_id_, tracklet_id);
+        static_keypoint_measurements.push_back(status);
     }
 
     StatusKeypointMeasurements dynamic_keypoint_measurements;
@@ -316,10 +314,8 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;
 
-                KeypointStatus status = KeypointStatus::Dynamic(object_id, frame.frame_id_);
-                KeypointMeasurement measurement = std::make_pair(tracklet_id, kp);
-
-                dynamic_keypoint_measurements.push_back(std::make_pair(status, measurement));
+                KeypointStatus status = KeypointStatus::Dynamic(kp, frame.frame_id_, tracklet_id, object_id);
+                dynamic_keypoint_measurements.push_back(status);
             }
         }
 
@@ -329,10 +325,12 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         frame.T_world_camera_,
-        frame,
+        frame.timestamp_,
+        frame.frame_id_,
         estimated_motions,
-        debug_image,
-        gt_packet
+        camera_,
+        gt_packet,
+        debug_imagery
     );
 }
 

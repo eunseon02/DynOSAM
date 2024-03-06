@@ -25,11 +25,15 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
 #include "dynosam/backend/MonoBatchBackendModule.hpp"
+#include "dynosam/common/Map.hpp"
 #include "dynosam/backend/MonoBackendModule.hpp"
+#include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 #include <glog/logging.h>
 
+
+DEFINE_bool(use_backend, false, "If any backend should be initalised");
 
 namespace dyno {
 
@@ -74,14 +78,19 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     {
         case FrontendType::kRGBD: {
             LOG(INFO) << "Making RGBDInstance frontend";
+
+            Map3d::Ptr map = Map3d::create();
+
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
+
+            if(FLAGS_use_backend) backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, &display_queue_);
         }   break;
         case FrontendType::kMono: {
             LOG(INFO) << "Making MonoInstance frontend";
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<MonoInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera, &display_queue_);
+            // backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera, &display_queue_);
         }   break;
 
         default: {

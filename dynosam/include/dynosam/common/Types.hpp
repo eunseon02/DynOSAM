@@ -38,7 +38,6 @@
 #include <type_traits>
 #include <string_view>
 
-
 namespace dyno
 {
 
@@ -46,6 +45,7 @@ template<typename T>
 struct traits;
 
 static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
+
 
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
@@ -81,221 +81,6 @@ using KeypointsCV = std::vector<KeypointCV>;
 using Motion3 = gtsam::Pose3;
 using MotionMap = gtsam::FastMap<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
-
-//! Expected label for the background in a semantic or motion mask
-constexpr static ObjectId background_label = 0u;
-
-enum KeyPointType {
-    STATIC,
-    DYNAMIC
-};
-
-
-enum ReferenceFrame {
-  WORLD,
-  CAMERA,
-  OBJECT
-};
-
-
-
-
-/**
- * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be background_label
- * Also includes information on how the landamrk was estimated, age etc...
- *
- */
-struct LandmarkStatus {
-
-    enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
-
-    ObjectId label_; //! Will be 0 if background
-    Method method_; //! How the landmark was constructed
-
-    LandmarkStatus(ObjectId label, Method method) : label_(label), method_(method) {}
-
-    inline static LandmarkStatus Static(Method method) {
-      return LandmarkStatus(background_label, method);
-    }
-
-    inline static LandmarkStatus Dynamic(Method method, ObjectId label) {
-      CHECK(label != background_label);
-      return LandmarkStatus(label, method);
-    }
-
-
-};
-
-/**
- * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be background_label
- *
- */
-struct KeypointStatus {
-  const KeyPointType kp_type_;
-  const ObjectId label_; //! Will be 0 if background
-  const FrameId frame_id_;
-
-  KeypointStatus(KeyPointType kp_type, ObjectId label, FrameId frame_id) : kp_type_(kp_type), label_(label), frame_id_(frame_id) {}
-
-  inline bool isStatic() const {
-    const bool is_static = (kp_type_ == KeyPointType::STATIC);
-    {
-      //sanity check
-      if(is_static) CHECK_EQ(label_, background_label) << "Keypoint Type is STATIC but label is not background label (" << background_label << ")";
-    }
-    return is_static;
-  }
-
-  inline static KeypointStatus Static(FrameId frame_id) {
-    return KeypointStatus(KeyPointType::STATIC, background_label, frame_id);
-  }
-
-  inline static KeypointStatus Dynamic(ObjectId label, FrameId frame_id) {
-    CHECK(label != background_label);
-    return KeypointStatus(KeyPointType::DYNAMIC, label, frame_id);
-  }
-};
-
-/// @brief A generic tracked estimate/measurement, associated with a trackletId
-/// @tparam M An estimate or measurement
-template<typename M>
-using GenericMTrack = std::pair<TrackletId, M>;
-
-
-/// @brief A generic tracked tracked estimate/measurement, associated with some
-/// status type
-/// @tparam MStatus An associated status obejct
-/// @tparam M An estimate or measurement
-template<typename MStatus, typename M>
-using GenericStatusMEstimate = std::pair<MStatus, GenericMTrack<M>>;
-
-/// @brief A vector of GenericStatusMEstimate, indicating tracked estimates/measurements
-/// and associated status types
-/// @tparam MStatus An associated status obejct
-/// @tparam M An estimate or measurement
-template<typename MStatus, typename M>
-using GenericStatusMEstimates = std::vector<GenericStatusMEstimate<MStatus, M>>;
-
-/// @brief A pair relating a tracklet ID with an estiamted landmark
-using LandmarkEstimate = GenericMTrack<Landmark>;
-/// @brief A pair relating a Landmark estimate (TrackletId + Landmark) with a status - inidicating type and the object label
-using StatusLandmarkEstimate = GenericStatusMEstimate<LandmarkStatus, Landmark>;
-/// @brief A vector of StatusLandmarkEstimate
-using StatusLandmarkEstimates = GenericStatusMEstimates<LandmarkStatus, Landmark>;
-
-
-
-/// @brief A pair relating a tracklet ID with an observed keypoint
-using KeypointMeasurement = GenericMTrack<Keypoint>;
-/// @brief A pair relating a Keypoint measurement (TrackletId + Keypoint) with a status - inidicating the keypoint type and the object label
-using StatusKeypointMeasurement = GenericStatusMEstimate<KeypointStatus, Keypoint>;
-/// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = GenericStatusMEstimates<KeypointStatus, Keypoint>;
-
-template<typename M>
-inline GenericMTrack<M> makeTrack(TrackletId tracklet_id, const M& m) {
-  return std::pair(tracklet_id, m);
-}
-
-template<typename MStatus, typename M>
-inline GenericStatusMEstimate<MStatus, M> makeStatusEstimate(const MStatus& status, TrackletId tracklet_id, const M& m) {
-  return std::make_pair(status, makeTrack(tracklet_id, m));
-}
-
-template<typename MStatus, typename M>
-inline GenericStatusMEstimates<MStatus, M>& appendStatusEstimate(GenericStatusMEstimates<MStatus, M>& estimates, const MStatus& status, TrackletId tracklet_id, const M& m) {
-  estimates.push_back(makeStatusEstimate(status, tracklet_id, m));
-  return estimates;
-}
-
-
-template<typename MStatus, typename M>
-inline MStatus retrieveStatus(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  return status_estimate.first;
-}
-
-template<typename MStatus, typename M>
-inline TrackletId retrieveTrackletId(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  //get the GenericMTrack<M> with status_estimate.first
-  //get the tracklet with .first;
-  return status_estimate.second.first;
-}
-
-template<typename MStatus, typename M>
-inline M retrieveEstimate(const GenericStatusMEstimate<MStatus, M>& status_estimate) {
-  //get the GenericMTrack<M> with status_estimate.first
-  //get the measurement/estimate with .second;
-  return status_estimate.second.second;
-}
-
-// /**
-//  * @brief Reference wrapper for a type T with operating casting
-//  *
-//  * @tparam T
-//  */
-// template<typename T>
-// struct Ref {
-//   using Type = T;
-
-//   Type& value;
-//   operator Type&() { return value; }
-//   operator const Type&() const { return value; }
-// };
-
-/**
- * @brief Estimate with a reference frame and operator casting
- *
- * If the estimate E should be const, template on const E
- * If estimate E should be a reference, can template on E&
- *
- * @tparam E
- */
-template<typename E>
-struct ReferenceFrameEstimate {
-  using Estimate = E;
-
-  using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
-
-  Estimate estimate_;
-  const ReferenceFrame frame_;
-
-  ReferenceFrameEstimate() {}
-  ReferenceFrameEstimate(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
-
-  operator Estimate&() { return estimate_; }
-  operator const Estimate&() const { return estimate_; }
-  operator const ReferenceFrame&() const { return frame_; }
-
-};
-
-/**
- * @brief Map of key to an estimate containting a reference frame
- *
- * @tparam Key
- * @tparam Estimate
- */
-template<typename Key, typename Estimate>
-using EstimateMap = gtsam::FastMap<Key, ReferenceFrameEstimate<Estimate>>;
-
-/// @brief Map of object ids to ReferenceFrameEstimate's of motions
-using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
-
-/// @brief Map of object poses per frame per object
-using ObjectPoseMap = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>>;
-
-
-
-
-//Optional string that can be modified directly (similar to old-stype boost::optional)
-//to access the mutable reference the internal string must be accessed with get()
-// e.g. optional->get() = "updated string value";
-//This is to overcome the fact that the stdlib does not support std::optional<T&> directly
-using OptionalString = std::optional<std::reference_wrapper<std::string>>;
-
 /**
  * @brief Get demangled class name
  *
@@ -303,25 +88,6 @@ using OptionalString = std::optional<std::reference_wrapper<std::string>>;
  * @return std::string
  */
 std::string demangle(const char* name);
-
-template<typename T>
-std::string to_string(const T& t);
-
-
-template<typename Input, typename Output>
-bool convert(const Input&, Output&);
-
-
-template<class Container>
-inline std::string container_to_string(const Container& container) {
-  std::stringstream ss;
-  for(const auto& c : container) {
-    ss << c << " ";
-  }
-  return ss.str();
-}
-
-
 
 /**
  * @brief Get demangled class name of type T from an instance
@@ -347,6 +113,302 @@ constexpr std::string type_name()
 {
   return demangle(typeid(T).name());
 }
+
+
+//! Expected label for the background in a semantic or motion mask
+constexpr static ObjectId background_label = 0u;
+
+enum KeyPointType {
+    STATIC,
+    DYNAMIC
+};
+
+
+enum class ReferenceFrame {
+  GLOBAL,
+  LOCAL,
+  OBJECT
+};
+
+/**
+ * @brief Estimate with a reference frame and operator casting
+ *
+ * If the estimate E should be const, template on const E
+ * If estimate E should be a reference, can template on E&
+ *
+ * @tparam E
+ */
+template<typename E>
+struct ReferenceFrameValue {
+  using Estimate = E;
+
+  using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
+
+  Estimate estimate_;
+  const ReferenceFrame frame_;
+
+  ReferenceFrameValue() {}
+  ReferenceFrameValue(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
+
+  operator Estimate&() { return estimate_; }
+  operator const Estimate&() const { return estimate_; }
+  operator const ReferenceFrame&() const { return frame_; }
+
+
+};
+
+
+
+//TODO: should make variables private
+template<typename VALUE>
+class TrackedValueStatus {
+public:
+  using Value = VALUE;
+  using This = TrackedValueStatus<Value>;
+
+  //Constexpr value used for the frame_id when it is NA (not applicable)
+  //this may be the case when the TrackedValueStatus object represents a time-invariant
+  //value (e.g a static point) and the value of the frame_id is therefore meaingless
+  //NOTE:this is possibly dangerous if we are not careful with casting (e.g. int to FrameId) since
+  //the overflow coulld land us at a meaningless frame
+  static constexpr auto MeaninglessFrame = std::numeric_limits<FrameId>::max();
+
+  //not we will have implicit casting of all other frame_ids to int here which could be dangerous
+  TrackedValueStatus(
+    const Value& value,
+    FrameId frame_id,
+    TrackletId tracklet_id,
+    ObjectId label,
+    ReferenceFrame reference_frame)
+    : value_(value, reference_frame),
+      frame_id_(frame_id),
+      tracklet_id_(tracklet_id),
+      label_(label) {}
+
+  virtual ~TrackedValueStatus() = default;
+
+  const Value& value() const { return value_; }
+  Value& value() { return value_; }
+
+  TrackletId trackletId() const { return tracklet_id_; }
+  ObjectId objectId() const { return label_; }
+  FrameId frameId() const { return frame_id_; }
+
+  const ReferenceFrame& referenceFrame() const { return value_; }
+  ReferenceFrame& referenceFrame() { return value_; }
+
+  ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
+  const ReferenceFrameValue<Value>& referenceFrameValue() const { return value_; }
+
+  friend std::ostream &operator<<(std::ostream &os, const This& t) {
+    os << type_name<Value>() << ": " << t.value() << "\n";
+    os << "frame id: " << t.frameId() << "\n";
+    os << "tracklet id: " << t.trackletId() << "\n";
+    os << "object id: " << t.objectId() << "\n";
+    return os;
+  }
+
+
+  inline bool isStatic() const {
+    return label_ == background_label;
+  }
+
+  /**
+   * @brief Returns true if frame_id is equal to MeaninglessFrame (e.g. std::numeric_limits<FrameId>::quiet_NaN)
+   * and should indicatate that the value represented by this TrackedValueStatus is time-invariant, e.g. for a static point
+   * which does not change overtime.
+   * @return true
+   * @return false
+   */
+  inline bool isTimeInvariant() const {
+    return frame_id_ == MeaninglessFrame;
+  }
+
+protected:
+  ReferenceFrameValue<Value> value_;
+  FrameId frame_id_;
+  TrackletId tracklet_id_;
+  ObjectId label_; //! Will be 0 if background
+
+};
+
+/// @brief Check if derived DERIVEDSTATUS us in factor derived from Status<Value>
+/// @tparam DERIVEDSTATUS derived type
+/// @tparam VALUE expected value to templated base Status on
+template<typename DERIVEDSTATUS, typename VALUE>
+inline constexpr bool IsDerivedTrackedValueStatus = std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
+
+
+/**
+ * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
+ *
+ * Label may be background at which point the KeyPointType should be background_label
+ * Also includes information on how the landamrk was estimated, age etc...
+ *
+ */
+struct LandmarkStatus : public TrackedValueStatus<Landmark> {
+    using Base = TrackedValueStatus<Landmark>;
+    using Base::Value;
+    enum class Method { MEASURED, TRIANGULATED, OPTIMIZED };
+    Method method_;
+
+    /**
+     * @brief Construct a new Landmark Status object
+     *
+     * @param lmk
+     * @param frame_id
+     * @param tracklet_id
+     * @param label
+     * @param method
+     */
+    LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, ReferenceFrame reference_frame, Method method)
+    : Base(lmk, frame_id, tracklet_id, label, reference_frame), method_(method) {}
+
+    inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ReferenceFrame reference_frame, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, reference_frame, method);
+    }
+
+    inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, ReferenceFrame reference_frame, Method method) {
+      CHECK(label != background_label);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, reference_frame, method);
+    }
+
+    inline static LandmarkStatus StaticInLocal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, ReferenceFrame::LOCAL, method);
+    }
+
+    inline static LandmarkStatus DynamicInLocal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
+      CHECK(label != background_label);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, ReferenceFrame::LOCAL, method);
+    }
+
+    inline static LandmarkStatus StaticInGlobal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, Method method) {
+      return LandmarkStatus(lmk, frame_id, tracklet_id, background_label, ReferenceFrame::GLOBAL, method);
+    }
+
+    inline static LandmarkStatus DynamicInGLobal(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id, ObjectId label, Method method) {
+      CHECK(label != background_label);
+      return LandmarkStatus(lmk, frame_id, tracklet_id, label, ReferenceFrame::GLOBAL, method);
+    }
+
+
+};
+
+/**
+ * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
+ *
+ * Label may be background at which point the KeyPointType should be background_label
+ *
+ */
+struct KeypointStatus : public TrackedValueStatus<Keypoint> {
+  using Base = TrackedValueStatus<Keypoint>;
+  using Base::Value;
+  KeyPointType kp_type_;
+
+  /**
+   * @brief Construct a new Keypoint Status object
+   *
+   * Since the object is Keypoint, the reference frame is set to be in camera in the base class
+   *
+   * @param kp
+   * @param frame_id
+   * @param tracklet_id
+   * @param label
+   * @param kp_type
+   */
+  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label, KeyPointType kp_type)
+  : Base(kp, frame_id, tracklet_id, label, ReferenceFrame::LOCAL), kp_type_(kp_type) {}
+
+  inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id) {
+    return KeypointStatus(kp, frame_id, background_label, tracklet_id, KeyPointType::STATIC);
+  }
+
+  inline static KeypointStatus Dynamic(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label) {
+    CHECK(label != background_label);
+    return KeypointStatus(kp, frame_id, tracklet_id, label, KeyPointType::DYNAMIC);
+  }
+};
+
+
+template<class DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
+struct IsStatus {
+  static_assert(IsDerivedTrackedValueStatus<DERIVEDSTATUS, VALUE>, "DERIVEDSTATUS does not derive from Status<Value>");
+  using type = DERIVEDSTATUS;
+  using value = VALUE;
+};
+
+template<typename DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
+class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
+public:
+
+  //check if the DERIVEDSTATUS meets requirements
+  //and alias to the value type of the status
+  using Value = typename IsStatus<DERIVEDSTATUS, VALUE>::value;
+
+  using Base = std::vector<DERIVEDSTATUS>;
+  using Base::Base;
+
+  /** Conversion to a standard STL container */
+  operator std::vector<DERIVEDSTATUS>() const {
+    return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
+  }
+
+};
+
+
+//TODO: really should be values or something, not estimate as these can be measurements OR values
+using StatusLandmarkEstimate = IsStatus<LandmarkStatus>::type;
+/// @brief A vector of StatusLandmarkEstimate
+using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
+
+
+using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
+/// @brief A vector of StatusKeypointMeasurements
+using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
+
+
+/**
+ * @brief Map of key to an estimate containting a reference frame
+ *
+ * @tparam Key
+ * @tparam Estimate
+ */
+template<typename Key, typename Estimate>
+using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
+
+/// @brief Map of object ids to ReferenceFrameValue's of motions
+using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
+
+/// @brief Map of object poses per frame per object
+using ObjectPoseMap = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>>;
+
+
+
+
+//Optional string that can be modified directly (similar to old-stype boost::optional)
+//to access the mutable reference the internal string must be accessed with get()
+// e.g. optional->get() = "updated string value";
+//This is to overcome the fact that the stdlib does not support std::optional<T&> directly
+using OptionalString = std::optional<std::reference_wrapper<std::string>>;
+
+
+template<typename T>
+std::string to_string(const T& t);
+
+
+template<typename Input, typename Output>
+bool convert(const Input&, Output&);
+
+
+template<class Container>
+inline std::string container_to_string(const Container& container) {
+  std::stringstream ss;
+  for(const auto& c : container) {
+    ss << c << " ";
+  }
+  return ss.str();
+}
+
 
 
 

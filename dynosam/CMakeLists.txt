@@ -98,10 +98,12 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendModule.cc
   src/backend/BackendParams.cc
   src/backend/FactorGraphTools.cc
-  src/backend/MonoBackendModule.cc
-  src/backend/MonoBatchBackendModule.cc
+  #src/backend/MonoBackendModule.cc
+  #src/backend/MonoBatchBackendModule.cc
   src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
+  src/backend/RGBDBackendModule.cc
+  src/backend/FixedLagOptimizer.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
@@ -252,6 +254,7 @@ if(BUILD_TESTING)
     test/test_camera.cc
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
+    test/internal/simulator.cc
     test/test_tools.cc
     test/test_map.cc
     test/test_pipelines.cc
@@ -259,6 +262,7 @@ if(BUILD_TESTING)
     test/test_triangulation.cc
     test/test_backend_structures.cc
     test/test_csvwriter.cc
+    test/test_rgbd_backend.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

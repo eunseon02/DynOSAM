@@ -134,7 +134,7 @@ protected:
     const FrontendParams base_params_;
     ImageDisplayQueue* display_queue_;
 
-    GroundTruthPacketMap gt_packet_map_;
+    GroundTruthPacketMap gt_packet_map_; //! Updated in the frontend module base via InputCallback (see FrontendModule constructor)
     ObjectPoseMap object_poses_; //! Keeps a track of the current object locations by propogating the motions. Really just (viz)
     gtsam::Pose3Vector camera_poses_; //! Keeps track of current camera trajectory. Really just for (viz) and drawn everytime
 

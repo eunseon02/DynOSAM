@@ -47,7 +47,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 
     if(FLAGS_use_frontend_logger) {
-        logger_ = std::make_unique<FrontendLogger>();
+        logger_ = std::make_unique<RGBDFrontendLogger>();
     }
 }
 
@@ -58,7 +58,6 @@ RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& im
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
-    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
 
     ImageContainer::Ptr image_container = input->image_container_;
 
@@ -94,7 +93,6 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
-    if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
     ImageContainer::Ptr image_container = input->image_container_;
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
@@ -164,14 +162,21 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
     }
 
-    cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame, *frame);
-    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
+    DebugImagery debug_imagery;
+    debug_imagery.tracking_image = tracker_->computeImageTracks(*previous_frame, *frame);
+    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
+
+    debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
+    //use the tracking images from the frame NOT the input tracking images since the feature tracking
+    //will do some modifications on the images (particularily the mask during mask propogation)
+    debug_imagery.input_images = frame->tracking_images_;
 
 
-    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
+
+    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, input->optional_gt_, debug_imagery);
 
     if(logger_) {
-        logger_->logObjectPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
+        logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
         //object_poses_ are in frontend module
         logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
     }
@@ -190,7 +195,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
         result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
     }
 
-    VLOG(5) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
+    VLOG(15) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
           << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
           << "- Tracking Status: "
           << to_string(result.status) << '\n'
@@ -223,7 +228,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
         result = object_motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
     }
 
-    VLOG(5) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
+    VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
           << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
           << "- Tracking Status: "
           << to_string(result.status) << '\n'
@@ -231,11 +236,12 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
           << "\t- # inliers: " << result.inliers.size() << '\n'
           << "\t- # outliers: " << result.outliers.size() << '\n';
 
+    //sanity check
 
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
 
-        ReferenceFrameEstimate<Motion3> estimate(result.best_pose, ReferenceFrame::WORLD);
+        ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
         motion_estimates.insert({object_id, estimate});
         return true;
     }
@@ -249,30 +255,40 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame,
     const MotionEstimateMap& estimated_motions,
     const gtsam::Pose3& T_world_camera,
-    const cv::Mat& debug_image,
-    const GroundTruthInputPacket::Optional& gt_packet)
+    const GroundTruthInputPacket::Optional& gt_packet,
+    const DebugImagery::Optional& debug_imagery)
 {
     StatusKeypointMeasurements static_keypoint_measurements;
     StatusLandmarkEstimates static_landmarks;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
         const TrackletId tracklet_id = f->tracklet_id_;
         const Keypoint kp = f->keypoint_;
-        const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
+        Landmark lmk_camera;
+        camera_->backProject(kp, f->depth_, &lmk_camera);
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
-        appendStatusEstimate(
-            static_keypoint_measurements,
-            KeypointStatus::Static(frame.frame_id_), //status
-            tracklet_id, //tracklet id
-            kp //measurement
+        //dont include features that have only been seen once as we havent had a chance to validate it yet
+        if(f->age_ < 1) {
+            continue;
+        }
+
+
+        static_keypoint_measurements.push_back(
+            KeypointStatus::Static(
+                kp,
+                frame.frame_id_,
+                tracklet_id
+            )
         );
 
-         appendStatusEstimate(
-            static_landmarks,
-            LandmarkStatus::Static(LandmarkStatus::Method::MEASURED), //status
-            tracklet_id, //tracklet id
-            lmk_camera //measurement
+        static_landmarks.push_back(
+            LandmarkStatus::StaticInLocal(
+                lmk_camera,
+                frame.frame_id_,
+                tracklet_id,
+                LandmarkStatus::Method::MEASURED
+            )
         );
     }
 
@@ -289,22 +305,33 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
                 CHECK(!f->isStatic());
                 CHECK_EQ(f->instance_label_, object_id);
 
+                //dont include features that have only been seen once as we havent had a chance to validate it yet
+                if(f->age_ < 1) {
+                    continue;
+                }
+
                 const TrackletId tracklet_id = f->tracklet_id_;
                 const Keypoint kp = f->keypoint_;
-                const Landmark lmk_camera = frame.backProjectToCamera(tracklet_id);
+                Landmark lmk_camera;
+                camera_->backProject(kp, f->depth_, &lmk_camera);
 
-                appendStatusEstimate(
-                    dynamic_keypoint_measurements,
-                    KeypointStatus::Dynamic(object_id, frame.frame_id_), //status
-                    tracklet_id, //tracklet id
-                    kp //measurement
+                dynamic_keypoint_measurements.push_back(
+                    KeypointStatus::Dynamic(
+                        kp,
+                        frame.frame_id_,
+                        tracklet_id,
+                        object_id
+                    )
                 );
 
-                appendStatusEstimate(
-                    dynamic_landmarks,
-                    LandmarkStatus::Dynamic(LandmarkStatus::Method::MEASURED, object_id), //status
-                    tracklet_id, //tracklet id
-                    lmk_camera //measurement
+                dynamic_landmarks.push_back(
+                    LandmarkStatus::DynamicInLocal(
+                        lmk_camera,
+                        frame.frame_id_,
+                        tracklet_id,
+                        object_id,
+                        LandmarkStatus::Method::MEASURED
+                    )
                 );
             }
         }
@@ -320,12 +347,14 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         static_landmarks,
         dynamic_landmarks,
         T_world_camera,
-        frame,
+        frame.timestamp_,
+        frame.frame_id_,
         estimated_motions,
         object_poses_,
         camera_poses_,
-        debug_image,
-        gt_packet
+        camera_,
+        gt_packet,
+        debug_imagery
     );
 }
 

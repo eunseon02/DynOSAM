@@ -252,11 +252,9 @@ MonoBackendModule::SpinReturn MonoBackendModule::monoNominalSpin(MonocularInstan
                 if(state_.exists(dynamic_point_symbol)) {
                     const Landmark lmk = state_.at<Landmark>(dynamic_point_symbol);
                     // const Landmark lmk = new_values_.at<Landmark>(dynamic_point_symbol);
-                    auto lmk_estimate = std::make_pair(tracklet_id, lmk);
 
-                    LandmarkStatus status(object_id,  LandmarkStatus::Method::OPTIMIZED);
-
-                    all_dynamic_object_triangulation.push_back(std::make_pair(status, lmk_estimate));
+                    LandmarkStatus status(lmk, frame_id, tracklet_id, object_id, LandmarkStatus::Method::OPTIMIZED);
+                    all_dynamic_object_triangulation.push_back(status);
                 }
 
             }
@@ -318,15 +316,12 @@ void MonoBackendModule::updateSmartStaticObservations(
     std::set<TrackletId> only_new_smart_factors;
 
     for(const StatusKeypointMeasurement& static_measurement : measurements) {
-        const KeypointStatus& status = static_measurement.first;
-        const KeyPointType kp_type = status.kp_type_;
-        const KeypointMeasurement& measurement = static_measurement.second;
+        const KeyPointType kp_type = static_measurement.kp_type_;
 
-        const ObjectId object_id = status.label_;
-
+        const ObjectId object_id = static_measurement.label_;
         CHECK(kp_type == KeyPointType::STATIC);
-        const TrackletId tracklet_id = measurement.first;
-        const Keypoint& kp = measurement.second;
+        const TrackletId tracklet_id = static_measurement.tracklet_id_;
+        const Keypoint& kp = static_measurement.value_;
 
         auto it = tracklet_to_status_map_.find(tracklet_id);
         if(it == tracklet_to_status_map_.end()) {
@@ -506,15 +501,13 @@ bool MonoBackendModule::convertSmartToProjectionFactor(const TrackletId smart_fa
 
 void MonoBackendModule::addStaticProjectionMeasurements(const FrameId frame_id, const StatusKeypointMeasurements& new_projection_measurements, gtsam::NonlinearFactorGraph& new_projection_factors) {
     for(const StatusKeypointMeasurement& static_measurement : new_projection_measurements) {
-        const KeypointStatus& status = static_measurement.first;
-        const KeyPointType kp_type = status.kp_type_;
-        const KeypointMeasurement& measurement = static_measurement.second;
+        const KeyPointType kp_type = static_measurement.kp_type_;
 
-        const ObjectId object_id = status.label_;
+        const ObjectId object_id = static_measurement.label_;
 
         CHECK(kp_type == KeyPointType::STATIC);
-        const TrackletId tracklet_id = measurement.first;
-        const Keypoint& kp = measurement.second;
+        const TrackletId tracklet_id = static_measurement.tracklet_id_;
+        const Keypoint& kp = static_measurement.value_;
 
         CHECK(!smart_factor_map_.exists(tracklet_id)) << "Measurement with tracklet id " << tracklet_id
                     << " has been marked as a projection factor but is in the smart_static_factor_map";
@@ -641,15 +634,13 @@ void MonoBackendModule::updateDynamicObjectTrackletMap(MonocularInstanceOutputPa
     const auto& dynamic_measurements = input->dynamic_keypoint_measurements_;
 
     for(const StatusKeypointMeasurement& dynamic_measurement : dynamic_measurements) {
-        const KeypointStatus& status = dynamic_measurement.first;
-        const KeyPointType kp_type = status.kp_type_;
-        const KeypointMeasurement& measurement = dynamic_measurement.second;
+        const KeyPointType kp_type = dynamic_measurement.kp_type_;
 
-        const ObjectId object_id = status.label_;
+        const ObjectId object_id = dynamic_measurement.label_;
 
         CHECK(kp_type == KeyPointType::DYNAMIC);
-        const TrackletId tracklet_id = measurement.first;
-        const Keypoint& kp = measurement.second;
+        const TrackletId tracklet_id = dynamic_measurement.tracklet_id_;
+        const Keypoint& kp = dynamic_measurement.value_;
 
         do_tracklet_manager_.add(object_id, tracklet_id, current_frame_id, kp);
     }
@@ -804,10 +795,9 @@ bool MonoBackendModule::attemptObjectTriangulation(
     for(size_t i = 0; i < lmks_world.size(); i++) {
         const TrackletId tracklet_id = triangulated_tracklets.at(i);
         const Landmark lmk = lmks_world.at(i);
-        auto lmk_estimate = std::make_pair(tracklet_id, lmk);
 
-        LandmarkStatus status(object_id,  LandmarkStatus::Method::TRIANGULATED);
-        triangulated_values.push_back(std::make_pair(status, lmk_estimate));
+        LandmarkStatus status(lmk, current_frame, tracklet_id, object_id, LandmarkStatus::Method::TRIANGULATED);
+        triangulated_values.push_back(status);
     }
 
 
@@ -828,14 +818,6 @@ void MonoBackendModule::addInitalObjectValues(
     new_values.insert(motion_symbol, prev_H_world_current);
 
     for(const StatusLandmarkEstimate& estimate : triangulated_values) {
-        const LandmarkStatus& status = estimate.first;
-        CHECK(status.label_ != background_label);
-
-        const LandmarkEstimate& le = estimate.second;
-
-        const Landmark lmk = le.second;
-        const TrackletId tracklet_id = le.first;
-
 
         // const gtsam::Symbol sym = DynamicLandmarkSymbol(tracklet_id);
         // new_values.insert(sym, lmk);
@@ -1033,6 +1015,8 @@ bool MonoBackendModule::safeAddConstantObjectVelocityFactor(FrameId current_fram
         CHECK(object_smoothing_noise_);
         CHECK_EQ(object_smoothing_noise_->dim(), 6u);
 
+        if(map_->exists(object_motion_key_k_1, new_values)) {
+
         factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
             prev_object_motion_key,
             curr_object_motion_key,
@@ -1112,18 +1096,13 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
     auto run_static_update = [&]() -> void {
         //static points
         for(const StatusKeypointMeasurement& static_measurement : input->static_keypoint_measurements_) {
+            const KeyPointType kp_type = static_measurement.kp_type_;
 
-
-
-            const KeypointStatus& status = static_measurement.first;
-            const KeyPointType kp_type = status.kp_type_;
-            const KeypointMeasurement& measurement = static_measurement.second;
-
-            const ObjectId object_id = status.label_;
+            const ObjectId object_id = static_measurement.label_;
 
             CHECK(kp_type == KeyPointType::STATIC);
-            const TrackletId tracklet_id = measurement.first;
-            const Keypoint& kp = measurement.second;
+            const TrackletId tracklet_id = static_measurement.tracklet_id_;
+            const Keypoint& kp = static_measurement.value_;
 
             const gtsam::Symbol lmk_symbol = StaticLandmarkSymbol(tracklet_id);
 
@@ -1260,17 +1239,13 @@ void MonoBackendModule::buildGraphWithDepth(MonocularInstanceOutputPacket::Const
         const auto& dynamic_measurements = input->dynamic_keypoint_measurements_;
         std::set<TrackletId> set_tracklets;
         for(const StatusKeypointMeasurement& dynamic_measurement : dynamic_measurements) {
+            const KeyPointType kp_type = dynamic_measurement.kp_type_;
 
-
-            const KeypointStatus& status = dynamic_measurement.first;
-            const KeyPointType kp_type = status.kp_type_;
-            const KeypointMeasurement& measurement = dynamic_measurement.second;
-
-            const ObjectId object_id = status.label_;
+            const ObjectId object_id = dynamic_measurement.label_;
 
             CHECK(kp_type == KeyPointType::DYNAMIC);
-            const TrackletId tracklet_id = measurement.first;
-            const Keypoint& kp = measurement.second;
+            const TrackletId tracklet_id = dynamic_measurement.tracklet_id_;
+            const Keypoint& kp = dynamic_measurement.value_;
 
             set_tracklets.insert(tracklet_id);
 

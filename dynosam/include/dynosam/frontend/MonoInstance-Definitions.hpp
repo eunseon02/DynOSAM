@@ -71,10 +71,12 @@ public:
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const gtsam::Pose3 T_world_camera,
-        const Frame& frame,
+        const Timestamp timestamp,
+        const FrameId frame_id,
         const DecompositionRotationEstimates& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
+        const Camera::Ptr camera = nullptr,
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt
     )
     :
     FrontendOutputPacketBase(
@@ -82,9 +84,11 @@ public:
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         T_world_camera,
-        frame,
-        debug_image,
-        gt_packet),
+        timestamp,
+        frame_id,
+        camera,
+        gt_packet,
+        debug_imagery),
     estimated_motions_(estimated_motions)
     {
     }

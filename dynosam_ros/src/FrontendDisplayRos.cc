@@ -22,6 +22,7 @@
  */
 
 #include <dynosam/visualizer/ColourMap.hpp>
+#include <dynosam/frontend/vision/Feature.hpp> //for functional_keypoint
 #include <dynosam/frontend/RGBDInstance-Definitions.hpp>
 #include <dynosam/utils/SafeCast.hpp>
 
@@ -71,11 +72,12 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
     //TODO: does frontend or backend publish tf transform?
-    publishDebugImage(frontend_output->debug_image_);
+    if(frontend_output->debug_imagery_) publishDebugImage(*frontend_output->debug_imagery_);
 
     if(frontend_output->gt_packet_) {
-        const auto& rgb_image = frontend_output->frame_.tracking_images_.get<ImageType::RGBMono>();
-        publishGroundTruthInfo(frontend_output->getTimestamp(), frontend_output->gt_packet_.value(), rgb_image);
+        //TODO: put tracking images back into frontend output
+        // const auto& rgb_image = frontend_output->frame_.tracking_images_.get<ImageType::RGBMono>();
+        // publishGroundTruthInfo(frontend_output->getTimestamp(), frontend_output->gt_packet_.value(), rgb_image);
     }
 
     RGBDInstanceOutputPacket::ConstPtr rgbd_output = safeCast<FrontendOutputPacketBase, RGBDInstanceOutputPacket>(frontend_output);
@@ -92,63 +94,24 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
 
 void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
     CHECK(rgbd_frontend_output);
-    {
-        pcl::PointCloud<pcl::PointXYZRGB> cloud;
+    publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_, rgbd_frontend_output->T_world_camera_);
+    CloudPerObject clouds_per_obj = publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_, rgbd_frontend_output->T_world_camera_);
 
-        for(const auto& status_estimate : rgbd_frontend_output->static_landmarks_) {
-            const LandmarkStatus& status =  status_estimate.first;
-            const LandmarkEstimate& estimate = status_estimate.second;
-            const Landmark& lmk = rgbd_frontend_output->T_world_camera_ * estimate.second;
+    publishObjectPositions(
+        object_pose_pub_,
+        rgbd_frontend_output->propogated_object_poses_,
+        rgbd_frontend_output->getFrameId(),
+        rgbd_frontend_output->getTimestamp(),
+        "frontend");
 
-            pcl::PointXYZRGB pt;
-            if(status.label_ == background_label) {
-                // publish static lmk's as white
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
-            }
-            else {
-                const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
-            }
-            cloud.points.push_back(pt);
-        }
-
-
-        sensor_msgs::msg::PointCloud2 pc2_msg;
-        pcl::toROSMsg(cloud, pc2_msg);
-        pc2_msg.header.frame_id = params_.world_frame_id_;
-        static_tracked_points_pub_->publish(pc2_msg);
-    }
-
-    std::map<ObjectId, pcl::PointCloud<pcl::PointXYZ> > clouds_per_obj;
-    {
-        pcl::PointCloud<pcl::PointXYZRGB> cloud;
-
-        for(const auto& status_estimate :  rgbd_frontend_output->dynamic_landmarks_) {
-            const LandmarkStatus& status =  status_estimate.first;
-            const LandmarkEstimate& estimate = status_estimate.second;
-            const Landmark& lmk = rgbd_frontend_output->T_world_camera_ * estimate.second;
-
-            pcl::PointXYZRGB pt;
-            pcl::PointXYZ pt_xyz;
-            if(status.label_ == background_label) {
-                // publish static lmk's as white
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
-            }
-            else {
-                const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
-                pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
-                pt_xyz = pcl::PointXYZ(lmk(0), lmk(1), lmk(2));
-            }
-            cloud.points.push_back(pt);
-            clouds_per_obj[status.label_].push_back(pt_xyz);
-        }
-
-
-        sensor_msgs::msg::PointCloud2 pc2_msg;
-        pcl::toROSMsg(cloud, pc2_msg);
-        pc2_msg.header.frame_id = params_.world_frame_id_;
-        dynamic_tracked_points_pub_->publish(pc2_msg);
-    }
+    publishObjectPaths(
+        object_pose_path_pub_,
+        rgbd_frontend_output->propogated_object_poses_,
+        rgbd_frontend_output->getFrameId(),
+        rgbd_frontend_output->getTimestamp(),
+        "frontend",
+        60
+    );
 
     // object bounding box using linelist and id text in rviz
     {
@@ -219,31 +182,13 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
     }
 
 
-    // publishStaticCloud(rgbd_frontend_output->static_landmarks_);
-    // publishObjectCloud(rgbd_frontend_output->dynamic_keypoint_measurements_, rgbd_frontend_output->dynamic_landmarks_);
-    publishObjectPositions(
-        object_pose_pub_,
-        rgbd_frontend_output->propogated_object_poses_,
-        rgbd_frontend_output->getFrameId(),
-        rgbd_frontend_output->getTimestamp(),
-        "frontend");
-
-    publishObjectPaths(
-        object_pose_path_pub_,
-        rgbd_frontend_output->propogated_object_poses_,
-        rgbd_frontend_output->getFrameId(),
-        rgbd_frontend_output->getTimestamp(),
-        "frontend",
-        60
-    );
-
     // Predict 3D object poses
     gtsam::FastMap<ObjectId, std::vector<gtsam::Pose3> > obj_predicted_poses;
     {
         int prediction_length = 3;
-        FrameId current_frame_id = rgbd_frontend_output->frame_.frame_id_;
-        ObjectPoseMap obj_poses = rgbd_frontend_output->propogated_object_poses_;
-        MotionEstimateMap obj_motions = rgbd_frontend_output->estimated_motions_;
+        const FrameId current_frame_id = rgbd_frontend_output->getFrameId();
+        const ObjectPoseMap& obj_poses = rgbd_frontend_output->propogated_object_poses_;
+        const MotionEstimateMap& obj_motions = rgbd_frontend_output->estimated_motions_;
         for (const auto& [object_id, this_obj_traj] : obj_poses){
             if(this_obj_traj.exists(current_frame_id)){
                 gtsam::Pose3 current_obj_pose = this_obj_traj.at(current_frame_id);
@@ -269,13 +214,12 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
     // 2D image visualisation using opencv
     {
         // 2D bounding box
-        cv::Mat rgb_with_bbx = rgbd_frontend_output->frame_.drawDetectedObjectBoxes();
+        cv::Mat rgb_with_bbx = rgbd_frontend_output->debug_imagery_->detected_bounding_boxes;
 
-        StatusKeypointMeasurements obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
+        const StatusKeypointMeasurements& obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
         for(const StatusKeypointMeasurement& this_px : obj_px) {
-            KeypointStatus status = retrieveStatus(this_px);
-            ObjectId object_id = status.label_;
-            gtsam::Point2 px_coordinate = retrieveEstimate(this_px);
+            ObjectId object_id = this_px.objectId();
+            const gtsam::Point2& px_coordinate = this_px.value();
 
             const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
             // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
@@ -283,22 +227,21 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             int radius = 1;
             int thickness = 1;
             cv::circle(rgb_with_bbx, centre, radius, colour, thickness);
-            // functional_keypoint::at<cv::Scalar>(px_coordinate, rgb_with_bbx) = colour;
         }
 
         // object history and prediction
-        ObjectPoseMap obj_poses = rgbd_frontend_output->propogated_object_poses_;
-        gtsam::Pose3 cam_pose = rgbd_frontend_output->T_world_camera_;
+        const ObjectPoseMap& obj_poses = rgbd_frontend_output->propogated_object_poses_;
+        const gtsam::Pose3& cam_pose = rgbd_frontend_output->T_world_camera_;
         int line_thinkness = 3;
         for (const auto& [object_id, this_obj_traj] : obj_poses){
             cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
             // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
-            std::vector<cv::Point> cv_line; 
+            std::vector<cv::Point> cv_line;
             for (const auto& [frame_id, this_obj_pose] : this_obj_traj){
                 gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
                 Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
                 Keypoint this_obj_px_in_cam;
-                bool is_lmk_contained = rgbd_frontend_output->frame_.camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
                 if (is_lmk_contained){
                     cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
                 }
@@ -316,7 +259,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
                 Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
                 Keypoint this_obj_px_in_cam;
-                bool is_lmk_contained = rgbd_frontend_output->frame_.camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
                 if (is_lmk_contained){
                     cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
                 }
@@ -402,14 +345,29 @@ void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Tim
     tf_broadcaster_->sendTransform(t);
 }
 
-void FrontendDisplayRos::publishDebugImage(const cv::Mat& debug_image) {
-    if(debug_image.empty()) return;
+// void FrontendDisplayRos::publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
+//     geometry_msgs::msg::PoseStamped pose_stamped;
+//     utils::convertWithHeader(T_world_camera, pose_stamped, timestamp, "world");
+
+//     static std_msgs::msg::Header header;
+//     header.stamp = utils::toRosTime(timestamp);
+//     header.frame_id = "world";
+//     odom_path_msg_.header = header;
+
+//     odom_path_msg_.poses.push_back(pose_stamped);
+//     odometry_path_pub_->publish(odom_path_msg_);
+
+// }
+
+
+void FrontendDisplayRos::publishDebugImage(const DebugImagery& debug_imagery) {
+    if(debug_imagery.tracking_image.empty()) return;
 
     // cv::Mat resized_image;
     // cv::resize(debug_image, resized_image, cv::Size(640, 480));
 
     std_msgs::msg::Header hdr;
-    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", debug_image).toImageMsg();
+    sensor_msgs::msg::Image::SharedPtr msg = cv_bridge::CvImage(hdr, "bgr8", debug_imagery.tracking_image).toImageMsg();
     tracking_image_pub_.publish(msg);
 }
 
