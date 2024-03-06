@@ -79,7 +79,7 @@ private:
     // // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     // void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
-    void publishDebugImage(const cv::Mat& debug_image);
+    void publishDebugImage(const DebugImagery& debug_imagery);
 
     void publishGroundTruthInfo(Timestamp timestamp, const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
 

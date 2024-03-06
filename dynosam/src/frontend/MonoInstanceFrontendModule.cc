@@ -286,8 +286,8 @@ FrontendModule::SpinReturn MonoInstanceFrontendModule::nominalSpin(FrontendInput
 MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         const Frame& frame,
         const DecompositionRotationEstimates& estimated_motions,
-        const cv::Mat& debug_image,
-        const GroundTruthInputPacket::Optional& gt_packet)
+        const GroundTruthInputPacket::Optional& gt_packet,
+        const DebugImagery::Optional& debug_imagery)
 {
     StatusKeypointMeasurements static_keypoint_measurements;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
@@ -328,8 +328,9 @@ MonocularInstanceOutputPacket::Ptr MonoInstanceFrontendModule::constructOutput(
         frame.timestamp_,
         frame.frame_id_,
         estimated_motions,
-        debug_image,
-        gt_packet
+        camera_,
+        gt_packet,
+        debug_imagery
     );
 }
 

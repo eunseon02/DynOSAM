@@ -27,6 +27,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
+#include "dynosam/common/Camera.hpp"
 
 namespace dyno {
 
@@ -42,8 +43,9 @@ public:
     const gtsam::Pose3 T_world_camera_;
     const Timestamp timestamp_;
     const FrameId frame_id_;
-    const cv::Mat debug_image_;
+    const Camera::Ptr camera_;
     const GroundTruthInputPacket::Optional gt_packet_;
+    const DebugImagery::Optional debug_imagery_;
 
     FrontendOutputPacketBase(
         const FrontendType frontend_type,
@@ -52,8 +54,9 @@ public:
         const gtsam::Pose3& T_world_camera,
         const Timestamp timestamp,
         const FrameId frame_id,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
+        const Camera::Ptr camera = nullptr,
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt
     )
     :   frontend_type_(frontend_type),
         static_keypoint_measurements_(static_keypoint_measurements),
@@ -61,12 +64,14 @@ public:
         T_world_camera_(T_world_camera),
         timestamp_(timestamp),
         frame_id_(frame_id),
-        debug_image_(debug_image),
-        gt_packet_(gt_packet)
+        camera_(camera),
+        gt_packet_(gt_packet),
+        debug_imagery_(debug_imagery)
     {}
 
     virtual ~FrontendOutputPacketBase() {}
 
+    inline bool hasCamera() const { return (bool)camera_; }
     inline Timestamp getTimestamp() const { return timestamp_; }
     inline FrameId getFrameId() const { return frame_id_; }
 };

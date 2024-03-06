@@ -162,11 +162,18 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
     }
 
-    cv::Mat tracking_img = tracker_->computeImageTracks(*previous_frame, *frame);
-    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", tracking_img));
+    DebugImagery debug_imagery;
+    debug_imagery.tracking_image = tracker_->computeImageTracks(*previous_frame, *frame);
+    if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
+
+    debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
+    //use the tracking images from the frame NOT the input tracking images since the feature tracking
+    //will do some modifications on the images (particularily the mask during mask propogation)
+    debug_imagery.input_images = frame->tracking_images_;
 
 
-    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, tracking_img, input->optional_gt_);
+
+    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, input->optional_gt_, debug_imagery);
 
     if(logger_) {
         logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
@@ -248,8 +255,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame,
     const MotionEstimateMap& estimated_motions,
     const gtsam::Pose3& T_world_camera,
-    const cv::Mat& debug_image,
-    const GroundTruthInputPacket::Optional& gt_packet)
+    const GroundTruthInputPacket::Optional& gt_packet,
+    const DebugImagery::Optional& debug_imagery)
 {
     StatusKeypointMeasurements static_keypoint_measurements;
     StatusLandmarkEstimates static_landmarks;
@@ -345,8 +352,9 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         estimated_motions,
         object_poses_,
         camera_poses_,
-        debug_image,
-        gt_packet
+        camera_,
+        gt_packet,
+        debug_imagery
     );
 }
 

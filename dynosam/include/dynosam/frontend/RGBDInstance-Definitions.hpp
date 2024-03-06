@@ -58,8 +58,9 @@ public:
         const MotionEstimateMap& estimated_motions,
         const ObjectPoseMap propogated_object_poses = {},
         const gtsam::Pose3Vector camera_poses = {},
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
+        const Camera::Ptr camera = nullptr,
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt
     )
     :
     FrontendOutputPacketBase(
@@ -69,8 +70,9 @@ public:
         T_world_camera,
         timestamp,
         frame_id,
-        debug_image,
-        gt_packet),
+        camera,
+        gt_packet,
+        debug_imagery),
     static_landmarks_(static_landmarks),
     dynamic_landmarks_(dynamic_landmarks),
     estimated_motions_(estimated_motions),
@@ -85,7 +87,6 @@ public:
 
 
 //write to file on destructor
-//TODO: currently FrontendLogger really is RGBDLogger?
 class RGBDFrontendLogger : public EstimationModuleLogger {
 public:
     DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)

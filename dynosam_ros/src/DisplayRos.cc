@@ -28,12 +28,14 @@
 
 namespace dyno {
 
-void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
+DisplayRos::CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
+
+    CloudPerObject clouds_per_obj;
 
     for(const auto& status_estimate : landmarks) {
         Landmark lmk_world = status_estimate.value();
-
+        const ObjectId object_id = status_estimate.objectId();
         if(status_estimate.referenceFrame() == ReferenceFrame::LOCAL) {
             lmk_world = T_world_camera * status_estimate.value();
         }
@@ -47,10 +49,11 @@ void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLa
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), 0, 0, 0);
         }
         else {
-            const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.objectId());
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0), colour(1), colour(2));
         }
         cloud.points.push_back(pt);
+        clouds_per_obj[object_id].push_back(pt);
     }
 
 
@@ -58,6 +61,8 @@ void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLa
     pcl::toROSMsg(cloud, pc2_msg);
     pc2_msg.header.frame_id = params_.world_frame_id_;
     pub->publish(pc2_msg);
+
+    return clouds_per_obj;
 }
 
 void DisplayRos::publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
@@ -234,39 +239,5 @@ void DisplayRos::publishObjectPaths(
     pub->publish(object_path_marker_array);
 }
 
-
-pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(pcl::PointXYZ min_point_AABB, pcl::PointXYZ max_point_AABB){
-    pcl::PointCloud<pcl::PointXYZ> line_list_points;
-
-    // bottom
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    // top
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    // vertical
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-
-    return line_list_points;
-}
 
 }

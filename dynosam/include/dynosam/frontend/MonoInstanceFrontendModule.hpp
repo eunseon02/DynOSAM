@@ -29,6 +29,7 @@
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
+
 namespace dyno {
 
 class MonoInstanceFrontendModule : public FrontendModule {
@@ -51,8 +52,8 @@ private:
     MonocularInstanceOutputPacket::Ptr constructOutput(
         const Frame& frame,
         const DecompositionRotationEstimates& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt);
 
 
 

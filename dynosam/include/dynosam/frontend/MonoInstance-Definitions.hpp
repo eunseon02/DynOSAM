@@ -74,8 +74,9 @@ public:
         const Timestamp timestamp,
         const FrameId frame_id,
         const DecompositionRotationEstimates& estimated_motions,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
+        const Camera::Ptr camera = nullptr,
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt
     )
     :
     FrontendOutputPacketBase(
@@ -85,8 +86,9 @@ public:
         T_world_camera,
         timestamp,
         frame_id,
-        debug_image,
-        gt_packet),
+        camera,
+        gt_packet,
+        debug_imagery),
     estimated_motions_(estimated_motions)
     {
     }

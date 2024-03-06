@@ -24,6 +24,9 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/common/ImageContainer.hpp"
+
+#include <opencv4/opencv2/core.hpp>
 
 namespace dyno {
 
@@ -75,4 +78,23 @@ inline std::string to_string(const TrackingStatus& status) {
 }
 
 
-}
+
+using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
+
+/**
+ * @brief Struct containing debug imagery from the frontend that (optionally) is included in the frontend output
+ *
+ */
+struct DebugImagery {
+  DYNO_POINTER_TYPEDEFS(DebugImagery)
+
+  //TODO: make const!!
+  cv::Mat detected_bounding_boxes;
+  cv::Mat tracking_image;
+  TrackingInputImages input_images;
+
+
+};
+
+
+} //dyno

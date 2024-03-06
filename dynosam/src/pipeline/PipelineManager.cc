@@ -33,6 +33,8 @@
 #include <glog/logging.h>
 
 
+DEFINE_bool(use_backend, false, "If any backend should be initalised");
+
 namespace dyno {
 
 DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display)
@@ -81,7 +83,8 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, &display_queue_);
+
+            if(FLAGS_use_backend) backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, &display_queue_);
         }   break;
         case FrontendType::kMono: {
             LOG(INFO) << "Making MonoInstance frontend";

@@ -24,12 +24,11 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/ImageContainer.hpp"
 
 namespace dyno {
-
-using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
 
 template<typename U, typename V>
 struct TrackletCorrespondance {
