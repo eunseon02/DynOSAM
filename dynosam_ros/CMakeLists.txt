@@ -116,6 +116,7 @@ install(DIRECTORY
 add_executable(dynosam_node src/dynosam_node.cc)
 target_link_libraries(dynosam_node
   ${PROJECT_NAME}
+  ${PCL_LIBRARIES}
 
 )
 ament_target_dependencies(dynosam_node "rclcpp" "std_msgs"

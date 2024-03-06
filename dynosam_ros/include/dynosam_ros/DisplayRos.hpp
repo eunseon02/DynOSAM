@@ -24,7 +24,9 @@
 
 #include "dynosam_ros/Display-Definitions.hpp"
 
+#include <dynosam/common/Exceptions.hpp>
 #include <dynosam/common/Types.hpp>
+#include <dynosam/common/Camera.hpp>
 
 #include "image_transport/image_transport.hpp"
 
@@ -49,8 +51,10 @@ public:
     using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
     using MarkerArrayPub = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
 
+    using CloudPerObject = gtsam::FastMap<ObjectId,  pcl::PointCloud<pcl::PointXYZRGB>>;
 
-    virtual void publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks);
+
+    virtual CloudPerObject publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
     virtual void publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     virtual void publishOdometryPath(PathPub::SharedPtr pub, const gtsam::Pose3Vector& poses, Timestamp latest_timestamp);
 
@@ -77,5 +81,41 @@ public:
 protected:
     const DisplayParams params_;
 };
+
+// Axis Aligned Bounding Box (AABB)
+template<typename PointT>
+pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(const PointT& min_point_AABB, const PointT& max_point_AABB) {
+    pcl::PointCloud<pcl::PointXYZ> line_list_points;
+
+    // bottom
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    // top
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+    // vertical
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
+    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
+
+    return line_list_points;
+}
 
 } //dyno

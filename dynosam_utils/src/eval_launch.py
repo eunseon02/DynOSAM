@@ -125,10 +125,6 @@ def main(parsed_args, unknown_args):
 
     unknown_args.append("--output_path={}".format(output_folder_path))
 
-    print('')
-    print('Starting launch of launch description...')
-    print('')
-
     running_success = True
     run_pipeline = parsed_args.run_pipeline
     if run_pipeline:

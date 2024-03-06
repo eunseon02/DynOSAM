@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,31 +21,27 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendModule.hpp"
+#pragma once
 
-#include <glog/logging.h>
+#include "dynosam/backend/Optimizer.hpp"
+
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
 namespace dyno {
 
-FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue)
-    :   Base("frontend"), base_params_(params), display_queue_(display_queue)
-    {
-        //create callback to update gt_packet_map_ values so the derived classes dont need to manage this
-        registerInputCallback([=](FrontendInputPacketBase::ConstPtr input) {
-            if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
-        });
-    }
+class FixedLagOptimizer : public Optimizer {
 
+public:
+    FixedLagOptimizer();
 
+    gtsam::Values getBestEstimate() const override;
+    gtsam::NonlinearFactorGraph getFullGraph() const override;
 
-void FrontendModule::validateInput(const FrontendInputPacketBase::ConstPtr& input) const {
-    CHECK(input->image_container_);
+    bool update(FrameId frame_id_k, Timestamp timestamp, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors) override;
 
-    const ImageValidationResult result = validateImageContainer(input->image_container_);
+private:
+    std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
-    //throw exception if result is false
-    checkAndThrow<InvalidImageContainerException>(result.valid_, *input->image_container_, result.requirement_);
-
-}
+};
 
 } //dyno

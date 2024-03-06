@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,31 +21,19 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/frontend/FrontendModule.hpp"
+#include "dynosam_ros/RosUtils.hpp"
 
 #include <glog/logging.h>
+#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-namespace dyno {
+using namespace dyno;
 
-FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue)
-    :   Base("frontend"), base_params_(params), display_queue_(display_queue)
-    {
-        //create callback to update gt_packet_map_ values so the derived classes dont need to manage this
-        registerInputCallback([=](FrontendInputPacketBase::ConstPtr input) {
-            if(input->optional_gt_) gt_packet_map_.insert2(input->getFrameId(), *input->optional_gt_);
-        });
-    }
+#include "geometry_msgs/msg/point.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 
 
-
-void FrontendModule::validateInput(const FrontendInputPacketBase::ConstPtr& input) const {
-    CHECK(input->image_container_);
-
-    const ImageValidationResult result = validateImageContainer(input->image_container_);
-
-    //throw exception if result is false
-    checkAndThrow<InvalidImageContainerException>(result.valid_, *input->image_container_, result.requirement_);
-
+TEST(RosUtils, HasMsgHeader) {
+    EXPECT_FALSE(internal::HasMsgHeader<geometry_msgs::msg::Point>::value);
+    EXPECT_TRUE(internal::HasMsgHeader<nav_msgs::msg::Odometry>::value);
 }
-
-} //dyno

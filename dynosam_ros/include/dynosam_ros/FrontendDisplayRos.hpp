@@ -79,7 +79,7 @@ private:
     // // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     // void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
-    void publishDebugImage(const cv::Mat& debug_image);
+    void publishDebugImage(const DebugImagery& debug_imagery);
 
     void publishGroundTruthInfo(Timestamp timestamp, const GroundTruthInputPacket& gt_packet, const cv::Mat& rgb);
 
@@ -103,6 +103,7 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_motion_pub_; //! Draw object motion as arrows
 
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object motion as arrows
     image_transport::Publisher tracking_image_pub_;
 
     //ground truth publishers

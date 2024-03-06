@@ -27,19 +27,29 @@
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue, bool use_logger)
     :   Base("backend"),
         base_params_(params),
-        camera_(CHECK_NOTNULL(camera)),
         display_queue_(display_queue)
 
 {
-    const auto& camera_params = camera_->getParams();
-    gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(
-        camera_params.constructGtsamCalibration<Camera::CalibrationType>());
+    // const auto& camera_params = camera_->getParams();
+    // gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(
+    //     camera_params.constructGtsamCalibration<Camera::CalibrationType>());
 
-    CHECK(gtsam_calibration_);
+    // CHECK(gtsam_calibration_);
     setFactorParams(params);
+
+    //create callback to update gt_packet_map_ values so the derived classes dont need to manage this
+    //TODO: this logic is exactly the same as in FrontendModule - functionalise!!
+    registerInputCallback([=](BackendInputPacket::ConstPtr input) {
+        if(input->gt_packet_) gt_packet_map_.insert2(input->getFrameId(), *input->gt_packet_);
+    });
+
+    if(use_logger) {
+        VLOG(5) << "Using backend logger";
+        logger_ = std::make_unique<BackendLogger>();
+    }
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {

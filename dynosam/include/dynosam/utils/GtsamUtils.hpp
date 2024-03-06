@@ -71,7 +71,17 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
  */
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
-
+/**
+ * @brief Perturbs a gtsam::Value type object via sampling a normal distribution using
+ * the sigmas provided. The length of the sigmas must match the dimension of the value
+ * as given by gtsam::traits<T>::dimension.
+ *
+ * @tparam T
+ * @param t
+ * @param sigmas
+ * @param seed
+ * @return T
+ */
 template<typename T>
 T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());

@@ -23,6 +23,8 @@
 #pragma once
 
 #include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/common/GroundTruthPacket.hpp"
 
 #include <stdlib.h>
 #include <fstream>
@@ -36,6 +38,18 @@
 
 
 namespace dyno {
+
+/**
+ * @brief Constructs a file path (using the file name) where the root of the path is
+ * defined by the FLAGS_output_path param.
+ *
+ * This flag defines the output folder of all output log/debug files.
+ * The resulting file path with then be FLAGS_output_path/file_name
+ *
+ * @param file_name
+ * @return std::string
+ */
+std::string getOutputFilePath(const std::string& file_name);
 
 // Open files with name output_filename, and checks that it is valid
 static inline void OpenFile(const std::string& output_filename,
@@ -71,6 +85,49 @@ class OfstreamWrapper {
 };
 
 
+
+class EstimationModuleLogger {
+
+public:
+  DYNO_POINTER_TYPEDEFS(EstimationModuleLogger)
+  EstimationModuleLogger(const std::string& module_name);
+  //write to file on destructor
+  virtual ~EstimationModuleLogger();
+
+  //logs to motion errors
+  virtual void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
+
+  //logs to object pose errors and the object pose itself (to a differnet file)
+  virtual void logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses);
+
+  //logs to camera pose errors and the camera pose itself (to a differnet file)
+  virtual void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera, std::optional<const gtsam::Pose3> T_world_camera_k_1);
+
+  virtual void logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks);
+
+protected:
+  const std::string module_name_;
+
+  const std::string object_motion_errors_file_name_;
+  const std::string object_pose_errors_file_name_;
+  const std::string object_pose_file_name_;
+
+  const std::string camera_pose_errors_file_name_;
+  const std::string camera_pose_file_name_;
+
+  const std::string map_points_file_name_;
+
+  CsvWriter::UniquePtr object_motion_errors_csv_;
+  CsvWriter::UniquePtr object_pose_errors_csv_;
+  CsvWriter::UniquePtr object_pose_csv_;
+
+  CsvWriter::UniquePtr camera_pose_errors_csv_;
+  CsvWriter::UniquePtr camera_pose_csv_;
+
+  CsvWriter::UniquePtr map_points_csv_;
+
+
+};
 
 
 } //dyno

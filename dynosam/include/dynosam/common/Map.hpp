@@ -40,32 +40,51 @@
 namespace dyno {
 
 
-
-//TODO: state node
-
 //Implemented as Best from https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
 //So that constructor is only usable by this class. Instead, use create
 //Want to use std::enable_shared_from_this<Map>, so that the nodes carry a weak_ptr
 //to the Map
-class Map : public std::enable_shared_from_this<Map> {
+
+
+template<typename MEASUREMENT = Keypoint>
+class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     struct Private{};
 public:
-    DYNO_POINTER_TYPEDEFS(Map)
+    using Measurement = MEASUREMENT;
+    using This = Map<Measurement>;
+
+
+    /// @brief Alias to a GenericTrackedStatusVector using the templated Measurement type,
+    /// specifying that StatusVector must contain the desired measurement type
+    /// @tparam DERIVEDSTATUS
+    template<typename DERIVEDSTATUS>
+    using MeasurementStatusVector = GenericTrackedStatusVector<DERIVEDSTATUS, Measurement>;
+
+    using ObjectNodeM = ObjectNode<Measurement>;
+    using FrameNodeM = FrameNode<Measurement>;
+    using LandmarkNodeM = LandmarkNode<Measurement>;
+    // using StaticLandmarkNodeM = StaticLandmarkNode<Measurement>;
+    // using DynamicLandmarkNodeM = DynamicLandmarkNode<Measurement>;
+
+
+    DYNO_POINTER_TYPEDEFS(This)
 
     // Constructor is only usable by this class
     Map(Private) {}
 
-    static std::shared_ptr<Map> create()
+    static std::shared_ptr<This> create()
     {
-        return std::make_shared<Map>(Private());
+        return std::make_shared<This>(Private());
     }
 
-    std::shared_ptr<Map> getptr()
+    std::shared_ptr<This> getptr()
     {
-        return shared_from_this();
+        //dependant base so need to qualify name lookup with this
+        return this->shared_from_this();
     }
 
-    void updateObservations(const StatusKeypointMeasurements& keypoint_measurements);
+    template<typename DERIVEDSTATUS>
+    void updateObservations(const MeasurementStatusVector<DERIVEDSTATUS>& measurements);
     void updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id);
 
     bool frameExists(FrameId frame_id) const;
@@ -73,28 +92,35 @@ public:
     bool objectExists(ObjectId object_id) const;
 
     //should these not all be const?!!! dont want to modify the values
-    ObjectNode::Ptr getObject(ObjectId object_id);
-    FrameNode::Ptr getFrame(FrameId frame_id);
-    LandmarkNode::Ptr getLandmark(TrackletId tracklet_id);
+    typename ObjectNodeM::Ptr getObject(ObjectId object_id);
+    typename FrameNodeM::Ptr getFrame(FrameId frame_id);
+    typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id);
 
-    const ObjectNode::Ptr getObject(ObjectId object_id) const;
-    const FrameNode::Ptr getFrame(FrameId frame_id) const;
-    const LandmarkNode::Ptr getLandmark(TrackletId tracklet_id) const;
+    const typename ObjectNodeM::Ptr getObject(ObjectId object_id) const;
+    const typename FrameNodeM::Ptr getFrame(FrameId frame_id) const;
+    const typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const;
 
     TrackletIds getStaticTrackletsByFrame(FrameId frame_id) const;
 
     //object related queries
     size_t numObjectsSeen() const;
 
-
-    //TODO:test
-    const FrameNode::Ptr lastFrame() const;
+    const typename FrameNodeM::Ptr lastFrame() const;
 
     FrameId lastEstimateUpdate() const;
 
+    StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) {
+        return frames_.at(frame_id)->getPoseEstimate();
+    }
 
     //TODo: test
     bool getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const;
+
+    //landmark related queries
+    //TODO: test
+    StatusLandmarkEstimates getFullStaticMap() const;
+    StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const;
+
 
     template<typename ValueType>
     StateQuery<ValueType> query(gtsam::Key key) const {
@@ -106,46 +132,71 @@ public:
         }
     }
 
-    const gtsam::Values& getValues() const;
-    const gtsam::NonlinearFactorGraph& getGraph() const;
+    inline const gtsam::Values& getValues() const { return values_; }
+    inline const gtsam::NonlinearFactorGraph& getGraph() const { return graph_; }
+    inline const gtsam::Values& getInitialValues() const { return values_; }
+
+    bool exists(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
+        return (values_.exists(key) || new_values.exists(key));
+    }
+
+    template<typename ValueType>
+    ValueType at(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
+        StateQuery<ValueType> state_query = this->query(key);
+        if(state_query) {
+            return state_query.get();
+        }
+
+        if(new_values.exists(key)) {
+            return new_values.at<ValueType>(key);
+        }
+
+        throw gtsam::ValuesKeyDoesNotExist("Requesting value from dyno::Map::at", key);
+    }
+
+    template<typename ValueType>
+    bool safeGet(ValueType& value, gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) {
+        if(!this->exists(key, new_values)) {
+            return false;
+        }
+
+        value = this->at<ValueType>(key, new_values);
+        return true;
+    }
 
 
 
 
 private:
-    void addOrUpdateMapStructures(TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static);
+    void addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static);
 
-//TODO: for now
 private:
     //nodes
-    gtsam::FastMap<FrameId, FrameNode::Ptr> frames_;
-    gtsam::FastMap<TrackletId, LandmarkNode::Ptr> landmarks_;
-    gtsam::FastMap<ObjectId, ObjectNode::Ptr> objects_;
+    gtsam::FastMap<FrameId, typename FrameNodeM::Ptr> frames_;
+    gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr> landmarks_;
+    gtsam::FastMap<ObjectId, typename ObjectNodeM::Ptr> objects_;
 
     //estimates
     gtsam::Values values_;
     gtsam::NonlinearFactorGraph graph_;
+    //initial estimate for each value
+    gtsam::Values initial_;
     FrameId last_estimate_update_{0};
 };
 
 
-/**
- * @brief Free helper function to query the Map using a weak_ptr.
- *
- * Useful as the MapNodes carry a weak_ptr to the map.
- *
- * @tparam ValueType
- * @param map_ptr
- * @param key
- * @return std::optional<ValueType>
- */
-template<typename ValueType>
-StateQuery<ValueType> queryWeakMap(const std::weak_ptr<Map> map_ptr, gtsam::Key key) {
-    if(auto map = map_ptr.lock()) {
-        return map->query<ValueType>(key);
-    }
-    return StateQuery<ValueType>::InvalidMap();
-}
+
+using Map3d = Map<Landmark>;
+using ObjectNode3d = Map3d::ObjectNodeM;
+using LandmarkNode3d = Map3d::LandmarkNodeM;
+using FrameNode3d = Map3d::FrameNodeM;
+
+using Map2d = Map<Keypoint>;
+using ObjectNode2d = Map2d::ObjectNodeM;
+using LandmarkNode2d = Map2d::LandmarkNodeM;
+using FrameNode2d = Map2d::FrameNodeM;
+
+} //dyno
 
 
-}
+#include "dynosam/common/Map-inl.hpp"

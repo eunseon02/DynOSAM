@@ -25,7 +25,6 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 
@@ -54,12 +53,14 @@ public:
         const StatusLandmarkEstimates& static_landmarks,
         const StatusLandmarkEstimates& dynamic_landmarks,
         const gtsam::Pose3 T_world_camera,
-        const Frame& frame,
+        const Timestamp timestamp,
+        const FrameId frame_id,
         const MotionEstimateMap& estimated_motions,
         const ObjectPoseMap propogated_object_poses = {},
         const gtsam::Pose3Vector camera_poses = {},
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt
+        const Camera::Ptr camera = nullptr,
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt
     )
     :
     FrontendOutputPacketBase(
@@ -67,9 +68,11 @@ public:
         static_keypoint_measurements,
         dynamic_keypoint_measurements,
         T_world_camera,
-        frame,
-        debug_image,
-        gt_packet),
+        timestamp,
+        frame_id,
+        camera,
+        gt_packet,
+        debug_imagery),
     static_landmarks_(static_landmarks),
     dynamic_landmarks_(dynamic_landmarks),
     estimated_motions_(estimated_motions),
@@ -84,27 +87,10 @@ public:
 
 
 //write to file on destructor
-//TODO: currently FrontendLogger really is RGBDLogger?
-class FrontendLogger {
+class RGBDFrontendLogger : public EstimationModuleLogger {
 public:
-    DYNO_POINTER_TYPEDEFS(FrontendLogger)
-    FrontendLogger();
-    //write to file on destructor
-    ~FrontendLogger();
-
-    void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
-    void logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses);
-    void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera_k, std::optional<const gtsam::Pose3> T_world_camera_k_1 = {});
-    void logObjectPoints(FrameId frame_id, const gtsam::Pose3& T_world_camera_k, const StatusLandmarkEstimates& dynamic_landmarks);
-    // void logFrontendStats(const FeatureTrackerInfo& tracking_info);
-
-private:
-    CsvWriter::UniquePtr object_motion_errors_csv_;
-    CsvWriter::UniquePtr camera_pose_errors_csv_;
-    CsvWriter::UniquePtr camera_pose_csv_;
-    CsvWriter::UniquePtr object_pose_csv_;
-    CsvWriter::UniquePtr object_points_csv_;
-
+    DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)
+    RGBDFrontendLogger() : EstimationModuleLogger("frontend") {}
 };
 
 } //dymo

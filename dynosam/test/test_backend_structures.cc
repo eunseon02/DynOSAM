@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/backend/FactorGraphTools.hpp"
 
 using namespace dyno;
 
@@ -64,3 +65,26 @@ TEST(DynamicObjectSymbol, testReconstructMotionInfoFromOtherSymbol) {
     FrameId recovered_frame_id;
     EXPECT_FALSE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
 }
+
+TEST(BackendDefinitions, testDynoChrExtractor) {
+    gtsam::Key motion_key = ObjectMotionSymbol(12, 10);
+    EXPECT_EQ(DynoChrExtractor(motion_key), kObjectMotionSymbolChar);
+
+    gtsam::Key cam_pose_key = CameraPoseSymbol(2);
+    EXPECT_EQ(DynoChrExtractor(cam_pose_key), kPoseSymbolChar);
+
+    gtsam::Key dynamic_point_key = DynamicLandmarkSymbol(2, 10);
+    EXPECT_EQ(DynoChrExtractor(dynamic_point_key), kDynamicLandmarkSymbolChar);
+
+    gtsam::Key static_point_key = StaticLandmarkSymbol(2);
+    EXPECT_EQ(DynoChrExtractor(static_point_key), kStaticLandmarkSymbolChar);
+}
+
+// TEST(FactorGraphTools, testReconstructMotionInfoFromOtherSymbol) {
+
+//     gtsam::Key motion_key = CameraPoseSymbol(10);
+
+//     ObjectId recovered_object_id;
+//     FrameId recovered_frame_id;
+//     EXPECT_FALSE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
+// }

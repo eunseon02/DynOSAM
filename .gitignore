@@ -81,3 +81,6 @@ CATKIN_IGNORE
 
 % Ignore python bytecode
 *.pyc
+
+# Avoid overwriting user specific arguments
+docker/create_containers.sh

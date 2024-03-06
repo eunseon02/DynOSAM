@@ -27,7 +27,7 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/backend/DynamicPointSymbol.hpp"
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/logger/Logger.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
@@ -50,7 +50,6 @@ static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
 inline gtsam::Key H(unsigned char label, std::uint64_t j) {return gtsam::LabeledSymbol(kObjectMotionSymbolChar, label, j);}
 
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
-inline gtsam::Symbol ObjectMotionSymbol(FrameId frame_id) { return gtsam::Symbol(kObjectMotionSymbolChar, frame_id); }
 inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
 inline DynamicPointSymbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return DynamicPointSymbol(kDynamicLandmarkSymbolChar, tracklet_id, frame_id); }
 
@@ -86,6 +85,9 @@ inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, Fram
 }
 
 std::string DynoLikeKeyFormatter(gtsam::Key);
+std::string DynoLikeKeyFormatterVerbose(gtsam::Key);
+SymbolChar DynoChrExtractor(gtsam::Key);
+
 
 using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
 
@@ -98,7 +100,7 @@ using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gts
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
 
-
+//TODO: depricate
 /**
  * @brief Definition of a tracklet - a tracket point seen at multiple frames.
  *
@@ -134,7 +136,47 @@ private:
 };
 
 
+class DebugInfo {
+public:
+    int num_static_factors = 0; //num new static factors added
+    int num_new_static_points = 0;
 
+    struct ObjectInfo {
+        int num_dynamic_factors = 0;
+        int num_new_dynamic_points = 0;
+        int num_motion_factors = 0;
+        bool smoothing_factor_added{false};
+    };
+
+    gtsam::FastMap<ObjectId, ObjectInfo> object_info{};
+
+    bool odometry_factor_added {false};
+
+    double update_static_time = 0;
+    double update_dynamic_time = 0;
+    double optimize_time = 0;
+
+    double error_before = 0;
+    double error_after = 0;
+
+    size_t num_factors = 0;
+    size_t num_values = 0;
+
+    int num_elements_in_matrix = 0;
+    int num_zeros_in_matrix = 0;
+
+};
+
+//TODO: currently FrontendLogger really is RGBDLogger?
+class BackendLogger : public EstimationModuleLogger {
+public:
+    DYNO_POINTER_TYPEDEFS(BackendLogger)
+    BackendLogger() : EstimationModuleLogger("backend") {}
+};
+
+
+
+//TODO: depricate
 class DynamicObjectManager {
 public:
     using ObjectToTrackletIdMap = gtsam::FastMap<ObjectId, TrackletIds>;
@@ -252,7 +294,7 @@ protected:
 
 };
 
-
+//TODO: depricate
 template<typename MEASUREMENT>
 class DynamicObjectTrackletManager : public DynamicObjectManager {
 

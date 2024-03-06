@@ -160,7 +160,7 @@ cv::Mat Frame::drawDetectedObjectBoxes() const {
         if(bb.empty()) { continue; }
 
         const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
-        const std::string label = "Object: " + std::to_string(object_id);
+        const std::string label = "Obj " + std::to_string(object_id);
         utils::drawLabeledBoundingBox(rgb_objects, label, colour, bb);
 
     }

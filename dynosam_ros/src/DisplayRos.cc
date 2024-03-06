@@ -28,24 +28,32 @@
 
 namespace dyno {
 
-void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks) {
+DisplayRos::CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
+    CloudPerObject clouds_per_obj;
+
     for(const auto& status_estimate : landmarks) {
-        const LandmarkStatus& status =  status_estimate.first;
-        const LandmarkEstimate& estimate = status_estimate.second;
-        const Landmark& lmk = estimate.second;
+        Landmark lmk_world = status_estimate.value();
+        const ObjectId object_id = status_estimate.objectId();
+        if(status_estimate.referenceFrame() == ReferenceFrame::LOCAL) {
+            lmk_world = T_world_camera * status_estimate.value();
+        }
+        else if(status_estimate.referenceFrame() == ReferenceFrame::OBJECT) {
+            throw DynosamException("Cannot display object point in the object reference frame");
+        }
 
         pcl::PointXYZRGB pt;
-        if(status.label_ == background_label) {
+        if(status_estimate.isStatic()) {
             // publish static lmk's as white
-            pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
+            pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), 0, 0, 0);
         }
         else {
-            const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
-            pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
+            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0), colour(1), colour(2));
         }
         cloud.points.push_back(pt);
+        clouds_per_obj[object_id].push_back(pt);
     }
 
 
@@ -53,6 +61,8 @@ void DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLa
     pcl::toROSMsg(cloud, pc2_msg);
     pc2_msg.header.frame_id = params_.world_frame_id_;
     pub->publish(pc2_msg);
+
+    return clouds_per_obj;
 }
 
 void DisplayRos::publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
@@ -158,16 +168,6 @@ void DisplayRos::publishObjectPaths(
     object_path_marker_array.markers.push_back(delete_marker);
 
     for(const auto&[object_id, poses_map] : object_positions) {
-        //keys for FastMap are sorted by std::less so largest key should be in end()
-        // const FrameId last_seen_frame = poses_map.end()->first;
-
-        // LOG(INFO) << last_seen_frame << " " << frame_id;
-
-        // //dont draw objects more than 10 frames ago
-        // if(frame_id - last_seen_frame > 10u) {
-        //     continue;
-        // }
-
         if(poses_map.size() < 2u) {
             continue;
         }

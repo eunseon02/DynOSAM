@@ -44,7 +44,7 @@ private:
     EgoMotionSolver motion_solver_;
     ObjectMotionSovler object_motion_solver_;
     FeatureTracker::UniquePtr tracker_;
-    FrontendLogger::UniquePtr logger_;
+    RGBDFrontendLogger::UniquePtr logger_;
 
 private:
 
@@ -75,8 +75,8 @@ private:
         const Frame& frame,
         const MotionEstimateMap& estimated_motions,
         const gtsam::Pose3& T_world_camera,
-        const cv::Mat& debug_image = cv::Mat(),
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt);
+        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+        const DebugImagery::Optional& debug_imagery = std::nullopt);
 
     //updates the object_poses_ map which is then sent to the viz via the output
     //this updates the estimated trajectory of the object from a starting pont using the
