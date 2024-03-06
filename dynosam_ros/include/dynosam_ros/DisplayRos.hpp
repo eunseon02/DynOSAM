@@ -83,39 +83,11 @@ protected:
 };
 
 // Axis Aligned Bounding Box (AABB)
-template<typename PointT>
-pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(const PointT& min_point_AABB, const PointT& max_point_AABB) {
-    pcl::PointCloud<pcl::PointXYZ> line_list_points;
+void findAABBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB);
+pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(pcl::PointXYZ min_point_AABB, pcl::PointXYZ max_point_AABB);
 
-    // bottom
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    // top
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    // vertical
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(min_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, min_point_AABB.y, max_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, min_point_AABB.z));
-    line_list_points.push_back(pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z));
-
-    return line_list_points;
-}
+// // TODO: Not yet implemented
+// // Oriented Bounding Box
+// void findOBBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB);
 
 } //dyno

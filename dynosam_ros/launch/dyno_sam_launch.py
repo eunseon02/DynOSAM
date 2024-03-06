@@ -105,7 +105,13 @@ def load_dynosam_node(context, *args, **kwargs):
         ],
         arguments=arguments
     )
-    return [node]
+
+    tf_node = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        arguments=["0.0", "0.0", "0.0", "1.57", "-1.57", "0.0", "world", "robot"]
+    )
+    return [node, tf_node]
 
 
 def generate_launch_description():

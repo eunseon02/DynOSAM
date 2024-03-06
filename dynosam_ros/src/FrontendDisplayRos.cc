@@ -40,8 +40,6 @@
 
 #include <pcl/common/common.h>
 #include <pcl/common/centroid.h>
-#include <pcl/features/moment_of_inertia_estimation.h>
-#include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/memory.h>
 
 #include <string>
@@ -115,6 +113,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         60
     );
 
+    // object bounding box using linelist and id text in rviz
     {
         visualization_msgs::msg::MarkerArray object_bbx_marker_array;
         static visualization_msgs::msg::Marker delete_marker;
@@ -145,22 +144,10 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             txt_marker.pose.position.z = centroid.z-1.0;
             object_bbx_marker_array.markers.push_back(txt_marker);
 
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(obj_cloud);
-            pcl::PointCloud<pcl::PointXYZRGB> filtered_cloud;
-
-            pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> outlier_remover;
-            outlier_remover.setInputCloud(obj_cloud_ptr);
-            outlier_remover.setMeanK(100);
-            outlier_remover.setStddevMulThresh(1.0);
-            outlier_remover.filter(filtered_cloud);
-
-            pcl::MomentOfInertiaEstimation<pcl::PointXYZRGB> bbx_extractor;
-            bbx_extractor.setInputCloud(pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(filtered_cloud));
-            bbx_extractor.compute();
-
-            pcl::PointXYZRGB min_point_AABB;
-            pcl::PointXYZRGB max_point_AABB;
-            bbx_extractor.getAABB(min_point_AABB, max_point_AABB);
+            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud);
+            pcl::PointXYZ min_point_AABB;
+            pcl::PointXYZ max_point_AABB;
+            findAABBFromCloud(obj_cloud_ptr, min_point_AABB, max_point_AABB);
 
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = "world";
@@ -301,9 +288,6 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
 
     {
         visualization_msgs::msg::MarkerArray object_pred_marker_array;
-        // static visualization_msgs::msg::Marker delete_marker;
-        // delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
-        // object_pred_marker_array.markers.push_back(delete_marker);
 
         for (const auto& [object_id, this_obj_predicted_poses] : obj_predicted_poses){
             const cv::Scalar colour = ColourMap::getObjectColour(object_id);
@@ -347,169 +331,6 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
 
 }
 
-// void FrontendDisplayRos::publishStaticCloud(const Landmarks& static_landmarks) {
-//     pcl::PointCloud<pcl::PointXYZRGB> cloud;
-
-//     for(const Landmark& lmk : static_landmarks) {
-//         // publish static lmk's as white
-//         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), 0, 0, 0);
-//         cloud.points.push_back(pt);
-//     }
-
-
-//     sensor_msgs::msg::PointCloud2 pc2_msg;
-//     pcl::toROSMsg(cloud, pc2_msg);
-//     pc2_msg.header.frame_id = "world";
-//     static_tracked_points_pub_->publish(pc2_msg);
-// }
-
-// void FrontendDisplayRos::publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks) {
-//     pcl::PointCloud<pcl::PointXYZRGB> cloud;
-//     CHECK_EQ(dynamic_measurements.size(), dynamic_landmarks.size());
-
-//     const size_t num_measurements = dynamic_measurements.size();
-
-//     for(size_t i = 0; i < num_measurements; i++) {
-//         const StatusKeypointMeasurement& kpm = dynamic_measurements.at(i);
-//         const KeypointStatus& status = kpm.first;
-//         const Landmark& lmk = dynamic_landmarks.at(i);
-
-//         const cv::Scalar colour = ColourMap::getObjectColour(status.label_);
-//         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
-//         cloud.points.push_back(pt);
-//     }
-
-//     sensor_msgs::msg::PointCloud2 pc2_msg;
-//     pcl::toROSMsg(cloud, pc2_msg);
-//     pc2_msg.header.frame_id = "world";
-//     dynamic_tracked_points_pub_->publish(pc2_msg);
-// }
-
-
-// void FrontendDisplayRos::publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id) {
-//     visualization_msgs::msg::MarkerArray object_pose_marker_array;
-//     visualization_msgs::msg::MarkerArray object_path_marker_array;
-
-//     static visualization_msgs::msg::Marker delete_marker;
-//     delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
-
-//     object_pose_marker_array.markers.push_back(delete_marker);
-
-//     for(const auto&[object_id, pose] : propogated_object_poses) {
-
-//             //object centroid per frame
-//             visualization_msgs::msg::Marker marker;
-//             marker.header.frame_id = "world";
-//             marker.ns = "frontend_composed_object_positions";
-//             marker.id = object_id;
-//             marker.type = visualization_msgs::msg::Marker::SPHERE;
-//             marker.action = visualization_msgs::msg::Marker::ADD;
-//             marker.header.stamp = node_->now();
-//             marker.pose.position.x = pose.x();
-//             marker.pose.position.y = pose.y();
-//             marker.pose.position.z = pose.z();
-//             marker.pose.orientation.x = pose.rotation().toQuaternion().x();
-//             marker.pose.orientation.y = pose.rotation().toQuaternion().y();
-//             marker.pose.orientation.z = pose.rotation().toQuaternion().z();
-//             marker.pose.orientation.w = pose.rotation().toQuaternion().w();
-//             marker.scale.x = 1;
-//             marker.scale.y = 1;
-//             marker.scale.z = 1;
-//             marker.color.a = 1.0; // Don't forget to set the alpha!
-
-//             const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-//             marker.color.r = colour(0)/255.0;
-//             marker.color.g = colour(1)/255.0;
-//             marker.color.b = colour(2)/255.0;
-
-//             object_pose_marker_array.markers.push_back(marker);
-
-//             //update past trajectotries of objects
-//             auto it = object_trajectories_.find(object_id);
-//             if(it == object_trajectories_.end()) {
-//                 object_trajectories_[object_id] = gtsam::Pose3Vector();
-//             }
-
-//             object_trajectories_update_[object_id] = frame_id;
-//             object_trajectories_[object_id].push_back(pose);
-//     }
-
-//     //iterate over object trajectories and display the ones with enough poses and the ones weve seen recently
-//     for(const auto& [object_id, poses] : object_trajectories_) {
-//         const FrameId last_seen_frame = object_trajectories_update_.at(object_id);
-
-//         //if weve seen the object in the last 30 frames and the length is at least 2
-//         if(poses.size() < 2u) {
-//             continue;
-//         }
-
-//         //draw a line list for viz
-//         visualization_msgs::msg::Marker line_list_marker;
-//         line_list_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-//         line_list_marker.header.frame_id = "world";
-//         line_list_marker.ns = "frontend_composed_object_path";
-//         line_list_marker.id = object_id;
-//         line_list_marker.header.stamp = node_->now();
-//         line_list_marker.scale.x = 0.3;
-
-//         line_list_marker.pose.orientation.x = 0;
-//         line_list_marker.pose.orientation.y = 0;
-//         line_list_marker.pose.orientation.z = 0;
-//         line_list_marker.pose.orientation.w = 1;
-
-//         const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-//         line_list_marker.color.r = colour(0)/255.0;
-//         line_list_marker.color.g = colour(1)/255.0;
-//         line_list_marker.color.b = colour(2)/255.0;
-//         line_list_marker.color.a = 1;
-
-//         //only draw the last 60 poses
-//         const size_t traj_size = std::min(60, static_cast<int>(poses.size()));
-//         // const size_t traj_size = poses.size();
-//         //have to duplicate the first in each drawn pair so that we construct a complete line
-//         for(size_t i = poses.size() - traj_size + 1; i < poses.size(); i++) {
-//             const gtsam::Pose3& prev_pose = poses.at(i-1);
-//             const gtsam::Pose3& curr_pose = poses.at(i);
-
-//             {
-//                 geometry_msgs::msg::Point p;
-//                 p.x = prev_pose.x();
-//                 p.y = prev_pose.y();
-//                 p.z = prev_pose.z();
-
-//                 line_list_marker.points.push_back(p);
-//             }
-
-//             {
-//                 geometry_msgs::msg::Point p;
-//                 p.x = curr_pose.x();
-//                 p.y = curr_pose.y();
-//                 p.z = curr_pose.z();
-
-//                 line_list_marker.points.push_back(p);
-//             }
-//         }
-
-//          object_path_marker_array.markers.push_back(line_list_marker);
-//     }
-
-//     // Publish centroids of composed object poses
-//     object_pose_pub_->publish(object_pose_marker_array);
-
-//     // Publish composed object path
-//     object_pose_path_pub_->publish(object_path_marker_array);
-
-// }
-
-
-// void FrontendDisplayRos::publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses) {
-//     CHECK_EQ(motion_estimates.size(), propogated_object_poses.size());
-
-//     //should have a 1 to 1 between the motion map and the propogated poses (same object ids in both)
-// }
-
-
-
 void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
     DisplayRos::publishOdometry(odometry_pub_, T_world_camera, timestamp);
     geometry_msgs::msg::TransformStamped t;
@@ -521,9 +342,7 @@ void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera, Tim
     t.header.frame_id = params_.world_frame_id_;
     t.child_frame_id = params_.camera_frame_id_;
 
-
     tf_broadcaster_->sendTransform(t);
-
 }
 
 // void FrontendDisplayRos::publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
