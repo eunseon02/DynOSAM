@@ -28,6 +28,9 @@
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 
+#include "dynosam/common/PointCloudProcess.hpp"
+
+#include <pcl/impl/point_types.hpp>
 
 #include <glog/logging.h>
 
@@ -46,6 +49,9 @@ public:
     const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
     const ObjectPoseMap propogated_object_poses_; //! Propogated poses using the esimtate from the frontend
     const gtsam::Pose3Vector camera_poses_; //! Vector of ego-motion poses (drawn everytime)
+
+    CloudPerObject object_clouds_;
+    BbxPerObject object_bbxes_;
 
      RGBDInstanceOutputPacket(
         const StatusKeypointMeasurements& static_keypoint_measurements,
@@ -82,6 +88,21 @@ public:
         //they need to be the same size as we expect a 1-to-1 relation between the keypoint and the landmark (which acts as an initalisation point)
         CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());
         CHECK_EQ(dynamic_landmarks_.size(), dynamic_keypoint_measurements_.size());
+
+        // TODO: Put this into a function - in point cloud process?
+        object_clouds_ = groupObjectCloud(dynamic_landmarks_, T_world_camera_);
+        for (const auto& [object_id, this_object_cloud] : object_clouds_){
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(this_object_cloud);
+            ObjectBBX this_object_bbx = findAABBFromCloud(obj_cloud_ptr);
+            object_bbxes_.insert2(object_id, this_object_bbx);
+        }
+    }
+
+    pcl::PointCloud<pcl::PointXYZRGB> getDynamicObjectPointCloud(ObjectId object_id) {
+        return object_clouds_[object_id];
+    }
+    ObjectBBX getDynamicObjectBBX(ObjectId object_id) {
+        return object_bbxes_[object_id];
     }
 };
 

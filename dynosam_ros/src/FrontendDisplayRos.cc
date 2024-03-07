@@ -144,12 +144,10 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             txt_marker.pose.position.z = centroid.z-1.0;
             object_bbx_marker_array.markers.push_back(txt_marker);
 
-            pcl::PointCloud<pcl::PointXYZ> obj_cloud_xyz;
-            pcl::copyPointCloud(obj_cloud, obj_cloud_xyz);
-            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud_xyz);
-            pcl::PointXYZ min_point_AABB;
-            pcl::PointXYZ max_point_AABB;
-            findAABBFromCloud(obj_cloud_ptr, min_point_AABB, max_point_AABB);
+            // pcl::PointCloud<pcl::PointXYZ> obj_cloud_xyz;
+            // pcl::copyPointCloud(obj_cloud, obj_cloud_xyz);
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(obj_cloud);
+            ObjectBBX aabb = findAABBFromCloud(obj_cloud_ptr);
 
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = "world";
@@ -170,7 +168,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             marker.color.b = colour(2)/255.0;
             marker.color.a = 1;
 
-            for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(min_point_AABB, max_point_AABB)){
+            for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
                 geometry_msgs::msg::Point p;
                 p.x = this_line_list_point.x;
                 p.y = this_line_list_point.y;
