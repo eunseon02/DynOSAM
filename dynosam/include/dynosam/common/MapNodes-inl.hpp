@@ -150,7 +150,7 @@ template<typename MEASUREMENT>
 std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair> FrameNode<MEASUREMENT>::getDynamicMeasurements() const {
     std::vector<LandmarkMeasurementPair> measurements;
     for(const auto& lmk_ptr : dynamic_landmarks) {
-        MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
+        const MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
         measurements.push_back(std::make_pair(lmk_ptr, m));
     }
     return measurements;
@@ -162,7 +162,7 @@ std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair> FrameNode<
     std::vector<LandmarkMeasurementPair> measurements;
     for(const auto& lmk_ptr : dynamic_landmarks) {
         if(lmk_ptr->getObjectId() == object_id) {
-            MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
+            const MEASUREMENT m = lmk_ptr->getMeasurement(this->frame_id);
             measurements.push_back(std::make_pair(lmk_ptr, m));
         }
 

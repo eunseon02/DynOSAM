@@ -52,6 +52,7 @@
  */
 
 #include "dynosam/utils/Statistics.hpp"
+#include "dynosam/utils/CsvWriter.hpp"
 
 #include <cmath>
 #include <fstream>
@@ -329,11 +330,9 @@ void Statistics::WriteAllSamplesToCsvFile(const std::string& path) {
     return;
   }
 
-  std::ofstream output_file(path);
-  if (!output_file) {
-    LOG(ERROR) << "Could not write samples: Unable to open file: " << path;
-    return;
-  }
+  static const CsvHeader header("label", "samples");
+  CsvWriter writer(header);
+
 
   VLOG(1) << "Writing statistics to file: " << path;
   for (const map_t::value_type& tag : tag_map) {
@@ -341,17 +340,53 @@ void Statistics::WriteAllSamplesToCsvFile(const std::string& path) {
     if (GetNumSamples(index) > 0) {
       const std::string& label = tag.first;
 
-      // Add header to csv file. tag.first is the stats label.
-      output_file << label;
+      // // Add header to csv file. tag.first is the stats label.
+      writer << label;
 
       // Each row has all samples.
+      std::stringstream ss;
       const std::vector<double>& samples = GetAllSamples(index);
       for (const auto& sample : samples) {
-        output_file << ',' << sample;
+        //make space separated so not to confuse the CsvWriter
+        //treat all samples as a single column
+        ss << ' ' << sample;
       }
-      output_file << '\n';
+      writer << ss.str();
     }
   }
+
+  writer.write(path);
+}
+
+
+void Statistics::WriteSummaryToCsvFile(const std::string &path) {
+  const map_t& tag_map = Instance().tag_map_;
+  if (tag_map.empty()) {
+    return;
+  }
+
+  static const CsvHeader header("label", "num samples", "log Hz", "mean", "stddev", "min", "max");
+  CsvWriter writer(header);
+
+
+  for (const map_t::value_type& tag : tag_map) {
+    const size_t& index = tag.second;
+    if (GetNumSamples(index) > 0) {
+      const std::string& label = tag.first;
+      size_t i = tag.second;
+
+      writer << label
+             << GetNumSamples(i)
+             << GetHz(i)
+             << GetMean(i)
+             << sqrt(GetVariance(i))
+             << GetMin(i)
+             << GetMax(i);
+    }
+  }
+
+  writer.write(path);
+
 }
 
 void Statistics::WriteToYamlFile(const std::string& path) {

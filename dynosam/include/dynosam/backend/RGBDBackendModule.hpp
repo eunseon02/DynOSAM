@@ -27,9 +27,11 @@
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/common/Map.hpp"
 
+#include "dynosam/backend/DynoISAM2.hpp"
+
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
-#include <gtsam/nonlinear/ISAM2.h>
+// #include <gtsam/nonlinear/ISAM2.h>
 
 #include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
@@ -79,7 +81,7 @@ public:
 
 
 public:
-    std::unique_ptr<gtsam::ISAM2> smoother_;
+    std::unique_ptr<DynoISAM2> smoother_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
     using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;

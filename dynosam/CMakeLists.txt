@@ -103,7 +103,10 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
   src/backend/RGBDBackendModule.cc
-  src/backend/FixedLagOptimizer.cc
+  src/backend/DynoISAM2.cc
+  src/backend/DynoISAM2Params.cc
+  src/backend/DynoISAM2-impl.cc
+  src/backend/DynoISAM2Clique.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
@@ -154,6 +157,8 @@ target_link_libraries(${PROJECT_NAME}
   gflags
   gtsam
   gtsam_unstable
+  # gtsamDebug
+  # gtsam_unstableDebug
   Boost::boost
   png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
@@ -168,6 +173,7 @@ ament_export_libraries(${PROJECT_NAME}
   opengv
   Boost::boost
   gtsam
+  # gtsamDebug
   ${OpenCV_LIBRARIES}
   png
 )

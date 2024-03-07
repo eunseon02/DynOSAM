@@ -51,6 +51,35 @@ namespace dyno {
  */
 std::string getOutputFilePath(const std::string& file_name);
 
+/**
+ * @brief Writes all the statistics to a csv file on the path defined by getOutputFilePath(file_name).
+ *
+ * The output csv file has a header "label, samples"
+ * Where ALL recorded samples per label are saved to file.
+ *
+ * Internally uses Statistics::WriteAllSamplesToCsvFile.
+ *
+ * Default file name is statistics_samples.csv.
+ *
+ * @param file_name
+ * @return true
+ * @return false
+ */
+void writeStatisticsSamplesToFile(const std::string& file_name = "statistics_samples.csv");
+
+/**
+ * @brief Writes a summary of the statistics to a csv file on the path defined by getOutputFilePath(file_name).
+ *
+ * Internally uses Statistics::WriteSummaryToCsvFile.
+ *
+ * Default file name is statistics.csv.
+ *
+ * @param file_name
+ * @return true
+ * @return false
+ */
+void writeStatisticsSummaryToFile(const std::string& file_name = "statistics.csv");
+
 // Open files with name output_filename, and checks that it is valid
 static inline void OpenFile(const std::string& output_filename,
                             std::ofstream* output_file,

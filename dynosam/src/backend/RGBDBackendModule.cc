@@ -30,6 +30,7 @@
 
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 
+#include <gtsam/base/debug.h>
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 
 #include <glog/logging.h>
@@ -46,15 +47,20 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
     CHECK_NOTNULL(map);
     CHECK_NOTNULL(map_);
 
-    gtsam::ISAM2Params isam_params;
+    //TODO: for now!!
+    CHECK(gtsam::isDebugVersion());
+    // gtsam::guardedSetDebug("ISAM2 recalculate", true);
+
+    DynoISAM2Params isam_params;
     // isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
     isam_params.enableDetailedResults = true;
     // isam_params.factorizationTranslator("QR");
     isam_params.relinearizeThreshold = 0.01;
     isam_params.relinearizeSkip = 1;
+    isam_params.enablePartialRelinearizationCheck = true;
 
     // smoother_ = std::make_unique<gtsam::IncrementalFixedLagSmoother>(2, isam_params);
-    smoother_ = std::make_unique<gtsam::ISAM2>(isam_params);
+    smoother_ = std::make_unique<DynoISAM2>(isam_params);
 
     //TODO: functioanlise and streamline with BackendModule
     static_point_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.static_point_noise_sigma_);
@@ -70,7 +76,13 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
         //TODO: not k_huber_3d_points_ not just used for 3d points
         landmark_motion_noise_ = gtsam::noiseModel::Robust::Create(
             gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), landmark_motion_noise_);
+
     }
+
+    CHECK_NOTNULL(static_point_noise_);
+    CHECK_NOTNULL(dynamic_point_noise_);
+    CHECK_NOTNULL(landmark_motion_noise_);
+
 }
 
 RGBDBackendModule::~RGBDBackendModule() {}
@@ -134,7 +146,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     backend_output->T_world_camera_ = map_->getPoseEstimate(frame_k).get();
     backend_output->static_landmarks_ = map_->getFullStaticMap();
     backend_output->dynamic_landmarks_ = map_->getDynamicMap(frame_k);
-    backend_output->composed_object_poses = updateObjectPoses(frame_k, input);
+    // backend_output->composed_object_poses = updateObjectPoses(frame_k, input);
 
     debug_info_ = DebugInfo();
 
@@ -451,7 +463,7 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
 
 
 void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors) {
-    gtsam::ISAM2UpdateParams isam_update_params;
+    DynoISAM2UpdateParams isam_update_params;
     // isam_update_params.
 
     //create an ordering putting motions last?
@@ -481,15 +493,25 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
 
     //allows keys to be re-ordered
     gtsam::FastList<gtsam::Key> extraReelimKeys;
-    gtsam::KeyVector old_dynamic_points;
+    gtsam::KeyVector marginalize_keys;
     // // //eliminate motions last? (group < dynamic key)
     const FrameNode3d::Ptr frame_node_k = map_->getFrame(frame_id_k);
+    const FrameNode3d::Ptr frame_node_k_1 = map_->getFrame(frame_id_k - 1u);
     for(const ObjectNode3d::Ptr& object_node : frame_node_k->objects_seen) {
         const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(object_node->getId());
 
         if(new_values.exists(object_motion_key_k)) {
             constrainedKeys[object_motion_key_k] = 1;
         }
+
+        // if(frame_node_k_1) {
+        //     const gtsam::Key object_motion_key_k_1 = frame_node_k_1->makeObjectMotionKey(object_node->getId());
+        //     if(map_->exists(object_motion_key_k_1)) {
+        //         constrainedKeys.insert2(object_motion_key_k_1, 0);
+        //         marginalize_keys.push_back(object_motion_key_k_1);
+        //     }
+
+        // }
     }
 
     for(const auto& dyn_lmk_node : frame_node_k->dynamic_landmarks) {
@@ -517,7 +539,7 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
     }
 
     // //further up the tree than the other two?
-    constrainedKeys.insert2(CameraPoseSymbol(frame_id_k), 1);
+    // constrainedKeys.insert2(CameraPoseSymbol(frame_id_k), 1);
 
     // if(frame_id_k > 1) {
     //     constrainedKeys.insert2(CameraPoseSymbol(frame_id_k -1), 0);
@@ -559,9 +581,9 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
         // If the key was not found in the separator/parents, then none of its children can have it either
     };
 
-    // //these keys should already be in the smoother and should now be at the leaves of the tree
+    //these keys should already be in the smoother and should now be at the leaves of the tree
     // std::set<gtsam::Key> additionalKeys;
-    // for(gtsam::Key key : old_dynamic_points) {
+    // for(gtsam::Key key : marginalize_keys) {
     //     gtsam::ISAM2Clique::shared_ptr clique = smoother_->operator[](key);
     //     for(const gtsam::ISAM2Clique::shared_ptr& child: clique->children) {
     //         recursiveMarkAffectedKeys(key, child, additionalKeys);
@@ -583,9 +605,10 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
     try {
         // gtsam::IncrementalFixedLagSmoother::Result fl_result = smoother_->update(new_factors, new_values, timestamp_map_);
         // gtsam::ISAM2Result result = smoother_->getISAM2Result();
-        gtsam::ISAM2Result result = smoother_->update(new_factors, new_values, isam_update_params);
-        result = smoother_->update();
-        result = smoother_->update();
+        utils::TimingStatsCollector("backend.update");
+        DynoISAM2Result result = smoother_->update(new_factors, new_values, isam_update_params);
+        // result = smoother_->update();
+        // result = smoother_->update();
 
         // smoother_->print("isam2 ", DynoLikeKeyFormatter);
         result.print();
@@ -622,9 +645,9 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
     timestamp_map_.clear();
 
 //     // Marginalize out any needed variables
-//     if (old_dynamic_points.size() > 0) {
-//         gtsam::FastList<gtsam::Key> leafKeys(old_dynamic_points.begin(),
-//             old_dynamic_points.end());
+//     if (marginalize_keys.size() > 0) {
+//         gtsam::FastList<gtsam::Key> leafKeys(marginalize_keys.begin(),
+//             marginalize_keys.end());
 //         smoother_->marginalizeLeaves(leafKeys);
 //   }
 

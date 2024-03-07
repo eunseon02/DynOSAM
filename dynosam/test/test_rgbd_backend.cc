@@ -96,8 +96,54 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         ss << output->T_world_camera_ << "\n";
         ss << dyno::container_to_string(output->static_landmarks_);
 
-        LOG(INFO) << ss.str();
+        // LOG(INFO) << ss.str();
         backend.spinOnce(output);
+
+        gtsam::NonlinearFactorGraph full_graph = backend.smoother_->getFactorsUnsafe();
+        gtsam::Values values = backend.smoother_->getLinearizationPoint();
+
+        //get variables in this frame
+        const auto& map = backend.getMap();
+        const auto frame_k_node = map->getFrame(i);
+        const auto dyn_lmk_nodes = frame_k_node->dynamic_landmarks;
+        const auto object_nodes = frame_k_node->objects_seen;
+
+        gtsam::KeyVector dyn_lmks_this_frame;
+
+        for(const auto& dyn_lmk_node : dyn_lmk_nodes) {
+            gtsam::Key key = dyn_lmk_node->makeDynamicKey(i);
+            if(map->exists(key)) {
+                dyn_lmks_this_frame.push_back(key);
+            }
+        }
+
+        dyn_lmks_this_frame.push_back(map->getFrame(i)->makePoseKey());
+
+        gtsam::KeyVector object_motions_this_frame;
+
+        for(const auto& node : object_nodes) {
+            const gtsam::Key key = frame_k_node->makeObjectMotionKey(node->getId());
+            if(map->exists(key)) {
+                dyn_lmks_this_frame.push_back(key);
+            }
+        }
+
+
+        gtsam::VariableIndex affectedFactorsVarIndex(full_graph);
+        gtsam::Ordering order = gtsam::Ordering::ColamdConstrainedLast(affectedFactorsVarIndex, dyn_lmks_this_frame);
+        auto linearized = full_graph.linearize(values);
+
+        auto bayesTree =
+            gtsam::ISAM2JunctionTree(
+                gtsam::GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
+                .eliminate(gtsam::EliminatePreferCholesky)
+                .first;
+
+        LOG(INFO) << bayesTree->roots().size();
+        LOG(WARNING) << "Number nnz bayes tree " << bayesTree->roots().at(0)->calculate_nnz();
+        LOG(WARNING) << "Number nnz isam2 tree " << backend.smoother_->roots().at(0)->calculate_nnz();
+
+        bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
 
         // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
@@ -359,43 +405,54 @@ TEST(RGBDBackendModule, testCliques) {
     initial.insert(CameraPoseSymbol(1), pose1);
     initial.insert(CameraPoseSymbol(2), pose2);
 
-    graph.saveGraph(dyno::getOutputFilePath("small_graph.dot"), dyno::DynoLikeKeyFormatter);
+    // graph.saveGraph(dyno::getOutputFilePath("small_graph.dot"), dyno::DynoLikeKeyFormatter);
+    gtsam::ISAM2BayesTree::shared_ptr bayesTree = nullptr;
+    {//
+        // gtsam::ISAM2 isam2;
+        gtsam::VariableIndex affectedFactorsVarIndex(graph);
+        gtsam::Ordering order = gtsam::Ordering::Colamd(affectedFactorsVarIndex);
+        auto linearized = graph.linearize(initial);
 
-    gtsam::ISAM2 isam2;
+        bayesTree =
+        gtsam::ISAM2JunctionTree(
+            gtsam::GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
+            .eliminate(gtsam::EliminatePreferCholesky)
+            .first;
 
-
-
-    {
-
-        gtsam::ISAM2UpdateParams isam_update_params;
-
-        gtsam::FastMap<gtsam::Key, int> constrainedKeys;
-        //this includes the motions, where do we want these?
-        //maybe BETWEEN the dynnamic keys
-        //we want motions always on the right but impossible since parent?
-        for(const auto& [keys, value] : initial) {
-            constrainedKeys.insert2(keys, 1);
-        }
-        //put previous dynamic keys lower in the graph
-        constrainedKeys.insert2(DynamicLandmarkSymbol(0, 1), 0);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(1, 1), 0);
-
-        constrainedKeys.insert2(DynamicLandmarkSymbol(0, 2), 0);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(1, 2), 0);
-
-        constrainedKeys.insert2(DynamicLandmarkSymbol(0, 2), 0);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(1, 2), 0);
-
-        ///put current keys later in the graph
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 1), 2);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 2), 2);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 3), 2);
-
-        isam_update_params.constrainedKeys = constrainedKeys;
-        isam2.update(graph, initial, isam_update_params);
+        bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
     }
 
-    isam2.saveGraph(dyno::getOutputFilePath("small_tree_original.dot"), dyno::DynoLikeKeyFormatter);
+    // {
+
+    //     gtsam::ISAM2UpdateParams isam_update_params;
+
+    //     gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+    //     //this includes the motions, where do we want these?
+    //     //maybe BETWEEN the dynnamic keys
+    //     //we want motions always on the right but impossible since parent?
+    //     for(const auto& [keys, value] : initial) {
+    //         constrainedKeys.insert2(keys, 1);
+    //     }
+    //     //put previous dynamic keys lower in the graph
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(0, 1), 0);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(1, 1), 0);
+
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(0, 2), 0);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(1, 2), 0);
+
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(0, 2), 0);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(1, 2), 0);
+
+    //     ///put current keys later in the graph
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 1), 2);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 2), 2);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 3), 2);
+
+    //     isam_update_params.constrainedKeys = constrainedKeys;
+    //     isam2.update(graph, initial, isam_update_params);
+    // }
+
+    // isam2.saveGraph(dyno::getOutputFilePath("small_tree_original.dot"), dyno::DynoLikeKeyFormatter);
 
     //add new factors to  motion
     //the simplest dynamic graph
@@ -467,35 +524,55 @@ TEST(RGBDBackendModule, testCliques) {
 
     new_values.insert(CameraPoseSymbol(3), pose3);
 
-    gtsam::NonlinearFactorGraph all = graph;
-    all.add_factors(new_graph);
-    all.saveGraph(dyno::getOutputFilePath("small_graph_updated.dot"), dyno::DynoLikeKeyFormatter);
+    {
+        gtsam::NonlinearFactorGraph full_graph(graph);
+        full_graph.add_factors(new_graph);
 
-     {
+        gtsam::Values all_values(initial);
+        all_values.insert(new_values);
 
-        gtsam::ISAM2UpdateParams isam_update_params;
+        gtsam::VariableIndex affectedFactorsVarIndex(full_graph);
+        gtsam::Ordering order = gtsam::Ordering::ColamdConstrainedLast(affectedFactorsVarIndex, full_graph.keyVector(), true);
+        auto linearized = full_graph.linearize(all_values);
 
-        gtsam::FastMap<gtsam::Key, int> constrainedKeys;
-        //this includes the motions, where do we want these?
-        //maybe BETWEEN the dynnamic keys
-        //we want motions always on the right but impossible since parent?
-        for(const auto& [keys, value] : new_values) {
-            constrainedKeys.insert2(keys, 1);
-        }
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 1), 0);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 2), 0);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(2, 3), 0);
+        bayesTree =
+        gtsam::ISAM2JunctionTree(
+            gtsam::GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
+            .eliminate(gtsam::EliminatePreferCholesky)
+            .first;
 
-        ///put current keys later in the graph
-        constrainedKeys.insert2(DynamicLandmarkSymbol(3, 1), 2);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(3, 2), 2);
-        constrainedKeys.insert2(DynamicLandmarkSymbol(3, 3), 2);
-
-        isam_update_params.constrainedKeys = constrainedKeys;
-        isam2.update(new_graph, new_values, isam_update_params);
+        bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree_1.dot"), dyno::DynoLikeKeyFormatter);
     }
 
-    isam2.saveGraph(dyno::getOutputFilePath("small_tree_updated.dot"), dyno::DynoLikeKeyFormatter);
+    // gtsam::NonlinearFactorGraph all = graph;
+    // all.add_factors(new_graph);
+    // all.saveGraph(dyno::getOutputFilePath("small_graph_updated.dot"), dyno::DynoLikeKeyFormatter);
+
+    //  {
+
+    //     gtsam::ISAM2UpdateParams isam_update_params;
+
+    //     gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+    //     //this includes the motions, where do we want these?
+    //     //maybe BETWEEN the dynnamic keys
+    //     //we want motions always on the right but impossible since parent?
+    //     for(const auto& [keys, value] : new_values) {
+    //         constrainedKeys.insert2(keys, 1);
+    //     }
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 1), 0);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 2), 0);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(2, 3), 0);
+
+    //     ///put current keys later in the graph
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(3, 1), 2);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(3, 2), 2);
+    //     constrainedKeys.insert2(DynamicLandmarkSymbol(3, 3), 2);
+
+    //     isam_update_params.constrainedKeys = constrainedKeys;
+    //     isam2.update(new_graph, new_values, isam_update_params);
+    // }
+
+    // isam2.saveGraph(dyno::getOutputFilePath("small_tree_updated.dot"), dyno::DynoLikeKeyFormatter);
 
 
 

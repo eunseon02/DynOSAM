@@ -57,7 +57,6 @@ PipelineReturnStatus PipelineModule<INPUT, OUTPUT>::spinOnce() {
     {
       // Transfer the ownership of input to the actual pipeline module.
       // From this point on, you cannot use input, since process owns it.
-      auto tic_process = utils::Timer::tic();
       OutputConstSharedPtr output = nullptr;
       // try
       // {

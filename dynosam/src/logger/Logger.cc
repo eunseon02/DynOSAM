@@ -23,6 +23,7 @@
 
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/utils/Metrics.hpp"
+#include "dynosam/utils/Statistics.hpp"
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -39,6 +40,16 @@ std::string getOutputFilePath(const std::string& file_name) {
   fs::path out_path(FLAGS_output_path);
   return out_path / file_name;
 }
+
+
+void writeStatisticsSamplesToFile(const std::string& file_name) {
+  utils::Statistics::WriteAllSamplesToCsvFile(getOutputFilePath(file_name));
+}
+
+void writeStatisticsSummaryToFile(const std::string& file_name) {
+  utils::Statistics::WriteSummaryToCsvFile(getOutputFilePath(file_name));
+}
+
 
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,

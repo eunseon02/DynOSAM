@@ -27,8 +27,7 @@ namespace dyno {
 namespace utils {
 
 TimingStatsCollector::TimingStatsCollector(const std::string& tag)
-    :   collector_(tag + " [ms]"),
-        tic_time_(Timer::tic()) {}
+    :   tic_time_(Timer::tic()), collector_(tag + " [ms]") {}
 
 
 TimingStatsCollector::~TimingStatsCollector() {
@@ -46,8 +45,9 @@ bool TimingStatsCollector::isValid() const {
 
 void TimingStatsCollector::tocAndLog() {
     if(is_valid_) {
-        auto toc = Timer::toc<std::chrono::milliseconds>(tic_time_);
-        collector_.AddSample(toc.count());
+        auto toc = Timer::toc<std::chrono::nanoseconds>(tic_time_);
+        auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(toc);
+        collector_.AddSample( static_cast<double>(milliseconds.count()));
         is_valid_ = false;
     }
 }

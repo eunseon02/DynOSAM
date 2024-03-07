@@ -29,6 +29,7 @@
 #include "dynosam/backend/MonoBackendModule.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include <glog/logging.h>
 
@@ -125,6 +126,11 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
 DynoPipelineManager::~DynoPipelineManager() {
     shutdownPipelines();
     shutdownSpinners();
+
+    //TODO: make shutdown hook!
+    writeStatisticsSamplesToFile("statistics_samples.csv");
+    writeStatisticsSummaryToFile("statistics.csv");
+
 }
 
 

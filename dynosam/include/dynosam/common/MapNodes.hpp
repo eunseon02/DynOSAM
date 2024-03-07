@@ -48,6 +48,7 @@ public:
     MapNodeBase(const std::shared_ptr<Map<MEASUREMENT>>& map) : map_ptr_(map) {}
     virtual ~MapNodeBase() = default;
     virtual int getId() const = 0;
+    virtual std::string toString() const = 0;
 
     template<typename ValueType>
     std::optional<ValueType> queryMap(gtsam::Key key) const;
@@ -146,15 +147,18 @@ class FastMapNodeSet : public std::set<NODE, MapNodePtrComparison<NODE>,
             Base::insert(other.begin(), other.end());
         }
 
-        // bool continuousIndex() const {
-        //     auto ids = collectIds();
-        //     if(ids.size() < 2) return true;
+        bool continuousAscendingIndex() const {
+            auto ids = collectIds();
+            if(ids.size() < 2) return true;
 
-        //     bool is_continuous = true;
-        //     for(size_t i = 1; i < ids.size(); i++) {
-        //         is_continuous &= (ids.at(i-1) ==
-        //     }
-        // }
+            bool is_continuous = true;
+            for(size_t i = 1; i < ids.size(); i++) {
+                const auto prev = ids.at(i-1);
+                const auto curr = ids.at(i);
+                is_continuous &= (prev + 1 == curr);
+            }
+            return is_continuous;
+        }
 
     private:
         template<typename Index>
@@ -253,6 +257,15 @@ public:
      * @return int
      */
     int getId() const override;
+    std::string toString() const override {
+        std::stringstream ss;
+        ss << "Frame Id: " << frame_id << "\n";
+        ss << "Objects seen: " << container_to_string(objects_seen.template collectIds<ObjectId>()) << "\n";
+        ss << "Num dynamic points: " << numDynamicPoints() << "\n";
+        ss << "Num static points: " << numStaticPoints();
+        return ss.str();
+    }
+
     bool objectObserved(ObjectId object_id) const;
     //TODO: test
     bool objectObservedInPrevious(ObjectId object_id) const;
@@ -323,6 +336,18 @@ public:
      * @return int
      */
     int getId() const override;
+    std::string toString() const override {
+        std::stringstream ss;
+        ss << "Object Id: " << getId() << "\n";
+        ss << "First seen: " << getFirstSeenFrame() << " last seen " << getLastSeenFrame() << "\n";
+        ss << "Seen continuously: " << std::boolalpha  << getSeenFrames().continuousAscendingIndex() << "\n";
+        ss << "Total landmarks: " << dynamic_landmarks.size();
+        return ss.str();
+    }
+
+    inline FrameId getFirstSeenFrame() const { return getSeenFrames().template getFirstIndex<FrameId>(); }
+    inline FrameId getLastSeenFrame() const { return getSeenFrames().template getLastIndex<FrameId>(); }
+
 
     //this could take a while?
     //for all the lmks we have for this object, find the frames of those lmks
@@ -380,6 +405,21 @@ public:
      * @return int
      */
     int getId() const override;
+
+    std::string toString() const override {
+        std::stringstream ss;
+        if(isStatic()) {
+            ss << "Static point: ";
+        }
+        else {
+            ss << "Dynamic point (" << object_id << "): ";
+        }
+        //tracklet ID
+        ss << getId() << "\n";
+        ss << "Num obs: " << numObservations();
+        return ss.str();
+    }
+
     ObjectId getObjectId() const;
 
     //simply checks the background label
