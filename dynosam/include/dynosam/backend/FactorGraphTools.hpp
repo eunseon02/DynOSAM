@@ -229,6 +229,79 @@ struct SparsityStats {
 SparsityStats computeHessianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering = {});
 SparsityStats computeJacobianSparsityStats(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const std::optional<gtsam::Ordering>& ordering = {});
 
+//TODO: we can make all these printing functions really nice in the future
+//for now, just make for printing affected keys or regular printing
+template <class CLIQUE>
+void dotBayesTree(std::ostream& s, boost::shared_ptr<CLIQUE> clique,
+                              const gtsam::KeyFormatter& keyFormatter,
+                              const gtsam::FastMap<gtsam::Key, std::string>& colour_map = {},
+                              int parentnum = 0) {
+    static int num = 0;
+    bool first = true;
+    std::stringstream out;
+    out << num;
+    std::string parent = out.str();
+    parent += "[label=\"";
+
+    //frontal key since this is what is used to add to nodes [j] (ie.e j is a frontal key)
+    bool keyInColourMap = false;
+    std::string colour;
+
+    for (auto key : clique->conditional_->frontals()) {
+      if (!first) parent += ", ";
+      first = false;
+      parent += keyFormatter(key);
+
+      keyInColourMap = colour_map.exists(key);
+      //only for the last key? Assumes all keys have the same colour?
+      if(keyInColourMap) colour = colour_map.at(key);
+    }
+
+    if (clique->parent()) {
+      parent += " : ";
+      s << parentnum << "->" << num << "\n";
+    }
+
+    first = true;
+    for (auto parentKey : clique->conditional_->parents()) {
+      if (!first) parent += ", ";
+      first = false;
+      parent += keyFormatter(parentKey);
+    }
+    //  parent += "\"];\n";
+
+    if(keyInColourMap) {
+        parent += "\",color=" + colour;
+        parent += "];\n";
+    }
+    else {
+        parent += "\"];\n";
+    }
+
+    s << parent;
+    parentnum = num;
+
+    for (auto c : clique->children) {
+      num++;
+      dotBayesTree(s, c, keyFormatter, colour_map, parentnum);
+    }
+}
+
+template <class CLIQUE>
+void saveBayesTree(const gtsam::BayesTree<CLIQUE>& tree, const std::string& filename,
+                                    const gtsam::KeyFormatter& keyFormatter, const gtsam::FastMap<gtsam::Key, std::string> colour_map = {})
+{
+  std::ofstream of(filename.c_str());
+
+  if (tree.roots().empty())
+      throw std::invalid_argument(
+          "the root of Bayes tree has not been initialized!");
+    of << "digraph G{\n";
+    for (const auto& root : tree.roots()) dotBayesTree(of, root, keyFormatter, colour_map);
+    of << "}";
+    std::flush(of);
+}
+
 
 std::pair<SparsityStats, cv::Mat> computeRFactor(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering ordering);
 

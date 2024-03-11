@@ -58,6 +58,7 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
     isam_params.relinearizeThreshold = 0.01;
     isam_params.relinearizeSkip = 1;
     isam_params.enablePartialRelinearizationCheck = true;
+    // isam_params.enableRelinearization = false;
 
     // smoother_ = std::make_unique<gtsam::IncrementalFixedLagSmoother>(2, isam_params);
     smoother_ = std::make_unique<DynoISAM2>(isam_params);
@@ -591,7 +592,7 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
     // }
     // gtsam::KeyList additionalMarkedKeys(additionalKeys.begin(), additionalKeys.end());
 
-    isam_update_params.constrainedKeys = constrainedKeys;
+    // isam_update_params.constrainedKeys = constrainedKeys;
     // isam_update_params.extraReelimKeys = additionalMarkedKeys;
     // isam_update_params.
     // isam_update_params.noRelinKeys = no_relin_keys;
@@ -606,15 +607,15 @@ void RGBDBackendModule::optimize(FrameId frame_id_k, const gtsam::Values& new_va
         // gtsam::IncrementalFixedLagSmoother::Result fl_result = smoother_->update(new_factors, new_values, timestamp_map_);
         // gtsam::ISAM2Result result = smoother_->getISAM2Result();
         utils::TimingStatsCollector("backend.update");
-        DynoISAM2Result result = smoother_->update(new_factors, new_values, isam_update_params);
+        smoother_result_ = smoother_->update(new_factors, new_values, isam_update_params);
         // result = smoother_->update();
         // result = smoother_->update();
 
         // smoother_->print("isam2 ", DynoLikeKeyFormatter);
-        result.print();
+        smoother_result_.print();
         LOG(INFO) << "Num total vars: " << all_values.size() << " num new vars " << new_values.size();
         //keys that were part of the bayes tree that is removed before conversion to a factor graph
-        LOG(INFO) << "Num marked keys: " << result.markedKeys.size();
+        LOG(INFO) << "Num marked keys: " << smoother_result_.markedKeys.size();
         LOG(INFO) << "Num total factors: " << smoother_->getFactorsUnsafe().size() << " num new factors " << new_factors.size();
         // LOG(INFO) << "Num total factors: " << smoother_->getFactors().size() << " num new factors " << new_factors.size();
 

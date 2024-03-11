@@ -128,6 +128,15 @@ struct DynoISAM2Result {
    */
   FastList<Key> affectedKeys;
 
+  //TODO: Still kind of unclear in the difference between affectedKeys and re-eliminated
+  //I think the diff is that re-eliminated marks any-thing be
+
+  /**
+   * All the keys involved in the re-ordering
+   *
+   */
+  FastList<Key> reeliminatedKeys;
+
   /**
    * A struct holding detailed results, which must be enabled with
    * ISAM2Params::enableDetailedResults.
@@ -193,6 +202,8 @@ struct DynoISAM2Result {
     using std::cout;
     cout << str << "  Reelimintated: " << variablesReeliminated
          << "  Relinearized: " << variablesRelinearized
+         << "  Affected: " << affectedKeys.size()
+         << "  Observed: " << observedKeys.size()
          << "  Incremental recalculate: " << std::boolalpha << recalculateIncremental
          << "  Cliques: " << cliques << std::endl;
   }

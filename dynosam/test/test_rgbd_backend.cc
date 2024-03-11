@@ -62,7 +62,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     );
 
     //add one obect
-    const size_t num_points = 5;
+    const size_t num_points = 3;
     dyno_testing::ObjectBody::Ptr object1 = std::make_shared<dyno_testing::ObjectBody>(
         std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
             gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
@@ -143,7 +143,19 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         LOG(WARNING) << "Number nnz bayes tree " << bayesTree->roots().at(0)->calculate_nnz();
         LOG(WARNING) << "Number nnz isam2 tree " << backend.smoother_->roots().at(0)->calculate_nnz();
 
-        bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
+        // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
+        dyno::factor_graph_tools::saveBayesTree(*bayesTree, dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
+
+        gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+        for(const auto& key : backend.smoother_result_.reeliminatedKeys) {
+            coloured_affected_keys.insert2(key, "red");
+        }
+
+        dyno::factor_graph_tools::saveBayesTree(
+            *backend.smoother_,
+            dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) + ".dot"),
+            dyno::DynoLikeKeyFormatter,
+            coloured_affected_keys);
 
         // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");

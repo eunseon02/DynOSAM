@@ -82,6 +82,7 @@ public:
 
 public:
     std::unique_ptr<DynoISAM2> smoother_;
+    DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
     using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;

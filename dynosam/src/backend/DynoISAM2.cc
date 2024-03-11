@@ -167,6 +167,8 @@ void DynoISAM2::recalculate(const DynoISAM2UpdateParams& updateParams,
 
     result->affectedKeys = affectedKeys;
 
+    LOG(INFO) << "Affected keys " << affectedKeys.size() << " theta " << theta_.size();
+
     KeySet affectedKeysSet;
     static const double kBatchThreshold = 0.65;
     if (affectedKeys.size() >= theta_.size() * kBatchThreshold) {
@@ -213,6 +215,8 @@ void DynoISAM2::recalculateBatch(const DynoISAM2UpdateParams& updateParams,
     affectedKeysSet->erase(key);
   }
   // gttoc(add_keys);
+
+
 
   // gttic(ordering);
 
@@ -264,6 +268,11 @@ void DynoISAM2::recalculateBatch(const DynoISAM2UpdateParams& updateParams,
 
   result->variablesReeliminated = affectedKeysSet->size();
   result->factorsRecalculated = nonlinearFactors_.size();
+
+  result->reeliminatedKeys.insert(result->reeliminatedKeys.end(),
+    affectedKeysSet->begin(), affectedKeysSet->end());
+
+  LOG(INFO) << result->reeliminatedKeys.size();
 
   // Reeliminated keys for detailed results
   if (params_.enableDetailedResults) {
@@ -317,6 +326,11 @@ void DynoISAM2::recalculateIncremental(const DynoISAM2UpdateParams& updateParams
 
   result->variablesReeliminated = affectedAndNewKeys.size();
   result->factorsRecalculated = factors.size();
+  //I think this is right?
+  result->reeliminatedKeys.insert(result->reeliminatedKeys.end(),
+    affectedAndNewKeys.begin(), affectedAndNewKeys.end());
+  LOG(INFO) << result->reeliminatedKeys.size();
+
 
   gttic(cached);
   // Add the cached intermediate results from the boundary of the orphans...
@@ -344,6 +358,8 @@ void DynoISAM2::recalculateIncremental(const DynoISAM2UpdateParams& updateParams
   // end in the ordering
   affectedKeysSet->insert(result->markedKeys.begin(), result->markedKeys.end());
   affectedKeysSet->insert(affectedKeys.begin(), affectedKeys.end());
+
+
   gttoc(list_to_set);
 
   VariableIndex affectedFactorsVarIndex(factors);
@@ -388,13 +404,10 @@ void DynoISAM2::recalculateIncremental(const DynoISAM2UpdateParams& updateParams
   DynoISAM2BayesTree::shared_ptr bayesTree = nullptr;
   {
     utils::TimingStatsCollector timer("dynoisam2.iElimination");
-    auto tic = utils::Timer::tic();
     GaussianEliminationTree etree(factors, affectedFactorsVarIndex, ordering);
     bayesTree = DynoISAM2JunctionTree(etree)
                        .eliminate(params_.getEliminationFunction())
                        .first;
-    auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
-    LOG(WARNING) << "dynosam - incremental elimination:" << utils::Timer::toSeconds(toc);
   }
 
   gttoc(reorder_and_eliminate);
@@ -492,9 +505,10 @@ DynoISAM2Result DynoISAM2::update(const NonlinearFactorGraph& newFactors,
   if (params_.evaluateNonlinearError)
     update.error(nonlinearFactors_, calculateEstimate(), &result.errorBefore);
 
-  // 3. Mark linear update
+  // 3. Mark linear update - keys in new factors
   update.gatherInvolvedKeys(newFactors, nonlinearFactors_,
                             result.keysWithRemovedFactors, &result.markedKeys);
+  // from marked keys, add to observed keys if not in unusedKeys
   update.updateKeys(result.markedKeys, &result);
 
   KeySet relinKeys;
