@@ -80,4 +80,34 @@ CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const 
     return clouds_per_obj;
 }
 
+ObjectBBX findOBBFromCloud(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr){
+    pcl::PointCloud<pcl::PointXYZRGB> filtered_cloud;
+
+    // statistical outlier removal
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> outlier_remover;
+    outlier_remover.setInputCloud(obj_cloud_ptr);
+    outlier_remover.setMeanK(100);
+    outlier_remover.setStddevMulThresh(1.0);
+    outlier_remover.filter(filtered_cloud);
+
+    // axis aligned bounding box
+    pcl::MomentOfInertiaEstimation<pcl::PointXYZRGB> bbx_extractor;
+    bbx_extractor.setInputCloud(pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(filtered_cloud));
+    bbx_extractor.compute();
+
+    pcl::PointXYZRGB min_point_AABB;
+    pcl::PointXYZRGB max_point_AABB;
+    pcl::PointXYZRGB position;
+    Eigen::Matrix3f orientation;
+    bbx_extractor.getOBB(min_point_AABB, max_point_AABB, position, orientation);
+
+    ObjectBBX obb;
+    obb.min_bbx_point_ = pcl::PointXYZ(min_point_AABB.x, min_point_AABB.y, min_point_AABB.z);
+    obb.max_bbx_point_ = pcl::PointXYZ(max_point_AABB.x, max_point_AABB.y, max_point_AABB.z);
+    obb.bbx_position_ = pcl::PointXYZ(position.x, position.y, position.z);
+    obb.orientation_ = orientation;
+
+    return obb;
+}
+
 } //dyno

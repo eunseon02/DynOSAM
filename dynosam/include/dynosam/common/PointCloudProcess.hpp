@@ -121,8 +121,7 @@ pcl::PointCloud<pcl::PointXYZ> findLineListPointsFromAABBMinMax(const PointT& mi
     return line_list_points;
 }
 
-// // TODO: Not yet implemented
-// // Oriented Bounding Box
-// void findOBBFromCloud(const pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr, pcl::PointXYZ& min_point_AABB, pcl::PointXYZ& max_point_AABB);
+// Oriented Bounding Box
+ObjectBBX findOBBFromCloud(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr);
 
 } //dyno
