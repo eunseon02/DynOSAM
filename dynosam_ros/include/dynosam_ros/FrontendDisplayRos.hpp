@@ -79,7 +79,8 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_motion_pub_; //! Draw object motion as arrows
 
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object motion as arrows
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_line_pub_; //! Draw object bounding boxes as line lists
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object bounding boxes as cubes
     image_transport::Publisher tracking_image_pub_;
 
     //ground truth publishers

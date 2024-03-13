@@ -93,8 +93,8 @@ public:
         object_clouds_ = groupObjectCloud(dynamic_landmarks_, T_world_camera_);
         for (const auto& [object_id, this_object_cloud] : object_clouds_){
             pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(this_object_cloud);
-            ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
-            // ObjectBBX this_object_bbx = findAABBFromCloud(obj_cloud_ptr);
+            // ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
+            ObjectBBX this_object_bbx = findAABBFromCloud(obj_cloud_ptr);
             object_bbxes_.insert2(object_id, this_object_bbx);
         }
     }
