@@ -52,7 +52,7 @@ ObjectBBX findAABBFromCloud(const pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_clo
     return aabb;
 }
 
-CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera){
+const CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera){
     CloudPerObject clouds_per_obj;
 
     for(const auto& status_estimate : landmarks) {

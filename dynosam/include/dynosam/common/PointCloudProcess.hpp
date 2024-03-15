@@ -37,23 +37,32 @@ namespace dyno {
 
 using CloudPerObject = gtsam::FastMap<ObjectId, pcl::PointCloud<pcl::PointXYZRGB>>;
 
+
+// A struct for bounding boxes estimated by pcl - both oriented (OBB) and axis aligned (AABB)
 struct ObjectBBX{
 public: 
     // Orientation is included, but identity for AABB
-
     ObjectBBX():orientation_(Eigen::Matrix3f::Identity())
     {}
 
+    // in the case of AABB, the min-max points are sufficient to put the box into the reference
+    // in the case of OBB, the min-max points only define the size of the box
     pcl::PointXYZ min_bbx_point_;
     pcl::PointXYZ max_bbx_point_;
+    // in the case of AABB, the position is zero
+    // in the case of OBB, the position is the centroid of the bbx
     pcl::PointXYZ bbx_position_;
-
+    // in the case of AABB, the orientation is identity
+    // in the case of OBB, the orientation is that of the bbx
     Eigen::Matrix3f orientation_;
 };
 
 using BbxPerObject = gtsam::FastMap<ObjectId,  ObjectBBX>;
 
-CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
+// this function goes through the input 3D landmarks and group them into point clusters based on their object labels
+// these 3D landmarks are expected to be in the sensor reference frame, and T_world_camera puts them into the world frame
+// CloudPerObject is in the world frame
+const CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
 
 // Axis Aligned Bounding Box (AABB)
 // template<typename PointT>

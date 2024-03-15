@@ -50,10 +50,7 @@ public:
     const ObjectPoseMap propogated_object_poses_; //! Propogated poses using the esimtate from the frontend
     const gtsam::Pose3Vector camera_poses_; //! Vector of ego-motion poses (drawn everytime)
 
-    CloudPerObject object_clouds_;
-    BbxPerObject object_bbxes_;
-
-     RGBDInstanceOutputPacket(
+    RGBDInstanceOutputPacket(
         const StatusKeypointMeasurements& static_keypoint_measurements,
         const StatusKeypointMeasurements& dynamic_keypoint_measurements,
         const StatusLandmarkEstimates& static_landmarks,
@@ -105,6 +102,18 @@ public:
     ObjectBBX getDynamicObjectBBX(ObjectId object_id) {
         return object_bbxes_[object_id];
     }
+
+    CloudPerObject getObjectClouds(){
+        return object_clouds_;
+    }
+
+    BbxPerObject getObjectBbxes(){
+        return object_bbxes_;
+    }
+private:
+    CloudPerObject object_clouds_;
+    BbxPerObject object_bbxes_;
+
 };
 
 
