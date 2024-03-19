@@ -56,7 +56,7 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_poses", 1);
     object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
-    object_motion_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_motions", 1);
+    object_motion_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/object_motions", 1);
     object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx", 1);
     object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bounding_boxes", 1);
 
@@ -246,6 +246,34 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 }
             }
         }
+    }
+
+    // Write object motion to nav_msgs/Path and publish
+    nav_msgs::msg::Path object_motions_msg;
+    {
+        const FrameId current_frame_id = rgbd_frontend_output->getFrameId();
+        const MotionEstimateMap& obj_motions = rgbd_frontend_output->estimated_motions_;
+
+        // object_motions_msg.header.seq = current_frame_id;
+        object_motions_msg.header.stamp = node_->now();
+        object_motions_msg.header.frame_id = params_.world_frame_id_;
+
+        for (const auto& [object_id, current_obj_motion] : obj_motions){
+            geometry_msgs::msg::PoseStamped current_obj_motion_msg;
+            current_obj_motion_msg.header.stamp = node_->now();
+            current_obj_motion_msg.header.frame_id = std::to_string(object_id);
+            current_obj_motion_msg.pose.position.x = current_obj_motion.estimate_.translation().x();
+            current_obj_motion_msg.pose.position.y = current_obj_motion.estimate_.translation().y();
+            current_obj_motion_msg.pose.position.z = current_obj_motion.estimate_.translation().z();
+            current_obj_motion_msg.pose.orientation.w = current_obj_motion.estimate_.rotation().quaternion()[0]; // in w x y z form
+            current_obj_motion_msg.pose.orientation.x = current_obj_motion.estimate_.rotation().quaternion()[1]; // in w x y z form
+            current_obj_motion_msg.pose.orientation.y = current_obj_motion.estimate_.rotation().quaternion()[2]; // in w x y z form
+            current_obj_motion_msg.pose.orientation.z = current_obj_motion.estimate_.rotation().quaternion()[3]; // in w x y z form
+
+            object_motions_msg.poses.push_back(current_obj_motion_msg);
+        }
+
+        object_motion_pub_->publish(object_motions_msg);
     }
 
     // 2D image visualisation using opencv
