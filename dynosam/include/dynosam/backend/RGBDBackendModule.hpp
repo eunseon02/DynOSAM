@@ -79,8 +79,10 @@ public:
     // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
     //helper factor graph functions
+    //call should happen on every frame
+    const gtsam::FastMap<ObjectId, gtsam::Pose3>& updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
-    void updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
+    const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
 
 public:
@@ -94,6 +96,10 @@ public:
     // gtsam::NonlinearFactorGraph new_factors_;
 
     gtsam::FastMap<ObjectId, gtsam::Pose3> initial_object_poses_; //constructed from the input
+
+    //! A mapping of object to the frame id of when the initial object pose was set
+    //! Used to ensure consistency when propogating object poses
+    gtsam::FastMap<ObjectId, FrameId> initial_object_poses_set_;
     ObjectPoseMap composed_object_poses_;
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)

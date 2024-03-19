@@ -181,6 +181,7 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
   for(const auto&[object_id, poses_map] : propogated_poses) {
       //do not draw if in current frame
       if(!poses_map.exists(frame_id)) {
+          VLOG(10) << "Cannot log object pose for frame " << frame_id << " as it does not exist in the map";
           continue;
       }
 

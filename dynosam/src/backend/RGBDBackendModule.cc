@@ -95,7 +95,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     const FrameId frame_k = input->getFrameId();
     LOG(INFO) << "Running backend " << frame_k;
-    //update new objects poses so we can propogate them
+    //update initial object poses so we can propogate from them
     updateInitialObjectPoses(frame_k, input);
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
@@ -114,6 +114,8 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     optimizer_->update(frame_k, new_values, new_factors, map_);
     // optimize(frame_k, new_values, new_factors);
     map_->updateEstimates(new_values, new_factors, frame_k);
+    //must be called after the map update as it uses this to get all the info
+    updateObjectPoses(frame_k, input);
 
     return {State::Nominal, nullptr};
 }
@@ -124,8 +126,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     const FrameId frame_k = input->getFrameId();
     LOG(INFO) << "Running backend " << frame_k;
     const FrameId frame_k_1 = frame_k - 1u;
-
-    //update new objects poses so we can propogate them
+    //update initial object poses so we can propogate from them
     updateInitialObjectPoses(frame_k, input);
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
@@ -160,10 +161,13 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         //as we need these values in the map for when we call updateStaticObservations/updateDynamicObservations
         //maybe break into update initial values and update estimates?
         map_->updateEstimates(estimate, full_graph, frame_k);
+        // must be called after the map update as it uses this to get all the info
+        //currently only propofate object pose when optimize?
+        auto composed_poses = updateObjectPoses(frame_k, input);
 
         //only logs this the frame specified - in batch case we want to update all!!
         for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
-            logBackendFromMap(frame_id);
+            logBackendFromMap(frame_id, composed_poses);
 
         last_optimized_frame = frame_k;
     }
@@ -887,18 +891,99 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
 //     // map_->updateEstimates(all_values, graph, frame_id_k);
 // }
 
-void RGBDBackendModule::updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
+const gtsam::FastMap<ObjectId, gtsam::Pose3>& RGBDBackendModule::updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
     const ObjectPoseMap& frontend_positions = input->propogated_object_poses_;
 
+    //update initial object poses first
     for(const auto& [object_id, object_poses] : frontend_positions) {
         if(!initial_object_poses_.exists(object_id)) {
-            //this should also be the first time it exists from the frontend so it should have only one pose in it!!
-            CHECK_EQ(object_poses.size(), 1u);
-            CHECK(object_poses.exists(frame_id_k));
+            //this should also be the first time it exists from the frontend so it should have two poses in it
+            //one from the first observation and another from the motion computed (as in the frontend we only check for motions computed)
+            //once a motion is computed in the frontend, two poses are added - one for the first frame (computed by centroid etc), and then
+            //one for the motion
+            auto first_seen_frame = frame_id_k - 1u;
+            CHECK_EQ(object_poses.size(), 2u);
+            CHECK(object_poses.exists(first_seen_frame));
 
-            initial_object_poses_.insert2(object_id, object_poses.at(frame_id_k));
+            initial_object_poses_.insert2(object_id, object_poses.at(first_seen_frame));
+            initial_object_poses_set_.insert2(object_id, first_seen_frame);
         }
     }
+
+    return initial_object_poses_;
+}
+
+//TODO: cannot put update initial_object_poses_ in here as this expects the function to be called sequentially (i.e not batch)
+//but the logic that updates the object positions does not
+//we should break this apart or put one part into the map (as the object poses need to get constructed from the initial pose)
+//every time so we should just make it a map function (given, some initial pose)
+const ObjectPoseMap& RGBDBackendModule::updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
+    const ObjectPoseMap& frontend_positions = input->propogated_object_poses_;
+
+    //update initial object poses first
+    for(const auto& [object_id, object_poses] : frontend_positions) {
+        if(!initial_object_poses_.exists(object_id)) {
+            //this should also be the first time it exists from the frontend so it should have two poses in it
+            //one from the first observation and another from the motion computed (as in the frontend we only check for motions computed)
+            //once a motion is computed in the frontend, two poses are added - one for the first frame (computed by centroid etc), and then
+            //one for the motion
+            auto first_seen_frame = frame_id_k - 1u;
+            CHECK_EQ(object_poses.size(), 2u);
+            CHECK(object_poses.exists(first_seen_frame));
+
+            initial_object_poses_.insert2(object_id, object_poses.at(first_seen_frame));
+            initial_object_poses_set_.insert2(object_id, first_seen_frame);
+        }
+    }
+
+    // only run if at least the second frame - motion requires 2 frames
+    // assumes frames start at 0
+    // if(frame_id_k < 1) {
+    //     return composed_object_poses_;
+    // }
+
+    const auto& seen_object_nodes = CHECK_NOTNULL(map_->getFrame(frame_id_k))->objects_seen;
+    const FrameId frame_id_k_1 = frame_id_k - 1;
+
+    //check if new - if not in the current object set, but in seen_object_nodes assume that its a new object
+    for(const auto& object_node : seen_object_nodes) {
+        const auto object_id = object_node->getId();
+        if(!composed_object_poses_.exists(object_id)) {
+            //must be a new object
+            //first check that this object has an initial object pose
+            CHECK(initial_object_poses_.exists(object_id));
+            //check that the initial object pose was set at frame_id_k -1
+            //this is becuase we dont actually get a frame from the frontend until the second frame
+            //so the backend only runs after at least two spins of the frontend
+            CHECK_EQ(initial_object_poses_set_.at(object_id), frame_id_k_1);
+            //add this as the first object motion
+            composed_object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
+            const gtsam::Pose3& starting_pose = initial_object_poses_.at(object_id);
+            composed_object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
+        }
+        // else {
+            //we should have a motion for this object
+            auto& pose_map = composed_object_poses_.at(object_id);
+            //we should have the previous pose here
+            if(!pose_map.exists(frame_id_k_1)) {
+                LOG(WARNING) << "Failed to get pose for computed motion for object id " << object_id << " at frame " << frame_id_k_1 << ". Skipping logging!";
+                continue;
+            }
+            const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
+            StateQuery<gtsam::Pose3> motion_query = object_node->getMotionEstimate(frame_id_k);
+            if(!motion_query) {
+                LOG(WARNING) << "Failed to get motion for object pose propogation at key: " << DynoLikeKeyFormatter(motion_query.key_);
+                continue; //this will fail if the object re-appears?
+            }
+            const gtsam::Pose3 prev_H_world_curr = motion_query.get();
+            gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
+            pose_map.insert2(frame_id_k, object_pose_k);
+
+            LOG(INFO) << "Adding object pose for object " << object_id << " at frame " << frame_id_k;
+        // }
+    }
+
+    return composed_object_poses_;
 }
 
 

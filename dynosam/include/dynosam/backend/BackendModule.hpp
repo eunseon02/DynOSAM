@@ -180,7 +180,7 @@ public:
     }
 
 
-    void logBackendFromMap(FrameId frame_k);
+    void logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses);
 
 protected:
     virtual SpinReturn boostrapSpinImpl(InputConstPtr input) = 0;
@@ -210,12 +210,11 @@ private:
 
 
 template<class MODULE_TRAITS>
-void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k) {
+void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses) {
     if(!logger_) {
         return;
     }
 
-    VLOG(5) << "logBackendFromMap called for frame " << frame_k;
     //get MotionestimateMap
     const MotionEstimateMap motions = map_->getMotionEstimates(frame_k);
     logger_->logObjectMotion(gt_packet_map_, frame_k, motions);
@@ -232,6 +231,9 @@ void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k) {
     else {
         LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
     }
+
+
+    logger_->logObjectPose(gt_packet_map_, frame_k, object_poses);
 }
 
 

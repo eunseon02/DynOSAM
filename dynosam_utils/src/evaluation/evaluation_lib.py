@@ -387,6 +387,12 @@ _frontend_camera_pose_error_log = "frontend_camera_pose_error_log.csv"
 _frontend_camera_pose_log = "frontend_camera_pose_log.csv"
 _frontend_map_point_log = "frontend_map_points_log.csv"
 
+_backend_motion_error_log = "backend_object_motion_error_log.csv"
+_backend_object_pose_log = "backend_object_pose_log.csv"
+_backend_object_pose_error_log = "backend_object_pose_errors_log.csv"
+_backend_camera_pose_error_log = "backendcamera_pose_error_log.csv"
+_backend_camera_pose_log = "backend_camera_pose_log.csv"
+
 
 class DatasetEvaluator:
     def __init__(self, output_folder_path:str, args) -> None:
@@ -398,6 +404,14 @@ class DatasetEvaluator:
         self._frontend_object_pose_error_log_path = self._create_existing_file_path(_frontend_object_pose_error_log)
         self._frontend_camera_pose_error_log_path = self._create_existing_file_path(_frontend_camera_pose_error_log)
         self._frontend_camera_pose_log_path = self._create_existing_file_path(_frontend_camera_pose_log)
+
+        # backend file paths
+        self._backend_motion_error_log_path = self._create_existing_file_path(_backend_motion_error_log)
+        self._backend_object_pose_log_path = self._create_existing_file_path(_backend_object_pose_log)
+        self._backend_object_pose_error_log_path = self._create_existing_file_path(_backend_object_pose_error_log)
+        self._backend_camera_pose_error_log_path = self._create_existing_file_path(_backend_camera_pose_error_log)
+        self._backend_camera_pose_log_path = self._create_existing_file_path(_backend_camera_pose_log)
+
 
     def run_analysis(self):
         logger.info("Running analysis using files at output path {}".format(self._output_folder_path))
@@ -417,20 +431,36 @@ class DatasetEvaluator:
             self._frontend_camera_pose_log_path
         )
 
+        backend_motion_eval = MotionErrorEvaluator(
+            self._backend_motion_error_log_path,
+            self._backend_object_pose_log_path,
+            self._backend_object_pose_error_log_path)
 
 
+        backend_camera_pose_eval = CameraPoseEvaluator(
+            self._backend_camera_pose_error_log_path,
+            self._backend_camera_pose_log_path
+        )
 
         self._save_results_file("fontend_results", [frontend_motion_eval, frontend_camera_pose_eval])
+        self._save_results_file("backend_results", [backend_motion_eval, backend_camera_pose_eval])
 
-        all_eval = EgoObjectMotionEvaluator(frontend_camera_pose_eval, frontend_motion_eval)
+        frontend_all_eval = EgoObjectMotionEvaluator(frontend_camera_pose_eval, frontend_motion_eval)
+        backend_all_eval = EgoObjectMotionEvaluator(backend_camera_pose_eval, backend_motion_eval)
 
-        plot_collection = evo_plot.PlotCollection("Frontend")
-        add_eval_plot(plot_collection, frontend_camera_pose_eval)
-        add_eval_plot(plot_collection, frontend_motion_eval)
-        add_eval_plot(plot_collection, all_eval)
+        frontend_plot_collection = evo_plot.PlotCollection("Frontend")
+        add_eval_plot(frontend_plot_collection, frontend_camera_pose_eval)
+        add_eval_plot(frontend_plot_collection, frontend_motion_eval)
+        add_eval_plot(frontend_plot_collection, frontend_all_eval)
+
+        backend_plot_collection = evo_plot.PlotCollection("Backend")
+        add_eval_plot(backend_plot_collection, backend_camera_pose_eval)
+        add_eval_plot(backend_plot_collection, backend_motion_eval)
+        add_eval_plot(backend_plot_collection, backend_all_eval)
 
 
-        plot_collection.show()
+        frontend_plot_collection.show()
+        backend_plot_collection.show()
 
 
 
