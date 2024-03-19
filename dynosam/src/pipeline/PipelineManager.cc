@@ -31,6 +31,8 @@
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/logger/Logger.hpp"
 
+#include "dynosam/backend/Optimizer.hpp"
+
 #include <glog/logging.h>
 
 
@@ -38,7 +40,7 @@ DEFINE_bool(use_backend, false, "If any backend should be initalised");
 
 namespace dyno {
 
-DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display)
+DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider::Ptr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display)
     :   params_(params),
         data_loader_(std::move(data_loader)),
         displayer_(&display_queue_, params.parallel_run_)
@@ -80,12 +82,18 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         case FrontendType::kRGBD: {
             LOG(INFO) << "Making RGBDInstance frontend";
 
-            Map3d::Ptr map = Map3d::create();
+            using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
+            using MapType = RGBDBackendModule::MapType;
+            using OptimizerType = RGBDBackendModule::OptimizerType;
+            using MeasurementType = RGBDBackendModule::MeasurementType;
+
+            typename MapType::Ptr map = MapType::create();
+            typename OptimizerType::Ptr optimzier = createOptimizer<MeasurementType>(params.optimizer_type_);
 
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
             frontend = std::make_shared<RGBDInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
 
-            if(FLAGS_use_backend) backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, &display_queue_);
+            if(FLAGS_use_backend) backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, optimzier, &display_queue_);
         }   break;
         case FrontendType::kMono: {
             LOG(INFO) << "Making MonoInstance frontend";
@@ -202,7 +210,6 @@ void DynoPipelineManager::launchSpinners() {
     if(backend_viz_pipeline_)
         backend_viz_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::BackendVizPipeline::spin, backend_viz_pipeline_.get()), "backend-display-spinner");
 }
-
 
 
 } //dyno

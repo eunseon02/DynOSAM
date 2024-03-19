@@ -33,11 +33,6 @@ BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* dis
         display_queue_(display_queue)
 
 {
-    // const auto& camera_params = camera_->getParams();
-    // gtsam_calibration_ = boost::make_shared<Camera::CalibrationType>(
-    //     camera_params.constructGtsamCalibration<Camera::CalibrationType>());
-
-    // CHECK(gtsam_calibration_);
     setFactorParams(params);
 
     //create callback to update gt_packet_map_ values so the derived classes dont need to manage this

@@ -193,6 +193,24 @@ public:
         return keys;
     }
 
+    template<typename CLIQUE>
+    static gtsam::KeySet getLeafKeys(const gtsam::BayesTree<CLIQUE>& bayes_tree) {
+        gtsam::KeySet keys;
+        CliqueVisitor<CLIQUE> visitor = [&keys](const boost::shared_ptr<CLIQUE>& clique) -> void {
+            if(clique->children.size() == 0u) {
+                auto conditional = clique->conditional();
+                //it is FACTOR::const_iterator
+                for(auto it = conditional->beginFrontals(); it != conditional->endFrontals(); it++) {
+                    keys.insert(*it);
+                }
+            }
+        };
+
+        depthFirstTraversalEliminiationOrder(bayes_tree, visitor);
+
+        return keys;
+    }
+
 };
 
 

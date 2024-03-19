@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -20,19 +20,51 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
 #pragma once
 
-#include "dynosam/backend/BackendInputPacket.hpp"
-#include "dynosam/backend/BackendOutputPacket.hpp"
-#include "dynosam/pipeline/PipelineModuleProcessor.hpp"
-
-
-
+#include "dynosam/backend/Optimizer.hpp"
+#include "dynosam/backend/DynoISAM2.hpp"
 
 namespace dyno {
 
-using BackendPipeline = PipelineModuleProcessor<BackendInputPacket, BackendOutputPacket>;
 
+template<typename MEASUREMENT_TYPE>
+class IncrementalOptimizer : public Optimizer<MEASUREMENT_TYPE> {
+
+public:
+    using Base = Optimizer<MEASUREMENT_TYPE>;
+    using This = IncrementalOptimizer<MEASUREMENT_TYPE>;
+    using MapType = typename Base::MapType;
+    using MeasurementType = typename Base::MeasurementType;
+
+
+    bool shouldOptimize(FrameId) const {
+        return true;
+    }
+
+    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
+        new_values_ = new_values;
+        new_factors_ = new_factors;
+    }
+
+    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() {
+
+    }
+
+    void logStats() {
+
+    }
+
+    const DynoISAM2& getSmoother() const {
+        return *smoother_;
+    }
+
+
+private:
+    std::unique_ptr<DynoISAM2> smoother_;
+    gtsam::Values new_values_;
+    gtsam::NonlinearFactorGraph new_factors_;
+
+};
 
 } //dyno

@@ -32,6 +32,12 @@
 #include "dynosam/utils/Spinner.hpp"
 #include "dynosam/common/Types.hpp"
 
+#include "dynosam/backend/Optimizer.hpp"
+#include "dynosam/backend/BatchOptimizer.hpp"
+#include "dynosam/backend/IncrementalOptimizer.hpp"
+
+
+
 namespace dyno {
 
 
@@ -41,7 +47,7 @@ public:
     DYNO_POINTER_TYPEDEFS(DynoPipelineManager)
 
     //why are some unique and some shared?? silly silly
-    DynoPipelineManager(const DynoParams& params, DataProvider::UniquePtr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display);
+    DynoPipelineManager(const DynoParams& params, DataProvider::Ptr data_loader, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display);
     ~DynoPipelineManager();
 
     /**
@@ -64,6 +70,10 @@ private:
     void shutdownSpinners();
     void shutdownPipelines();
 
+    template<typename Measurement>
+    typename Optimizer<Measurement>::Ptr createOptimizer(OptimizerType optimizer_type) const;
+
+
 private:
     const DynoParams params_;
     FrontendPipeline::UniquePtr frontend_pipeline_{nullptr};
@@ -77,7 +87,7 @@ private:
 
     //Data-provider pointers
     DataInterfacePipeline::UniquePtr data_interface_;
-    DataProvider::UniquePtr data_loader_;
+    DataProvider::Ptr data_loader_;
 
     //Display and Viz
     FrontendVizPipeline::UniquePtr frontend_viz_pipeline_;
@@ -96,5 +106,27 @@ private:
 
 };
 
+
+template<typename Measurement>
+typename Optimizer<Measurement>::Ptr DynoPipelineManager::createOptimizer(OptimizerType optimizer_type) const {
+    if(optimizer_type == OptimizerType::kIncremental) {
+        LOG(INFO) << "Constructing incremental optimizer";
+        return std::make_shared<IncrementalOptimizer<Measurement>>();
+    }
+    else if(optimizer_type == OptimizerType::kBatch) {
+        LOG(INFO) << "Constructing batch optimizer";
+
+        BatchOptimizerParams batch_params;
+
+        //construct function to get end of dataset
+        auto get_last_frame = [=]() -> FrameId {
+            CHECK(data_loader_) << "Data Loader is null when accessing get_last_frame_ in BatchOptimizerParams";
+            return data_loader_->datasetSize();
+        };
+        batch_params.get_last_frame = get_last_frame;
+
+        return std::make_shared<BatchOptimizer<Measurement>>(batch_params);
+    }
+}
 
 } //dyno

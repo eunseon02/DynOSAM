@@ -210,26 +210,29 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                                  size_t& n_new_tracks)
 {
-  const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = tracking_images.getImageWrapper<ImageType::RGBMono>();
+  const cv::Mat& rgb = rgb_wrapper.toRGB();
+  cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
+
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
-  cv::Mat mono;
-  CHECK(!rgb.empty());
-  PLOG_IF(ERROR, rgb.channels() == 1) << "Input image should be RGB (channels == 3), not 1";
-  // Transfer color image to grey image
-  rgb.copyTo(mono);
+  // cv::Mat mono;
+  // CHECK(!rgb.empty());
+  // PLOG_IF(ERROR, rgb.channels() == 1) << "Input image should be RGB (channels == 3), not 1";
+  // // Transfer color image to grey image
+  // rgb.copyTo(mono);
 
-  cv::Mat viz;
-  rgb.copyTo(viz);
+  // cv::Mat viz;
+  // rgb.copyTo(viz);
 
-  if (mono.channels() == 3)
-  {
-    cv::cvtColor(mono, mono, cv::COLOR_RGB2GRAY);
-  }
-  else if (rgb.channels() == 4)
-  {
-    cv::cvtColor(mono, mono, cv::COLOR_RGBA2GRAY);
-  }
+  // if (mono.channels() == 3)
+  // {
+  //   cv::cvtColor(mono, mono, cv::COLOR_RGB2GRAY);
+  // }
+  // else if (rgb.channels() == 4)
+  // {
+  //   cv::cvtColor(mono, mono, cv::COLOR_RGBA2GRAY);
+  // }
 
   cv::Mat descriptors;
   KeypointsCV detected_keypoints;

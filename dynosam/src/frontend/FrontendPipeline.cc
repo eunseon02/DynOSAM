@@ -26,15 +26,4 @@
 
 #include <glog/logging.h>
 
-namespace dyno {
-
-FrontendPipeline::FrontendPipeline(const std::string& module_name, InputQueue* input_queue, FrontendModule::Ptr frontend_module)
-    :   SIMO(module_name, CHECK_NOTNULL(input_queue)), frontend_module_(CHECK_NOTNULL(frontend_module)) {}
-
-
-FrontendOutputPacketBase::ConstPtr FrontendPipeline::process(const FrontendInputPacketBase::ConstPtr& input) {
-    CHECK(input);
-    return frontend_module_->spinOnce(input);
-}
-
-} //dyno
+namespace dyno {} //dyno

@@ -40,16 +40,26 @@
 #pragma once
 
 #include "dynosam/backend/DynoISAM2Result.hpp" //FactorIndices
+#include <functional>
 
 
 #include <gtsam/base/FastList.h>
 #include <gtsam/dllexport.h>              // GTSAM_EXPORT
 #include <gtsam/inference/Key.h>          // Key, KeySet
+#include <gtsam/inference/Ordering.h>
 #include <optional>
 
 namespace dyno {
 
 using namespace gtsam;
+
+class DynoISAM2UpdateParams;
+
+using ConstructOrdering = std::function<gtsam::Ordering(
+    const DynoISAM2UpdateParams&,
+    const DynoISAM2Result&,
+    const gtsam::KeySet& /*affectedKeysSet*/,
+    const gtsam::VariableIndex&)>;
 
 /**
  * @ingroup isam2
@@ -96,6 +106,19 @@ struct DynoISAM2UpdateParams {
    * the deltas become too small down in the tree. This flagg forces a full
    * solve instead. */
   bool forceFullSolve{false};
+
+  std::optional<ConstructOrdering> incrementalOrdering;
+  std::optional<ConstructOrdering> batchOrdering;
+
+  inline void setIncrementalOrderingFunction(const ConstructOrdering& orderingFunction) { incrementalOrdering = orderingFunction; }
+  inline void setBatchOrderingFunction(const ConstructOrdering& orderingFunction) { batchOrdering = orderingFunction; }
+
+  void setOrderingFunctions(const ConstructOrdering& orderingFunction) {
+    incrementalOrdering = orderingFunction;
+    batchOrdering = orderingFunction;
+  }
+
+
 };
 
 }  // namespace dyno

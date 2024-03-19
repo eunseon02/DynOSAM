@@ -42,6 +42,10 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     pipeline_parser.getYamlParam("frontend_type", &frontend_type_i);
     frontend_type_ = static_cast<FrontendType>(frontend_type_i);
 
+    int optimizer_type_i;
+    pipeline_parser.getYamlParam("optimizer_type", &optimizer_type_i);
+    optimizer_type_ = static_cast<OptimizerType>(optimizer_type_i);
+
 }
 
 

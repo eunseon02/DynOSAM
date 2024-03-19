@@ -25,6 +25,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/Camera.hpp"
+#include "dynosam/backend/Optimizer.hpp"
 
 #include <gtest/gtest.h>
 #include <ament_index_cpp/get_package_prefix.hpp>
@@ -96,5 +97,39 @@ inline Camera makeDefaultCamera() {
 inline Camera::Ptr makeDefaultCameraPtr() {
   return std::make_shared<Camera>(makeDefaultCameraParams());
 }
+
+
+template<typename MEASUREMENT_TYPE>
+class DummyOptimizer : public Optimizer<MEASUREMENT_TYPE> {
+
+public:
+    using Base = Optimizer<MEASUREMENT_TYPE>;
+    using This = DummyOptimizer<MEASUREMENT_TYPE>;
+    using MapType = typename Base::MapType;
+    using MeasurementType = typename Base::MeasurementType;
+
+    DummyOptimizer() = default;
+    ~DummyOptimizer() {}
+
+    bool shouldOptimize(FrameId frame_id) const override {
+      return false;
+    }
+
+    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
+      all_values_.insert_or_assign(new_values);
+      graph_ += new_factors;
+    }
+
+    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() override {
+      return std::make_pair(all_values_, graph_);
+    }
+
+    void logStats() override {}
+
+private:
+  gtsam::Values all_values_;
+  gtsam::NonlinearFactorGraph graph_;
+
+};
 
 } //dyno_testing

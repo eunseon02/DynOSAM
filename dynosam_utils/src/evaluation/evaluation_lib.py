@@ -416,7 +416,8 @@ class DatasetEvaluator:
             self._frontend_camera_pose_error_log_path,
             self._frontend_camera_pose_log_path
         )
-        # print(frontend_camera_pose_eval.get_results_yaml())
+
+
 
 
         self._save_results_file("fontend_results", [frontend_motion_eval, frontend_camera_pose_eval])

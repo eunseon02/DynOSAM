@@ -231,7 +231,7 @@ public:
   using typename Base::InputQueue;
 
   using Base::isShutdown;
-  using Base::module_name_;
+  // using Base::module_name_;
 
   SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_, bool parallel_run = true)
     : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_)), parallel_run_(parallel_run)

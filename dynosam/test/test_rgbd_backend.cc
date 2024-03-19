@@ -24,6 +24,7 @@
 #include "internal/simulator.hpp"
 #include "internal/helpers.hpp"
 
+#include "dynosam/backend/IncrementalOptimizer.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 
@@ -85,9 +86,11 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     scenario.addObjectBody(2, object2);
 
     dyno::Map3d::Ptr map = dyno::Map3d::create();
+    auto optimizer = std::make_shared<dyno_testing::DummyOptimizer<dyno::Landmark>>();
     dyno::RGBDBackendModule backend(
         dyno::BackendParams{},
-        map);
+        map,
+        optimizer);
 
     for(size_t i = 0; i < 10; i++) {
         auto output = scenario.getOutput(i);
@@ -99,8 +102,11 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         // LOG(INFO) << ss.str();
         backend.spinOnce(output);
 
-        gtsam::NonlinearFactorGraph full_graph = backend.smoother_->getFactorsUnsafe();
-        gtsam::Values values = backend.smoother_->getLinearizationPoint();
+        LOG(INFO) << "Spun backend";
+
+        //Is this the full graph?
+        gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
+        // gtsam::Values values = backend.smoother_->getLinearizationPoint();
 
         //get variables in this frame
         const auto& map = backend.getMap();
@@ -129,33 +135,50 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         }
 
 
-        gtsam::VariableIndex affectedFactorsVarIndex(full_graph);
-        gtsam::Ordering order = gtsam::Ordering::ColamdConstrainedLast(affectedFactorsVarIndex, dyn_lmks_this_frame);
-        auto linearized = full_graph.linearize(values);
+        // gtsam::VariableIndex affectedFactorsVarIndex(full_graph);
+        // gtsam::Ordering order = gtsam::Ordering::ColamdConstrainedLast(affectedFactorsVarIndex, dyn_lmks_this_frame);
+        // auto linearized = full_graph.linearize(values);
 
-        auto bayesTree =
-            gtsam::ISAM2JunctionTree(
-                gtsam::GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
-                .eliminate(gtsam::EliminatePreferCholesky)
-                .first;
+        // auto bayesTree =
+        //     gtsam::ISAM2JunctionTree(
+        //         gtsam::GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
+        //         .eliminate(gtsam::EliminatePreferCholesky)
+        //         .first;
 
-        LOG(INFO) << bayesTree->roots().size();
-        LOG(WARNING) << "Number nnz bayes tree " << bayesTree->roots().at(0)->calculate_nnz();
-        LOG(WARNING) << "Number nnz isam2 tree " << backend.smoother_->roots().at(0)->calculate_nnz();
+        // LOG(INFO) << bayesTree->roots().size();
+        // LOG(WARNING) << "Number nnz bayes tree " << bayesTree->roots().at(0)->calculate_nnz();
+        // LOG(WARNING) << "Number nnz isam2 tree " << optimizer->getSmoother().roots().at(0)->calculate_nnz();
 
-        // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
-        dyno::factor_graph_tools::saveBayesTree(*bayesTree, dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
+        // // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
+        // dyno::factor_graph_tools::saveBayesTree(*bayesTree, dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
 
         gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
-        for(const auto& key : backend.smoother_result_.reeliminatedKeys) {
-            coloured_affected_keys.insert2(key, "red");
-        }
+        // for(const auto& key : backend.smoother_result_.reeliminatedKeys) {
+        //     coloured_affected_keys.insert2(key, "red");
+        // }
 
-        dyno::factor_graph_tools::saveBayesTree(
-            *backend.smoother_,
-            dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) + ".dot"),
-            dyno::DynoLikeKeyFormatter,
-            coloured_affected_keys);
+        // dyno::factor_graph_tools::saveBayesTree(
+        //     *backend.smoother_,
+        //     dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) + ".dot"),
+        //     dyno::DynoLikeKeyFormatter,
+        //     coloured_affected_keys);
+
+        {
+            // gtsam::KeySet marginalize_keys = dyno::factor_graph_tools::travsersal::getLeafKeys(*backend.smoother_);
+            // gtsam::PrintKeySet(marginalize_keys, "Leaf keys", dyno::DynoLikeKeyFormatter);
+
+            // gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+            // for(const auto& key : marginalize_keys) {
+            //     coloured_affected_keys.insert2(key, "blue");
+            // }
+
+            // dyno::factor_graph_tools::saveBayesTree(
+            //     *backend.smoother_,
+            //     dyno::getOutputFilePath("rgbd_bayes_tree_leaf.dot"),
+            //     dyno::DynoLikeKeyFormatter,
+            //     coloured_affected_keys);
+
+        }
 
         // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");

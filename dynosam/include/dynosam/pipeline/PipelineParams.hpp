@@ -27,7 +27,9 @@
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/common/CameraParams.hpp"
+
 #include "dynosam/frontend/Frontend-Definitions.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 
 #include <iomanip>
 #include <ostream>
@@ -57,6 +59,8 @@ public:
     int data_provider_type_; //Kitti, VirtualKitti, Online...
 
     FrontendType frontend_type_ = FrontendType::kRGBD;
+    OptimizerType optimizer_type_ = OptimizerType::kBatch;
+
 
 
     //! Pipeline level params

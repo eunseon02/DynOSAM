@@ -402,22 +402,20 @@ public:
         }
         for (size_t i = 0; i < Base::N; i++) {
             internal::select_apply<Base::N>(i, [&](auto stream_index) {
-                internal::select_apply<Base::N>(stream_index, [&](auto I) {
-                    using Type = typename Base::template DataType<I>;
-                    auto data_folder = this->template getDataFolder<I>();
-                    //loade at idx-1 since we expect all the indexing and loading to be appropiately zero idnexed
-                    Type loaded_data = data_folder->getItem(idx-1);
+                using Type = typename Base::template DataType<stream_index>;
+                auto data_folder = this->template getDataFolder<stream_index>();
+                //loade at idx-1 since we expect all the indexing and loading to be appropiately zero idnexed
+                Type loaded_data = data_folder->getItem(idx-1);
 
-                    auto& data_vector = this->template getDataVector<I>();
+                auto& data_vector = this->template getDataVector<stream_index>();
 
-                    // add loaded data to data vector. resize if necessary but we assume in most cases data will be loaded in order
-                    if(idx > data_vector.size()) {
-                        data_vector.resize(idx);
-                    }
+                // add loaded data to data vector. resize if necessary but we assume in most cases data will be loaded in order
+                if(idx > data_vector.size()) {
+                    data_vector.resize(idx);
+                }
 
-                    //index the data storage vector at I-1 to account for the zero indexing
-                    data_vector.at(idx-1) = loaded_data;
-                });
+                //index the data storage vector at I-1 to account for the zero indexing
+                data_vector.at(idx-1) = loaded_data;
             });
         }
 

@@ -85,6 +85,8 @@ public:
 
     template<typename DERIVEDSTATUS>
     void updateObservations(const MeasurementStatusVector<DERIVEDSTATUS>& measurements);
+
+
     void updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id);
 
     bool frameExists(FrameId frame_id) const;
@@ -110,7 +112,13 @@ public:
     FrameId lastEstimateUpdate() const;
 
     StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) {
-        return frames_.at(frame_id)->getPoseEstimate();
+        auto frame_node = getFrame(frame_id);
+        if(frame_node) {
+            return frame_node->getPoseEstimate();
+        }
+        else {
+            return StateQuery<gtsam::Pose3>::NotInMap(CameraPoseSymbol(frame_id));
+        }
     }
 
     //TODo: test
@@ -121,6 +129,8 @@ public:
     StatusLandmarkEstimates getFullStaticMap() const;
     StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const;
 
+
+    MotionEstimateMap getMotionEstimates(FrameId frame_id) const;
 
     template<typename ValueType>
     StateQuery<ValueType> query(gtsam::Key key) const {
@@ -133,6 +143,7 @@ public:
     }
 
     inline const gtsam::Values& getValues() const { return values_; }
+    //TODO: this should be the FULL graph but need to verify how we update this (ie.e when optimization happens and then how we update the estimates)
     inline const gtsam::NonlinearFactorGraph& getGraph() const { return graph_; }
     inline const gtsam::Values& getInitialValues() const { return values_; }
 

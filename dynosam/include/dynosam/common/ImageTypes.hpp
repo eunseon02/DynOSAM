@@ -91,6 +91,7 @@ struct ImageType {
         static void validate(const cv::Mat& input);
         static std::string name() { return "RGBMono"; }
         static cv::Mat toRGB(const ImageWrapper<RGBMono>& image);
+        static cv::Mat toMono(const ImageWrapper<RGBMono>& image);
     };
 
     //really should be disparity?

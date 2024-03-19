@@ -46,7 +46,10 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
 public:
     using Base = BackendModuleType<RGBDBackendModuleTraits>;
-    RGBDBackendModule(const BackendParams& backend_params, Map3d::Ptr map, ImageDisplayQueue* display_queue = nullptr);
+    using RGBDMap = Base::MapType;
+    using RGBDOptimizer = Base::OptimizerType;
+
+    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
     using SpinReturn = Base::SpinReturn;
@@ -71,18 +74,18 @@ public:
 
 
 
-    void optimize(FrameId frame_id_k, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors);
+    // void optimize(FrameId frame_id_k, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors);
 
-    const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
+    // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
     //helper factor graph functions
 
-
+    void updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
 
 public:
-    std::unique_ptr<DynoISAM2> smoother_;
-    DynoISAM2Result smoother_result_;
+    // std::unique_ptr<DynoISAM2> smoother_;
+    // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
 
     using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;
@@ -90,6 +93,7 @@ public:
     // gtsam::Values new_values_;
     // gtsam::NonlinearFactorGraph new_factors_;
 
+    gtsam::FastMap<ObjectId, gtsam::Pose3> initial_object_poses_; //constructed from the input
     ObjectPoseMap composed_object_poses_;
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)

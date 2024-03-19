@@ -38,7 +38,7 @@ enum DatasetType {
 
 struct DataProviderFactory {
 
-    static DataProvider::UniquePtr Create(const std::string& dataset_folder_path, const std::string& params_folder_path, DatasetType dataset_type);
+    static DataProvider::Ptr Create(const std::string& dataset_folder_path, const std::string& params_folder_path, DatasetType dataset_type);
 
 };
 

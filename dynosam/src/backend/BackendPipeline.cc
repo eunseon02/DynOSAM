@@ -25,15 +25,4 @@
 
 #include <glog/logging.h>
 
-namespace dyno {
-
-BackendPipeline::BackendPipeline(const std::string& module_name, InputQueue* input_queue, BackendModule::Ptr backend_module)
-    :   SIMO(module_name, CHECK_NOTNULL(input_queue)), backend_module_(CHECK_NOTNULL(backend_module)) {}
-
-
-BackendOutputPacket::ConstPtr BackendPipeline::process(const BackendInputPacket::ConstPtr& input) {
-    CHECK(input);
-    return backend_module_->spinOnce(input);
-}
-
-} //dyno
+namespace dyno {} //dyno

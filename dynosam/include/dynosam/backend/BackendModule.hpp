@@ -33,17 +33,24 @@
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
+#include "dynosam/backend/Optimizer.hpp"
 
 #include "dynosam/visualizer/Visualizer-Definitions.hpp" //for ImageDisplayQueueOptional
 
 
 namespace dyno {
 
-template<typename DERIVED_INPUT_PACKET, typename MEASUREMENT_TYPE>
+template<typename DERIVED_INPUT_PACKET, typename MEASUREMENT_TYPE, typename BASE_INPUT_PACKET = BackendInputPacket>
 struct BackendModuleTraits {
     using DerivedPacketType = DERIVED_INPUT_PACKET;
     using DerivedPacketTypeConstPtr = std::shared_ptr<const DerivedPacketType>;
 
+    using BasePacketType = BackendInputPacket;
+    //BasePacketType is the type that gets passed to the module via the pipeline and must be a base class
+    //since we pass data along the pipelines via poniters
+    static_assert(std::is_base_of_v<BasePacketType, DerivedPacketType>);
+
+    //Must be a gtsam value type and meet all the concept criteria for that
     using MeasurementType = MEASUREMENT_TYPE;
 
     static constexpr size_t Dim() {
@@ -52,8 +59,6 @@ struct BackendModuleTraits {
 };
 
 
-//TODO: backend doesnt need camera
-//TODO: should do like RGBD/MonoBackendModuleBase... which also knows about the map. Means we can move a lot of common functionality to the base class
 /**
  * @brief Base class to actually do processing. Data passed to this module from the frontend
  *
@@ -86,7 +91,7 @@ protected:
 protected:
     const BackendParams base_params_;
     //NOTE: this is copied directly from the frontend module.
-    GroundTruthPacketMap gt_packet_map_; //! Updated in the frontend module base via InputCallback (see FrontendModule constructor)
+    GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor)
 
     BackendLogger::UniquePtr logger_;
 
@@ -123,6 +128,7 @@ public:
     using Base = BackendModule;
 
     using MapType = Map<MeasurementType>;
+    using OptimizerType = Optimizer<MeasurementType>;
 
     DYNO_POINTER_TYPEDEFS(This)
 
@@ -133,12 +139,13 @@ public:
     using InputConstPtr = DerivedPacketTypeConstPtr;
     using OutputConstPtr = Base::OutputConstPtr;
 
-    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, ImageDisplayQueue* display_queue, bool use_logger = true)
-    : Base(params, display_queue, use_logger), map_(CHECK_NOTNULL(map)) {}
+    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, ImageDisplayQueue* display_queue, bool use_logger = true)
+    : Base(params, display_queue, use_logger), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
 
     virtual ~BackendModuleType() = default;
 
     inline const typename MapType::Ptr getMap() {  return map_; }
+    inline const typename OptimizerType::Ptr getOptimzier() {  return optimizer_; }
 
     //factor graph helper functions
     bool safeAddObjectSmoothingFactor(
@@ -146,6 +153,15 @@ public:
     {
         CHECK(object_smoothing_noise_);
         CHECK_EQ(object_smoothing_noise_->dim(), 6u);
+
+        {
+            ObjectId object_label_k_1, object_label_k;
+            FrameId frame_id_k_1, frame_id_k;
+            CHECK(reconstructMotionInfo(motion_key_k_1, object_label_k_1, frame_id_k_1));
+            CHECK(reconstructMotionInfo(motion_key_k, object_label_k, frame_id_k));
+            CHECK_EQ(object_label_k_1, object_label_k);
+            CHECK_EQ(frame_id_k_1 + 1, frame_id_k); //assumes consequative frames
+        }
 
         //if the motion key at k (motion from k-1 to k), and key at k-1 (motion from k-2 to k-1)
         //exists in the map or is about to exist via new values, add the smoothing factor
@@ -163,11 +179,15 @@ public:
         return false;
     }
 
+
+    void logBackendFromMap(FrameId frame_k);
+
 protected:
     virtual SpinReturn boostrapSpinImpl(InputConstPtr input) = 0;
     virtual SpinReturn nominalSpinImpl(InputConstPtr input) = 0;
 
     typename MapType::Ptr map_;
+    typename OptimizerType::Ptr optimizer_;
 
 private:
     SpinReturn boostrapSpin(Base::BaseInputConstPtr base_input) override {
@@ -188,6 +208,31 @@ private:
 
 };
 
+
+template<class MODULE_TRAITS>
+void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k) {
+    if(!logger_) {
+        return;
+    }
+
+    VLOG(5) << "logBackendFromMap called for frame " << frame_k;
+    //get MotionestimateMap
+    const MotionEstimateMap motions = map_->getMotionEstimates(frame_k);
+    logger_->logObjectMotion(gt_packet_map_, frame_k, motions);
+
+    StateQuery<gtsam::Pose3> X_k_query = map_->getPoseEstimate(frame_k);
+
+    if(X_k_query) {
+        std::optional<gtsam::Pose3> X_k_1_query;
+        if(frame_k > 0) {
+            X_k_1_query = map_->getPoseEstimate(frame_k - 1u);
+        }
+        logger_->logCameraPose(gt_packet_map_, frame_k, X_k_query.get(), X_k_1_query);
+    }
+    else {
+        LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
+    }
+}
 
 
 

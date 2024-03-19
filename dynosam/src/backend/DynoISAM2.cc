@@ -216,43 +216,72 @@ void DynoISAM2::recalculateBatch(const DynoISAM2UpdateParams& updateParams,
   }
   // gttoc(add_keys);
 
+  result->variablesReeliminated = affectedKeysSet->size();
+  result->factorsRecalculated = nonlinearFactors_.size();
 
+  result->reeliminatedKeys.insert(result->reeliminatedKeys.end(),
+    affectedKeysSet->begin(), affectedKeysSet->end());
 
-  // gttic(ordering);
+   // gttoc(ordering);
 
-  Ordering order;
-  {
-    utils::TimingStatsCollector timer("dynoisam2.bOrdering");
+  // gttic(linearize);
+
+  //this was originally after the call to ordering
+  //it has been moved BEFORE, so that we can set results->affectedFactorGraph
+  //in case it wants to be accessed by the user defined updateParams.batchOrdering function
+  auto linearized = nonlinearFactors_.linearize(theta_);
+  if (params_.cacheLinearizedFactors) linearFactors_ = *linearized;
+  // gttoc(linearize);
+
+  result->affectedFactorGraph = *linearized;
+
+  auto defaultOrderingConstraints = [&](const DynoISAM2UpdateParams& updateParams,
+                                        const DynoISAM2Result& result,
+                                        const gtsam::KeySet& /*affectedKeysSet*/,
+                                        const gtsam::VariableIndex& affectedFactorsVarIndex) -> gtsam::Ordering {
+    Ordering order;
     if (updateParams.constrainedKeys) {
       order = Ordering::ColamdConstrained(affectedFactorsVarIndex,
                                           *updateParams.constrainedKeys);
     } else {
-      if (theta_.size() > result->observedKeys.size()) {
+      if (theta_.size() > result.observedKeys.size()) {
         // Only if some variables are unconstrained
         FastMap<Key, int> constraintGroups;
-        for (Key var : result->observedKeys) constraintGroups[var] = 1;
+        for (Key var : result.observedKeys) constraintGroups[var] = 1;
         order = Ordering::ColamdConstrained(affectedFactorsVarIndex,
                                             constraintGroups);
       } else {
         order = Ordering::Colamd(affectedFactorsVarIndex);
       }
     }
+    return order;
+  }; // defaultOrderingConstraints
+
+  std::optional<ConstructOrdering> ordering_function = updateParams.batchOrdering;
+  //if no ordering given in update, use default ordering constraints
+  if(!ordering_function) {
+    ordering_function = defaultOrderingConstraints;
+  }
+  CHECK(ordering_function);
+
+  Ordering ordering;
+  {
+    utils::TimingStatsCollector timer("dynoisam2.bOrdering");
+    ordering = ordering_function->operator()(
+      updateParams,
+      *result,
+      *affectedKeysSet,
+      affectedFactorsVarIndex);
+
   }
 
-
-  // gttoc(ordering);
-
-  // gttic(linearize);
-  auto linearized = nonlinearFactors_.linearize(theta_);
-  if (params_.cacheLinearizedFactors) linearFactors_ = *linearized;
-  // gttoc(linearize);
 
   // gttic(eliminate);
   DynoISAM2BayesTree::shared_ptr bayesTree = nullptr;
   {
     utils::TimingStatsCollector timer("dynoisam2.bEliminate");
     bayesTree = DynoISAM2JunctionTree(
-          GaussianEliminationTree(*linearized, affectedFactorsVarIndex, order))
+          GaussianEliminationTree(*linearized, affectedFactorsVarIndex, ordering))
           .eliminate(params_.getEliminationFunction())
           .first;
   }
@@ -266,11 +295,6 @@ void DynoISAM2::recalculateBatch(const DynoISAM2UpdateParams& updateParams,
   nodes_.insert(bayesTree->nodes().begin(), bayesTree->nodes().end());
   gttoc(insert);
 
-  result->variablesReeliminated = affectedKeysSet->size();
-  result->factorsRecalculated = nonlinearFactors_.size();
-
-  result->reeliminatedKeys.insert(result->reeliminatedKeys.end(),
-    affectedKeysSet->begin(), affectedKeysSet->end());
 
   LOG(INFO) << result->reeliminatedKeys.size();
 
@@ -359,46 +383,64 @@ void DynoISAM2::recalculateIncremental(const DynoISAM2UpdateParams& updateParams
   affectedKeysSet->insert(result->markedKeys.begin(), result->markedKeys.end());
   affectedKeysSet->insert(affectedKeys.begin(), affectedKeys.end());
 
+  result->affectedFactorGraph = factors;
 
   gttoc(list_to_set);
 
   VariableIndex affectedFactorsVarIndex(factors);
 
-  gttic(ordering_constraints);
-  // Create ordering constraints
-  FastMap<Key, int> constraintGroups;
-  if (updateParams.constrainedKeys) {
-    constraintGroups = *updateParams.constrainedKeys;
-  } else {
-    constraintGroups = FastMap<Key, int>();
-    const int group =
-        result->observedKeys.size() < affectedFactorsVarIndex.size() ? 1 : 0;
-    for (Key var : result->observedKeys)
-      constraintGroups.emplace(var, group);
-  }
+  auto defaultOrderingConstraints = [](const DynoISAM2UpdateParams& updateParams,
+                                        const DynoISAM2Result& result,
+                                        const gtsam::KeySet& affectedKeysSet,
+                                        const gtsam::VariableIndex& affectedFactorsVarIndex) -> gtsam::Ordering {
+    gttic(ordering_constraints);
+    // Create ordering constraints
+    FastMap<Key, int> constraintGroups;
+    if (updateParams.constrainedKeys) {
+      constraintGroups = *updateParams.constrainedKeys;
+    } else {
+      constraintGroups = FastMap<Key, int>();
+      const int group =
+          result.observedKeys.size() < affectedFactorsVarIndex.size() ? 1 : 0;
+      for (Key var : result.observedKeys)
+        constraintGroups.emplace(var, group);
+    }
 
-  // Remove unaffected keys from the constraints
-  for (FastMap<Key, int>::iterator iter = constraintGroups.begin();
-       iter != constraintGroups.end();
-       /*Incremented in loop ++iter*/) {
-    if (result->unusedKeys.exists(iter->first) ||
-        !affectedKeysSet->exists(iter->first))
-      constraintGroups.erase(iter++);
-    else
-      ++iter;
-  }
-  gttoc(ordering_constraints);
+    // Remove unaffected keys from the constraints
+    for (FastMap<Key, int>::iterator iter = constraintGroups.begin();
+        iter != constraintGroups.end();
+        /*Incremented in loop ++iter*/) {
+      if (result.unusedKeys.exists(iter->first) ||
+          !affectedKeysSet.exists(iter->first))
+        constraintGroups.erase(iter++);
+      else
+        ++iter;
+    }
+    gttoc(ordering_constraints);
 
-  // Generate ordering
-  // gttic(Ordering);
-  Ordering ordering;
+    // Generate ordering
+    // gttic(Ordering);
+    return Ordering::ColamdConstrained(affectedFactorsVarIndex, constraintGroups);
+  }; //defaultOrderingConstraints
+
+  std::optional<ConstructOrdering> ordering_function = updateParams.incrementalOrdering;
+  //if no ordering given in update, use default ordering constraints
+  if(!ordering_function) {
+    ordering_function = defaultOrderingConstraints;
+  }
+  CHECK(ordering_function);
+
+  gtsam::Ordering ordering;
   {
     utils::TimingStatsCollector timer("dynoisam2.iOrdering");
-    ordering = Ordering::ColamdConstrained(affectedFactorsVarIndex, constraintGroups);
+    ordering = ordering_function->operator()(
+      updateParams,
+      *result,
+      *affectedKeysSet,
+      affectedFactorsVarIndex);
   }
-  // gttoc(Ordering);
 
-  result->affectedFactorGraph = factors;
+  // gttoc(Ordering);
 
   // Do elimination
   DynoISAM2BayesTree::shared_ptr bayesTree = nullptr;
@@ -574,14 +616,14 @@ void DynoISAM2::marginalizeLeaves(
         // Add to factors to remove
         const auto& involved = variableIndex_[frontal];
         factorIndicesToRemove.insert(involved.begin(), involved.end());
-#if !defined(NDEBUG)
+// #if !defined(NDEBUG)
         // Check for non-leaf keys
         if (!leafKeys.exists(frontal))
           throw std::runtime_error(
-              "Requesting to marginalize variables that are not leaves, "
-              "the DynoISAM2 object is now in an inconsistent state so should "
+              "Requesting to marginalize variables that are not leaves (frontal: " + params_.keyFormatter(frontal) +
+              "), the DynoISAM2 object is now in an inconsistent state so should "
               "no longer be used.");
-#endif
+// #endif
       }
     }
     return removedCliques;

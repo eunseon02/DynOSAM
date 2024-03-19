@@ -120,7 +120,9 @@ struct DynoISAM2Result {
   /** If the incremental recalculate method was used, else, batch recalculate*/
   bool recalculateIncremental;
 
-  /** The Gaussian factor graph used for eliminiation. This includes orphans etc... */
+  /** The Gaussian factor graph used for eliminiation. This includes orphans etc...
+   * In the case of the batch update, this should be the full graph, linearized around theta_
+   */
   GaussianFactorGraph affectedFactorGraph;
 
   /** List of keys in the affected bayes-net (which is removed from the top of the tree)

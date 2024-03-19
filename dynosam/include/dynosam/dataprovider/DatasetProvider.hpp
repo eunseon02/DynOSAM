@@ -249,6 +249,7 @@ private:
     bool are_loaders_set_{false};
 };
 
+
 template<typename... DataTypes>
 class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvider  {
 
@@ -258,7 +259,6 @@ public:
     DYNO_POINTER_TYPEDEFS(This)
 
     using BaseDynoDataset::isProviderValid;
-    using BaseDynoDataset::getDatasetSize;
 
     //does not accept DataProviderModule* for dataprovider
     DynoDatasetProvider(
@@ -277,6 +277,8 @@ public:
     void setEndingFrame(int ending_frame) {
         if(ending_frame != -1)
             requested_ending_frame_id_ = ending_frame;
+
+        LOG(WARNING) << "Updating ending frame" << requested_ending_frame_id_;
     }
 
     /**
@@ -295,13 +297,22 @@ public:
     }
 
 
+    size_t datasetSize() const override {
+        //this is very gross - the ending_frame_id_ will only get set after the first call to spin, but this is what we want to return
+        //so the value may change depending on if setEndingFrame has been called and/or when datasetSize is called!!!!!
+        if(is_first_spin_) {
+            return BaseDynoDataset::getDatasetSize();
+        }
+        return ending_frame_id_;
+    }
+
     virtual bool spin() override {
         if(!isProviderValid()) {
             LOG(ERROR) << "Cannot spin as provider is invalid";
             return false;
         }
 
-        const size_t dataset_size = getDatasetSize();
+        const size_t dataset_size = BaseDynoDataset::getDatasetSize();
 
         //initalise and check
         if(is_first_spin_) {
@@ -336,6 +347,7 @@ public:
 
         if(active_frame_id_ >= ending_frame_id_) {
             LOG_FIRST_N(INFO, 1) << "Finished dataset";
+            emitOnFinishCallbacks();
             return false;
         }
 
@@ -350,6 +362,9 @@ public:
         return true;
     }
 
+    size_t getActiveFrameId() const { return active_frame_id_; }
+    size_t getEndingFrameId() const { return ending_frame_id_; }
+
 private:
     size_t active_frame_id_ = 0u;
     size_t ending_frame_id_ = 0u; //Start at 0, but this will be set upon the first call to spin()
@@ -358,6 +373,9 @@ private:
     int requested_ending_frame_id_{-1};
 
     bool is_first_spin_{true};
+
+    using BaseDynoDataset::getDatasetSize;
+
 
 
 };

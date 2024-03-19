@@ -75,6 +75,17 @@ public:
         return image_container;
     }
 
+    inline void registerOnFinishCallback(const std::function<void()>& callback) {
+        on_finish_callbacks_.push_back(callback);
+    }
+
+    /**
+     * @brief Get the size of the dataset - if this is not valid (i.e. the provider is online) this function should return
+     * emitOnFinishCallbacks
+     *
+     * @return int
+     */
+    virtual size_t datasetSize() const = 0;
 
     /**
      * @brief Spins the dataset for one "step" of the dataset
@@ -88,6 +99,14 @@ public:
     virtual void shutdown();
 
 
+protected:
+    //This class does not know when the data finishes finishes (indeed this is only really valid for datasets)
+    //so we make a protected function that can be called by a derived class that will trigger the callbacks
+    //we need the callbacks in the base class becuase the pipelinemanager only has access to the DataProvider::Ptr and NOT
+    //the derived classes
+    void emitOnFinishCallbacks() {
+        for(auto cb : on_finish_callbacks_) cb();
+    }
 
 
 protected:
@@ -99,6 +118,9 @@ protected:
 
     // Shutdown switch to stop data provider.
     std::atomic_bool shutdown_ = {false};
+
+private:
+    std::vector<std::function<void()>> on_finish_callbacks_;
 
 };
 

@@ -55,7 +55,48 @@ void ImageType::RGBMono::validate(const cv::Mat& input) {
 }
 
 cv::Mat ImageType::RGBMono::toRGB(const ImageWrapper<RGBMono>& image) {
-   return image;
+    const cv::Mat& mat = image;
+    const auto channels = mat.channels();
+    if(channels == 3) {
+        return image;
+    }
+    else if(channels == 4) {
+        cv::Mat rgb;
+        cv::cvtColor(mat, rgb, cv::COLOR_RGBA2RGB);
+        return rgb;
+    }
+    else if (channels == 1) {
+        //grey scale but we want rgb so that we can draw colours on it or whatever
+        cv::Mat rgb;
+        cv::cvtColor(mat, rgb, cv::COLOR_GRAY2RGB);
+        return rgb;
+    }
+    else {
+        return image;
+    }
+}
+
+cv::Mat ImageType::RGBMono::toMono(const ImageWrapper<RGBMono>& image) {
+    const cv::Mat& mat = image;
+    const auto channels = mat.channels();
+    if(channels == 1) {
+        return image;
+    }
+    if (channels == 3)
+    {
+        cv::Mat mono;
+        cv::cvtColor(mat, mono, cv::COLOR_RGB2GRAY);
+        return mono;
+    }
+    else if (channels == 4)
+    {
+        cv::Mat mono;
+        cv::cvtColor(mat, mono, cv::COLOR_RGBA2GRAY);
+        return mono;
+    }
+    else {
+        return image;
+    }
 }
 
 

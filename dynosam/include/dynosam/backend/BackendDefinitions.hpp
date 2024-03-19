@@ -64,6 +64,24 @@ bool checkIfLabeledSymbol(gtsam::Key key);
 
 bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
 
+enum class OptimizerType {
+    kIncremental = 0,
+    kBatch = 1
+};
+
+template<>
+inline std::string to_string(const OptimizerType& t) {
+    if(t == OptimizerType::kBatch) {
+        return "Batch";
+    }
+    else if(t == OptimizerType::kIncremental) {
+        return "Incremental";
+    }
+    else {
+        return "Unknown OptimizerType";
+    }
+}
+
 
 //TODO: depricate!!
 /**
@@ -167,7 +185,6 @@ public:
 
 };
 
-//TODO: currently FrontendLogger really is RGBDLogger?
 class BackendLogger : public EstimationModuleLogger {
 public:
     DYNO_POINTER_TYPEDEFS(BackendLogger)

@@ -89,7 +89,7 @@ public:
     cv::Mat getItem(size_t idx) override {
         CHECK(idx > 0);
         std::stringstream ss;
-        //index at frame -1 so that we get the flow from t-t to t (where the idx is t)
+        //index at frame -1 so that we get the flow from t-1 to t (where the idx is t)
         ss << std::setfill('0') << std::setw(5) << idx-1;
         const std::string file_path = full_path_  + "/flow_" + ss.str() + ".png";
         // const std::string file_path = full_path_  + "/backwardFlow_" + ss.str() + ".png"; //specific to backwards flow

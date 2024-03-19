@@ -174,6 +174,30 @@ StatusLandmarkEstimates Map<MEASUREMENT>::getDynamicMap(FrameId frame_id) const 
 }
 
 template<typename MEASUREMENT>
+MotionEstimateMap Map<MEASUREMENT>::getMotionEstimates(FrameId frame_id) const {
+    MotionEstimateMap motion_estimates;
+    const auto frame_k_node = this->getFrame(frame_id);
+
+    if(!frame_k_node) {
+        return motion_estimates;
+    }
+    for(const auto& object_node : frame_k_node->objects_seen) {
+        StateQuery<gtsam::Pose3> motion_query = object_node->getMotionEstimate(frame_id);
+
+        //hardcoded motion reference frame
+        if(motion_query) {
+            motion_estimates.insert2(
+                object_node->getId(),
+                ReferenceFrameValue<gtsam::Pose3>(
+                    motion_query.get(),
+                    ReferenceFrame::GLOBAL
+                ));
+        }
+    }
+    return motion_estimates;
+}
+
+template<typename MEASUREMENT>
 void Map<MEASUREMENT>::addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
     typename LandmarkNodeM::Ptr  landmark_node = nullptr;
     typename FrameNodeM::Ptr frame_node = nullptr;
