@@ -56,8 +56,9 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
     object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_poses", 1);
     object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
-    object_motion_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_motions", 1);
-    object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx", 1);
+    object_motion_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/object_motions", 1);
+    object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx_viz", 1);
+    object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bounding_boxes", 1);
 
     gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 1);
     gt_object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_poses", 1);
@@ -95,6 +96,10 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
 void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
     CHECK(rgbd_frontend_output);
     publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_, rgbd_frontend_output->T_world_camera_);
+
+    //TODO: there is a bunch of repeated code in this function and in groupObjectCloud
+    //we leave this as is becuase this function ALSO creates the coloured point cloud (which groupObjectCloud does not)
+    //eventually, refactor into one function or calcualte the coloured cloud in the RGBDInstanceOutputPacket
     CloudPerObject clouds_per_obj = publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_, rgbd_frontend_output->T_world_camera_);
 
     publishObjectPositions(
@@ -115,9 +120,11 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
 
     // object bounding box using linelist and id text in rviz
     {
-        visualization_msgs::msg::MarkerArray object_bbx_marker_array;
+        visualization_msgs::msg::MarkerArray object_bbx_linelist_marker_array; // using linelist
+        visualization_msgs::msg::MarkerArray object_bbx_marker_array; // using cube
         static visualization_msgs::msg::Marker delete_marker;
         delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+        object_bbx_linelist_marker_array.markers.push_back(delete_marker);
         object_bbx_marker_array.markers.push_back(delete_marker);
 
         for (const auto& [object_id, obj_cloud] : clouds_per_obj){
@@ -142,18 +149,15 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             txt_marker.pose.position.x = centroid.x;
             txt_marker.pose.position.y = centroid.y-2.0;
             txt_marker.pose.position.z = centroid.z-1.0;
-            object_bbx_marker_array.markers.push_back(txt_marker);
+            object_bbx_linelist_marker_array.markers.push_back(txt_marker);
 
-            pcl::PointCloud<pcl::PointXYZ> obj_cloud_xyz;
-            pcl::copyPointCloud(obj_cloud, obj_cloud_xyz);
-            pcl::PointCloud<pcl::PointXYZ>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZ> >(obj_cloud_xyz);
-            pcl::PointXYZ min_point_AABB;
-            pcl::PointXYZ max_point_AABB;
-            findAABBFromCloud(obj_cloud_ptr, min_point_AABB, max_point_AABB);
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(obj_cloud);
+            ObjectBBX aabb = findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
+            ObjectBBX obb = findOBBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
 
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = "world";
-            marker.ns = "object_bbx";
+            marker.ns = "object_bbx_linelist";
             marker.id = object_id;
             marker.type = visualization_msgs::msg::Marker::LINE_LIST;
             marker.action = visualization_msgs::msg::Marker::ADD;
@@ -170,16 +174,45 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             marker.color.b = colour(2)/255.0;
             marker.color.a = 1;
 
-            for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(min_point_AABB, max_point_AABB)){
+            for (const pcl::PointXYZ& this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
                 geometry_msgs::msg::Point p;
                 p.x = this_line_list_point.x;
                 p.y = this_line_list_point.y;
                 p.z = this_line_list_point.z;
                 marker.points.push_back(p);
             }
+            object_bbx_linelist_marker_array.markers.push_back(marker);
 
-            object_bbx_marker_array.markers.push_back(marker);
+            visualization_msgs::msg::Marker bbx_marker;
+            bbx_marker.header.frame_id = "world";
+            bbx_marker.ns = "object_bbx";
+            bbx_marker.id = object_id;
+            bbx_marker.type = visualization_msgs::msg::Marker::CUBE;
+            bbx_marker.action = visualization_msgs::msg::Marker::ADD;
+            bbx_marker.header.stamp = node_->now();
+            bbx_marker.scale.x = obb.max_bbx_point_.x() - obb.min_bbx_point_.x();
+            bbx_marker.scale.y = obb.max_bbx_point_.y() - obb.min_bbx_point_.y();
+            bbx_marker.scale.z = obb.max_bbx_point_.z() - obb.min_bbx_point_.z();
+
+            bbx_marker.pose.position.x = obb.bbx_position_.x();
+            bbx_marker.pose.position.y = obb.bbx_position_.y();
+            bbx_marker.pose.position.z = obb.bbx_position_.z();
+
+            const gtsam::Quaternion& q = obb.orientation_.toQuaternion();
+            bbx_marker.pose.orientation.x = q.x();
+            bbx_marker.pose.orientation.y = q.y();
+            bbx_marker.pose.orientation.z = q.z();
+            bbx_marker.pose.orientation.w = q.w();
+
+            bbx_marker.color.r = colour(0)/255.0;
+            bbx_marker.color.g = colour(1)/255.0;
+            bbx_marker.color.b = colour(2)/255.0;
+            bbx_marker.color.a = 0.2;
+
+
+            object_bbx_marker_array.markers.push_back(bbx_marker);
         }
+        object_bbx_line_pub_->publish(object_bbx_linelist_marker_array);
         object_bbx_pub_->publish(object_bbx_marker_array);
     }
 
@@ -211,6 +244,34 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 }
             }
         }
+    }
+
+    // Write object motion to nav_msgs/Path and publish
+    nav_msgs::msg::Path object_motions_msg;
+    {
+        const FrameId current_frame_id = rgbd_frontend_output->getFrameId();
+        const MotionEstimateMap& obj_motions = rgbd_frontend_output->estimated_motions_;
+
+        // object_motions_msg.header.seq = current_frame_id;
+        object_motions_msg.header.stamp = node_->now();
+        object_motions_msg.header.frame_id = params_.world_frame_id_;
+
+        for (const auto& [object_id, current_obj_motion] : obj_motions){
+            geometry_msgs::msg::PoseStamped current_obj_motion_msg;
+            current_obj_motion_msg.header.stamp = node_->now();
+            current_obj_motion_msg.header.frame_id = std::to_string(object_id);
+            current_obj_motion_msg.pose.position.x = current_obj_motion.estimate_.translation().x();
+            current_obj_motion_msg.pose.position.y = current_obj_motion.estimate_.translation().y();
+            current_obj_motion_msg.pose.position.z = current_obj_motion.estimate_.translation().z();
+            current_obj_motion_msg.pose.orientation.w = current_obj_motion.estimate_.rotation().toQuaternion().w(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.x = current_obj_motion.estimate_.rotation().toQuaternion().x(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.y = current_obj_motion.estimate_.rotation().toQuaternion().y(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.z = current_obj_motion.estimate_.rotation().toQuaternion().z(); // in w x y z form
+
+            object_motions_msg.poses.push_back(current_obj_motion_msg);
+        }
+
+        object_motion_pub_->publish(object_motions_msg);
     }
 
     // 2D image visualisation using opencv
@@ -327,7 +388,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 object_pred_marker_array.markers.push_back(arrow_marker);
             }
         }
-        object_bbx_pub_->publish(object_pred_marker_array);
+        object_bbx_line_pub_->publish(object_pred_marker_array);
     }
 
 

@@ -25,6 +25,7 @@
 #include "dynosam/utils/CsvWriter.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/common/PointCloudProcess.hpp"
 
 #include <stdlib.h>
 #include <fstream>
@@ -105,12 +106,16 @@ public:
 
   virtual void logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks);
 
+  //logs to object bounding boxes
+  virtual void logObjectBbxes(FrameId frame_id, const BbxPerObject& object_bbxes);
+
 protected:
   const std::string module_name_;
 
   const std::string object_motion_errors_file_name_;
   const std::string object_pose_errors_file_name_;
   const std::string object_pose_file_name_;
+  const std::string object_bbx_file_name_;
 
   const std::string camera_pose_errors_file_name_;
   const std::string camera_pose_file_name_;
@@ -120,6 +125,7 @@ protected:
   CsvWriter::UniquePtr object_motion_errors_csv_;
   CsvWriter::UniquePtr object_pose_errors_csv_;
   CsvWriter::UniquePtr object_pose_csv_;
+  CsvWriter::UniquePtr object_bbx_csv_;
 
   CsvWriter::UniquePtr camera_pose_errors_csv_;
   CsvWriter::UniquePtr camera_pose_csv_;

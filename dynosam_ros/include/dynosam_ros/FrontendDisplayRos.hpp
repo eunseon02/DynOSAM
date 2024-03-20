@@ -76,10 +76,11 @@ private:
     std::map<ObjectId, gtsam::Pose3Vector> object_trajectories_;
     std::map<ObjectId, FrameId> object_trajectories_update_; //! The last frame id that the object was seen in
 
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_motion_pub_; //! Draw object motion as arrows
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr object_motion_pub_; //! Publish object motions per frame as an array of SE(3) transformations (a Path) where frame_id per pose is object id
 
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object motion as arrows
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_line_pub_; //! Draw object bounding boxes as line lists
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object bounding boxes as cubes
     image_transport::Publisher tracking_image_pub_;
 
     //ground truth publishers

@@ -85,6 +85,7 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
     object_motion_errors_file_name_(module_name_ + "_object_motion_error_log.csv"),
     object_pose_errors_file_name_(module_name_ + "_object_pose_errors_log.csv"),
     object_pose_file_name_(module_name_ + "_object_pose_log.csv"),
+    object_bbx_file_name_(module_name_ + "_object_bbx_log.csv"),
     camera_pose_errors_file_name_(module_name_ + "_camera_pose_error_log.csv"),
     camera_pose_file_name_(module_name_ + "_camera_pose_log.csv"),
     map_points_file_name_(module_name_ + "_map_points_log.csv")
@@ -101,27 +102,42 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
             "t_rel_err", "r_rel_err"));
 
 
-    camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "t_abs_err", "r_abs_err",
             "t_rel_err", "r_rel_err"));
 
-    camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "x", "y", "z",
             "roll", "pitch" , "yaw"));
 
-    object_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  object_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
             "x", "y", "z",
             "roll", "pitch" , "yaw"));
 
-    map_points_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  map_points_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
             "tracklet_id",
             "x_world", "y_world", "z_world"));
+
+  object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "object_id",
+            "t_abs_err", "r_abs_err",
+            "t_rel_err", "r_rel_err"));
+
+  object_bbx_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "object_id",
+            "min_bbx_x", "min_bbx_y", "min_bbx_z",
+            "max_bbx_x", "max_bbx_y", "max_bbx_z",
+            "px", "py", "pz",
+            "qw", "qx", "qy", "qz"));
+
 }
 
 EstimationModuleLogger::~EstimationModuleLogger() {
@@ -130,6 +146,7 @@ EstimationModuleLogger::~EstimationModuleLogger() {
   OfstreamWrapper::WriteOutCsvWriter(*object_motion_errors_csv_, object_motion_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_pose_errors_csv_, object_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_pose_csv_, object_pose_file_name_);
+  OfstreamWrapper::WriteOutCsvWriter(*object_bbx_csv_, object_bbx_file_name_);
 
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_errors_csv_, camera_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
@@ -259,5 +276,14 @@ void EstimationModuleLogger::logPoints(FrameId frame_id, const gtsam::Pose3& T_w
 
 }
 
+void EstimationModuleLogger::logObjectBbxes(FrameId frame_id, const BbxPerObject& object_bbxes){
+  for(const auto&[object_id, this_object_bbx] : object_bbxes) {
+    const gtsam::Quaternion& q = this_object_bbx.orientation_.toQuaternion();
+    *object_bbx_csv_ << frame_id << object_id << this_object_bbx.min_bbx_point_.x() << this_object_bbx.min_bbx_point_.y() << this_object_bbx.min_bbx_point_.z()
+                                              << this_object_bbx.max_bbx_point_.x() << this_object_bbx.max_bbx_point_.y() << this_object_bbx.max_bbx_point_.z()
+                                              << this_object_bbx.bbx_position_.x() << this_object_bbx.bbx_position_.y() << this_object_bbx.bbx_position_.z()
+                                              << q.w() << q.x() << q.y() << q.z();
+  }
+}
 
 } //dyno

@@ -157,5 +157,3 @@ if __name__ == '__main__':
     # the user wants to parse to the LaunchService as real args to be used as GFLAGS.
     args, unknown = parser.parse_known_args()
     sys.exit(main(args, unknown))
-
-    # from evaluation.evaluation_lib import hello

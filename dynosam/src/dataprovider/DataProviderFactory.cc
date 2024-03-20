@@ -31,8 +31,8 @@
 
 #include <glog/logging.h>
 
-DEFINE_uint32(starting_frame, -1, "Starting frame of the dataset. If -1 use the default which is the starting frame=0");
-DEFINE_uint32(ending_frame, -1, "Ending frame of the dataset. If -1 use the default which is the ending_frame=dataset_size");
+DEFINE_int32(starting_frame, -1, "Starting frame of the dataset. If -1 use the default which is the starting frame=0");
+DEFINE_int32(ending_frame, -1, "Ending frame of the dataset. If -1 use the default which is the ending_frame=dataset_size");
 
 namespace dyno {
 

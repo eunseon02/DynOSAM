@@ -179,6 +179,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
         //object_poses_ are in frontend module
         logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
+        logger_->logObjectBbxes(output->getFrameId(), output->getObjectBbxes());
     }
     return {State::Nominal, output};
 }
