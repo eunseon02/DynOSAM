@@ -28,7 +28,7 @@
 
 namespace dyno {
 
-DisplayRos::CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
+CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
     CloudPerObject clouds_per_obj;
@@ -238,6 +238,5 @@ void DisplayRos::publishObjectPaths(
 
     pub->publish(object_path_marker_array);
 }
-
 
 }

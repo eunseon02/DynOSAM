@@ -53,30 +53,6 @@ public:
 private:
     void processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output);
 
-    // void publishStaticCloud(const Landmarks& static_landmarks);
-    // void publishObjectCloud(const StatusKeypointMeasurements& dynamic_measurements, const Landmarks& dynamic_landmarks);
-
-    // /**
-    //  * @brief Draw propogated (composed) object poses as estimated with frame to frame motion from the frontend
-    //  *
-    //  * Also draw object paths (as separate topic) using LINE_LISTS.
-    //  *
-    //  * @param propogated_object_poses
-    //  * @param frame_id
-    //  */
-    // void publishObjectPositions(const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses, FrameId frame_id);
-
-    // /**
-    //  * @brief Draw object motion as arrows starting from the current object pose.
-    //  *
-    //  * This viz is slightly misleading as the motion is from t-t to t and the object pose is estimated for time t.
-    //  *
-    //  * @param motion_estimates
-    //  * @param propogated_object_poses
-    //  */
-    // void publishObjectMotions(const MotionEstimateMap& motion_estimates, const std::map<ObjectId, gtsam::Pose3>& propogated_object_poses);
-
-    // // void publishVisibleCloud(const FrontendOutputPacketBase& frontend_output);
     void publishOdometry(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     // void publishOdometryPath(const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     void publishDebugImage(const DebugImagery& debug_imagery);
@@ -100,10 +76,11 @@ private:
     std::map<ObjectId, gtsam::Pose3Vector> object_trajectories_;
     std::map<ObjectId, FrameId> object_trajectories_update_; //! The last frame id that the object was seen in
 
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_motion_pub_; //! Draw object motion as arrows
+    rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr object_motion_pub_; //! Publish object motions per frame as an array of SE(3) transformations (a Path) where frame_id per pose is object id
 
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
-    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object motion as arrows
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_line_pub_; //! Draw object bounding boxes as line lists
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_bbx_pub_; //! Draw object bounding boxes as cubes
     image_transport::Publisher tracking_image_pub_;
 
     //ground truth publishers
@@ -116,7 +93,6 @@ private:
 
     image_transport::Publisher gt_bounding_box_pub_;
 
-    //
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
 
