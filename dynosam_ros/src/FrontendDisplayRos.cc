@@ -57,7 +57,7 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
     object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
     odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
     object_motion_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/object_motions", 1);
-    object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx", 1);
+    object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx_viz", 1);
     object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bounding_boxes", 1);
 
     gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 1);
