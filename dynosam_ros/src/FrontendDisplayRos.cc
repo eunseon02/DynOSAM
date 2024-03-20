@@ -96,6 +96,10 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
 void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
     CHECK(rgbd_frontend_output);
     publishPointCloud(static_tracked_points_pub_, rgbd_frontend_output->static_landmarks_, rgbd_frontend_output->T_world_camera_);
+
+    //TODO: there is a bunch of repeated code in this function and in groupObjectCloud
+    //we leave this as is becuase this function ALSO creates the coloured point cloud (which groupObjectCloud does not)
+    //eventually, refactor into one function or calcualte the coloured cloud in the RGBDInstanceOutputPacket
     CloudPerObject clouds_per_obj = publishPointCloud(dynamic_tracked_points_pub_, rgbd_frontend_output->dynamic_landmarks_, rgbd_frontend_output->T_world_camera_);
 
     publishObjectPositions(
@@ -147,11 +151,9 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             txt_marker.pose.position.z = centroid.z-1.0;
             object_bbx_linelist_marker_array.markers.push_back(txt_marker);
 
-            // pcl::PointCloud<pcl::PointXYZ> obj_cloud_xyz;
-            // pcl::copyPointCloud(obj_cloud, obj_cloud_xyz);
             pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(obj_cloud);
-            ObjectBBX aabb = findAABBFromCloud(obj_cloud_ptr);
-            ObjectBBX obb = findOBBFromCloud(obj_cloud_ptr);
+            ObjectBBX aabb = findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
+            ObjectBBX obb = findOBBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
 
             visualization_msgs::msg::Marker marker;
             marker.header.frame_id = "world";
@@ -172,7 +174,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             marker.color.b = colour(2)/255.0;
             marker.color.a = 1;
 
-            for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
+            for (const pcl::PointXYZ& this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
                 geometry_msgs::msg::Point p;
                 p.x = this_line_list_point.x;
                 p.y = this_line_list_point.y;
@@ -188,30 +190,26 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             bbx_marker.type = visualization_msgs::msg::Marker::CUBE;
             bbx_marker.action = visualization_msgs::msg::Marker::ADD;
             bbx_marker.header.stamp = node_->now();
-            bbx_marker.scale.x = obb.max_bbx_point_.x - obb.min_bbx_point_.x;
-            bbx_marker.scale.y = obb.max_bbx_point_.y - obb.min_bbx_point_.y;
-            bbx_marker.scale.z = obb.max_bbx_point_.z - obb.min_bbx_point_.z;
+            bbx_marker.scale.x = obb.max_bbx_point_.x() - obb.min_bbx_point_.x();
+            bbx_marker.scale.y = obb.max_bbx_point_.y() - obb.min_bbx_point_.y();
+            bbx_marker.scale.z = obb.max_bbx_point_.z() - obb.min_bbx_point_.z();
 
-            bbx_marker.pose.position.x = obb.bbx_position_.x;
-            bbx_marker.pose.position.y = obb.bbx_position_.y;
-            bbx_marker.pose.position.z = obb.bbx_position_.z;
-            bbx_marker.pose.orientation.x = Eigen::Quaterniond(obb.orientation_.cast<double>()).x();
-            bbx_marker.pose.orientation.y = Eigen::Quaterniond(obb.orientation_.cast<double>()).y();
-            bbx_marker.pose.orientation.z = Eigen::Quaterniond(obb.orientation_.cast<double>()).z();
-            bbx_marker.pose.orientation.w = Eigen::Quaterniond(obb.orientation_.cast<double>()).w();
+            bbx_marker.pose.position.x = obb.bbx_position_.x();
+            bbx_marker.pose.position.y = obb.bbx_position_.y();
+            bbx_marker.pose.position.z = obb.bbx_position_.z();
+
+            const gtsam::Quaternion& q = obb.orientation_.toQuaternion();
+            bbx_marker.pose.orientation.x = q.x();
+            bbx_marker.pose.orientation.y = q.y();
+            bbx_marker.pose.orientation.z = q.z();
+            bbx_marker.pose.orientation.w = q.w();
 
             bbx_marker.color.r = colour(0)/255.0;
             bbx_marker.color.g = colour(1)/255.0;
             bbx_marker.color.b = colour(2)/255.0;
             bbx_marker.color.a = 0.2;
 
-            // for (pcl::PointXYZ this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
-            //     geometry_msgs::msg::Point p;
-            //     p.x = this_line_list_point.x;
-            //     p.y = this_line_list_point.y;
-            //     p.z = this_line_list_point.z;
-            //     bbx_marker.points.push_back(p);
-            // }
+
             object_bbx_marker_array.markers.push_back(bbx_marker);
         }
         object_bbx_line_pub_->publish(object_bbx_linelist_marker_array);
@@ -265,10 +263,10 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             current_obj_motion_msg.pose.position.x = current_obj_motion.estimate_.translation().x();
             current_obj_motion_msg.pose.position.y = current_obj_motion.estimate_.translation().y();
             current_obj_motion_msg.pose.position.z = current_obj_motion.estimate_.translation().z();
-            current_obj_motion_msg.pose.orientation.w = current_obj_motion.estimate_.rotation().quaternion()[0]; // in w x y z form
-            current_obj_motion_msg.pose.orientation.x = current_obj_motion.estimate_.rotation().quaternion()[1]; // in w x y z form
-            current_obj_motion_msg.pose.orientation.y = current_obj_motion.estimate_.rotation().quaternion()[2]; // in w x y z form
-            current_obj_motion_msg.pose.orientation.z = current_obj_motion.estimate_.rotation().quaternion()[3]; // in w x y z form
+            current_obj_motion_msg.pose.orientation.w = current_obj_motion.estimate_.rotation().toQuaternion().w(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.x = current_obj_motion.estimate_.rotation().toQuaternion().x(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.y = current_obj_motion.estimate_.rotation().toQuaternion().y(); // in w x y z form
+            current_obj_motion_msg.pose.orientation.z = current_obj_motion.estimate_.rotation().toQuaternion().z(); // in w x y z form
 
             object_motions_msg.poses.push_back(current_obj_motion_msg);
         }

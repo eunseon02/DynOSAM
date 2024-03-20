@@ -86,33 +86,49 @@ public:
         CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());
         CHECK_EQ(dynamic_landmarks_.size(), dynamic_keypoint_measurements_.size());
 
-        // TODO: Put this into a function - in point cloud process?
         object_clouds_ = groupObjectCloud(dynamic_landmarks_, T_world_camera_);
         for (const auto& [object_id, this_object_cloud] : object_clouds_){
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(this_object_cloud);
+            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>(this_object_cloud);
             // ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
-            ObjectBBX this_object_bbx = findAABBFromCloud(obj_cloud_ptr);
+
+            //TODO: currently axis-aligned bounding box (not orientated bbx)
+            ObjectBBX this_object_bbx = findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
             object_bbxes_.insert2(object_id, this_object_bbx);
         }
     }
 
-    pcl::PointCloud<pcl::PointXYZRGB> getDynamicObjectPointCloud(ObjectId object_id) {
-        return object_clouds_[object_id];
-    }
-    ObjectBBX getDynamicObjectBBX(ObjectId object_id) {
-        return object_bbxes_[object_id];
+    /**
+     * @brief Checks if an object id exists within the frontend output
+     *
+     * Actually looks in the map of objectids -> object_clouds_, does not check the status keypoints/landmarks for this
+     * id.
+     *
+     * @param object_id
+     * @return true
+     * @return false
+     */
+    inline bool hasObject(ObjectId object_id) const { return object_clouds_.exists(object_id); }
+
+    const pcl::PointCloud<pcl::PointXYZRGB>& getDynamicObjectPointCloud(ObjectId object_id) const  {
+        CHECK(hasObject(object_id)) << "Cannot get dynamic object as id missing: " << object_id;
+        return object_clouds_.at(object_id);
     }
 
-    CloudPerObject getObjectClouds(){
+    const ObjectBBX& getDynamicObjectBBX(ObjectId object_id) const {
+        CHECK(hasObject(object_id)) << "Cannot get dynamic object bbx as id missing: " << object_id;
+        return object_bbxes_.at(object_id);
+    }
+
+    const CloudPerObject& getObjectClouds() const {
         return object_clouds_;
     }
 
-    BbxPerObject getObjectBbxes(){
+    const BbxPerObject& getObjectBbxes() const {
         return object_bbxes_;
     }
 private:
-    CloudPerObject object_clouds_;
-    BbxPerObject object_bbxes_;
+    CloudPerObject object_clouds_; //! Point clouds per object extracted from dynamic_landmarks_ in the world frame
+    BbxPerObject object_bbxes_; //! Bounding boxes per object extracted from the object_clouds_
 
 };
 

@@ -278,10 +278,10 @@ void EstimationModuleLogger::logPoints(FrameId frame_id, const gtsam::Pose3& T_w
 
 void EstimationModuleLogger::logObjectBbxes(FrameId frame_id, const BbxPerObject& object_bbxes){
   for(const auto&[object_id, this_object_bbx] : object_bbxes) {
-    Eigen::Quaterniond q(this_object_bbx.orientation_.cast<double>());
-    *object_bbx_csv_ << frame_id << object_id << this_object_bbx.min_bbx_point_.x << this_object_bbx.min_bbx_point_.y << this_object_bbx.min_bbx_point_.z 
-                                              << this_object_bbx.max_bbx_point_.x << this_object_bbx.max_bbx_point_.y << this_object_bbx.max_bbx_point_.z
-                                              << this_object_bbx.bbx_position_.x << this_object_bbx.bbx_position_.y << this_object_bbx.bbx_position_.z
+    const gtsam::Quaternion& q = this_object_bbx.orientation_.toQuaternion();
+    *object_bbx_csv_ << frame_id << object_id << this_object_bbx.min_bbx_point_.x() << this_object_bbx.min_bbx_point_.y() << this_object_bbx.min_bbx_point_.z()
+                                              << this_object_bbx.max_bbx_point_.x() << this_object_bbx.max_bbx_point_.y() << this_object_bbx.max_bbx_point_.z()
+                                              << this_object_bbx.bbx_position_.x() << this_object_bbx.bbx_position_.y() << this_object_bbx.bbx_position_.z()
                                               << q.w() << q.x() << q.y() << q.z();
   }
 }
