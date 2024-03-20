@@ -197,6 +197,7 @@ MotionEstimateMap Map<MEASUREMENT>::getMotionEstimates(FrameId frame_id) const {
     return motion_estimates;
 }
 
+
 template<typename MEASUREMENT>
 void Map<MEASUREMENT>::addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
     typename LandmarkNodeM::Ptr  landmark_node = nullptr;

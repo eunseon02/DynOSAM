@@ -80,11 +80,11 @@ using BbxPerObject = gtsam::FastMap<ObjectId,  ObjectBBX>;
 /**
  * @brief This function goes through the input 3D landmarks and group them into point clusters based on their object labels
  * these 3D landmarks are expected to be in the sensor reference frame, and T_world_camera puts them into the world frame
- * CloudPerObject is in the world frame
+ * CloudPerObject is in the world frame.
  *
  * @param landmarks const StatusLandmarkEstimates&
  * @param T_world_camera const gtsam::Pose3& Transform from camera to world frame
- * @return CloudPerObject
+ * @return CloudPerObject XYZRGB point cloud per obect in the world frame
  */
 CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
 

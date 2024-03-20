@@ -348,6 +348,10 @@ public:
     inline FrameId getFirstSeenFrame() const { return getSeenFrames().template getFirstIndex<FrameId>(); }
     inline FrameId getLastSeenFrame() const { return getSeenFrames().template getLastIndex<FrameId>(); }
 
+    //this recomputed everything everytime
+    //eventually should cache things but for now its okay
+    gtsam::FastMap<FrameId, gtsam::Pose3> computePoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt = true) const;
+
 
     //this could take a while?
     //for all the lmks we have for this object, find the frames of those lmks

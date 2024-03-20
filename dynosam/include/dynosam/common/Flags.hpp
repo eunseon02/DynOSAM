@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
  *   Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,49 +21,14 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/common/Flags.hpp"
+#pragma once
+
 #include <gflags/gflags.h>
 
-#include <string>
-#include <cxxabi.h>
+/**
+ * @brief Declaration of common gflags that are DEFINED in Types.cc
+ *
+ */
 
 //common glags used in multiple modules
-DEFINE_bool(init_object_pose_from_gt, false , "If true, then the viz pose from the frontend/backend will start from the gt");
-
-namespace dyno {
-
-
-template<>
-std::string to_string(const ReferenceFrame& reference_frame) {
-  switch (reference_frame)
-  {
-  case ReferenceFrame::LOCAL:
-    return "local";
-  case ReferenceFrame::GLOBAL:
-    return "global";
-  case ReferenceFrame::OBJECT:
-    return "object";
-  default:
-    return "Unknown reference frame";
-  }
-};
-
-std::string demangle(const char* name)
-{
-  // by default set to the original mangled name
-  std::string demangled_name = std::string(name);
-
-  // g++ version of demangle
-  char* demangled = nullptr;
-  int status = -1;  // some arbitrary value to eliminate the compiler warning
-  demangled = abi::__cxa_demangle(name, nullptr, nullptr, &status);
-
-  demangled_name = (status == 0) ? std::string(demangled) : std::string(name);
-  std::free(demangled);
-
-  return demangled_name;
-}
-
-
-} //dyno
+DECLARE_bool(init_object_pose_from_gt);

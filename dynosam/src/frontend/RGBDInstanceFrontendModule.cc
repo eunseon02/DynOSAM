@@ -31,7 +31,8 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
 
-DEFINE_bool(init_object_pose_from_gt, false , "If true, then the viz pose from the frontend will start from the gt");
+#include "dynosam/common/Flags.hpp" //for common flags
+
 DEFINE_bool(use_frontend_logger, false , "If true, the frontend logger will be used");
 
 namespace dyno {

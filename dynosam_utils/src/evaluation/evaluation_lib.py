@@ -390,7 +390,7 @@ _frontend_map_point_log = "frontend_map_points_log.csv"
 _backend_motion_error_log = "backend_object_motion_error_log.csv"
 _backend_object_pose_log = "backend_object_pose_log.csv"
 _backend_object_pose_error_log = "backend_object_pose_errors_log.csv"
-_backend_camera_pose_error_log = "backendcamera_pose_error_log.csv"
+_backend_camera_pose_error_log = "backend_camera_pose_error_log.csv"
 _backend_camera_pose_log = "backend_camera_pose_log.csv"
 
 

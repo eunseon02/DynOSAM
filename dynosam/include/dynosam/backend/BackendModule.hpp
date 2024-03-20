@@ -35,6 +35,7 @@
 #include "dynosam/backend/BackendOutputPacket.hpp"
 #include "dynosam/backend/Optimizer.hpp"
 
+
 #include "dynosam/visualizer/Visualizer-Definitions.hpp" //for ImageDisplayQueueOptional
 
 
@@ -179,6 +180,10 @@ public:
         return false;
     }
 
+    //gets all object poses. This iterates over each object in the map
+    //and recomputes all the object poses given the values in the map
+    ObjectPoseMap getObjectPoses(bool init_translation_from_gt) const;
+
 
     void logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses);
 
@@ -208,6 +213,18 @@ private:
 
 };
 
+template<class MODULE_TRAITS>
+ObjectPoseMap BackendModuleType<MODULE_TRAITS>::getObjectPoses(bool init_translation_from_gt) const {
+    const ObjectIds object_ids = map_->getObjectIds();
+    ObjectPoseMap object_pose_map;
+
+    for(auto object_id : object_ids) {
+        const auto& object_node = map_->getObject(object_id);
+        object_pose_map.insert2(
+            object_id, object_node->computePoseMap(gt_packet_map_, init_translation_from_gt));
+    }
+    return object_pose_map;
+}
 
 template<class MODULE_TRAITS>
 void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses) {

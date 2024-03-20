@@ -132,6 +132,7 @@ public:
 
     MotionEstimateMap getMotionEstimates(FrameId frame_id) const;
 
+
     template<typename ValueType>
     StateQuery<ValueType> query(gtsam::Key key) const {
         if(values_.exists(key)) {
@@ -175,7 +176,14 @@ public:
         return true;
     }
 
-
+    ObjectIds getObjectIds() const {
+        ObjectIds object_ids;
+        for(const auto& [object_id, object_node] : objects_) {
+            (void)object_node;
+            object_ids.push_back(object_id);
+        }
+        return object_ids;
+    }
 
 
 private:

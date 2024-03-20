@@ -27,6 +27,8 @@
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/logger/Logger.hpp"
 
+#include "dynosam/common/Flags.hpp"
+
 #include "dynosam/backend/IncrementalOptimizer.hpp"
 
 
@@ -95,8 +97,6 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     const FrameId frame_k = input->getFrameId();
     LOG(INFO) << "Running backend " << frame_k;
-    //update initial object poses so we can propogate from them
-    updateInitialObjectPoses(frame_k, input);
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
 
@@ -114,8 +114,6 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     optimizer_->update(frame_k, new_values, new_factors, map_);
     // optimize(frame_k, new_values, new_factors);
     map_->updateEstimates(new_values, new_factors, frame_k);
-    //must be called after the map update as it uses this to get all the info
-    updateObjectPoses(frame_k, input);
 
     return {State::Nominal, nullptr};
 }
@@ -126,8 +124,6 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     const FrameId frame_k = input->getFrameId();
     LOG(INFO) << "Running backend " << frame_k;
     const FrameId frame_k_1 = frame_k - 1u;
-    //update initial object poses so we can propogate from them
-    updateInitialObjectPoses(frame_k, input);
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
     {
@@ -163,7 +159,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         map_->updateEstimates(estimate, full_graph, frame_k);
         // must be called after the map update as it uses this to get all the info
         //currently only propofate object pose when optimize?
-        auto composed_poses = updateObjectPoses(frame_k, input);
+        auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
 
         //only logs this the frame specified - in batch case we want to update all!!
         for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
@@ -242,6 +238,10 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
             //see if we have enough observations to add this lmk
             if(lmk_node->numObservations() < kMinObservations) { continue;}
 
+            //this condition should only run once per tracklet (ie.e the first time the tracklet has enough observations)
+            //we gather the tracklet observations and then initalise it in the new values
+            //these should then get added to the map
+            //and map_->exists() should return true for all other times
             FrameNodePtrSet<Landmark> seen_frames = lmk_node->getSeenFrames();
             for(const FrameNode3d::Ptr& seen_frame : seen_frames) {
                 //check for sanity that the seen frames are <= than the current frame
@@ -277,7 +277,7 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
     const FrameNode3d::Ptr frame_node_k_1 = map_->getFrame(frame_id_k_1);
     CHECK_NOTNULL(frame_node_k_1);
 
-    constexpr static size_t kMinObservations = 3u;
+    constexpr static size_t kMinObservations = 5u;
 
     //for each object
     for(const ObjectNode3d::Ptr& object_node : frame_node_k->objects_seen) {
@@ -333,6 +333,7 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
                 std::stringstream ss;
                 ss << "Going back to add point on object " << object_id << " at frames\n";
 
+                //iterate over k-N to k (inclusive) and all all
                 for(auto seen_frames_itr = starting_motion_frame_itr; seen_frames_itr != seen_frames.end(); seen_frames_itr++) {
                     auto seen_frames_itr_prev = seen_frames_itr;
                     std::advance(seen_frames_itr_prev, -1);
@@ -362,6 +363,31 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
                     const Landmark& measured_k = obj_lmk_node->getMeasurement(query_frame_node_k);
                     const Landmark& measured_k_1 = obj_lmk_node->getMeasurement(query_frame_node_k_1);
 
+                    //this should DEFINITELY be in the map, as long as we update the values in the map everyy time
+                    StateQuery<gtsam::Pose3> T_world_camera_k_1_query = query_frame_node_k_1->getPoseEstimate();
+                    CHECK(T_world_camera_k_1_query) << "Failed cam pose query at frame " << query_frame_node_k_1->frame_id
+                        << ". This may happen if the map_ is not updated every iteration OR something is wrong with the tracking...";
+                    const gtsam::Pose3 T_world_camera_k_1 = T_world_camera_k_1_query.get();
+
+                    StateQuery<gtsam::Pose3> T_world_camera_k_query = query_frame_node_k->getPoseEstimate();
+                    gtsam::Pose3 T_world_camera_k;
+                    //querying the map at the current frame ie. the last iteration in this loop as we havent added
+                    //the pose to the map yet!!
+                    if(!T_world_camera_k_query) {
+                        //this SHOULD happen when query_frame_node_k->frame_id == frame_id_k and at no other time
+                        CHECK_EQ(query_frame_node_k->frame_id, frame_id_k);
+                        //if this is okay, just set the pose to be the argument, since this should be the pose at frame_k
+                        T_world_camera_k = T_world_camera;
+                    }
+                    else {
+                        //we are not at the last frame of this loop yet so query_frame_node_k->frame_id < frame_id_k
+                        CHECK_LT(query_frame_node_k->frame_id, frame_id_k);
+                        T_world_camera_k = T_world_camera_k_query.get();
+                    }
+
+
+                    // const gtsam::Pose3 T_world_camera_k = T_world_camera_k_query.get();
+
                     gtsam::Key object_point_key_k = obj_lmk_node->makeDynamicKey(query_frame_node_k->frame_id);
                     gtsam::Key object_point_key_k_1 = obj_lmk_node->makeDynamicKey(query_frame_node_k_1->frame_id);
 
@@ -377,7 +403,7 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
                         );
                         object_debug_info.num_dynamic_factors++;
 
-                        const Landmark lmk_world_k_1 = T_world_camera * measured_k_1;
+                        const Landmark lmk_world_k_1 = T_world_camera_k_1 * measured_k_1;
                         new_values.insert(object_point_key_k_1, lmk_world_k_1);
                         timestamp_map_[object_point_key_k_1] = query_frame_node_k_1->frame_id;
                         object_debug_info.num_new_dynamic_points++;
@@ -387,14 +413,14 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
                     CHECK(new_values.exists(object_point_key_k_1));
 
                     new_point_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
-                        query_frame_node_k->makePoseKey(), //pose key at previous frames
+                        query_frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
                         object_point_key_k,
                         measured_k,
                         dynamic_point_noise_
                     );
                     object_debug_info.num_dynamic_factors++;
 
-                    const Landmark lmk_world_k = T_world_camera * measured_k;
+                    const Landmark lmk_world_k = T_world_camera_k * measured_k;
                     new_values.insert(object_point_key_k, lmk_world_k);
                     timestamp_map_[object_point_key_k] = query_frame_node_k->frame_id;
                     object_debug_info.num_new_dynamic_points++;
@@ -891,147 +917,8 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
 //     // map_->updateEstimates(all_values, graph, frame_id_k);
 // }
 
-const gtsam::FastMap<ObjectId, gtsam::Pose3>& RGBDBackendModule::updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
-    const ObjectPoseMap& frontend_positions = input->propogated_object_poses_;
-
-    //update initial object poses first
-    for(const auto& [object_id, object_poses] : frontend_positions) {
-        if(!initial_object_poses_.exists(object_id)) {
-            //this should also be the first time it exists from the frontend so it should have two poses in it
-            //one from the first observation and another from the motion computed (as in the frontend we only check for motions computed)
-            //once a motion is computed in the frontend, two poses are added - one for the first frame (computed by centroid etc), and then
-            //one for the motion
-            auto first_seen_frame = frame_id_k - 1u;
-            CHECK_EQ(object_poses.size(), 2u);
-            CHECK(object_poses.exists(first_seen_frame));
-
-            initial_object_poses_.insert2(object_id, object_poses.at(first_seen_frame));
-            initial_object_poses_set_.insert2(object_id, first_seen_frame);
-        }
-    }
-
-    return initial_object_poses_;
-}
-
-//TODO: cannot put update initial_object_poses_ in here as this expects the function to be called sequentially (i.e not batch)
-//but the logic that updates the object positions does not
-//we should break this apart or put one part into the map (as the object poses need to get constructed from the initial pose)
-//every time so we should just make it a map function (given, some initial pose)
-const ObjectPoseMap& RGBDBackendModule::updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
-    const ObjectPoseMap& frontend_positions = input->propogated_object_poses_;
-
-    //update initial object poses first
-    for(const auto& [object_id, object_poses] : frontend_positions) {
-        if(!initial_object_poses_.exists(object_id)) {
-            //this should also be the first time it exists from the frontend so it should have two poses in it
-            //one from the first observation and another from the motion computed (as in the frontend we only check for motions computed)
-            //once a motion is computed in the frontend, two poses are added - one for the first frame (computed by centroid etc), and then
-            //one for the motion
-            auto first_seen_frame = frame_id_k - 1u;
-            CHECK_EQ(object_poses.size(), 2u);
-            CHECK(object_poses.exists(first_seen_frame));
-
-            initial_object_poses_.insert2(object_id, object_poses.at(first_seen_frame));
-            initial_object_poses_set_.insert2(object_id, first_seen_frame);
-        }
-    }
-
-    // only run if at least the second frame - motion requires 2 frames
-    // assumes frames start at 0
-    // if(frame_id_k < 1) {
-    //     return composed_object_poses_;
-    // }
-
-    const auto& seen_object_nodes = CHECK_NOTNULL(map_->getFrame(frame_id_k))->objects_seen;
-    const FrameId frame_id_k_1 = frame_id_k - 1;
-
-    //check if new - if not in the current object set, but in seen_object_nodes assume that its a new object
-    for(const auto& object_node : seen_object_nodes) {
-        const auto object_id = object_node->getId();
-        if(!composed_object_poses_.exists(object_id)) {
-            //must be a new object
-            //first check that this object has an initial object pose
-            CHECK(initial_object_poses_.exists(object_id));
-            //check that the initial object pose was set at frame_id_k -1
-            //this is becuase we dont actually get a frame from the frontend until the second frame
-            //so the backend only runs after at least two spins of the frontend
-            CHECK_EQ(initial_object_poses_set_.at(object_id), frame_id_k_1);
-            //add this as the first object motion
-            composed_object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
-            const gtsam::Pose3& starting_pose = initial_object_poses_.at(object_id);
-            composed_object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
-        }
-        // else {
-            //we should have a motion for this object
-            auto& pose_map = composed_object_poses_.at(object_id);
-            //we should have the previous pose here
-            if(!pose_map.exists(frame_id_k_1)) {
-                LOG(WARNING) << "Failed to get pose for computed motion for object id " << object_id << " at frame " << frame_id_k_1 << ". Skipping logging!";
-                continue;
-            }
-            const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
-            StateQuery<gtsam::Pose3> motion_query = object_node->getMotionEstimate(frame_id_k);
-            if(!motion_query) {
-                LOG(WARNING) << "Failed to get motion for object pose propogation at key: " << DynoLikeKeyFormatter(motion_query.key_);
-                continue; //this will fail if the object re-appears?
-            }
-            const gtsam::Pose3 prev_H_world_curr = motion_query.get();
-            gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
-            pose_map.insert2(frame_id_k, object_pose_k);
-
-            LOG(INFO) << "Adding object pose for object " << object_id << " at frame " << frame_id_k;
-        // }
-    }
-
-    return composed_object_poses_;
-}
 
 
-// const ObjectPoseMap& RGBDBackendModule::updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input) {
-//     //only run if at least the second frame - motion requires 2 frames
-//     if(frame_id_k < 1) {
-//         return composed_object_poses_;
-//     }
-//     //check objects seen in this frame
-//     const auto& seen_object_nodes = map_->getFrame(frame_id_k)->objects_seen;
-//     const FrameId frame_id_k_1 = frame_id_k - 1;
-
-//     //check if new - if not in the current object set, but in seen_object_nodes assume that its a new object
-//     for(const ObjectNode3d::Ptr& object_node : seen_object_nodes) {
-//         const auto object_id = object_node->getId();
-//         if(!composed_object_poses_.exists(object_id)) {
-//             //assume is new object
-//             //initalise pose from input
-//             const ObjectPoseMap& initial_positions = input->propogated_object_poses_;
-//             //check is in the initial map, it should be as we construct the object nodes from the input
-//             CHECK(initial_positions.exists(object_id));
-//             CHECK(initial_positions.at(object_id).exists(frame_id_k));
-
-//             //are we sure that this will be the starting frame? We hope so if its in seen object nodes
-//             const gtsam::Pose3& starting_pose = initial_positions.at(object_id).at(frame_id_k);
-//             //update backend map
-//             composed_object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
-//             composed_object_poses_.at(object_id).insert2(frame_id_k, starting_pose);
-//         }
-//         else {
-//             //we should have a motion for this object
-//             auto& pose_map = composed_object_poses_.at(object_id);
-//             //we should have the previous pose here
-//             CHECK(pose_map.exists(frame_id_k_1));
-//             const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
-
-//             StateQuery<gtsam::Pose3> motion_query = object_node->getMotionEstimate(frame_id_k);
-//             if(!motion_query) {
-//                 continue; //this will fail if the object re-appears?
-//             }
-//             const gtsam::Pose3 prev_H_world_curr = motion_query.get();
-//             gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
-//             pose_map.insert2(frame_id_k, object_pose_k);
-//         }
-//     }
-
-//     return composed_object_poses_;
-// }
 
 //TODO: these functions can go in base
 void RGBDBackendModule::saveGraph(const std::string& file) {

@@ -80,9 +80,9 @@ public:
 
     //helper factor graph functions
     //call should happen on every frame
-    const gtsam::FastMap<ObjectId, gtsam::Pose3>& updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
+    // const gtsam::FastMap<ObjectId, gtsam::Pose3>& updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
-    const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
+    // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
 
 public:

@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/utils/Macros.hpp"
+#include "dynosam/common/Flags.hpp" //for common glags DECLARATIONS
 
 #include <gtsam/base/Matrix.h>
 #include <gtsam/geometry/Pose3.h>
@@ -80,6 +81,7 @@ using KeypointsCV = std::vector<KeypointCV>;
 
 using Motion3 = gtsam::Pose3;
 using MotionMap = gtsam::FastMap<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
+
 
 /**
  * @brief Get demangled class name
@@ -158,8 +160,6 @@ struct ReferenceFrameValue {
 };
 
 
-
-//TODO: should make variables private
 template<typename VALUE>
 class TrackedValueStatus {
 public:
