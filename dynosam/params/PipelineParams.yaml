@@ -10,4 +10,4 @@ data_provider_type: 0
 frontend_type: 0
 
 # Incremental = 0, Batch = 1 (same as OptimizerType, defined in BackendDefinitions.hpp)
-optimizer_type: 1
+optimizer_type: 0

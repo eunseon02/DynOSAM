@@ -112,6 +112,7 @@ typename Optimizer<Measurement>::Ptr DynoPipelineManager::createOptimizer(Optimi
     if(optimizer_type == OptimizerType::kIncremental) {
         LOG(INFO) << "Constructing incremental optimizer";
         return std::make_shared<IncrementalOptimizer<Measurement>>();
+        // return std::make_shared<ISAMOptimizer<Measurement>>();
     }
     else if(optimizer_type == OptimizerType::kBatch) {
         LOG(INFO) << "Constructing batch optimizer";

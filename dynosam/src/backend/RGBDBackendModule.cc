@@ -159,11 +159,12 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         map_->updateEstimates(estimate, full_graph, frame_k);
         // must be called after the map update as it uses this to get all the info
         //currently only propofate object pose when optimize?
-        auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
+        //can only run with ground truth!!!???!!
+        // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
 
-        //only logs this the frame specified - in batch case we want to update all!!
-        for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
-            logBackendFromMap(frame_id, composed_poses);
+        // // //only logs this the frame specified - in batch case we want to update all!!
+        // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
+        //     logBackendFromMap(frame_id, composed_poses);
 
         last_optimized_frame = frame_k;
     }

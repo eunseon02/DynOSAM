@@ -25,6 +25,8 @@
 #include "dynosam/backend/Optimizer.hpp"
 #include "dynosam/backend/DynoISAM2.hpp"
 
+#include <gtsam/nonlinear/NonlinearISAM.h>
+
 namespace dyno {
 
 
@@ -37,18 +39,65 @@ public:
     using MapType = typename Base::MapType;
     using MeasurementType = typename Base::MeasurementType;
 
+    IncrementalOptimizer()
+    {
+        DynoISAM2Params isam_params;
+    // isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
+        isam_params.enableDetailedResults = true;
+        // isam_params.factorizationTranslator("QR");
+        isam_params.relinearizeThreshold = 0.01;
+        isam_params.relinearizeSkip = 1;
+        isam_params.enablePartialRelinearizationCheck = true;
+        // isam_params.enableRelinearization = false;
+
+        // smoother_ = std::make_unique<gtsam::IncrementalFixedLagSmoother>(2, isam_params);
+        smoother_ = std::make_unique<DynoISAM2>(isam_params);
+    }
+
 
     bool shouldOptimize(FrameId) const {
         return true;
     }
 
     void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
-        new_values_ = new_values;
-        new_factors_ = new_factors;
+        new_values_.insert(new_values);
+        new_factors_ += new_factors;
     }
 
     std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() {
+        // gtsam::KeyVector keyVector(new_factors_.begin(), new_factors_.end());
 
+        // gtsam::PrintKeyVector(new_factors_.keyVector(), " new keys", DynoLikeKeyFormatter);
+
+        DynoISAM2UpdateParams isam_update_params;
+        // isam_update_params.setOrderingFunctions([=](const DynoISAM2UpdateParams& updateParams,
+        //                                 const DynoISAM2Result& result,
+        //                                 const gtsam::KeySet& affectedKeysSet,
+        //                                 const gtsam::VariableIndex& affectedFactorsVarIndex) -> gtsam::Ordering {
+
+
+        //     gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+        //     for(const gtsam::Key key : affectedKeysSet) {
+        //         auto chr = DynoChrExtractor(key);
+
+        //         if(chr == kObjectMotionSymbolChar) {
+        //             constrainedKeys.insert2(key, 1);
+        //         }
+        //         else {
+        //             constrainedKeys.insert2(key, 0);
+        //         }
+        //     }
+        //     return Ordering::ColamdConstrained(affectedFactorsVarIndex, constrainedKeys);
+
+        // });
+
+
+        smoother_result_ = smoother_->update(new_factors_, new_values_, isam_update_params);
+
+        new_factors_.resize(0);
+        new_values_.clear();
+
+        return { smoother_->calculateBestEstimate(), smoother_->getFactorsUnsafe() };
     }
 
     void logStats() {
@@ -59,12 +108,87 @@ public:
         return *smoother_;
     }
 
+    const DynoISAM2Result& getResult() const {
+        return smoother_result_;
+    }
+
 
 private:
     std::unique_ptr<DynoISAM2> smoother_;
     gtsam::Values new_values_;
     gtsam::NonlinearFactorGraph new_factors_;
 
+    DynoISAM2Result smoother_result_;
+
 };
+
+template<typename MEASUREMENT_TYPE>
+class ISAMOptimizer : public Optimizer<MEASUREMENT_TYPE> {
+
+public:
+    using Base = Optimizer<MEASUREMENT_TYPE>;
+    using This = ISAMOptimizer<MEASUREMENT_TYPE>;
+    using MapType = typename Base::MapType;
+    using MeasurementType = typename Base::MeasurementType;
+
+    ISAMOptimizer() : isam_(5)
+    {
+    //     DynoISAM2Params isam_params;
+    // // isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
+    //     isam_params.enableDetailedResults = true;
+    //     // isam_params.factorizationTranslator("QR");
+    //     isam_params.relinearizeThreshold = 0.01;
+    //     isam_params.relinearizeSkip = 1;
+    //     isam_params.enablePartialRelinearizationCheck = true;
+    //     // isam_params.enableRelinearization = false;
+
+    //     // smoother_ = std::make_unique<gtsam::IncrementalFixedLagSmoother>(2, isam_params);
+    //     smoother_ = std::make_unique<DynoISAM2>(isam_params);
+    }
+
+
+    bool shouldOptimize(FrameId) const {
+        return true;
+    }
+
+    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
+        new_values_.insert(new_values);
+        new_factors_ += new_factors;
+    }
+
+    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() {
+        // DynoISAM2UpdateParams isam_update_params;
+        // smoother_result_ = smoother_->update(new_factors_, new_values_, isam_update_params);
+        isam_.update(new_factors_, new_values_);
+
+        new_factors_.resize(0);
+        new_values_.clear();
+
+        return { isam_.estimate(), isam_.getFactorsUnsafe() };
+    }
+
+    void logStats() {
+
+    }
+
+    const gtsam::NonlinearISAM& getSmoother() const {
+        return isam_;
+    }
+
+    // const DynoISAM2Result& getResult() const {
+    //     return smoother_result_;
+    // }
+
+
+private:
+    // std::unique_ptr<DynoISAM2> smoother_;
+    gtsam::NonlinearISAM isam_;
+    gtsam::Values new_values_;
+    gtsam::NonlinearFactorGraph new_factors_;
+
+    DynoISAM2Result smoother_result_;
+
+};
+
 
 } //dyno
