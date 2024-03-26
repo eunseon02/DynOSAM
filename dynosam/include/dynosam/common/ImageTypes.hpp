@@ -87,6 +87,11 @@ struct ImageWrapper {
 struct ImageType {
 
 
+    /**
+     * @brief Defines the input RGB/greyscale (mono) image.
+     *
+     *
+     */
     struct RGBMono {
         static void validate(const cv::Mat& input);
         static std::string name() { return "RGBMono"; }

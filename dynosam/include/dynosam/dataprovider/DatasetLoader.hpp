@@ -140,6 +140,27 @@ private:
     std::optional<fs::path> absolute_folder_path_{std::nullopt};
 };
 
+
+template<typename T>
+class FunctionalDataFolder : public dyno::DataFolder<T> {
+
+public:
+    using Type = T;
+    using This = FunctionalDataFolder<T>;
+    using Base = dyno::DataFolder<T>;
+
+    using GetItemFunction = std::function<Type(size_t)>;
+
+    FunctionalDataFolder(const GetItemFunction& func) : func_(func) {}
+
+    std::string getFolderName() const override { return ""; }
+    Type getItem(size_t idx) override { return func_(idx); }
+
+private:
+    GetItemFunction func_;
+
+};
+
 class RGBDataFolder : public dyno::DataFolder<cv::Mat> {
 
 public:

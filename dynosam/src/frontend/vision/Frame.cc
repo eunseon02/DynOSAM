@@ -357,32 +357,33 @@ void Frame::constructDynamicObservations() {
     for(auto& object_observation_pair : object_observations_) {
         const ObjectId object_id = object_observation_pair.first;
         DynamicObjectObservation& obs = object_observation_pair.second;
+        vision_tools::findObjectBoundingBox(mask, object_id, obs.bounding_box_);
 
-        cv::Mat obj_mask = (mask == object_id);
-        cv::Mat dilated_obj_mask;
-        cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
-                                                            cv::Size(1, 11)); // a rectangle of 1*5
-        cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+        // cv::Mat obj_mask = (mask == object_id);
+        // cv::Mat dilated_obj_mask;
+        // cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+        //                                                     cv::Size(1, 11)); // a rectangle of 1*5
+        // cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
 
-        std::vector<std::vector<cv::Point>> contours;
-        std::vector<cv::Vec4i> hierarchy;
-        cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+        // std::vector<std::vector<cv::Point>> contours;
+        // std::vector<cv::Vec4i> hierarchy;
+        // cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
-        if(contours.empty()) {
-            obs.bounding_box_ = cv::Rect();
-        }
-        else if(contours.size() == 1u) {
-            obs.bounding_box_ = cv::boundingRect(contours.at(0));
-        }
-        else {
-            std::vector<cv::Rect> rectangles;
-            for(auto it : contours) {
-                rectangles.push_back(cv::boundingRect(it));
-            }
-            cv::Rect merged_rect = rectangles[0];
-            for(const auto& r : rectangles) { merged_rect |= r; }
-            obs.bounding_box_ = merged_rect;
-        }
+        // if(contours.empty()) {
+        //     obs.bounding_box_ = cv::Rect();
+        // }
+        // else if(contours.size() == 1u) {
+        //     obs.bounding_box_ = cv::boundingRect(contours.at(0));
+        // }
+        // else {
+        //     std::vector<cv::Rect> rectangles;
+        //     for(auto it : contours) {
+        //         rectangles.push_back(cv::boundingRect(it));
+        //     }
+        //     cv::Rect merged_rect = rectangles[0];
+        //     for(const auto& r : rectangles) { merged_rect |= r; }
+        //     obs.bounding_box_ = merged_rect;
+        // }
     }
 
 

@@ -32,7 +32,7 @@ namespace dyno {
 
 struct BatchOptimizerParams {
 
-    //if provided, the function should get the FrameId of the last frame which is used to determine if a full batch opt should be run!
+    //! if provided, the function should get the FrameId of the last frame which is used to determine if a full batch opt should be run!
     std::optional<std::function<FrameId()>> get_last_frame;
     gtsam::LevenbergMarquardtParams lm_params;
 
@@ -51,9 +51,12 @@ public:
     BatchOptimizer(const BatchOptimizerParams& params) : params_(params) {}
 
 
-    bool shouldOptimize(FrameId frame_id) const override {
+protected:
+
+    bool shouldOptimize(const BackendSpinState& state_k) const override {
         if(params_.get_last_frame) {
             FrameId last_frame = (*params_.get_last_frame)();
+            const auto frame_id = state_k.frame_id;
             LOG(WARNING) << frame_id << " " << last_frame;
             // -1u becuase reasons...?
             if(frame_id == last_frame - 1u) {
@@ -64,7 +67,7 @@ public:
         return false;
     }
 
-    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
+    void updateImpl(const BackendSpinState&, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
         initial_.insert_or_assign(new_values);
         graph_ += new_factors;
     }

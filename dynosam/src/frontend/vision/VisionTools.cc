@@ -261,6 +261,37 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
   return std::vector<std::vector<int> >();
 }
 
+
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect) {
+  cv::Mat obj_mask = (mask == object_id);
+  cv::Mat dilated_obj_mask;
+  cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
+                                                      cv::Size(1, 11)); // a rectangle of 1*5
+  cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+
+  std::vector<std::vector<cv::Point>> contours;
+  std::vector<cv::Vec4i> hierarchy;
+  cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
+
+  if(contours.empty()) {
+      rect = cv::Rect();
+      return false;
+  }
+  else if(contours.size() == 1u) {
+      rect = cv::boundingRect(contours.at(0));
+  }
+  else {
+      std::vector<cv::Rect> rectangles;
+      for(auto it : contours) {
+          rectangles.push_back(cv::boundingRect(it));
+      }
+      cv::Rect merged_rect = rectangles[0];
+      for(const auto& r : rectangles) { merged_rect |= r; }
+      rect = merged_rect;
+  }
+  return true;
+}
+
 } //vision_tools
 
 // void RGBDProcessor::updateMovingObjects(const Frame& previous_frame, Frame::Ptr current_frame,  cv::Mat& debug) const {

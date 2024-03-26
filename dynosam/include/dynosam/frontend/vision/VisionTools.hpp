@@ -53,6 +53,23 @@ ObjectIds getObjectLabels(const cv::Mat& image);
 
 std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const Frame& previous_frame, Frame::Ptr current_frame);
 
+/**
+ * @brief From a instance/semantic mask type img, construct the bounding box for the mask of object_id
+ *
+ * If object_id is not present in the mask (ie.e no pixe values with this mask),
+ * or no valid contours could be constructed, false is returned.
+ *
+ *
+ *
+ * @param mask const cv::Mat&
+ * @param object_id ObjectId
+ * @param rect cv::Rect& The calcualted bounding box
+ * @return true
+ * @return false
+ */
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect);
+
+
 } //vision_tools
 
 

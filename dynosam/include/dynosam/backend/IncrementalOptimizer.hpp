@@ -54,42 +54,38 @@ public:
         smoother_ = std::make_unique<DynoISAM2>(isam_params);
     }
 
+    const DynoISAM2& getSmoother() const {
+        return *smoother_;
+    }
 
-    bool shouldOptimize(FrameId) const {
+    const DynoISAM2Result& getResult() const {
+        return smoother_result_;
+    }
+
+
+private:
+
+    bool shouldOptimize(const BackendSpinState&) const override {
         return true;
     }
 
-    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
+    void updateImpl(const BackendSpinState&, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
         new_values_.insert(new_values);
         new_factors_ += new_factors;
     }
 
-    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() {
+    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() override {
         // gtsam::KeyVector keyVector(new_factors_.begin(), new_factors_.end());
 
         // gtsam::PrintKeyVector(new_factors_.keyVector(), " new keys", DynoLikeKeyFormatter);
 
         DynoISAM2UpdateParams isam_update_params;
-        // isam_update_params.setOrderingFunctions([=](const DynoISAM2UpdateParams& updateParams,
-        //                                 const DynoISAM2Result& result,
-        //                                 const gtsam::KeySet& affectedKeysSet,
-        //                                 const gtsam::VariableIndex& affectedFactorsVarIndex) -> gtsam::Ordering {
-
-
-        //     gtsam::FastMap<gtsam::Key, int> constrainedKeys;
-        //     for(const gtsam::Key key : affectedKeysSet) {
-        //         auto chr = DynoChrExtractor(key);
-
-        //         if(chr == kObjectMotionSymbolChar) {
-        //             constrainedKeys.insert2(key, 1);
-        //         }
-        //         else {
-        //             constrainedKeys.insert2(key, 0);
-        //         }
-        //     }
-        //     return Ordering::ColamdConstrained(affectedFactorsVarIndex, constrainedKeys);
-
-        // });
+        isam_update_params.setOrderingFunctions([=](const DynoISAM2UpdateParams& updateParams,
+                                        const DynoISAM2Result& result,
+                                        const gtsam::KeySet& affectedKeysSet,
+                                        const gtsam::VariableIndex& affectedFactorsVarIndex) -> gtsam::Ordering {
+            return LatestVariablesLastOrdering(updateParams, result, affectedKeysSet, affectedFactorsVarIndex);
+        });
 
 
         smoother_result_ = smoother_->update(new_factors_, new_values_, isam_update_params);
@@ -104,12 +100,73 @@ public:
 
     }
 
-    const DynoISAM2& getSmoother() const {
-        return *smoother_;
+    gtsam::Ordering MotionLastOrdering(const DynoISAM2UpdateParams& updateParams,
+                                        const DynoISAM2Result& result,
+                                        const gtsam::KeySet& affectedKeysSet,
+                                        const gtsam::VariableIndex& affectedFactorsVarIndex) const
+    {
+        const FrameId last_updated_frame = this->getLastUpdatedState().frame_id;
+
+        gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+        for(const gtsam::Key key : affectedKeysSet) {
+            auto chr = DynoChrExtractor(key);
+
+            if(chr == kObjectMotionSymbolChar) {
+
+                ObjectId object_label;
+                FrameId frame_id;
+                CHECK(reconstructMotionInfo(key, object_label, frame_id));
+
+                if(frame_id == last_updated_frame) {
+                    constrainedKeys.insert2(key, 1);
+                    LOG(INFO) << "Constrained motion " << DynoLikeKeyFormatter(key);
+                }
+
+                //
+            }
+            // else {
+            //     constrainedKeys.insert2(key, 0);
+            // }
+        }
+        return Ordering::ColamdConstrained(affectedFactorsVarIndex, constrainedKeys);
     }
 
-    const DynoISAM2Result& getResult() const {
-        return smoother_result_;
+
+    gtsam::Ordering LatestVariablesLastOrdering(const DynoISAM2UpdateParams& updateParams,
+                                        const DynoISAM2Result& result,
+                                        const gtsam::KeySet& affectedKeysSet,
+                                        const gtsam::VariableIndex& affectedFactorsVarIndex) const
+    {
+        const FrameId last_updated_frame = this->getLastUpdatedState().frame_id;
+
+        gtsam::FastMap<gtsam::Key, int> constrainedKeys;
+        for(const gtsam::Key key : affectedKeysSet) {
+            auto chr = DynoChrExtractor(key);
+
+            FrameId variable_frame;
+            int group = 0;
+
+            if(chr == kPoseSymbolChar) {
+                variable_frame = gtsam::Symbol(key).index();
+                group = 3;
+            }
+            // else if(chr == kObjectMotionSymbolChar) {
+            //     ObjectId object_label;
+            //     CHECK(reconstructMotionInfo(key, object_label, variable_frame));
+            //     group = 2;
+            // }
+            else if(chr == kDynamicLandmarkSymbolChar) {
+                variable_frame = DynamicPointSymbol(key).frameId();
+                group = 1;
+            }
+
+            if(variable_frame == last_updated_frame) {
+                constrainedKeys.insert2(key, group);
+            }
+
+            // LOG(INFO) << "Adding group: " << group << " for key " << DynoLikeKeyFormatterVerbose(key);
+        }
+        return Ordering::ColamdConstrained(affectedFactorsVarIndex, constrainedKeys);
     }
 
 
@@ -147,16 +204,16 @@ public:
     }
 
 
-    bool shouldOptimize(FrameId) const {
+    bool shouldOptimize(const BackendSpinState&) const override {
         return true;
     }
 
-    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
+    void updateImpl(const BackendSpinState&, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) {
         new_values_.insert(new_values);
         new_factors_ += new_factors;
     }
 
-    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() {
+    std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() override {
         // DynoISAM2UpdateParams isam_update_params;
         // smoother_result_ = smoother_->update(new_factors_, new_values_, isam_update_params);
         isam_.update(new_factors_, new_values_);

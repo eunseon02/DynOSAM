@@ -92,9 +92,10 @@ protected:
 protected:
     const BackendParams base_params_;
     //NOTE: this is copied directly from the frontend module.
-    GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor)
+    GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor).
 
     BackendLogger::UniquePtr logger_;
+    BackendSpinState spin_state_; //! Spin state of the backend. Updated in the backend module base via InputCallback (see BackendModule constructor).
 
     // //! Camera related parameters
     // Camera::Ptr camera_;

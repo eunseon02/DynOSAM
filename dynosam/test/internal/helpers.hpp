@@ -111,11 +111,11 @@ public:
     DummyOptimizer() = default;
     ~DummyOptimizer() {}
 
-    bool shouldOptimize(FrameId frame_id) const override {
+    bool shouldOptimize(const BackendSpinState&) const override {
       return false;
     }
 
-    void update(FrameId, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
+    void updateImpl(const BackendSpinState&, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
       all_values_.insert_or_assign(new_values);
       graph_ += new_factors;
     }

@@ -39,6 +39,17 @@ BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* dis
     //TODO: this logic is exactly the same as in FrontendModule - functionalise!!
     registerInputCallback([=](BackendInputPacket::ConstPtr input) {
         if(input->gt_packet_) gt_packet_map_.insert2(input->getFrameId(), *input->gt_packet_);
+
+        const BackendSpinState previous_spin_state = spin_state_;
+
+        //update spin state
+        spin_state_ = BackendSpinState(
+            input->getFrameId(),
+            input->getTimestamp(),
+            previous_spin_state.iteration + 1
+        );
+
+
     });
 
     if(use_logger) {

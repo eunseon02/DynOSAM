@@ -37,6 +37,14 @@ void validateMask(const cv::Mat& input, const std::string& name) {
     }
 }
 
+void validateRGBMono(const cv::Mat& input) {
+    if(input.type() != CV_8UC1 && input.type() != CV_8UC3) {
+        throw InvalidImageTypeException(
+            "RGBMono image was not CV_8UC1 or CV_8UC3. Input image type was " + utils::cvTypeToString(input.type())
+        );
+    }
+}
+
 void validateSingleImage(const cv::Mat& input, int expected_type, const std::string& name) {
     if(input.type() != expected_type) {
         throw InvalidImageTypeException(
@@ -45,20 +53,10 @@ void validateSingleImage(const cv::Mat& input, int expected_type, const std::str
     }
 }
 
-
-void ImageType::RGBMono::validate(const cv::Mat& input) {
-    if(input.type() != CV_8UC1 && input.type() != CV_8UC3) {
-        throw InvalidImageTypeException(
-            "RGBMono image was not CV_8UC1 or CV_8UC3. Input image type was " + utils::cvTypeToString(input.type())
-        );
-    }
-}
-
-cv::Mat ImageType::RGBMono::toRGB(const ImageWrapper<RGBMono>& image) {
-    const cv::Mat& mat = image;
+cv::Mat RGBMonoToRGB(const cv::Mat& mat) {
     const auto channels = mat.channels();
     if(channels == 3) {
-        return image;
+        return mat;
     }
     else if(channels == 4) {
         cv::Mat rgb;
@@ -72,15 +70,14 @@ cv::Mat ImageType::RGBMono::toRGB(const ImageWrapper<RGBMono>& image) {
         return rgb;
     }
     else {
-        return image;
+        return mat;
     }
 }
 
-cv::Mat ImageType::RGBMono::toMono(const ImageWrapper<RGBMono>& image) {
-    const cv::Mat& mat = image;
+cv::Mat RGBMonoToMono(const cv::Mat& mat) {
     const auto channels = mat.channels();
     if(channels == 1) {
-        return image;
+        return mat;
     }
     if (channels == 3)
     {
@@ -95,11 +92,25 @@ cv::Mat ImageType::RGBMono::toMono(const ImageWrapper<RGBMono>& image) {
         return mono;
     }
     else {
-        return image;
+        return mat;
     }
 }
 
+// RGBMono
+void ImageType::RGBMono::validate(const cv::Mat& input) {
+    validateRGBMono(input);
+}
 
+cv::Mat ImageType::RGBMono::toRGB(const ImageWrapper<RGBMono>& image) {
+    return RGBMonoToRGB(image);
+}
+
+cv::Mat ImageType::RGBMono::toMono(const ImageWrapper<RGBMono>& image) {
+    return RGBMonoToMono(image);
+}
+
+
+// Depth
 void ImageType::Depth::validate(const cv::Mat& input){
     validateSingleImage(input, OpenCVType, name());
 }

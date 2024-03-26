@@ -39,7 +39,7 @@ struct ObjectPoseGT {
     DYNO_POINTER_TYPEDEFS(ObjectPoseGT)
 
     struct MotionInfo {
-        bool is_moving_;
+        bool is_moving_; //moving between k-1 and k
         bool has_stopped_; //has stopped since the previous frame. If true, then is_moving_ should be false
     };
 

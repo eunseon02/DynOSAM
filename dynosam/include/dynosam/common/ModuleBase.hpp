@@ -204,10 +204,20 @@ public:
         return spin_return.second;
     }
 
+    /**
+     * @brief Registeres a function callback to be triggered prior to nominal/bootstrapSpin being called.
+     *
+     * @param input_callback const InputCallback&
+     */
     inline void registerInputCallback(const InputCallback& input_callback) {
         input_callback_ = input_callback;
     }
 
+    /**
+     * @brief Registeres a function callback to be triggered after nominal/bootstrapSpin is called.
+     *
+     * @param output_callback const OutputCallback&
+     */
     inline void registerOutputCallback(const OutputCallback& output_callback) {
         output_callback_ = output_callback;
     }

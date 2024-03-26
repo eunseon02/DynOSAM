@@ -96,6 +96,7 @@ RGBDBackendModule::SpinReturn
 RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     const FrameId frame_k = input->getFrameId();
+    CHECK_EQ(spin_state_.frame_id, frame_k);
     LOG(INFO) << "Running backend " << frame_k;
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
@@ -111,7 +112,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     addInitialPose(T_world_cam_k_frontend, frame_k, new_values, new_factors);
     //must optimzie to update the map
-    optimizer_->update(frame_k, new_values, new_factors, map_);
+    optimizer_->update(spin_state_, new_values, new_factors, map_);
     // optimize(frame_k, new_values, new_factors);
     map_->updateEstimates(new_values, new_factors, frame_k);
 
@@ -122,6 +123,8 @@ RGBDBackendModule::SpinReturn
 RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     const FrameId frame_k = input->getFrameId();
+    CHECK_EQ(spin_state_.frame_id, frame_k);
+
     LOG(INFO) << "Running backend " << frame_k;
     const FrameId frame_k_1 = frame_k - 1u;
     //estimate of pose from the frontend
@@ -141,44 +144,65 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     // gtsam::NonlinearFactorGraph new_dyn_factors;
     updateDynamicObservations(T_world_cam_k_frontend, frame_k, new_values, new_factors);
 
-    optimizer_->update(frame_k, new_values, new_factors, map_);
-
     gtsam::NonlinearFactorGraph full_graph = map_->getGraph();
     full_graph += new_factors;
 
-    static FrameId last_optimized_frame = 0;
+    //update the map with the new values
+    //the map will insert or assign these new values which MAY then be updated from the state
+    //NOTE: do we want optimzied vs not optimized values in the graph?
 
-    if(optimizer_->shouldOptimize(frame_k)) {
-        gtsam::Values estimate;
-        gtsam::NonlinearFactorGraph graph;
-        std::tie(estimate, graph) = optimizer_->optimize();
-        // TODO: depending on if (fixed-lag)incremental or batch, the graph returned from optimize may or MAY not be the full graph
-        //NOTE: this also doesnt allow us to query the map for when the last time we updated the (optimized) values
-        //as we need these values in the map for when we call updateStaticObservations/updateDynamicObservations
-        //maybe break into update initial values and update estimates?
-        map_->updateEstimates(estimate, full_graph, frame_k);
-        // must be called after the map update as it uses this to get all the info
-        //currently only propofate object pose when optimize?
-        //can only run with ground truth!!!???!!
+    const bool optimized = optimizer_->update(spin_state_, new_values, new_factors, map_);
+
+    //NOTE: assumes frames start at 0
+    static FrameId last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
+
+    if(optimized) {
+        const auto& esimtates = optimizer_->getValues();
+        // const auto& graph
+        map_->updateEstimates(esimtates, full_graph, frame_k);
+
+
         // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
-
-        // // //only logs this the frame specified - in batch case we want to update all!!
+        // //only logs this the frame specified - in batch case we want to update all!!
         // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
         //     logBackendFromMap(frame_id, composed_poses);
 
-        last_optimized_frame = frame_k;
+        last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
+        CHECK_EQ(last_optimized_frame, frame_k);
     }
     else {
-        gtsam::Values values = map_->getValues();
-        values.insert_or_assign(new_values);
-
-        map_->updateEstimates(values, full_graph, frame_k);
+        //must update the map with the new values anyway
+        map_->updateEstimates(new_values, full_graph, frame_k);
     }
 
-    // optimize(frame_k, new_values, new_factors);
-    // map_->updateEstimates(new_values_, new_factors_, frame_k);
 
-    //TODO: update debug info
+    // if(optimizer_->shouldOptimize(frame_k)) {
+    //     gtsam::Values estimate;
+    //     gtsam::NonlinearFactorGraph graph;
+    //     std::tie(estimate, graph) = optimizer_->optimize();
+    //     // TODO: depending on if (fixed-lag)incremental or batch, the graph returned from optimize may or MAY not be the full graph
+    //     //NOTE: this also doesnt allow us to query the map for when the last time we updated the (optimized) values
+    //     //as we need these values in the map for when we call updateStaticObservations/updateDynamicObservations
+    //     //maybe break into update initial values and update estimates?
+    //     map_->updateEstimates(estimate, full_graph, frame_k);
+    //     // must be called after the map update as it uses this to get all the info
+    //     //currently only propofate object pose when optimize?
+    //     //can only run with ground truth!!!???!!
+    //     // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
+
+    //     // // //only logs this the frame specified - in batch case we want to update all!!
+    //     // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
+    //     //     logBackendFromMap(frame_id, composed_poses);
+
+    //     last_optimized_frame = frame_k;
+    // }
+    // else {
+    //     gtsam::Values values = map_->getValues();
+    //     values.insert_or_assign(new_values);
+
+    //     map_->updateEstimates(values, full_graph, frame_k);
+    // }
+
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();

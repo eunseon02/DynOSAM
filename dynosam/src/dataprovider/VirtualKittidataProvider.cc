@@ -29,8 +29,6 @@
 #include <glog/logging.h>
 #include <fstream>
 
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string.hpp>
 
 #include <png++/png.hpp> //libpng-dev
 
@@ -653,25 +651,6 @@ private:
         return gt_packets;
     }
 
-    std::vector<std::string> trimAndSplit(const std::string& input) const {
-        std::string trim_input = boost::algorithm::trim_right_copy(input);
-        std::vector<std::string> split_line;
-        boost::algorithm::split(split_line, trim_input, boost::is_any_of(" "));
-        return split_line;
-    }
-
-
-    bool getLine(std::ifstream& fstream, std::vector<std::string>& split_lines) const {
-        std::string line;
-        getline(fstream, line);
-
-        split_lines.clear();
-
-        if(line.empty()) return false;
-
-        split_lines = trimAndSplit(line);
-        return true;
-    }
 
 
 
@@ -754,51 +733,16 @@ public:
     VirtualKittiMotionSegFolder(const std::string& path, VirtualKittiTextGtLoader::Ptr gt_loader): VirtualKittiGenericInstanceSegFolder(path, gt_loader) {}
 
     cv::Mat loadImage(const std::string& file_path, FrameId frame, const GroundTruthInputPacket& gt_packet) override {
+        CHECK_EQ(frame, gt_packet.frame_id_);
+
         //remove object in semantic mask
         cv::Mat instance_semantic_mask = loadSemanticInstanceUnchanged(file_path);
         cv::Mat motion_mask;
-        instance_semantic_mask.copyTo(motion_mask);
 
-
-        ObjectIds object_ids = vision_tools::getObjectLabels(instance_semantic_mask);
-
-
-        //collect only moving labels
-        std::vector<int> moving_labels;
-        for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
-            const ObjectId& object_id = object_pose_gt.object_id_;
-            if(gt_loader_->isMoving(frame, object_id)) {
-                moving_labels.push_back(object_id);
-            }
-
-            //this is just a sanity (debug) check to ensure all the labels in the image
-            //match up with the ones we have already collected in the ground truth packet
-            const auto& it = std::find(object_ids.begin(), object_ids.end(), object_id);
-            CHECK(it != object_ids.end()) << "Object id " << object_id << " appears in gt packet but"
-                "is not in mask when loading motion mask for Virtual Kitti at frame " << frame;
-
-        }
-
-        CHECK_EQ(frame, gt_packet.frame_id_);
-
-        //iterate over each object and if not moving remove
-        for (int i = 0; i < motion_mask.rows; i++)
-        {
-            for (int j = 0; j < motion_mask.cols; j++)
-            {
-
-                int label = motion_mask.at<int>(i, j);
-                if(label == 0) {
-                    continue;
-                }
-
-                //check if label is in moving labels. if not, make zero!
-                auto it = std::find(moving_labels.begin(), moving_labels.end(), label);
-                if(it == moving_labels.end()) {
-                    motion_mask.at<int>(i, j) = 0;
-                }
-            }
-        }
+        //we used to use gt_loader->isMoving function which seems to be back indexed (see the function comment)
+        //now we use the motion_info information in the ground truth packet (see removeStaticObjectFromMask())
+        //not sure if this actually makes a difference...
+        removeStaticObjectFromMask(instance_semantic_mask, motion_mask, gt_packet);
         return motion_mask;
     }
 

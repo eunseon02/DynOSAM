@@ -83,7 +83,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     );
 
     scenario.addObjectBody(1, object1);
-    scenario.addObjectBody(2, object2);
+    // scenario.addObjectBody(2, object2);
 
     dyno::Map3d::Ptr map = dyno::Map3d::create();
     std::shared_ptr<dyno::IncrementalOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::IncrementalOptimizer<dyno::Landmark>>();
@@ -191,7 +191,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
         }
 
-        // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
+        backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
 

@@ -297,7 +297,7 @@ public:
     }
 
 
-    size_t datasetSize() const override {
+    virtual size_t datasetSize() const override {
         //this is very gross - the ending_frame_id_ will only get set after the first call to spin, but this is what we want to return
         //so the value may change depending on if setEndingFrame has been called and/or when datasetSize is called!!!!!
         if(is_first_spin_) {

@@ -26,6 +26,8 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <gtsam/geometry/Pose3.h>
 
+#include "dynosam/common/GroundTruthPacket.hpp"
+
 namespace dyno {
 
 void throwExceptionIfPathInvalid(const std::string image_path);
@@ -39,23 +41,51 @@ void loadFlow(const std::string& image_path, cv::Mat& img);
 void loadDepth(const std::string& image_path, cv::Mat& img);
 
 //CV_32SC1
+//this is old kitti style and loads from a .txt file (which is why we need the size)
 void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::Mat& mask);
 
-// /**
-//  * @brief Converts RAW kitti (object) pose information into a full pose.
-//  *
-//  * The rotation information is expected to be in raw form (-pi to pi) which then be handled within the function
-//  * No frame change is made.
-//  *
-//  * @param tx
-//  * @param ty
-//  * @param tz
-//  * @param ry
-//  * @param rx
-//  * @param rz
-//  * @return gtsam::Pose3
-//  */
-// gtsam::Pose3 constructkittiObjectPose(double tx, double ty, double tz, double ry, double rx, double rz);
+//CV_32SC1
+void loadMask(const std::string& image_path, cv::Mat& mask);
 
+/**
+ * @brief From an instance semantic mask (one that satisfies the requirements for a SemanticMask), ie. all detected
+ * obejcts in the scene, with unique instance labels as pixel values starting from 1 (background is 0).
+ * Using the information in the ground truth, masks of detected objects that are not moving are removed.
+ * Masks are removed by setting the pixle values to 0 (background).
+ *
+ * Expects the gt packet to be fully formed (ie. have all motion information set from setMotions()).
+ *
+ *
+ *
+ *
+ * NOTE: function expects to find a match between the object id's in the ground truth packet, and the pixel values (instance mask values)
+ * in the image!! If there is not a 1-to-1 match between ground truth packets and the pixels, the function will fail
+ *
+ *
+ * @param instance_mask const cv::Mat&
+ * @param motion_mask cv::Mat&
+ * @param gt_packet const GroundTruthInputPacket&
+ */
+void removeStaticObjectFromMask(const cv::Mat& instance_mask, cv::Mat& motion_mask, const GroundTruthInputPacket& gt_packet);
+
+/**
+ * @brief Gets the next line from the input ifstream and returns it as split string (using white space as the delimieter).
+ * Any newline/carriage return/trailing white space values are trimmed.
+ *
+ * @param fstream std::ifstream&
+ * @param split_lines std::vector<std::string>&
+ * @return true
+ * @return false
+ */
+bool getLine(std::ifstream& fstream, std::vector<std::string>& split_lines);
+
+/**
+ * @brief Takes an input string and splits it using white space (" ") as the delimiter.
+ * Trims any newline/carriage return/trailing white space values.
+ *
+ * @param input const std::string&
+ * @return std::vector<std::string>
+ */
+std::vector<std::string> trimAndSplit(const std::string& input);
 
 } //dyno

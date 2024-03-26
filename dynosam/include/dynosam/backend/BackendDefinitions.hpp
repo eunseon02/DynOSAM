@@ -69,6 +69,15 @@ enum class OptimizerType {
     kBatch = 1
 };
 
+struct BackendSpinState {
+    FrameId frame_id {0u};
+    Timestamp timestamp {0.0};
+    size_t iteration {0u}; //! Indexed from 1, such that when iteration==1, this is the first iteration
+
+    BackendSpinState() {}
+    BackendSpinState(FrameId frame, Timestamp t, size_t itr) : frame_id(frame), timestamp(t), iteration(itr) {}
+};
+
 template<>
 inline std::string to_string(const OptimizerType& t) {
     if(t == OptimizerType::kBatch) {

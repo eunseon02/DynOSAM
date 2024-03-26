@@ -24,9 +24,16 @@
 #include "dynosam/dataprovider/DataProviderUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
+#include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
+#include "dynosam/common/ImageTypes.hpp"
+
+
 #include <filesystem>
 #include <exception>
 #include <fstream>
+
+#include <boost/algorithm/string/split.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include <glog/logging.h>
 
@@ -96,69 +103,88 @@ void loadSemanticMask(const std::string& image_path, const cv::Size& size, cv::M
 
   file_mask.close();
 
+}
+
+void loadMask(const std::string& image_path, cv::Mat& mask) {
+    throwExceptionIfPathInvalid(image_path);
+    mask = cv::imread(image_path, cv::IMREAD_UNCHANGED);
+    mask.convertTo(mask, CV_32SC1);
+}
+
+void removeStaticObjectFromMask(const cv::Mat& instance_mask, cv::Mat& motion_mask, const GroundTruthInputPacket& gt_packet) {
+    try {
+        ImageType::SemanticMask::validate(instance_mask);
+    }
+    catch (const InvalidImageTypeException& e) {
+        throw DynosamException("Input mask to removeStaticObjectFromMask as it"
+            "did not meet the requirements of ImageType::SemanticMask. Error: " + std::string(e.what()));
+    }
+
+    ObjectIds object_ids = vision_tools::getObjectLabels(instance_mask);
+
+    instance_mask.copyTo(motion_mask);
+
+    const FrameId frame_id = gt_packet.frame_id_;
+
+    //collect only moving labels
+    std::vector<int> moving_labels;
+    for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
+        CHECK(object_pose_gt.motion_info_)
+            << "Object Pose GT does not have motion info set! Cannot determine of object is moving or not!";
+        const auto& motion_info = *object_pose_gt.motion_info_;
+        const ObjectId& object_id = object_pose_gt.object_id_;
+        if(motion_info.is_moving_) {
+            moving_labels.push_back(object_id);
+        }
+
+        //this is just a sanity (debug) check to ensure all the labels in the image
+        //match up with the ones we have already collected in the ground truth packet
+        const auto& it = std::find(object_ids.begin(), object_ids.end(), object_id);
+        CHECK(it != object_ids.end()) << "Object id " << object_id << " appears in gt packet but"
+            "is not in mask when loading motion mask for Virtual Kitti at frame " << frame_id;
+
+    }
+
+    //iterate over each object and if not moving remove
+    for (int i = 0; i < motion_mask.rows; i++)
+    {
+        for (int j = 0; j < motion_mask.cols; j++)
+        {
+
+            int label = motion_mask.at<int>(i, j);
+            if(label == 0) {
+                continue;
+            }
+
+            //check if label is in moving labels. if not, make zero!
+            auto it = std::find(moving_labels.begin(), moving_labels.end(), label);
+            if(it == moving_labels.end()) {
+                motion_mask.at<int>(i, j) = 0;
+            }
+        }
+    }
 
 }
 
 
-// gtsam::Pose3 constructkittiObjectPose(double tx, double ty, double tz, double ry, double rx, double rz) {
-//     cv::Mat t(3, 1, CV_64FC1);
-//     t.at<double>(0) = tx;
-//     t.at<double>(1) = ty;
-//     t.at<double>(2) = tz;
+ std::vector<std::string> trimAndSplit(const std::string& input) {
+    std::string trim_input = boost::algorithm::trim_right_copy(input);
+    std::vector<std::string> split_line;
+    boost::algorithm::split(split_line, trim_input, boost::is_any_of(" "));
+    return split_line;
+}
 
-//     // from Euler to Rotation Matrix
-//     cv::Mat R(3, 3, CV_64FC1);
 
-//     // assign r vector
-//     double y = obj_pose_gt[9] + (3.1415926 / 2);  // +(3.1415926/2)
-//     double x = 0.0;
-//     double z = 0.0;
+bool getLine(std::ifstream& fstream, std::vector<std::string>& split_lines) {
+    std::string line;
+    getline(fstream, line);
 
-//     // the angles are in radians.
-//     double cy = cos(y);
-//     double sy = sin(y);
-//     double cx = cos(x);
-//     double sx = sin(x);
-//     double cz = cos(z);
-//     double sz = sin(z);
+    split_lines.clear();
 
-//     double m00, m01, m02, m10, m11, m12, m20, m21, m22;
+    if(line.empty()) return false;
 
-//     m00 = cy * cz + sy * sx * sz;
-//     m01 = -cy * sz + sy * sx * cz;
-//     m02 = sy * cx;
-//     m10 = cx * sz;
-//     m11 = cx * cz;
-//     m12 = -sx;
-//     m20 = -sy * cz + cy * sx * sz;
-//     m21 = sy * sz + cy * sx * cz;
-//     m22 = cy * cx;
-
-//     R.at<double>(0, 0) = m00;
-//     R.at<double>(0, 1) = m01;
-//     R.at<double>(0, 2) = m02;
-//     R.at<double>(1, 0) = m10;
-//     R.at<double>(1, 1) = m11;
-//     R.at<double>(1, 2) = m12;
-//     R.at<double>(2, 0) = m20;
-//     R.at<double>(2, 1) = m21;
-//     R.at<double>(2, 2) = m22;
-
-//     // construct 4x4 transformation matrix
-//     cv::Mat Pose = cv::Mat::eye(4, 4, CV_64F);
-//     Pose.at<double>(0, 0) = R.at<double>(0, 0);
-//     Pose.at<double>(0, 1) = R.at<double>(0, 1);
-//     Pose.at<double>(0, 2) = R.at<double>(0, 2);
-//     Pose.at<double>(0, 3) = t.at<double>(0);
-//     Pose.at<double>(1, 0) = R.at<double>(1, 0);
-//     Pose.at<double>(1, 1) = R.at<double>(1, 1);
-//     Pose.at<double>(1, 2) = R.at<double>(1, 2);
-//     Pose.at<double>(1, 3) = t.at<double>(1);
-//     Pose.at<double>(2, 0) = R.at<double>(2, 0);
-//     Pose.at<double>(2, 1) = R.at<double>(2, 1);
-//     Pose.at<double>(2, 2) = R.at<double>(2, 2);
-//     Pose.at<double>(2, 3) = t.at<double>(2);
-// }
-
+    split_lines = trimAndSplit(line);
+    return true;
+}
 
 } //dyno
