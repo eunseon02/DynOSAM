@@ -184,6 +184,23 @@ inline bool equals_with_abs_tol(const std::vector<T>& vec1, const std::vector<T>
     return true;
 }
 
+// //templated on eigen vector type (fixed col size, N rows)
+// template<typename T, typename Size>
+// inline bool equals_with_abs_tol(const Eigen::Vector<T, Size>& vec1, const Eigen::Vector<T, Size>& vec2, double tol = 1e-9) {
+//     if(vec1.size() != vec2.size()) return false;
+
+//     const size_t m = vec1.size();
+//     for(size_t i = 0; i < m; i++) {
+//         if(!fpEqual(vec1[i], vec2[i], tol)) {
+//             return false;
+//         }
+//     }
+
+//     return true;
+// }
+
+//templated on eigen vector type with fixed colum size and dynamic rows
+
 template<typename T>
 inline T computeCentroid(const std::vector<T>& vec) {
   T sum{};

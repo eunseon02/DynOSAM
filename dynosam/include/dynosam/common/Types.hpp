@@ -399,12 +399,12 @@ std::string to_string(const T& t);
 template<typename Input, typename Output>
 bool convert(const Input&, Output&);
 
-
+//TODO: adds delimiter at end of string too!
 template<class Container>
-inline std::string container_to_string(const Container& container) {
+inline std::string container_to_string(const Container& container, const std::string& delimiter = " ") {
   std::stringstream ss;
   for(const auto& c : container) {
-    ss << c << " ";
+    ss << c << delimiter;
   }
   return ss.str();
 }

@@ -75,7 +75,16 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     FrontendModule::Ptr frontend = nullptr;
     BackendModule::Ptr backend = nullptr;
 
-    const CameraParams& camera_params = params_.camera_params_;
+    CameraParams camera_params;
+    if(params_.prefer_data_provider_camera_params_ && data_loader->getCameraParams()) {
+        LOG(INFO) << "Using camera params from DataProvider, not the config in the CameraParams.yaml!";
+        camera_params = *data_loader->getCameraParams();
+    }
+    else {
+        LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
+        camera_params = params_.camera_params_;
+    }
+
     //eventually from actual params
     switch (params_.frontend_type_)
     {

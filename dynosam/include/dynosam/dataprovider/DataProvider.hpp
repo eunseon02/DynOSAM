@@ -6,6 +6,7 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/common/CameraParams.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/dataprovider/DataInterfacePipeline.hpp"
 
@@ -81,11 +82,11 @@ public:
 
     /**
      * @brief Get the size of the dataset - if this is not valid (i.e. the provider is online) this function should return
-     * emitOnFinishCallbacks
+     * -1
      *
      * @return int
      */
-    virtual size_t datasetSize() const = 0;
+    virtual int datasetSize() const = 0;
 
     /**
      * @brief Spins the dataset for one "step" of the dataset
@@ -98,6 +99,16 @@ public:
 
     virtual void shutdown();
 
+    /**
+     * @brief Provides functionality to get camera paramters for the main pipeline, as these may be available
+     * from the dataset.
+     *
+     * By default returns std::nullopt but the derived data-provider can overwrite this and return
+     * the loaded params
+     *
+     * @return CameraParams::Optional
+     */
+    virtual CameraParams::Optional getCameraParams() const { return {}; }
 
 protected:
     //This class does not know when the data finishes finishes (indeed this is only really valid for datasets)

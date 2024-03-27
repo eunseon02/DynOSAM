@@ -51,6 +51,7 @@ public:
      * /path/to/dataset/
      *  /images
      *  /landmarks
+     *  /intrinsic.txt
      *  ....
      *  /optical_flow
      *  /instance_masks
@@ -61,8 +62,14 @@ public:
      */
     ClusterSlamDataLoader(const fs::path& dataset_path);
 
-private:
+    //we can get the camera params from this dataset, so overload the function!
+    //returns camera params from camera1
+    CameraParams::Optional getCameraParams()  const override {
+        return left_camera_params_;
+    }
 
+private:
+    CameraParams left_camera_params_;
 
 
 };

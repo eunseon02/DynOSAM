@@ -11,3 +11,9 @@ frontend_type: 0
 
 # Incremental = 0, Batch = 1 (same as OptimizerType, defined in BackendDefinitions.hpp)
 optimizer_type: 0
+
+
+# Use the camera params provided by the dataprovider (if available),
+# instead the camera params specified by the CameraParams.yaml.
+# this is useful when running experiments as changing the dataset will change the camera extrinsics
+prefer_data_provider_camera_params: 1

@@ -30,6 +30,7 @@
 #include <boost/filesystem.hpp>
 
 #include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
+#include "dynosam/common/Algorithms.hpp"
 
 #include <glog/logging.h>
 #include <fstream>
@@ -67,6 +68,7 @@ public:
      */
     ClusterSlamAllLoader(const std::string& file_path)
     :   left_images_folder_path_(file_path + "/images/left"),
+        right_images_folder_path_(file_path + "/images/right"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         pose_folder_path_(file_path + "/pose"),
         instance_masks_folder_(file_path + "/instance_masks"),
@@ -76,6 +78,7 @@ public:
     {
 
         throwExceptionIfPathInvalid(left_images_folder_path_);
+        throwExceptionIfPathInvalid(right_images_folder_path_);
         throwExceptionIfPathInvalid(optical_flow_folder_path_);
         throwExceptionIfPathInvalid(pose_folder_path_);
         throwExceptionIfPathInvalid(instance_masks_folder_);
@@ -89,20 +92,23 @@ public:
         //we use flow to set the size as for this dataset, there will be one less
         //optical flow as the flow ids index t to t+1 (which is gross, I know!!)
         loadFlowImagesAndSize(optical_flow_image_paths_, dataset_size_);
-        loadLeftImages(left_rgb_image_paths_);
+        //left
+        loadImages(left_rgb_image_paths_, left_images_folder_path_);
+        //right
+        loadImages(right_rgb_image_paths_, right_images_folder_path_);
+        CHECK_EQ(right_rgb_image_paths_.size(), left_rgb_image_paths_.size());
+
         loadInstanceMasksImages(instance_masks_image_paths_);
         loadLeftLandmarks(left_landmarks_map_);
 
         loadLandMarkMapping(landmark_mapping_);
 
-        // //sanity check -> should have the same size of left_landmarks_map_ as landmark_mapping_
-        // //as they both represent landmark ids!!
-        // CHECK_EQ(left_landmarks_map_.size(), landmark_mapping_.size());
-
         CHECK_EQ(optical_flow_image_paths_.size(), left_rgb_image_paths_.size() - 1);
         CHECK_EQ(instance_masks_image_paths_.size(), optical_flow_image_paths_.size());
         CHECK_EQ(size(), optical_flow_image_paths_.size());
         setGroundTruthPacket(ground_truth_packets_);
+
+        setIntrisics();
 
     }
 
@@ -129,12 +135,12 @@ public:
         //debug check -> draw keypoints on image!
         const LandmarksMap& kps_map = left_landmarks_map_.at(idx);
 
-        for(const auto&[landmark_id, kp] : kps_map) {
-            const auto cluster_id = landmark_mapping_.at(landmark_id);
+        // for(const auto&[landmark_id, kp] : kps_map) {
+        //     const auto cluster_id = landmark_mapping_.at(landmark_id);
 
-            cv::Point2f pt(utils::gtsamPointToCv(kp));
-            utils::drawCircleInPlace(rgb, pt, ColourMap::getObjectColour(cluster_id));
-        }
+        //     cv::Point2f pt(utils::gtsamPointToCv(kp));
+        //     utils::drawCircleInPlace(rgb, pt, ColourMap::getObjectColour(cluster_id));
+        // }
 
         return rgb;
     }
@@ -152,8 +158,16 @@ public:
         return relabelled_mask;
     }
 
+    cv::Mat getDepthImage(size_t idx) const {
+
+    }
+
     const GroundTruthInputPacket& getGtPacket(size_t idx) const {
         return ground_truth_packets_.at(idx);
+    }
+
+    const CameraParams& getLeftCameraParams() const {
+        return left_camera_params_;
     }
 
 private:
@@ -169,8 +183,8 @@ private:
     }
    }
 
-    void loadLeftImages(std::vector<std::string>& images_paths) {
-        std::vector<std::filesystem::path> files_in_directory = getAllFilesInDir(left_images_folder_path_);
+    void loadImages(std::vector<std::string>& images_paths, const std::string& image_folder) {
+        std::vector<std::filesystem::path> files_in_directory = getAllFilesInDir(image_folder);
 
         for (const std::string file_path : files_in_directory) {
             throwExceptionIfPathInvalid(file_path);
@@ -185,6 +199,82 @@ private:
             throwExceptionIfPathInvalid(file_path);
             images_paths.push_back(file_path);
         }
+    }
+
+    //set all intrinsics/camera parameters related variables
+    void setIntrisics() {
+        std::ifstream fstream;
+        fstream.open(intrinsics_file_path_, std::ios::in);
+        if(!fstream) {
+            throw std::runtime_error("Could not open file " + intrinsics_file_path_ + " when trying to load Cluster Slam intrinsics!");
+        }
+
+        auto load_projection_matrix = [](std::ifstream& fstream, gtsam::Matrix34& projection_matrix) -> void {
+            //read the first 3 liens of the projection matrix and populate camera matrix
+            for(size_t i = 0; i < 3; i++) {
+                // std::vector<std::string> split_line;
+                //hmmm my getline function does not seem to work here (maybe because doubles so we'll do it manually!)
+                // CHECK(getLine(fstream, split_line));
+                // CHECK_EQ(split_line.size(), 4) << "Line was: " << container_to_string(split_line, ", ");
+
+                std::string s;
+                std::getline(fstream, s);
+
+                std::stringstream ss;
+                ss << s;
+
+                LOG(INFO) << ss.str();
+                for(size_t j = 0; j < 4; j++) {
+                    double tmp;
+                    ss >> tmp;
+                    LOG(INFO) << tmp;
+                    projection_matrix(i, j) = tmp;
+                }
+            }
+        }; //load_projection_matrix
+
+        //intrinscis file is
+        //3 x 4 projection matrix, over 3 lines
+        // new line
+        //3 x 4 projection matrix, over 3 lines
+        //populate camera 1 matrix
+        load_projection_matrix(fstream, projection_matrix_cam1_);
+
+        //read the line line
+        std::string s;
+        std::getline(fstream, s);
+        //populate camera 2 matrix
+        load_projection_matrix(fstream, projection_matrix_cam2_);
+
+        //set K matrices
+        K_cam_1 = projection_matrix_cam1_.topLeftCorner(3, 3);
+        K_cam_2 = projection_matrix_cam2_.topLeftCorner(3, 3);
+
+        double fx = K_cam_1(0, 0);
+        double fy = K_cam_1(1, 1);
+        double cu = K_cam_1(0, 2);
+        double cv = K_cam_1(1, 2);
+
+        left_camera_params_ = CameraParams(
+            CameraParams::IntrinsicsCoeffs({fx, fy, cu, cv}),
+            CameraParams::DistortionCoeffs({0, 0, 0, 0}),
+            getRGB(0).size(),
+            DistortionModel::RADTAN
+        );
+
+    }
+
+
+    cv::Mat denseStereoReconstruction(size_t frame) {
+        const cv::Mat rgb_left = getRGB(frame);
+
+        cv::Mat rgb_right;
+        CHECK_LT(idx, right_rgb_image_paths_.size());
+
+        loadRGB(right_rgb_image_paths_.at(idx), rgb_right);
+        CHECK(!rgb_right.empty());
+
+
     }
 
 
@@ -275,78 +365,90 @@ private:
     void associateDetectedBBWithObject(const cv::Mat& instance_mask, FrameId frame_id, cv::Mat& relabelled_mask) const {
         const GroundTruthInputPacket& gt_packet = getGtPacket(frame_id);
         ObjectIds object_ids = vision_tools::getObjectLabels(instance_mask);
-
-
+        const size_t n = object_ids.size();
 
         instance_mask.copyTo(relabelled_mask);
+
+        if(n == 0) {
+            return;
+        }
+
 
         //sort kps map into a map of clusters -> [kps....]
         const LandmarksMap& kps_map = left_landmarks_map_.at(frame_id);
         //cluster id (track id -> all keypoints for that cluster)
+        std::set<int> cluster_id_set;
         gtsam::FastMap<int, Keypoints> clustered_kps;
         for(const auto&[landmark_id, kp] : kps_map) {
             const auto cluster_id = landmark_mapping_.at(landmark_id);
-
+            cluster_id_set.insert(cluster_id);
             if(!clustered_kps.exists(cluster_id)) {
                 clustered_kps.insert2(cluster_id, Keypoints());
             }
             clustered_kps.at(cluster_id).push_back(kp);
         }
 
-        //alright ive done something wrong.....
-        for(const auto&[cluster_id, kps] : clustered_kps) {
-            //vector for each of the object ids
-            //containts a pair identifying which object in the instance mask
-            //and HOW many keypoints for this (cluster id) object fell inside the detected bounding box
-            std::vector<std::pair<ObjectId, int>> voting;
+        std::vector<int> cluster_ids(cluster_id_set.begin(), cluster_id_set.end());
 
-            //for each object in the instance mask, try and associate it with a cluster
-            for(ObjectId object_id : object_ids) {
-                //get the binary mask just for this object, we will use this too find a bounding box
-                //and count how many kp's fall into this mask
-                const cv::Mat object_mask = relabelled_mask == object_id;
+        //want to assign object ids to clusters
+        const size_t m = cluster_ids.size();
+        CHECK_EQ(m, clustered_kps.size());
 
-                cv::Rect bb;
-                if(!vision_tools::findObjectBoundingBox(instance_mask, object_id, bb)) {
-                    VLOG(10) << "No bb could be found for detected object " << object_id << " at frame " << frame_id << ". Skipping association and removing object from mask";
-                    relabelled_mask.setTo(cv::Scalar(0), object_mask);
-                    continue;
-                }
+        LOG(INFO) << n <<" " << m;
 
-                std::pair<ObjectId, int> object_count{object_id, 0};
-                //iteate over all kps in this cluster from gt and see if they lie in the detected bb
-                for(const Keypoint& kp : kps) {
-                    cv::Point2f pt(utils::gtsamPointToCv(kp));
+        Eigen::MatrixXd cost;
+        cost.resize(n, m);
 
-                    if(bb.contains(pt)) {
-                        object_count.second++;
-                    }
-                }
+        for(size_t rows = 0; rows < n; rows++) {
+            ObjectId object_id = object_ids.at(rows);
 
-                voting.push_back(object_count);
+            // get the binary mask just for this object, we will use this too find a bounding box
+            //and count how many kp's fall into this mask
+            const cv::Mat object_mask = relabelled_mask == object_id;
 
-            }
-
-            if(voting.empty()) {
+            cv::Rect bb;
+            if(!vision_tools::findObjectBoundingBox(instance_mask, object_id, bb)) {
+                VLOG(10) << "No bb could be found for detected object " << object_id << " at frame " << frame_id << ". Skipping association and removing object from mask";
+                relabelled_mask.setTo(cv::Scalar(0), object_mask);
                 continue;
             }
 
-            //sort in descening order via the object coutn
-            auto sort_pair_int = [](const std::pair<int, int>& a, const std::pair<int, int>& b) -> bool {
-                return (a.second > b.second);
-            };
-            std::sort(voting.begin(), voting.end(), sort_pair_int);
 
-            //the detected object label with the most kps in it from cluster_id
-            //we therefore need to relabel all pixels with the value associated_object_label
-            //to cluster label
-            auto associated_object_label = voting[0].first;
-            const cv::Mat assciated_object_mask = relabelled_mask == associated_object_label;
-            relabelled_mask.setTo(cv::Scalar(cluster_id), assciated_object_mask);
+            for(size_t cols = 0; cols < m; cols++) {
+                int cluster_id = cluster_ids.at(cols);
+                const Keypoints& kps = clustered_kps.at(cluster_id);
 
-            LOG(INFO) << "Relabelled object id " << associated_object_label << " to " << cluster_id;
-
+                //(inverse) cost for the object id with this cluster id
+                //hack - make really small number so we divide by zero!!
+                double object_count = 0.000001;
+                for(const auto& kp : kps) {
+                    cv::Point2f pt(utils::gtsamPointToCv(kp));
+                    if(bb.contains(pt)) {
+                        object_count++;
+                    }
+                }
+                cost(rows, cols) = object_count;
+            }
         }
+
+        //apply scaling to the costs to turn the cost function from an argmax to an argmin problem
+        //which the hungrian problem sovles
+        //ie we want the assignment that maximuses the number of kp's in the object insancec
+        Eigen::MatrixXd loged_costs = cost.unaryExpr([](double x) { return 1.0/x * 10; });
+        Eigen::VectorXi assignment;
+        internal::HungarianAlgorithm().solve(loged_costs, assignment);
+
+        for(size_t i = 0; i < assignment.size(); i++) {
+            int j = assignment[i];
+
+            //the i-th object is assignment to the j-th cluster
+            ObjectId object_id = object_ids.at(i);
+            int assigned_custer = cluster_ids.at(j);
+
+            const cv::Mat object_mask = relabelled_mask == object_id;
+            relabelled_mask.setTo(cv::Scalar(assigned_custer), object_mask);
+        }
+
     }
 
 
@@ -459,11 +561,13 @@ private:
     const std::string optical_flow_folder_path_;
     const std::string pose_folder_path_;
     const std::string left_landmarks_folder_;
+    const std::string right_images_folder_path_;
     const std::string instance_masks_folder_;
     const std::string landmark_mapping_file_path_;
     const std::string intrinsics_file_path_;
 
     std::vector<std::string> left_rgb_image_paths_; //index from 0 to match the naming convention of the dataset
+    std::vector<std::string> right_rgb_image_paths_;
     std::vector<std::string> optical_flow_image_paths_;
     std::vector<std::string> instance_masks_image_paths_;
     LandmarksMapPerFrame left_landmarks_map_;
@@ -477,8 +581,15 @@ private:
     //the landmark id is the key in LandmarksMap
     gtsam::FastMap<int, int> landmark_mapping_;
 
+    //set by setIntrinsics()
+    gtsam::Matrix33 K_cam_1;
+    gtsam::Matrix33 K_cam_2;
+    gtsam::Matrix34 projection_matrix_cam1_;
+    gtsam::Matrix34 projection_matrix_cam2_;
+    CameraParams left_camera_params_;
+
     GroundTruthPacketMap ground_truth_packets_;
-    size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /pose folder which is one per frame
+    size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /optical_flow folder which is one per frame
 
 };
 
@@ -508,6 +619,8 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
     //this would go out of scope but we capture it in the functional loaders
     auto loader = std::make_shared<ClusterSlamAllLoader>(dataset_path);
     auto timestamp_loader = std::make_shared<ClusterSlamTimestampLoader>(loader);
+
+    left_camera_params_ = loader->getLeftCameraParams();
 
     auto rgb_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
         [loader](size_t idx) {
@@ -549,6 +662,8 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
         gt_loader
     );
 }
+
+
 
 
 }

@@ -70,7 +70,7 @@ add_library(${PROJECT_NAME} SHARED
   src/common/Map.cc
   src/common/MapNodes.cc
   src/common/PointCloudProcess.cc
-
+  src/common/Algorithms.cc
 
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
@@ -271,6 +271,7 @@ if(BUILD_TESTING)
     test/test_backend_structures.cc
     test/test_csvwriter.cc
     test/test_rgbd_backend.cc
+    test/test_algorithms.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

@@ -46,6 +46,9 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     pipeline_parser.getYamlParam("optimizer_type", &optimizer_type_i);
     optimizer_type_ = static_cast<OptimizerType>(optimizer_type_i);
 
+
+    pipeline_parser.getYamlParam("prefer_data_provider_camera_params", &prefer_data_provider_camera_params_);
+
 }
 
 

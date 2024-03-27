@@ -61,7 +61,10 @@ public:
     FrontendType frontend_type_ = FrontendType::kRGBD;
     OptimizerType optimizer_type_ = OptimizerType::kBatch;
 
-
+    //! If camera params are provided from the dataprovider, use this instead of the
+    //! params here. This allows the specific dataset camera params (which changes per dataset)
+    //! rather than needing the change the CameraParams.yaml everytime
+    bool prefer_data_provider_camera_params_{true};
 
     //! Pipeline level params
     bool parallel_run_{true};
