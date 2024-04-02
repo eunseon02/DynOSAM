@@ -71,6 +71,7 @@ add_library(${PROJECT_NAME} SHARED
   src/common/MapNodes.cc
   src/common/PointCloudProcess.cc
   src/common/Algorithms.cc
+  src/common/StereoCamera.cc
 
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
@@ -93,6 +94,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/FeatureTracker.cc
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
+  src/frontend/vision/StereoMatcher.cc
   src/frontend/RGBDInstance-Definitions.cc
 
   src/backend/BackendDefinitions.cc

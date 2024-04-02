@@ -68,7 +68,7 @@ protected:
     }
 
     void updateImpl(const BackendSpinState&, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors, const typename MapType::Ptr) override {
-        initial_.insert_or_assign(new_values);
+        initial_.insert(new_values);
         graph_ += new_factors;
     }
 

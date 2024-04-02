@@ -139,7 +139,7 @@ class UndistorterRectifier {
    * @param undistorted_img Undistorted Rectified output image
    */
   void undistortRectifyImage(const cv::Mat& img,
-                             cv::Mat* undistorted_img) const;
+                             cv::Mat& undistorted_img) const;
 
   /**
    * @brief undistortRectifyKeypoints Undistorts and rectifies a sparse set of

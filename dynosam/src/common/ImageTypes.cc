@@ -38,9 +38,9 @@ void validateMask(const cv::Mat& input, const std::string& name) {
 }
 
 void validateRGBMono(const cv::Mat& input) {
-    if(input.type() != CV_8UC1 && input.type() != CV_8UC3) {
+    if(input.type() != CV_8UC1 && input.type() != CV_8UC3 && input.type() != CV_8UC4) {
         throw InvalidImageTypeException(
-            "RGBMono image was not CV_8UC1 or CV_8UC3. Input image type was " + utils::cvTypeToString(input.type())
+            "RGBMono image was not CV_8UC1, CV_8UC3 or CV_8UC4. Input image type was " + utils::cvTypeToString(input.type())
         );
     }
 }

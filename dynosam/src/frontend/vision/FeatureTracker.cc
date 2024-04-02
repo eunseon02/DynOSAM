@@ -152,33 +152,33 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
     }
   }
 
-  for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
-    // CHECK(object_observation.marked_as_moving_);
-    //get average center of 2 object
-    FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
+  // for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
+  //   // CHECK(object_observation.marked_as_moving_);
+  //   //get average center of 2 object
+  //   FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
 
-    size_t count = 0;
-    int center_x = 0, center_y = 0;
-    auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return Feature::IsUsable(f); });
-    for(const Feature::Ptr& feature : usable_iterator) {
-      center_x += functional_keypoint::u(feature->keypoint_);
-      center_y += functional_keypoint::v(feature->keypoint_);
-      count++;
-    }
+  //   size_t count = 0;
+  //   int center_x = 0, center_y = 0;
+  //   auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return Feature::IsUsable(f); });
+  //   for(const Feature::Ptr& feature : usable_iterator) {
+  //     center_x += functional_keypoint::u(feature->keypoint_);
+  //     center_y += functional_keypoint::v(feature->keypoint_);
+  //     count++;
+  //   }
 
-    center_x /= features.size();
-    center_y /= features.size();
+  //   center_x /= features.size();
+  //   center_y /= features.size();
 
-    cv::putText(
-      img_rgb,
-      std::to_string(object_observation.tracking_label_),
-      cv::Point(center_x, center_y),
-      cv::FONT_HERSHEY_DUPLEX,
-      1.0,
-      CV_RGB(118, 185, 0),  // font color
-      3);
+  //   cv::putText(
+  //     img_rgb,
+  //     std::to_string(object_observation.tracking_label_),
+  //     cv::Point(center_x, center_y),
+  //     cv::FONT_HERSHEY_DUPLEX,
+  //     1.0,
+  //     CV_RGB(118, 185, 0),  // font color
+  //     3);
 
-  }
+  // }
 
   for ( const Feature::Ptr& feature : current_frame.dynamic_features_) {
     const Keypoint& px_cur = feature->keypoint_;
@@ -428,8 +428,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
       if(grid.isOccupied(cell_idx)) {continue;}
 
-      // we are within the image bounds?
-      if (j + flow_xe < rgb.cols && j + flow_xe > 0 && i + flow_ye < rgb.rows && i + flow_ye > 0)
+      // if the predicted kp (ie the kp at k + 1) is out of bounds, dont construct the feature
+      if ((j + flow_xe < rgb.cols && j + flow_xe > 0 && i + flow_ye < rgb.rows && i + flow_ye > 0))
       {
         // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
@@ -509,8 +509,10 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
     ObjectIds temp_label;
     for (size_t j = 0; j < object_features[i].size(); j++)
     {
+      //feature at k-1
       Feature::Ptr feature = previous_frame_->dynamic_features_.getByTrackletId(object_features[i][j]);
       CHECK(Feature::IsNotNull(feature));
+      //kp at k
       const Keypoint& predicted_kp = feature->predicted_keypoint_;
       const int u = functional_keypoint::u(predicted_kp);
       const int v = functional_keypoint::v(predicted_kp);

@@ -106,12 +106,44 @@ gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose) {
   return gtsam::Pose3(Eigen::Matrix4d(vector_pose.data()).transpose());
 }
 
-
+gtsam::Cal3_S2 Cvmat2Cal3_S2(const cv::Mat& M) {
+  CHECK_EQ(M.rows, 3);  // We expect homogeneous camera matrix.
+  CHECK_GE(M.cols, 3);  // We accept extra columns (which we do not use).
+  const double& fx = M.at<double>(0, 0);
+  const double& fy = M.at<double>(1, 1);
+  const double& s = M.at<double>(0, 1);
+  const double& u0 = M.at<double>(0, 2);
+  const double& v0 = M.at<double>(1, 2);
+  return gtsam::Cal3_S2(fx, fy, s, u0, v0);
+}
 
 gtsam::Pose3 openGvTfToGtsamPose3(const opengv::transformation_t& RT) {
   gtsam::Matrix poseMat = gtsam::Matrix::Identity(4, 4);
   poseMat.block<3, 4>(0, 0) = RT;
   return gtsam::Pose3(poseMat);
+}
+
+std::pair<cv::Mat, cv::Mat> Pose2cvmats(const gtsam::Pose3& pose) {
+  const gtsam::Matrix3& rot = pose.rotation().matrix();
+  const gtsam::Vector3& tran = pose.translation();
+  return std::make_pair(gtsamMatrix3ToCvMat(rot), gtsamVector3ToCvMat(tran));
+}
+
+// TODO(Toni): template this on type double, float etc.
+cv::Mat gtsamMatrix3ToCvMat(const gtsam::Matrix3& rot) {
+  cv::Mat R = cv::Mat(3, 3, CV_64F);
+  cv::eigen2cv(rot, R);
+  return R;
+}
+
+cv::Mat gtsamVector3ToCvMat(const gtsam::Vector3& tran) {
+  cv::Mat T = cv::Mat(3, 1, CV_64F);
+  cv::eigen2cv(tran, T);
+  return T;
+}
+
+cv::Point3d gtsamVector3ToCvPoint3(const gtsam::Vector3& tran) {
+  return cv::Point3d(tran[0], tran[1], tran[2]);
 }
 
 } //utils

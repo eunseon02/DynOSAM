@@ -45,8 +45,8 @@ struct ObjectPoseGT {
 
     FrameId frame_id_; //k
     ObjectId object_id_;
-    gtsam::Pose3 L_camera_; //!object pose in camera frame
-    gtsam::Pose3 L_world_; //!object pose in world frame
+    gtsam::Pose3 L_camera_; //!object pose in camera frame (using camera ie. OpenCV frame convention)
+    gtsam::Pose3 L_world_; //!object pose in world frame (using camera ie. OpenCV frame convention)
     cv::Rect bounding_box_; //!box of detection on image plane
 
     /// @brief 3D object 'dimensions' in meters. Not all datasets will contain. Used to represent a 3D bounding box.
@@ -103,7 +103,7 @@ public:
         : PipelinePayload(timestamp), frame_id_(id), X_world_(X), object_poses_(poses) {}
 
     FrameId frame_id_;
-    gtsam::Pose3 X_world_; //camera pose in world frame
+    gtsam::Pose3 X_world_; //camera pose in world frame (using camera ie. OpenCV frame convention)
     //! Vector of GT objects. This should contain all the objects in the sequence
     std::vector<ObjectPoseGT> object_poses_;
 

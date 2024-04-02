@@ -26,6 +26,7 @@
 
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
+#include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 
 #include "dynosam/utils/YamlParser.hpp"
 
@@ -50,6 +51,13 @@ DataProvider::Ptr DataProviderFactory::Create(const std::string& dataset_folder_
         LOG(INFO) << "Using Virtual KITTI dataset at path: " << dataset_folder_path;
         VirtualKittiDataLoader::Params params = VirtualKittiDataLoader::Params::fromYaml(params_folder_path);
         auto loader = std::make_shared<VirtualKittiDataLoader>(dataset_folder_path, params);
+        loader->setStartingFrame(FLAGS_starting_frame);
+        loader->setEndingFrame(FLAGS_ending_frame);
+        return loader;
+    }
+    else if(dataset_type == DatasetType::CLUSTER) {
+        LOG(INFO) << "Using Cluster (SLAM) dataset at path: " << dataset_folder_path;
+        auto loader = std::make_shared<ClusterSlamDataLoader>(dataset_folder_path);
         loader->setStartingFrame(FLAGS_starting_frame);
         loader->setEndingFrame(FLAGS_ending_frame);
         return loader;

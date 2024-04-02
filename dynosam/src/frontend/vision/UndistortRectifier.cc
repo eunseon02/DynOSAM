@@ -154,6 +154,21 @@ gtsam::Vector3 UndistorterRectifier::undistortKeypointAndGetProjectedVersor(cons
 }
 
 
+void UndistorterRectifier::undistortRectifyImage(const cv::Mat& img,
+                             cv::Mat& undistorted_img) const
+{
+  CHECK_EQ(map_x_.size, img.size);
+  CHECK_EQ(map_y_.size, img.size);
+  cv::remap(img,
+            undistorted_img,
+            map_x_,
+            map_y_,
+            remap_interpolation_type_,
+            remap_use_constant_border_type_ ? cv::BORDER_CONSTANT
+                                            : cv::BORDER_REPLICATE);
+}
+
+
 void UndistorterRectifier::initUndistortRectifyMaps(
     const CameraParams& cam_params,
     const cv::Mat& R,

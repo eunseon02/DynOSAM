@@ -100,6 +100,7 @@ struct ImageType {
     };
 
     //really should be disparity?
+    //depends on dataset. the inputc can be disparity, but by the time we get to the frontend it MUST be depth
     struct Depth {
         constexpr static int OpenCVType = CV_64F; //! Expected opencv image type for depth (or disparity) image
         static void validate(const cv::Mat& input);
@@ -108,7 +109,7 @@ struct ImageType {
 
     };
     struct OpticalFlow {
-        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type for depth (or disparity) image
+        constexpr static int OpenCVType = CV_32FC2; //! Expected opencv image type OpticalFlow image
         static void validate(const cv::Mat& input);
         static std::string name() { return "OpticalFlow"; }
         static cv::Mat toRGB(const ImageWrapper<OpticalFlow>& image);

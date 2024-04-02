@@ -2,15 +2,15 @@
 
 parallel_run: 0
 
-# KITTI: 0, VIRTUAL_KITTI: 1
-data_provider_type: 0
+# KITTI: 0, VIRTUAL_KITTI: 1, CLUSTER: 2
+data_provider_type: 2
 
 
 #RGBD instance = 0, MONO instance = 1 (same as FrontendType)
 frontend_type: 0
 
 # Incremental = 0, Batch = 1 (same as OptimizerType, defined in BackendDefinitions.hpp)
-optimizer_type: 0
+optimizer_type: 1
 
 
 # Use the camera params provided by the dataprovider (if available),

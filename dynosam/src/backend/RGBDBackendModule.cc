@@ -70,6 +70,8 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
     //TODO: functioanlise and streamline with BackendModule
     static_point_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.static_point_noise_sigma_);
     dynamic_point_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.dynamic_point_noise_sigma_);
+    //set in base!
+    // landmark_motion_noise_ =  gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
 
     if(backend_params.use_robust_kernals_) {
         static_point_noise_ = gtsam::noiseModel::Robust::Create(
@@ -162,13 +164,15 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         map_->updateEstimates(esimtates, full_graph, frame_k);
 
 
-        // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
-        // //only logs this the frame specified - in batch case we want to update all!!
-        // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
-        //     logBackendFromMap(frame_id, composed_poses);
+        auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
+        //only logs this the frame specified - in batch case we want to update all!!
+        for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
+            logBackendFromMap(frame_id, composed_poses);
 
         last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
         CHECK_EQ(last_optimized_frame, frame_k);
+
+        optimizer_->getFactors().saveGraph(getOutputFilePath("batch_output.dot"), DynoLikeKeyFormatter);
     }
     else {
         //must update the map with the new values anyway
@@ -243,7 +247,14 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
     CHECK_NOTNULL(frame_node_k);
 
     constexpr static size_t kMinObservations = 2u;
+
+    //TODO: debug stuff
+    int num_points = 0;
+
+    LOG(INFO) << "Looping over " <<  frame_node_k->static_landmarks.size() << " static lmks for frame " << frame_id_k;
     for(const LandmarkNode3d::Ptr& lmk_node : frame_node_k->static_landmarks) {
+
+
         const gtsam::Key point_key = lmk_node->makeStaticKey();
         //check if lmk node is already in map (which should mean it is equivalently in isam)
         if(map_->exists(point_key)) {
@@ -262,6 +273,10 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
         else {
             //see if we have enough observations to add this lmk
             if(lmk_node->numObservations() < kMinObservations) { continue;}
+
+            num_points++;
+
+            if(num_points > 5) {break;}
 
             //this condition should only run once per tracklet (ie.e the first time the tracklet has enough observations)
             //we gather the tracklet observations and then initalise it in the new values
@@ -302,7 +317,7 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
     const FrameNode3d::Ptr frame_node_k_1 = map_->getFrame(frame_id_k_1);
     CHECK_NOTNULL(frame_node_k_1);
 
-    constexpr static size_t kMinObservations = 5u;
+    constexpr static size_t kMinObservations = 3u;
 
     //for each object
     for(const ObjectNode3d::Ptr& object_node : frame_node_k->objects_seen) {
@@ -326,12 +341,22 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
             continue;
         }
 
+        //TODO: debug
+        int num_lmks = 0;
+
+
         //iterate over each lmk we have on this object
         for(const LandmarkNode3d::Ptr& obj_lmk_node : seen_lmks_k) {
             CHECK_EQ(obj_lmk_node->getObjectId(), object_id);
 
             //see if we have enough observations to add this lmk
             if(obj_lmk_node->numObservations() < kMinObservations) { continue;}
+
+            num_lmks++;
+
+            if(num_lmks > 5) {
+                break;
+            }
 
             TrackletId tracklet_id = obj_lmk_node->getId();
 

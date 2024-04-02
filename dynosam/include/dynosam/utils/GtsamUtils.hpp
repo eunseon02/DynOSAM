@@ -72,6 +72,29 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
 /**
+ * @brief Converts a 3x3 (or 3xM, M > 3) camera matrix from opencv to gtsam::Cal3_S2
+ *
+ * @param M
+ * @return gtsam::Cal3_S2
+ */
+gtsam::Cal3_S2 Cvmat2Cal3_S2(const cv::Mat& M);
+
+
+/**
+ * @brief  Converts a gtsam pose3 to a 3x3 rotation matrix and translation vector
+ * in opencv format (note: the function only extracts R and t, without
+ * changing them)
+ *
+ * @param pose const gtsam::Pose3&
+ * @return std::pair<cv::Mat, cv::Mat>
+ */
+std::pair<cv::Mat, cv::Mat> Pose2cvmats(const gtsam::Pose3& pose);
+
+cv::Mat gtsamMatrix3ToCvMat(const gtsam::Matrix3& rot);
+cv::Mat gtsamVector3ToCvMat(const gtsam::Vector3& tran);
+cv::Point3d gtsamVector3ToCvPoint3(const gtsam::Vector3& tran);
+
+/**
  * @brief Perturbs a gtsam::Value type object via sampling a normal distribution using
  * the sigmas provided. The length of the sigmas must match the dimension of the value
  * as given by gtsam::traits<T>::dimension.

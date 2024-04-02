@@ -208,7 +208,24 @@ cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label) {
   return labelMaskToRGB(mask, background_label, rgb);
 }
 
+void getDisparityVis(cv::InputArray src, cv::OutputArray dst, int unknown_disparity) {
+  CHECK(!src.empty() && (src.depth() == CV_16S || src.depth() == CV_32F) &&
+        (src.channels() == 1));
+  // cv::Mat srcMat = src.getMat();
+  cv::Mat srcMat = src.getMat();
+  dst.create(srcMat.rows, srcMat.cols, CV_8UC1);
+  cv::Mat& dstMat = dst.getMatRef();
 
+  // Check its extreme values.
+  double min_val;
+  double max_val;
+  cv::minMaxLoc(src, &min_val, &max_val);
+
+  // Multiply by 1.25 just to saturate a bit the extremums.
+  double scale = 2.0 * 255.0 / (max_val - min_val);
+  srcMat.convertTo(dstMat, CV_8UC1, scale / 16.0);
+  dstMat &= (srcMat != unknown_disparity);
+}
 
 void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
   constexpr static double kFontScale = 0.7;

@@ -32,6 +32,9 @@
 #include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
 #include "dynosam/common/Algorithms.hpp"
 
+#include "dynosam/common/StereoCamera.hpp"
+#include "dynosam/frontend/vision/StereoMatcher.hpp"
+
 #include <glog/logging.h>
 #include <fstream>
 
@@ -132,8 +135,12 @@ public:
         loadRGB(left_rgb_image_paths_.at(idx), rgb);
         CHECK(!rgb.empty());
 
+        //this set of images are loaded as 8UC4
+        // CHECK_EQ(rgb.type(), CV_8UC4) << "Somehow the image type has changed...";
+        // rgb.convertTo(rgb, CV_8UC3);
+
         //debug check -> draw keypoints on image!
-        const LandmarksMap& kps_map = left_landmarks_map_.at(idx);
+        // const LandmarksMap& kps_map = left_landmarks_map_.at(idx);
 
         // for(const auto&[landmark_id, kp] : kps_map) {
         //     const auto cluster_id = landmark_mapping_.at(landmark_id);
@@ -159,7 +166,7 @@ public:
     }
 
     cv::Mat getDepthImage(size_t idx) const {
-
+        return denseStereoReconstruction(idx);
     }
 
     const GroundTruthInputPacket& getGtPacket(size_t idx) const {
@@ -168,6 +175,11 @@ public:
 
     const CameraParams& getLeftCameraParams() const {
         return left_camera_params_;
+    }
+
+    double getTimestamp(size_t idx) {
+        //we dont have a time? for now just make idx
+        return static_cast<double>(idx);
     }
 
 private:
@@ -201,7 +213,7 @@ private:
         }
     }
 
-    //set all intrinsics/camera parameters related variables
+    //set all intrinsics/camera parameters related variables include stereo camera/matcher etc...
     void setIntrisics() {
         std::ifstream fstream;
         fstream.open(intrinsics_file_path_, std::ios::in);
@@ -227,7 +239,6 @@ private:
                 for(size_t j = 0; j < 4; j++) {
                     double tmp;
                     ss >> tmp;
-                    LOG(INFO) << tmp;
                     projection_matrix(i, j) = tmp;
                 }
             }
@@ -250,30 +261,67 @@ private:
         K_cam_1 = projection_matrix_cam1_.topLeftCorner(3, 3);
         K_cam_2 = projection_matrix_cam2_.topLeftCorner(3, 3);
 
-        double fx = K_cam_1(0, 0);
-        double fy = K_cam_1(1, 1);
-        double cu = K_cam_1(0, 2);
-        double cv = K_cam_1(1, 2);
+        double fx_left = K_cam_1(0, 0);
+        double fy_left = K_cam_1(1, 1);
+        double cu_left = K_cam_1(0, 2);
+        double cv_left = K_cam_1(1, 2);
+
+        double fx_right = K_cam_2(0, 0);
+        double fy_right = K_cam_2(1, 1);
+        double cu_right = K_cam_2(0, 2);
+        double cv_right = K_cam_2(1, 2);
+
+        //Projection_matrix = K * extrinsics
+        gtsam::Pose3 extrinsics_left = gtsam::Pose3(K_cam_1.inverse() * projection_matrix_cam1_);
+        gtsam::Pose3 extrinsics_right = gtsam::Pose3(K_cam_2.inverse() * projection_matrix_cam2_);
+
+        //I think this dataset has the projection matrix in the local left frame (i.e projection of 2 into 1)
+        //becuase the translation component of extrinsics_right is negative
+        //we want extrinsice to be in the world frame because this is what the camera params expect
+        //OR the dataset is in OpenCV convention...
+        extrinsics_right = extrinsics_right.inverse();
+
+        LOG(INFO) << "left e " << extrinsics_left;
+        LOG(INFO) << "right e " << extrinsics_right;
 
         left_camera_params_ = CameraParams(
-            CameraParams::IntrinsicsCoeffs({fx, fy, cu, cv}),
+            CameraParams::IntrinsicsCoeffs({fx_left, fy_left, cu_left, cv_left}),
             CameraParams::DistortionCoeffs({0, 0, 0, 0}),
             getRGB(0).size(),
-            DistortionModel::RADTAN
+            DistortionModel::RADTAN,
+            extrinsics_left
         );
+
+        CameraParams right_camera_params(
+            CameraParams::IntrinsicsCoeffs({fx_right, fy_right, cu_right, cv_right}),
+            CameraParams::DistortionCoeffs({0, 0, 0, 0}),
+            getRGB(0).size(),
+            DistortionModel::RADTAN,
+            extrinsics_right
+        );
+
+        stereo_camera_ = std::make_shared<StereoCamera>(left_camera_params_, right_camera_params);
+        stereo_matcher_ = std::make_shared<StereoMatcher>(stereo_camera_);
 
     }
 
 
-    cv::Mat denseStereoReconstruction(size_t frame) {
-        const cv::Mat rgb_left = getRGB(frame);
+    cv::Mat denseStereoReconstruction(size_t frame) const {
+        cv::Mat rgb_left = getRGB(frame);
 
         cv::Mat rgb_right;
-        CHECK_LT(idx, right_rgb_image_paths_.size());
+        CHECK_LT(frame, right_rgb_image_paths_.size());
 
-        loadRGB(right_rgb_image_paths_.at(idx), rgb_right);
+        loadRGB(right_rgb_image_paths_.at(frame), rgb_right);
         CHECK(!rgb_right.empty());
 
+         //this set of images are loaded as 8UC4
+        CHECK_EQ(rgb_right.type(), CV_8UC4) << "Somehow the image type has changed...";
+
+        cv::Mat depth_image;
+        CHECK_NOTNULL(stereo_matcher_)->denseStereoReconstruction(rgb_left, rgb_right, depth_image);
+
+        return depth_image;
 
     }
 
@@ -344,10 +392,11 @@ private:
             CHECK_EQ(split_line.size(), kExpectedSize) << "Line present in landmark mapping file does not have the right length - " << container_to_string(split_line);
 
             const int landmark_id = std::stoi(split_line.at(0));
-            //clusters start at 0 here, but we need them to start at 1
-            // such that the tracking is consistent with out labelling system
-            //which has background = 0
-            const int cluster_id = std::stoi(split_line.at(1)) + 1;
+            //clusters start at 0 here, but that includes background label (which is 0)
+            //since the  line ordering of the trajectories files determines the label
+            //the camera pose is always first (line = 0), so any cluster that is associated to an object
+            //and not the camera pose, should have idx > 0
+            const int cluster_id = std::stoi(split_line.at(1));
 
             landmark_mapping.insert2(landmark_id, cluster_id);
         }
@@ -459,6 +508,9 @@ private:
         //expect the file name to give us the frame we are working with!!
         std::vector<std::filesystem::path> files_in_directory = getAllFilesInDir(pose_folder_path_);
 
+        gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
+        bool initial_frame_set = false;
+
         for (const std::filesystem::path& pose_file_path : files_in_directory) {
 
             //this should be the file name which we will then decompose into the frame id
@@ -477,18 +529,33 @@ private:
 
             GroundTruthInputPacket gt_packet;
             gt_packet.frame_id_ = frame;
+            gt_packet.timestamp_ = getTimestamp(frame);
             // Quoting the dataset home page:
             // For each trajectory file under pose/ directory, each line in each file represents
             // the pose of each cluster except for the first line - that line represents the camera pose.
             for(size_t i = 0; i < poses.size(); i++) {
+
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+                //pose is in world coordinate convention so we put into camera convention (the camera_to_world.inverse())
+                gtsam::Pose3 pose = camera_to_world.inverse() * poses.at(i);
+
+                if(!initial_frame_set) {
+                    //expect very first pose (first frame, and first pose within that frame) to be the first camera pose
+                    initial_pose = pose;
+                    initial_frame_set = true;
+                }
+
+                // offset initial pose so we start at "0, 0, 0"
+                pose = initial_pose.inverse() * pose;
+
                 if(i == 0) {
-                    gt_packet.X_world_ = poses.at(i);
+                    gt_packet.X_world_ = pose;
                 }
                 else {
                     ObjectPoseGT object_pose_gt;
                     object_pose_gt.frame_id_ = frame;
                     object_pose_gt.object_id_ = i;
-                    object_pose_gt.L_world_ = poses.at(i);
+                    object_pose_gt.L_world_ = pose;
                     object_pose_gt.L_camera_ = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
                     gt_packet.object_poses_.push_back(object_pose_gt);
                 }
@@ -588,6 +655,9 @@ private:
     gtsam::Matrix34 projection_matrix_cam2_;
     CameraParams left_camera_params_;
 
+    StereoCamera::Ptr stereo_camera_;
+    StereoMatcher::Ptr stereo_matcher_;
+
     GroundTruthPacketMap ground_truth_packets_;
     size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /optical_flow folder which is one per frame
 
@@ -605,8 +675,7 @@ struct ClusterSlamTimestampLoader : public TimestampBaseLoader {
     }
 
     double getItem(size_t idx) override {
-        //we dont have a time? for now just make idx
-        return static_cast<double>(idx);
+        return loader_->getTimestamp(idx);
     }
 };
 
@@ -622,6 +691,8 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
 
     left_camera_params_ = loader->getLeftCameraParams();
 
+    CHECK(getCameraParams());
+
     auto rgb_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
         [loader](size_t idx) {
             return loader->getRGB(idx);
@@ -636,7 +707,7 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
 
     auto depth_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
         [loader](size_t idx) {
-            return cv::Mat();
+            return loader->getDepthImage(idx);
         }
     );
 
@@ -661,6 +732,35 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
         instance_mask_loader,
         gt_loader
     );
+
+     auto callback = [&](size_t frame_id,
+        Timestamp timestamp,
+        cv::Mat rgb,
+        cv::Mat optical_flow,
+        cv::Mat depth,
+        cv::Mat instance_mask,
+        GroundTruthInputPacket gt_object_pose_gt) -> bool
+    {
+        CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
+
+        CHECK(ground_truth_packet_callback_);
+        if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
+
+        ImageContainer::Ptr image_container = nullptr;
+        image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+        CHECK(image_container);
+        CHECK(image_container_callback_);
+        if(image_container_callback_) image_container_callback_(image_container);
+        return true;
+    };
+
+    this->setCallback(callback);
 }
 
 

@@ -137,6 +137,11 @@ public:
     return D_;
   }
 
+  /**
+   * @brief Get the camera extrinsics - the transform of the camera in the body frame (e.g T_robot_camera or ^RT_C)
+   *
+   * @return gtsam::Pose3
+   */
   inline gtsam::Pose3 getExtrinsics() const
   {
     return T_robot_camera_;

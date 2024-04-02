@@ -32,7 +32,8 @@ namespace dyno {
 
 enum DatasetType {
     KITTI,
-    VIRTUAL_KITTI
+    VIRTUAL_KITTI,
+    CLUSTER
 };
 
 

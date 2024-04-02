@@ -73,6 +73,19 @@ cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label, const cv::Mat&
 cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label);
 
 
+/**
+ * @brief Allows visualization of disparity image (which is
+ * usually outputed as CV_16S or CV_32F from stereo depth reconstruction).
+ *
+ * @param src cv::InputArray
+ * @param dst cv::OutputArray
+ * @param unknown_disparity
+ */
+void getDisparityVis(cv::InputArray src,
+                    cv::OutputArray dst,
+                    int unknown_disparity = 16320);
+
+
 void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
 
 
