@@ -109,13 +109,11 @@ class YamlParser {
         << " in file: " << filepath_.c_str();
     const cv::FileNode& file_handle_2 = file_handle[id_2];
     if(file_handle_2.type() == cv::FileNode::NONE) {
-      LOG(INFO) << id << " " << id_2;
       *output = default_value;
     }
     else {
       T v;
       file_handle_2 >> v;
-       LOG(INFO) << id << " " << id_2 << " " << v;
       file_handle_2 >> *output;
     }
 

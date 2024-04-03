@@ -15,6 +15,10 @@ n_levels: 8
 init_threshold_fast: 20
 min_threshold_fast: 7
 
+shrink_row: 25
+shrink_col: 200
+
+
 tracker:
   # When using mono-pipeline AND and additional inertial sensor is provided,
   # Then 2-point ransac will be used (eg. 2d2d ransac with rotation), else 5-point 2d2d pnp will be used
@@ -30,7 +34,7 @@ tracker:
 
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
-  ransac_threshold_pnp: 1.0
+  ransac_threshold_pnp: 0.5
   optimize_3d2d_pose_from_inliers: 0
 
   # 3d-3d PnP (stereo)

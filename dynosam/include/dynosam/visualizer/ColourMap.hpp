@@ -29,6 +29,8 @@
 #include <opencv2/viz/types.hpp>
 #include <glog/logging.h>
 
+#include <cmath>
+
 namespace dyno {
 
 struct ColourMap {
@@ -56,7 +58,7 @@ constexpr static int COLOURS_MAX = 150;
  * @param use_opencv_convention
  * @return cv::Scalar
  */
-cv::Scalar HSV2RGB(cv::Scalar hsv, bool use_opencv_convention = false);
+static cv::Scalar HSV2RGB(cv::Scalar hsv, bool use_opencv_convention = false);
 
 static inline cv::Scalar getRainbowColour(size_t index) {
     CHECK(index < COLOURS_MAX);
@@ -65,6 +67,19 @@ static inline cv::Scalar getRainbowColour(size_t index) {
         colmap[index][1] * 255.0,
         colmap[index][2] * 255.0,
         255.0);
+}
+
+static inline cv::Scalar generateUniqueColour(
+    int id,
+    bool use_opencv_convention = false,
+    double saturation = 0.5,
+    double value = 0.95) {
+  constexpr static double phi = (1 + std::sqrt(5.0))/2.0;
+  auto n = (double)id * phi - std::floor((double)id * phi);
+
+  //want in 255 mode
+  double hue = std::floor(n * 256.0);
+  return HSV2RGB(cv::Scalar(hue, saturation, value), use_opencv_convention);
 }
 
 //if use_opencv_convention then colours are reversed to be BGRA
@@ -76,116 +91,103 @@ static inline cv::Scalar RGBA2BGRA(cv::Scalar colour, bool use_opencv_convention
   return colour;
 }
 
-// static inline getObjectColour(ObjectId label, bool use_opencv_convention = false, double hue_min=0, double hue_max=1, double saturation=0.9, double value=0.9) {
-//   CHECK(saturation >=0 && saturation <= 1);
-//   CHECK(value >=0 && value <= 1);
-
-//   constexpr static double kGoldenAngle = 137.0/360.0;
-//   double hue = (static_cast<double>(label) % kGoldenAngle % 1);
-//   //Scale hue in range (hue_min, hue_max)
-//   hue = hue * (hue_max - hue_min) + hue_min;
-//   //Get rgb values
-//   cv::Scalar hsv()
-// }
-
 
 static inline cv::Scalar getObjectColour(ObjectId label, bool use_opencv_convention = false) {
-  while (label > 25)
-  {
-    label = label / 2.0;
-  }
+  return generateUniqueColour((int)label, use_opencv_convention);
+  // while (label > 25)
+  // {
+  //   label = label / 2.0;
+  // }
 
-  cv::Scalar colour;
-  switch (label)
-  {
-    case 0:
-      colour = cv::Scalar(0, 0, 255, 255);  // red
-      break;
-    case 1:
-      colour = cv::Scalar(128, 0, 128, 255);  // 255, 165, 0
-      break;
-    case 2:
-      colour =  cv::Scalar(0, 255, 255, 255);
-      break;
-    case 3:
-      colour =  cv::Scalar(0, 255, 0, 255);  // 255,255,0
-      break;
-    case 4:
-      colour =  cv::Scalar(255, 0, 0, 255);  // 255,192,203
-      break;
-    case 5:
-      colour =  cv::Scalar(0, 255, 255, 255);
-      break;
-    case 6:
-      colour =  cv::Scalar(128, 0, 128, 255);
-      break;
-    case 7:
-      colour =  cv::Scalar(255, 255, 255, 255);
-       break;
-    case 8:
-      colour =  cv::Scalar(255, 228, 196, 255);
-      break;
-    case 9:
-      colour =  cv::Scalar(180, 105, 255, 255);
-       break;
-    case 10:
-      colour =  cv::Scalar(165, 42, 42, 255);
-       break;
-    case 11:
-      colour =  cv::Scalar(35, 142, 107, 255);
-       break;
-    case 12:
-      colour =  cv::Scalar(45, 82, 160, 255);
-       break;
-    case 13:
-      colour =  cv::Scalar(0, 0, 255, 255);  // red
-       break;
-    case 14:
-      colour =  cv::Scalar(255, 165, 0, 255);
-       break;
-    case 15:
-      colour =  cv::Scalar(0, 255, 0, 255);
-       break;
-    case 16:
-      colour =  cv::Scalar(255, 255, 0, 255);
-       break;
-    case 17:
-      colour =  cv::Scalar(255, 192, 203, 255);
-       break;
-    case 18:
-      colour =  cv::Scalar(10, 255, 0, 255);
-       break;
-    case 19:
-      colour =  cv::Scalar(128, 0, 128, 255);
-       break;
-    case 20:
-      colour =  cv::Scalar(125, 255, 75, 255);
-       break;
-    case 21:
-      colour =  cv::Scalar(255, 228, 196, 255);
-       break;
-    case 22:
-      colour =  cv::Scalar(180, 105, 255, 255);
-       break;
-    case 23:
-      colour =  cv::Scalar(165, 42, 42, 255);
-       break;
-    case 24:
-      colour =  cv::Scalar(35, 142, 107, 255);
-       break;
-    case 25:
-      colour =  cv::Scalar(45, 82, 160, 255);
-       break;
-    case 41:
-      colour =  cv::Scalar(60, 20, 220, 255);
-       break;
-    default:
-      LOG(WARNING) << "Label is " << label;
-      colour =  cv::Scalar(60, 20, 220, 255);
-       break;
-  }
-
-  return RGBA2BGRA(colour, use_opencv_convention);
+  // cv::Scalar colour;
+  // switch (label)
+  // {
+  //   case 0:
+  //     colour = cv::Scalar(0, 0, 255, 255);  // red
+  //     break;
+  //   case 1:
+  //     colour = cv::Scalar(128, 0, 128, 255);  // 255, 165, 0
+  //     break;
+  //   case 2:
+  //     colour =  cv::Scalar(0, 255, 255, 255);
+  //     break;
+  //   case 3:
+  //     colour =  cv::Scalar(0, 255, 0, 255);  // 255,255,0
+  //     break;
+  //   case 4:
+  //     colour =  cv::Scalar(255, 0, 0, 255);  // 255,192,203
+  //     break;
+  //   case 5:
+  //     colour =  cv::Scalar(0, 255, 255, 255);
+  //     break;
+  //   case 6:
+  //     colour =  cv::Scalar(128, 0, 128, 255);
+  //     break;
+  //   case 7:
+  //     colour =  cv::Scalar(255, 255, 255, 255);
+  //      break;
+  //   case 8:
+  //     colour =  cv::Scalar(255, 228, 196, 255);
+  //     break;
+  //   case 9:
+  //     colour =  cv::Scalar(180, 105, 255, 255);
+  //      break;
+  //   case 10:
+  //     colour =  cv::Scalar(165, 42, 42, 255);
+  //      break;
+  //   case 11:
+  //     colour =  cv::Scalar(35, 142, 107, 255);
+  //      break;
+  //   case 12:
+  //     colour =  cv::Scalar(45, 82, 160, 255);
+  //      break;
+  //   case 13:
+  //     colour =  cv::Scalar(0, 0, 255, 255);  // red
+  //      break;
+  //   case 14:
+  //     colour =  cv::Scalar(255, 165, 0, 255);
+  //      break;
+  //   case 15:
+  //     colour =  cv::Scalar(0, 255, 0, 255);
+  //      break;
+  //   case 16:
+  //     colour =  cv::Scalar(255, 255, 0, 255);
+  //      break;
+  //   case 17:
+  //     colour =  cv::Scalar(255, 192, 203, 255);
+  //      break;
+  //   case 18:
+  //     colour =  cv::Scalar(10, 255, 0, 255);
+  //      break;
+  //   case 19:
+  //     colour =  cv::Scalar(128, 0, 128, 255);
+  //      break;
+  //   case 20:
+  //     colour =  cv::Scalar(125, 255, 75, 255);
+  //      break;
+  //   case 21:
+  //     colour =  cv::Scalar(255, 228, 196, 255);
+  //      break;
+  //   case 22:
+  //     colour =  cv::Scalar(180, 105, 255, 255);
+  //      break;
+  //   case 23:
+  //     colour =  cv::Scalar(165, 42, 42, 255);
+  //      break;
+  //   case 24:
+  //     colour =  cv::Scalar(35, 142, 107, 255);
+  //      break;
+  //   case 25:
+  //     colour =  cv::Scalar(45, 82, 160, 255);
+  //      break;
+  //   case 41:
+  //     colour =  cv::Scalar(60, 20, 220, 255);
+  //      break;
+  //   default:
+  //     LOG(WARNING) << "Label is " << label;
+  //     colour =  cv::Scalar(60, 20, 220, 255);
+  //      break;
+  // }
 }
 
 static constexpr double colmap[COLOURS_MAX][3] = { { 0, 0, 0.5263157895 },

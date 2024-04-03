@@ -276,7 +276,7 @@ void RGBDBackendModule::updateStaticObservations(const gtsam::Pose3& T_world_cam
 
             num_points++;
 
-            if(num_points > 5) {break;}
+            // if(num_points > 5) {break;}
 
             //this condition should only run once per tracklet (ie.e the first time the tracklet has enough observations)
             //we gather the tracklet observations and then initalise it in the new values
@@ -354,9 +354,9 @@ void RGBDBackendModule::updateDynamicObservations(const gtsam::Pose3& T_world_ca
 
             num_lmks++;
 
-            if(num_lmks > 5) {
-                break;
-            }
+            // if(num_lmks > 5) {
+            //     break;
+            // }
 
             TrackletId tracklet_id = obj_lmk_node->getId();
 

@@ -106,6 +106,21 @@ protected:
 
     void propogateMask(TrackingInputImages& tracking_images);
 
+    inline bool isWithinShrunkenImage(const Keypoint& kp) {
+        CHECK(!initial_computation_);
+        const auto shrunken_row = params_.shrink_row;
+        const auto shrunken_col = params_.shrink_col;
+
+        const int predicted_col = functional_keypoint::u(kp);
+        const int predicted_row = functional_keypoint::v(kp);
+
+        const auto image_rows = img_size_.height;
+        const auto image_cols = img_size_.width;
+        return (predicted_row > shrunken_row && predicted_row < (image_rows - shrunken_row) &&
+          predicted_col > shrunken_col && predicted_col < (image_cols - shrunken_col));
+
+    }
+
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
 

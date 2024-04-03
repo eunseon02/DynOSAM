@@ -147,12 +147,21 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
 
     MotionEstimateMap motion_estimates;
+    ObjectIds failed_object_tracks;
     for(const auto& [object_id, observations] : frame->object_observations_) {
 
         if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
             VLOG(5) << "Could not solve motion for object " << object_id <<
                 " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
+            failed_object_tracks.push_back(object_id);
         }
+    }
+
+    ///remove objects from the object observations list
+    //does not remove the features etc but stops the object being propogated to the backend
+    //as we loop over the object observations in the constructOutput function
+    for(auto object_id : failed_object_tracks) {
+        frame->object_observations_.erase(object_id);
     }
 
     //update the object_poses trajectory map which will be send to the viz
@@ -239,7 +248,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
           << "\t- # outliers: " << result.outliers.size() << '\n';
 
     //sanity check
-
+    //if valid, remove outliers and add to motion estimation
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
 

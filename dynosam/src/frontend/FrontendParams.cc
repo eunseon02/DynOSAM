@@ -48,6 +48,9 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
     yaml_parser.getYamlParam("init_threshold_fast", &params.init_threshold_fast, params.init_threshold_fast);
     yaml_parser.getYamlParam("min_threshold_fast", &params.min_threshold_fast, params.min_threshold_fast);
 
+    yaml_parser.getYamlParam("shrink_row", &params.shrink_row, params.shrink_row);
+    yaml_parser.getYamlParam("shrink_col", &params.shrink_col, params.shrink_col);
+
     yaml_parser.getNestedYamlParam(
         "tracker", "ransac_use_2point_mono",
         &params.ransac_use_2point_mono,

@@ -216,24 +216,6 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
-  // cv::Mat mono;
-  // CHECK(!rgb.empty());
-  // PLOG_IF(ERROR, rgb.channels() == 1) << "Input image should be RGB (channels == 3), not 1";
-  // // Transfer color image to grey image
-  // rgb.copyTo(mono);
-
-  // cv::Mat viz;
-  // rgb.copyTo(viz);
-
-  // if (mono.channels() == 3)
-  // {
-  //   cv::cvtColor(mono, mono, cv::COLOR_RGB2GRAY);
-  // }
-  // else if (rgb.channels() == 4)
-  // {
-  //   cv::cvtColor(mono, mono, cv::COLOR_RGBA2GRAY);
-  // }
-
   cv::Mat descriptors;
   KeypointsCV detected_keypoints;
   (*feature_detector_)(mono, cv::Mat(), detected_keypoints, descriptors);
@@ -375,6 +357,16 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(y, x)[1]);
 
         OpticalFlow flow(flow_xe, flow_ye);
+        const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(kp, flow);
+
+        if(!isWithinShrunkenImage(predicted_kp)) {
+          continue;
+        }
+
+        // //TODO: close to zero?
+        if(flow_xe == 0 || flow_ye == 0) {
+          continue;
+        }
 
         // // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
@@ -386,8 +378,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->tracklet_id_ = tracklet_id;
         feature->keypoint_ = kp;
         feature->measured_flow_ = flow;
-        feature->predicted_keypoint_ = Feature::CalculatePredictedKeypoint(kp, flow);
-
+        feature->predicted_keypoint_ = predicted_kp;
 
         dynamic_features.add(feature);
         tracked_feature_mask.at<uchar>(y, x) = 1;
@@ -418,18 +409,24 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         continue;
       }
 
-
       double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
       double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
 
+      //TODO: close to zero?
+      if(flow_xe == 0 || flow_ye == 0) {
+        continue;
+      }
+
       OpticalFlow flow(flow_xe, flow_ye);
       Keypoint keypoint(j, i);
+      const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(keypoint, flow);
       const size_t cell_idx = grid.getCellIndex(keypoint);
 
       if(grid.isOccupied(cell_idx)) {continue;}
 
+      //TODO: why do we not check for shrunken image here?
       // if the predicted kp (ie the kp at k + 1) is out of bounds, dont construct the feature
-      if ((j + flow_xe < rgb.cols && j + flow_xe > 0 && i + flow_ye < rgb.rows && i + flow_ye > 0))
+      if ((predicted_kp(0) < rgb.cols && predicted_kp(0) > 0 && predicted_kp(1) < rgb.rows && predicted_kp(1) > 0))
       {
         // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
@@ -577,12 +574,26 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
         {
           if (previous_mask.at<ObjectId>(j, k) == instance_labels[i])
           {
-            const int flow_x = previous_flow.at<cv::Vec2f>(j, k)[0];
-            const int flow_y = previous_flow.at<cv::Vec2f>(j, k)[1];
+            const double flow_xe = static_cast<double>(previous_flow.at<cv::Vec2f>(j, k)[0]);
+            const double flow_ye = static_cast<double>(previous_flow.at<cv::Vec2f>(j, k)[1]);
 
-            if (k + flow_x < previous_rgb.cols && k + flow_x > 0 && j + flow_y < previous_rgb.rows && j + flow_y > 0)
+            if(flow_xe == 0 || flow_ye == 0) {
+              continue;
+            }
+
+            OpticalFlow flow(flow_xe, flow_ye);
+            //x, y
+            Keypoint kp(k, j);
+            const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(kp, flow);
+
+            if(!isWithinShrunkenImage(predicted_kp)) {
+              continue;
+            }
+
+            if ((predicted_kp(0) < previous_rgb.cols && predicted_kp(0) > 0 && predicted_kp(1) < previous_rgb.rows && predicted_kp(1) > 0))
             {
-              current_mask.at<ObjectId>(j + flow_y, k + flow_x) = instance_labels[i];
+              current_mask.at<ObjectId>(functional_keypoint::v(predicted_kp), functional_keypoint::u(predicted_kp)) = instance_labels[i];
+              //  current_rgb
               // updated_mask_points++;
             }
           }

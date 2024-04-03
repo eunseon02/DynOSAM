@@ -31,82 +31,116 @@ cv::Scalar ColourMap::HSV2RGB(cv::Scalar hsv, bool use_opencv_convention) {
     //to be 0-1 but we want to return the rgb colour in the same form as the input
     //we dont have a great way of doing this so we just check if any of the SV values > 1
     //if they're not the colour is basically black anyway
+    double value = GET_VALUE(hsv);
+    double saturation = GET_SATURATION(hsv);
+    double hue = GET_HUE(hsv);
+    // Convert input values to range 0-1 if they are in range 0-255
+    if (hue > 1.0) hue /= 255.0;
+    if (saturation > 1.0) saturation /= 255.0;
+    if (value > 1.0) value /= 255.0;
 
-    cv::Scalar hsv_norm = hsv;
+    double alpha = 1.0;
 
-    const bool requires_normalization =  GET_SATURATION(hsv) > 1 || GET_VALUE(hsv) > 1; // if true, range is 0-255
-    if(requires_normalization) {
-        hsv_norm(1) /= 255.0;
-        hsv_norm(2) /= 255.0;
+    int h_i = int(hue * 6);
+    double f = hue * 6 - h_i;
+    double p = value * (1 - saturation);
+    double q = value * (1 - f * saturation);
+    double t = value * (1 - (1 - f) * saturation);
+
+    double r, g, b;
+    switch (h_i) {
+        case 0: r = value; g = t; b = p; break;
+        case 1: r = q; g = value; b = p; break;
+        case 2: r = p; g = value; b = t; break;
+        case 3: r = p; g = q; b = value; break;
+        case 4: r = t; g = p; b = value; break;
+        default: r = value; g = p; b = q; break;
     }
 
-    double hh, p, q, t, ff;
-    long i;
-    cv::Scalar out;
-
-    if(hsv_norm(1) <= 0.0) {       // < is bogus, just shuts up warnings
-        out = cv::Scalar(GET_VALUE(hsv), GET_VALUE(hsv), GET_VALUE(hsv)); //value
-        out(3) = 255.0; //set Alpha
-
-        if(requires_normalization) {
-            out(0) *= 255.0;
-            out(1) *= 255.0;
-            out(2) *= 255.0;
-        }
-        return RGBA2BGRA(out, use_opencv_convention);
+    // Convert output values back to the original range if input was in range 0-255
+    if (GET_HUE(hsv) > 1.0 || GET_SATURATION(hsv) > 1.0 || GET_VALUE(hsv) > 1.0) {
+        r *= 255.0;
+        g *= 255.0;
+        b *= 255.0;
+        alpha = 255.0;
     }
-    hh = GET_HUE(hsv_norm); //hue
-    if(hh >= 360.0) hh = 0.0;
-    hh /= 60.0;
-    i = (long)hh;
-    ff = hh - i;
-    p = GET_VALUE(hsv_norm) * (1.0 - GET_SATURATION(hsv_norm));
-    q = GET_VALUE(hsv_norm) * (1.0 - (GET_SATURATION(hsv_norm) * ff));
-    t = GET_VALUE(hsv_norm) * (1.0 - (GET_SATURATION(hsv_norm) * (1.0 - ff)));
+    return RGBA2BGRA(cv::Scalar(r, g, b, alpha), use_opencv_convention);
+    // cv::Scalar hsv_norm = hsv;
 
-    switch(i) {
-    case 0:
-        GET_R(out) = GET_VALUE(hsv_norm);
-        GET_G(out)= t;
-        GET_B(out) = p;
-        break;
-    case 1:
-        GET_R(out) = q;
-        GET_G(out) =  GET_VALUE(hsv_norm);
-        GET_B(out) = p;
-        break;
-    case 2:
-        GET_R(out) = p;
-        GET_G(out) =  GET_VALUE(hsv_norm);
-        GET_B(out) = t;
-        break;
+    // const bool requires_normalization =  GET_SATURATION(hsv) > 1 || GET_VALUE(hsv) > 1; // if true, range is 0-255
+    // if(requires_normalization) {
+    //     hsv_norm(0) /= 255.0;
+    //     hsv_norm(1) /= 255.0;
+    //     hsv_norm(2) /= 255.0;
+    // }
 
-    case 3:
-        GET_R(out) = p;
-        GET_G(out) = q;
-        GET_B(out) =  GET_VALUE(hsv_norm);
-        break;
-    case 4:
-        GET_R(out) = t;
-        GET_G(out) = p;
-        GET_B(out) =  GET_VALUE(hsv_norm);
-        break;
-    case 5:
-    default:
-        GET_R(out) = GET_VALUE(hsv_norm);
-        GET_G(out) = p;
-        GET_B(out) = q;
-        break;
-    }
+    // double hh, p, q, t, ff;
+    // long i;
+    // cv::Scalar out;
 
-    if(requires_normalization) {
-        out(0) *= 255.0;
-        out(1) *= 255.0;
-        out(2) *= 255.0;
-        out(3) = 255.0; //set Alpha
-    }
+    // if(hsv_norm(1) <= 0.0) {       // < is bogus, just shuts up warnings
+    //     out = cv::Scalar(GET_VALUE(hsv), GET_VALUE(hsv), GET_VALUE(hsv)); //value
+    //     out(3) = 255.0; //set Alpha
 
-    return RGBA2BGRA(out, use_opencv_convention);
+    //     if(requires_normalization) {
+    //         out(0) *= 255.0;
+    //         out(1) *= 255.0;
+    //         out(2) *= 255.0;
+    //     }
+    //     return RGBA2BGRA(out, use_opencv_convention);
+    // }
+    // hh = GET_HUE(hsv_norm); //hue
+    // if(hh >= 360.0) hh = 0.0;
+    // hh /= 60.0;
+    // i = (long)hh;
+    // ff = hh - i;
+    // p = GET_VALUE(hsv_norm) * (1.0 - GET_SATURATION(hsv_norm));
+    // q = GET_VALUE(hsv_norm) * (1.0 - (GET_SATURATION(hsv_norm) * ff));
+    // t = GET_VALUE(hsv_norm) * (1.0 - (GET_SATURATION(hsv_norm) * (1.0 - ff)));
+
+    // switch(i) {
+    // case 0:
+    //     GET_R(out) = GET_VALUE(hsv_norm);
+    //     GET_G(out)= t;
+    //     GET_B(out) = p;
+    //     break;
+    // case 1:
+    //     GET_R(out) = q;
+    //     GET_G(out) =  GET_VALUE(hsv_norm);
+    //     GET_B(out) = p;
+    //     break;
+    // case 2:
+    //     GET_R(out) = p;
+    //     GET_G(out) =  GET_VALUE(hsv_norm);
+    //     GET_B(out) = t;
+    //     break;
+
+    // case 3:
+    //     GET_R(out) = p;
+    //     GET_G(out) = q;
+    //     GET_B(out) =  GET_VALUE(hsv_norm);
+    //     break;
+    // case 4:
+    //     GET_R(out) = t;
+    //     GET_G(out) = p;
+    //     GET_B(out) =  GET_VALUE(hsv_norm);
+    //     break;
+    // case 5:
+    // default:
+    //     GET_R(out) = GET_VALUE(hsv_norm);
+    //     GET_G(out) = p;
+    //     GET_B(out) = q;
+    //     break;
+    // }
+
+    // if(requires_normalization) {
+    //     out(0) *= 255.0;
+    //     out(1) *= 255.0;
+    //     out(2) *= 255.0;
+    //     out(3) = 255.0; //set Alpha
+    // }
+
+    // return RGBA2BGRA(out, use_opencv_convention);
 
 
 }
