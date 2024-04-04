@@ -25,7 +25,11 @@
 #include "dynosam/backend/Optimizer.hpp"
 #include "dynosam/backend/DynoISAM2.hpp"
 
+#include <gtsam/geometry/Point3.h>
+
 #include <gtsam/nonlinear/NonlinearISAM.h>
+#include <gtsam_unstable/slam/PoseToPointFactor.h>
+
 
 namespace dyno {
 
@@ -42,7 +46,7 @@ public:
     IncrementalOptimizer()
     {
         DynoISAM2Params isam_params;
-    // isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
+        isam_params.findUnusedFactorSlots = false; //this is very important rn as we naively keep track of slots
         isam_params.enableDetailedResults = true;
         // isam_params.factorizationTranslator("QR");
         isam_params.relinearizeThreshold = 0.01;
@@ -75,11 +79,18 @@ private:
     }
 
     std::pair<gtsam::Values, gtsam::NonlinearFactorGraph> optimize() override {
-        // gtsam::KeyVector keyVector(new_factors_.begin(), new_factors_.end());
 
-        // gtsam::PrintKeyVector(new_factors_.keyVector(), " new keys", DynoLikeKeyFormatter);
-
+        const gtsam::NonlinearFactorGraph& graph_before_update = smoother_->getFactorsUnsafe();
         DynoISAM2UpdateParams isam_update_params;
+        isam_update_params.removeFactorIndices = factors_to_remove_;
+
+        // for(auto i : factors_to_remove_) {
+        //     auto factor = graph_before_update.at(i);
+        //     if(factor)
+        //         // factor->print("Actual factor removing: ", DynoLikeKeyFormatter);
+        // }
+
+        new_factors_ += additional_factors_;
         isam_update_params.setOrderingFunctions([=](const DynoISAM2UpdateParams& updateParams,
                                         const DynoISAM2Result& result,
                                         const gtsam::KeySet& affectedKeysSet,
@@ -90,8 +101,57 @@ private:
 
         smoother_result_ = smoother_->update(new_factors_, new_values_, isam_update_params);
 
+        factors_to_remove_.clear();
+        additional_factors_.resize(0);
+
+        const gtsam::FactorIndices new_factors_indices = smoother_result_.newFactorsIndices;
+
+        const gtsam::NonlinearFactorGraph& graph = smoother_->getFactorsUnsafe();
+
+        const BackendSpinState& state = this->getLastUpdatedState();
+
+        gtsam::FactorIndices pose_to_point_factors_to_remove;
+        gtsam::KeySet dynamic_points_to_add_prior_to;
+
+        if(state.frame_id > 2) {
+            const auto previous_frame = state.frame_id - 1;
+            //look for dynamic point pose factors connecting dynamic points at this frame
+            for(size_t index = 0; index < graph.size(); index++) {
+                const auto& factor = graph.at(index);
+                auto pose_to_point_factor = boost::dynamic_pointer_cast<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(factor);
+                if(pose_to_point_factor) {
+                    auto lmk_key = pose_to_point_factor->key2();
+                    SymbolChar chr = DynoChrExtractor(lmk_key);
+                    if(chr != kDynamicLandmarkSymbolChar) {
+                        continue;
+                    }
+
+                    DynamicPointSymbol dps(lmk_key);
+                    if(dps.frameId() <= previous_frame) {
+                        // pose_to_point_factor->print("Removing factor: " , DynoLikeKeyFormatter);
+                        pose_to_point_factors_to_remove.push_back(index);
+                        dynamic_points_to_add_prior_to.insert((gtsam::Key)dps);
+                    }
+                }
+            }
+
+        }
+
+        factors_to_remove_ = pose_to_point_factors_to_remove;
+
+
+        //now add new priors on those keys
+        for(const auto key : dynamic_points_to_add_prior_to) {
+            DynamicPointSymbol dps(key);
+            gtsam::Point3 estimate = smoother_->calculateEstimate<gtsam::Point3>(key);
+            additional_factors_.addPrior(key, estimate, gtsam::noiseModel::Isotropic::Sigma(3u, 0.01));
+        }
+
+        LOG(INFO) << "Additional factors " << additional_factors_.size();
+
         new_factors_.resize(0);
         new_values_.clear();
+
 
         return { smoother_->calculateBestEstimate(), smoother_->getFactorsUnsafe() };
     }
@@ -143,26 +203,45 @@ private:
         for(const gtsam::Key key : affectedKeysSet) {
             auto chr = DynoChrExtractor(key);
 
+            // if(chr == kObjectMotionSymbolChar) {
+            //     // variable_frame = gtsam::Symbol(key).index();
+            //     constrainedKeys.insert2(key, 1);
+            // }
+
             FrameId variable_frame;
-            int group = 0;
+            int group = 1;
 
             if(chr == kPoseSymbolChar) {
                 variable_frame = gtsam::Symbol(key).index();
-                group = 3;
+                 if(variable_frame == last_updated_frame) {
+                    // group = 2;
+                }
+                else {
+                    // group = ;
+                }
             }
-            // else if(chr == kObjectMotionSymbolChar) {
-            //     ObjectId object_label;
-            //     CHECK(reconstructMotionInfo(key, object_label, variable_frame));
-            //     group = 2;
-            // }
+            else if(chr == kObjectMotionSymbolChar) {
+                ObjectId object_label;
+                CHECK(reconstructMotionInfo(key, object_label, variable_frame));
+                if(variable_frame == last_updated_frame) {
+                    // group = 3;
+                }
+            }
             else if(chr == kDynamicLandmarkSymbolChar) {
                 variable_frame = DynamicPointSymbol(key).frameId();
-                group = 1;
+                if(variable_frame == last_updated_frame) {
+                    // group = 1;
+                }
+                else {
+                    group = 0;
+                }
+                //if this frame, put higher in order
+                // group = 1;
             }
 
-            if(variable_frame == last_updated_frame) {
+            // if(variable_frame == last_updated_frame) {
                 constrainedKeys.insert2(key, group);
-            }
+            // }
 
             // LOG(INFO) << "Adding group: " << group << " for key " << DynoLikeKeyFormatterVerbose(key);
         }
@@ -176,6 +255,9 @@ private:
     gtsam::NonlinearFactorGraph new_factors_;
 
     DynoISAM2Result smoother_result_;
+
+    gtsam::FactorIndices factors_to_remove_;
+    gtsam::NonlinearFactorGraph additional_factors_;
 
 };
 

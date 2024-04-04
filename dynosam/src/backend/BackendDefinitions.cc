@@ -79,9 +79,8 @@ std::string DynoLikeKeyFormatter(gtsam::Key key)
   }
 }
 
-//TODO: not actually sure if this is necessary
-//in this sytem we mix Symbol and LabelledSymbol so I just check which one the correct cast is
-//and use that label, This will
+
+
 SymbolChar DynoChrExtractor(gtsam::Key key) {
    const gtsam::LabeledSymbol asLabeledSymbol(key);
   if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
@@ -92,7 +91,7 @@ SymbolChar DynoChrExtractor(gtsam::Key key) {
     return asSymbol.chr();
   }
   else {
-    return '\0';
+    return InvalidDynoSymbol;
   }
 
 }

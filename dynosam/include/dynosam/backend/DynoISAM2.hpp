@@ -246,7 +246,7 @@ class DynoISAM2 : public BayesTree<DynoISAM2Clique> {
   template <class VALUE>
   VALUE calculateEstimate(Key key) const {
     const Vector& delta = getDelta()[key];
-    return traits<VALUE>::Retract(theta_.at<VALUE>(key), delta);
+    return gtsam::traits<VALUE>::Retract(theta_.at<VALUE>(key), delta);
   }
 
   /** Compute an estimate for a single variable using its incomplete linear

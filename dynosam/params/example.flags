@@ -1,7 +1,6 @@
 #!/bin/bash
 
 --test_flag=9
---output_path=/root/results/DynoSAM/
 
 # backend parameters
 --max_opt_iterations=30

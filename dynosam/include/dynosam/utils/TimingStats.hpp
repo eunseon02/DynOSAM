@@ -64,7 +64,8 @@ private:
 
 };
 
-
-
 } //utils
 } //dyno
+
+
+#define TIMING_STATS(tag) dyno::utils::TimingStatsCollector timing_stats_##tag(tag);

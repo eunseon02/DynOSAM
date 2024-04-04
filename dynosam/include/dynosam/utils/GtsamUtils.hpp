@@ -40,6 +40,19 @@
 #include <opencv4/opencv2/opencv.hpp>
 
 
+template <typename T>
+struct is_gtsam_factor : std::is_base_of<gtsam::Factor, T>
+{
+};
+
+template <class T>
+static constexpr bool is_gtsam_factor_v = is_gtsam_factor<T>::value;
+
+template <class T>
+using enable_if_gtsam_factor = std::enable_if_t<is_gtsam_factor_v<T>>;
+
+
+
 namespace opengv {
 typedef Eigen::Matrix<double, 3, 4> transformation_t;
 }

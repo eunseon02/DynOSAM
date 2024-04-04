@@ -164,15 +164,15 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         map_->updateEstimates(esimtates, full_graph, frame_k);
 
 
-        auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
-        //only logs this the frame specified - in batch case we want to update all!!
-        for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
-            logBackendFromMap(frame_id, composed_poses);
+        // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
+        // //only logs this the frame specified - in batch case we want to update all!!
+        // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
+        //     logBackendFromMap(frame_id, composed_poses);
 
         last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
         CHECK_EQ(last_optimized_frame, frame_k);
 
-        optimizer_->getFactors().saveGraph(getOutputFilePath("batch_output.dot"), DynoLikeKeyFormatter);
+        // optimizer_->getFactors().saveGraph(getOutputFilePath("batch_output.dot"), DynoLikeKeyFormatter);
     }
     else {
         //must update the map with the new values anyway

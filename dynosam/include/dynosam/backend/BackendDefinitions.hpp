@@ -113,6 +113,12 @@ inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, Fram
 
 std::string DynoLikeKeyFormatter(gtsam::Key);
 std::string DynoLikeKeyFormatterVerbose(gtsam::Key);
+
+constexpr static SymbolChar InvalidDynoSymbol = '\0';
+
+//TODO: not actually sure if this is necessary
+//in this sytem we mix Symbol and LabelledSymbol so I just check which one the correct cast is
+//and use that label, This will return InvalidDynoSymbol if a key cannot be constructed
 SymbolChar DynoChrExtractor(gtsam::Key);
 
 
@@ -126,6 +132,9 @@ using SmartProjectionFactor = gtsam::SmartProjectionPoseFactor<CalibrationType>;
 using GenericProjectionFactor = gtsam::GenericProjectionFactor<gtsam::Pose3, gtsam::Point3, CalibrationType>;
 
 using SmartProjectionFactorParams = gtsam::SmartProjectionParams;
+
+
+
 
 //TODO: depricate
 /**

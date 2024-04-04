@@ -2,9 +2,12 @@
 
 # general flags for the pipeline
 
+# default output path - almost always overwritten when using the provided launch files
+--output_path=/root/results/DynoSAM/
+
 # flags for the dataset loaders in the DataProviderFactory
 # used to set the starting and ending frame when a dataset provider is used
 # if -1, defaults to 0 for starting frame (i.e the first frame) and ending_frame=dataset_size
 --starting_frame=-1
---ending_frame=130
+--ending_frame=-1
 --use_backend=true

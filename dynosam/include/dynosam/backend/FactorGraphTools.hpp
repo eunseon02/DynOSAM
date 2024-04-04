@@ -25,6 +25,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
@@ -371,6 +372,35 @@ struct DrawBlockJacobiansOptions {
 
 cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, const gtsam::Ordering& ordering, const DrawBlockJacobiansOptions& options);
 
+template<typename T>
+void toGraphFileFormat(std::ostream& os, const T& t);
+
+template<typename T>
+std::ostream& seralizeFactorToGraphFileFormat(std::ostream& os, const T& t, const std::string& tag) {
+    static_assert(is_gtsam_factor_v<T>);
+
+    //TAG <keys> VALUE
+    //where the value is provided by toGraphFileFormat and should be in the form <measurement> <covaraince>
+
+    os << tag << " ";
+    const gtsam::Factor& factor = static_cast<const gtsam::Factor&>(t);
+    for(const gtsam::Key key : factor) {
+        os << key << " ";
+    }
+    toGraphFileFormat<T>(os, t);
+    os << '\n';
+    return os;
+}
+
+template<typename T>
+std::ostream& seralizeValueToGraphFileFormat(std::ostream& os, const T& t, gtsam::Key key, const std::string& tag) {
+    os << tag << " " << key << " ";
+    //TAG <key> VALUE
+    //where the value is provided by toGraphFileFormat and should be the value itself
+    toGraphFileFormat<T>(os, t);
+    os << '\n';
+    return os;
+}
 
 } //factor_graph_tools
 
@@ -475,6 +505,12 @@ public:
     gtsam::GaussianFactorGraph::shared_ptr linearize() const override {
         return graph_.linearize(values_);
     }
+
+    //strong dependancy on a factor graph constructed from THIS system
+    //e.g. using the type of symbols defined in dynosam and the type of factors
+    //we use the type of symbol and the characters here to determine the type of factor
+    //and the USE of this factor (e.g. a between factor could be a smoothing factor or an odom factor)
+    void writeDynosamGraphFile(const std::string& filename) const;
 
     // /**
     //  * @brief Constructs a factor_graph_tools::DrawBlockJacobiansOptions where the colour_selector function uses the type of value

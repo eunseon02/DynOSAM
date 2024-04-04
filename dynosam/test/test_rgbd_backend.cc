@@ -191,6 +191,8 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
         }
 
+        smoother.getFactorsUnsafe().saveGraph(dyno::getOutputFilePath("smoother_graph_" + std::to_string(i) + ".dot"), dyno::DynoLikeKeyFormatter);
+
         backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
@@ -450,6 +452,9 @@ TEST(RGBDBackendModule, testCliques) {
     initial.insert(CameraPoseSymbol(0), pose0);
     initial.insert(CameraPoseSymbol(1), pose1);
     initial.insert(CameraPoseSymbol(2), pose2);
+
+    dyno::NonlinearFactorGraphManager nlfgm(graph, initial);
+    nlfgm.writeDynosamGraphFile(dyno::getOutputFilePath("test_graph.g2o"));
 
     // graph.saveGraph(dyno::getOutputFilePath("small_graph.dot"), dyno::DynoLikeKeyFormatter);
     gtsam::ISAM2BayesTree::shared_ptr bayesTree = nullptr;
