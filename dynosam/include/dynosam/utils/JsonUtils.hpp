@@ -24,11 +24,31 @@
 
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <iostream>
+#include <fstream>
+#include <iomanip>
+#include <ostream>
+#include <sstream>
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <gtsam/geometry/Pose3.h>
 
 using json = nlohmann::json;
+
+namespace dyno {
+
+// wrapper to write a type t that is json seralizable to an open ofstream
+//with a set width
+template<typename T>
+std::ofstream& writeJson(std::ofstream& os, const T& t) {
+    //T must be json seralizable
+    const json j = t;
+    os << std::setw(4) << j;
+    return os;
+};
+
+}
+
 
 /**
  * @brief Provide direct specalisations of nlohmann::adl_serializer

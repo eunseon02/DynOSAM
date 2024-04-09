@@ -22,6 +22,7 @@
  */
 #pragma once
 
+#include "dynosam/utils/JsonUtils.hpp"
 #include "dynosam/utils/CsvWriter.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
@@ -102,6 +103,15 @@ class OfstreamWrapper {
   void closeAndOpenLogFile();
 
   static bool WriteOutCsvWriter(const CsvWriter& csv, const std::string& filename);
+
+  //T must be json seralizable
+  template<typename T>
+  static bool WriteOutJson(const T& value, const std::string& filename, bool append_mode = false) {
+    OfstreamWrapper ofsw(filename, append_mode);
+    writeJson<T>(ofsw.ofstream_, value);
+
+    return true;
+  }
 
  public:
   std::ofstream ofstream_;

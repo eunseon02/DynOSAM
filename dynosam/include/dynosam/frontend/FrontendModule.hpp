@@ -57,7 +57,7 @@ public:
     using Base::SpinReturn;
 
     FrontendModule(const FrontendParams& params, ImageDisplayQueue* display_queue = nullptr);
-    virtual ~FrontendModule() = default;
+    virtual ~FrontendModule();
 
 
 protected:
