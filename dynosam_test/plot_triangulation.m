@@ -53,4 +53,3 @@ zlabel("Z", "FontSize", 16);
 
 title("Rotation-Compensated Triangulation with Motion", "FontSize", 20);
 legend("Points at step 0", "Points at step 1", "Estimated points at step 0", "Location","northeast", "Fontsize", 18);
-

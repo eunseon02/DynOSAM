@@ -306,7 +306,23 @@ inline MaskType maskTypeFromString(const std::string& mask_type) {
     throw std::runtime_error("Cannot load mask type from string - unknown input " + mask_type);
 }
 
+// Helper type trait to check if a type is std::optional
+template <typename T>
+struct is_optional : std::false_type {};
 
+template <typename T>
+struct is_optional<std::optional<T>> : std::true_type {};
+
+// Helper type trait to extract the underlying type from std::optional
+template <typename T>
+struct unwrap_optional { using type = T; };
+
+template <typename T>
+struct unwrap_optional<std::optional<T>> { using type = T; };
+
+// Define a variadic template alias to convert DataTypes to a std::tuple of regular types
+// template<typename... DataTypes>
+// constexpr auto toTuple = std::tuple<typename unwrap_optional<DataTypes>::type...>;
 
 
 /**

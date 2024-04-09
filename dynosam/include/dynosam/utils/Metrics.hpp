@@ -102,7 +102,7 @@ struct TRErrorPairVector : public std::vector<TRErrorPair> {
 
     void push_back(double translation, double rot);
 
-     // https://en.wikipedia.org/wiki/Circular_mean
+    // https://en.wikipedia.org/wiki/Circular_mean
     TRErrorPair average() const;
 
 };

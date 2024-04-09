@@ -20,30 +20,3 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
-
-#include "dynosam/visualizer/ColourMap.hpp"
-
-
-#include <glog/logging.h>
-#include <gtest/gtest.h>
-
-
-using namespace dyno;
-
-TEST(ColourMap, rgbToHsvRed) {
-    {
-        //basic red (normalized version, i.e between 0-1.0)
-        cv::Scalar red = ColourMap::HSV2RGB(cv::Scalar(0, 1.0, 1.0));
-        EXPECT_EQ(red[0], 1);
-        EXPECT_EQ(red[1], 0);
-        EXPECT_EQ(red[2], 0);
-    }
-
-    {
-        //basic red (non-normalized version, i.e between 0-255.0)
-        cv::Scalar red = ColourMap::HSV2RGB(cv::Scalar(0, 255.0, 255.0));
-        EXPECT_EQ(red[0], 255);
-        EXPECT_EQ(red[1], 0);
-        EXPECT_EQ(red[2], 0);
-    }
-}

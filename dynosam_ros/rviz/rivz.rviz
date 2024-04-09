@@ -6,10 +6,8 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /Object Paths (Composed)1/Status1
         - /Object Paths (Composed)1/Topic1
         - /Object Poses (Composed)1/Topic1
-        - /Dynamic Point Cloud1/Status1
         - /Odometry1/Shape1
         - /Static Point Cloud1/Status1
         - /Static Point Cloud1/Topic1
@@ -64,17 +62,17 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: Object Paths (Composed)
       Namespaces:
-        {}
+        frontend_object_path: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep All
         Reliability Policy: Best Effort
         Value: /dynosam/composed_object_paths
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: Object Poses (Composed)
@@ -99,7 +97,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -120,7 +118,7 @@ Visualization Manager:
         Value: /dynosam/dynamic
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Angle Tolerance: 0.10000000149011612
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -239,7 +237,7 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: true
+      Enabled: false
       Keep: 1
       Name: Odometry (GT)
       Position Tolerance: 0.10000000149011612
@@ -260,12 +258,12 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/odom
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
       Color: 25; 255; 0
-      Enabled: false
+      Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
@@ -288,7 +286,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/odom_path
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/Image
       Enabled: false
       Max Value: 1
@@ -375,7 +373,7 @@ Visualization Manager:
       Enabled: true
       Name: Composed object poses (opt)
       Namespaces:
-        backend_object_positions: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -396,7 +394,7 @@ Visualization Manager:
         Value: /dynosam/ground_truth/object_poses
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
+      Enabled: false
       Name: Object Paths (GT)
       Namespaces:
         {}
@@ -406,7 +404,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/object_paths
-      Value: true
+      Value: false
     - Angle Tolerance: 0.10000000149011612
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -546,13 +544,25 @@ Visualization Manager:
       Enabled: true
       Name: Composed object paths (opt)
       Namespaces:
-        backend_object_path: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/backend/composed_object_paths
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: MarkerArray
+      Namespaces:
+        {}
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/backend/composed_object_poses
       Value: true
   Enabled: true
   Global Options:
@@ -600,25 +610,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 45.672237396240234
+      Distance: 30.366931915283203
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -0.6360437273979187
-        Y: 9.619660377502441
-        Z: 27.983922958374023
+        X: -1.0606906414031982
+        Y: 8.562071800231934
+        Z: 106.42842864990234
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.3997986316680908
+      Pitch: -0.1347973793745041
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.610373020172119
+      Yaw: 4.703569412231445
     Saved: ~
 Window Geometry:
   Displays:
@@ -638,5 +648,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1717
-  X: 67
-  Y: 116
+  X: 51
+  Y: 75

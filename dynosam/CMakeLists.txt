@@ -26,6 +26,7 @@ find_package(GTSAM REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
+find_package(nlohmann_json 3.2.0 REQUIRED) #nlohmann-json3-dev
 
 
 find_package(Boost REQUIRED)
@@ -80,6 +81,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/DataProviderFactory.cc
   src/dataprovider/VirtualKittidataProvider.cc
   src/dataprovider/ClusterSlamDataProvider.cc
+  src/dataprovider/DatasetProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc
@@ -130,6 +132,7 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/TimingStats.cc
   src/utils/Metrics.cc
   src/utils/CsvWriter.cc
+  src/utils/JsonUtils.cc
 
   src/visualizer/ColourMap.cc
   src/visualizer/VisualizerPipelines.cc
@@ -153,9 +156,10 @@ ament_target_dependencies(${PROJECT_NAME}
   OpenCV)
 
 target_link_libraries(${PROJECT_NAME}
-# PRIVATE
+  # PRIVATE
   opengv
-# PUBLIC
+  nlohmann_json::nlohmann_json
+  # PUBLIC
   ${rclcpp_LIBRARIES}
   glog
   gflags
@@ -168,6 +172,7 @@ target_link_libraries(${PROJECT_NAME}
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
+  # PRIVATE
 )
 
 

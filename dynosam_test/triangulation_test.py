@@ -16,7 +16,7 @@ def gen_random_pose(xyz_mean, rpy_mean, xyz_range, rpy_range):
 
   xyz = xyz_mean + np.array([random.uniform(-xyz_range[0], xyz_range[0]), random.uniform(-xyz_range[1], xyz_range[1]), random.uniform(-xyz_range[2], xyz_range[2])])
   rpy = rpy_mean + np.array([random.uniform(-rpy_range[0], rpy_range[0]), random.uniform(-rpy_range[1], rpy_range[1]), random.uniform(-rpy_range[2], rpy_range[2])])
-  
+
 
   rot = R.from_euler('zyx', rpy, degrees=True)
   rot_matrix = rot.as_matrix()
@@ -72,7 +72,7 @@ def homogeneous_points(points):
     length = points_shape[1]
     homo_pad = np.ones(length)
     points_homo = np.vstack((points, homo_pad))
-    
+
     return points_homo
   else:
     print("We expect 3D points")
@@ -127,7 +127,7 @@ def plot_whole_test(points_gt, points_est, points_exp, cam_poses):
     if step > 0:
       ax.scatter3D(points_est[step-1][0, :], points_est[step-1][1, :], points_est[step-1][2, :], label="Point (Est) in world from "+str(step-1)+" and "+str(step)+" at "+str(step-1))
       ax.scatter3D(points_exp[step-1][0, :], points_exp[step-1][1, :], points_exp[step-1][2, :], label="Point (Exp) in world from "+str(step-1)+" and "+str(step)+" at "+str(step-1))
-  
+
     x_axis_cam = np.matmul(cam_poses[step], x_axis[np.newaxis].T)[0:3]
     y_axis_cam = np.matmul(cam_poses[step], y_axis[np.newaxis].T)[0:3]
     z_axis_cam = np.matmul(cam_poses[step], z_axis[np.newaxis].T)[0:3]
@@ -206,7 +206,7 @@ def triangulate_with_rotation_expanded(cam_pose_origin, cam_pose_target, intrins
     # Static case:
     # project_inv matrices are 3*3: rotation*intrinsic^{-1}
     # coeffs is a 3*1 column vector: project_inv*obv
-    # the function constructed is: 
+    # the function constructed is:
     # coeff_target*depth_target - coeff_origin*depth_origin = cam_tran_origin - cam_tran_target
     # 2 unknowns 3 functions: we will use the first 2 to solve for a solution first
 
@@ -214,7 +214,7 @@ def triangulate_with_rotation_expanded(cam_pose_origin, cam_pose_target, intrins
     # target project_inv matrix is 3*3: rotation*intrinsic^{-1}
     # origin project_inv matrix: obj_rot*rotation*intrinsic^{-1}
     # coeffs is a 3*1 column vector: project_inv*obv
-    # the function constructed is: 
+    # the function constructed is:
     # coeff_target*depth_target - coeff_origin*depth_origin = obj_rot*cam_tran_origin + obj_tran(unknown) - cam_tran_target
     # 2 unknowns 3 functions: we will use the first 2 to solve for a solution first
     coeffs[3*i_obv, 0] = coeffs_scale[0]
@@ -278,7 +278,7 @@ def triangulate_with_rotation(cam_pose_origin, cam_pose_target, intrinsic, obv_o
     # Static case:
     # project_inv matrices are 3*3: rotation*intrinsic^{-1}
     # coeffs is a 3*1 column vector: project_inv*obv
-    # the function constructed is: 
+    # the function constructed is:
     # coeff_target*depth_target - coeff_origin*depth_origin = cam_tran_origin - cam_tran_target
     # 2 unknowns 3 functions: we will use the first 2 to solve for a solution first
 
@@ -286,7 +286,7 @@ def triangulate_with_rotation(cam_pose_origin, cam_pose_target, intrinsic, obv_o
     # target project_inv matrix is 3*3: rotation*intrinsic^{-1}
     # origin project_inv matrix: obj_rot*rotation*intrinsic^{-1}
     # coeffs is a 3*1 column vector: project_inv*obv
-    # the function constructed is: 
+    # the function constructed is:
     # coeff_target*depth_target - coeff_origin*depth_origin = obj_rot*cam_tran_origin + obj_tran(unknown) - cam_tran_target
     # 2 unknowns 3 functions: we will use the first 2 to solve for a solution first
     coeffs = np.concatenate((coeffs_target, -coeffs_origin), axis=1)
@@ -328,18 +328,18 @@ def main():
   # Set GT camera poses and points
 
   cam_ori_xyz_mean = np.array([0., 0., 0.]) # in meter
-  cam_ori_rpy_mean = np.array([0., 0., 0.]) # in degree 
+  cam_ori_rpy_mean = np.array([0., 0., 0.]) # in degree
   cam_ori_xyz_range = np.array([0., 0., 0.]) # in meter
-  cam_ori_rpy_range = np.array([0., 0., 0.]) # in degree 
+  cam_ori_rpy_range = np.array([0., 0., 0.]) # in degree
   cam_pose_origin = gen_random_pose(cam_ori_xyz_mean, cam_ori_rpy_mean, cam_ori_xyz_range, cam_ori_rpy_range)
 
   cam_poses = []
   cam_poses.append(cam_pose_origin)
 
   cam_mot_xyz_mean = np.array([0.1, 0.1, 2.0]) # in meter
-  cam_mot_rpy_mean = np.array([0., 15., 0.]) # in degree 
+  cam_mot_rpy_mean = np.array([0., 15., 0.]) # in degree
   cam_mot_xyz_range = np.array([0.0, 0.0, 0.0]) # in meter
-  cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
+  cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree
 
   for step in range(example_length-1):
     cam_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
@@ -361,9 +361,9 @@ def main():
   points.append(points_origin)
   for step in range(example_length-1):
     points_mot_xyz_mean = np.array([2.0, 0.0, 0.0]) # in meter
-    points_mot_rpy_mean = np.array([5., 10., 15.]) # in degree 
+    points_mot_rpy_mean = np.array([5., 10., 15.]) # in degree
     points_mot_xyz_range = np.array([0., 0., 0.]) # in meter
-    points_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
+    points_mot_rpy_range = np.array([0., 0., 0.]) # in degree
     points_motion = gen_random_pose(points_mot_xyz_mean, points_mot_rpy_mean, points_mot_xyz_range, points_mot_rpy_range)
     print(points_motion)
     # points_motion = np.identity(4, dtype=float)
@@ -427,4 +427,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-

@@ -11,7 +11,7 @@ def gen_random_pose(xyz_mean, rpy_mean, xyz_range, rpy_range):
 
   xyz = xyz_mean + np.array([random.uniform(-xyz_range[0], xyz_range[0]), random.uniform(-xyz_range[1], xyz_range[1]), random.uniform(-xyz_range[2], xyz_range[2])])
   rpy = rpy_mean + np.array([random.uniform(-rpy_range[0], rpy_range[0]), random.uniform(-rpy_range[1], rpy_range[1]), random.uniform(-rpy_range[2], rpy_range[2])])
-  
+
 
   rot = R.from_euler('zyx', rpy, degrees=True)
   rot_matrix = rot.as_matrix()
@@ -37,7 +37,7 @@ def homogeneous_points(points):
     length = points_shape[1]
     homo_pad = np.ones(length)
     points_homo = np.vstack((points, homo_pad))
-    
+
     return points_homo
   else:
     print("We expect 3D points")
@@ -122,20 +122,20 @@ def compute_essential(cam_pose_target, points_motion, cam_pose_origin):
 
 def main():
   cam_ori_xyz_mean = np.array([0., 0., 0.]) # in meter
-  cam_ori_rpy_mean = np.array([0., 0., 0.]) # in degree 
+  cam_ori_rpy_mean = np.array([0., 0., 0.]) # in degree
   cam_ori_xyz_range = np.array([2., 2., 2.]) # in meter
-  cam_ori_rpy_range = np.array([5., 5., 5.]) # in degree 
+  cam_ori_rpy_range = np.array([5., 5., 5.]) # in degree
   cam_pose_origin = gen_random_pose(cam_ori_xyz_mean, cam_ori_rpy_mean, cam_ori_xyz_range, cam_ori_rpy_range)
   # cam_pose_origin = np.identity(4)
 
   cam_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
-  cam_mot_rpy_mean = np.array([30., 45., 60.]) # in degree 
+  cam_mot_rpy_mean = np.array([30., 45., 60.]) # in degree
   cam_mot_xyz_range = np.array([2., 2., 2.]) # in meter
-  cam_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
+  cam_mot_rpy_range = np.array([5., 5., 5.]) # in degree
   # cam_mot_xyz_mean = np.array([11., 0., 0.]) # in meter
-  # cam_mot_rpy_mean = np.array([0., 0., 0.]) # in degree 
+  # cam_mot_rpy_mean = np.array([0., 0., 0.]) # in degree
   # cam_mot_xyz_range = np.array([0., 0., 0.]) # in meter
-  # cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree 
+  # cam_mot_rpy_range = np.array([0., 0., 0.]) # in degree
   cam_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
   cam_pose_target = np.matmul(cam_motion, cam_pose_origin)
 
@@ -159,9 +159,9 @@ def main():
   points_origin = gen_random_points(number_points, points_origin_centre, points_origin_range)
 
   points_mot_xyz_mean = np.array([10., 11., 12.]) # in meter
-  points_mot_rpy_mean = np.array([30., 45., 60.]) # in degree 
+  points_mot_rpy_mean = np.array([30., 45., 60.]) # in degree
   points_mot_xyz_range = np.array([2., 2., 2.]) # in meter
-  points_mot_rpy_range = np.array([5., 5., 5.]) # in degree 
+  points_mot_rpy_range = np.array([5., 5., 5.]) # in degree
   points_motion = gen_random_pose(cam_mot_xyz_mean, cam_mot_rpy_mean, cam_mot_xyz_range, cam_mot_rpy_range)
   # points_motion = np.identity(4)
 
@@ -240,4 +240,3 @@ def main():
 
 if __name__ == "__main__":
   main()
-

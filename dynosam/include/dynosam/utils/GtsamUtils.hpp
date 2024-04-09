@@ -25,6 +25,8 @@
 
 #include "dynosam/utils/Numerical.hpp"
 
+#include <optional>
+
 #include <eigen3/Eigen/Core> //must be included before opencv
 #include <gtsam/geometry/Unit3.h>
 #include <gtsam/inference/Symbol.h>
@@ -62,6 +64,32 @@ namespace dyno
 {
 namespace utils
 {
+
+/**
+ * @brief Check if two objects wrapped in std::optional are equal.
+ * If both are std::nullopt, function will return true
+ *
+ * T MUST be a gtsam::Value type (ie. have gtsam::traits<T>::Equals) defined
+ *
+ * @tparam T a gtsam::Value concept type
+ * @param a const std::optional<T>&
+ * @param b const std::optional<T>&
+ * @return true
+ * @return false
+ */
+template<typename T>
+bool equateGtsamOptionalValues(const std::optional<T>& a, const std::optional<T>& b) {
+  if(a && b) {
+    return gtsam::traits<T>::Equals(*a, *b);
+  }
+
+  if(!a && !b) {
+    return true;
+  }
+
+  return false;
+}
+
 gtsam::Pose3 cvMatToGtsamPose3(const cv::Mat& H);
 // Converts a rotation matrix and translation vector from opencv to gtsam
 // pose3

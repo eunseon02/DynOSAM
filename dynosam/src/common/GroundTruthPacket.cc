@@ -23,12 +23,16 @@
 
 #include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/Exceptions.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
 
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
 
+#include "dynosam/utils/JsonUtils.hpp" //for adl_seralizer for optional and gtsam-json
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
+
+
 
 
 namespace dyno {
@@ -92,11 +96,35 @@ void ObjectPoseGT::drawBoundingBox(cv::Mat& img) const {
 ObjectPoseGT::operator std::string() const {
     std::stringstream ss;
     ss << "FrameId: " << frame_id_
-       << " ObjectId: " << object_id_;
+       << " ObjectId: " << object_id_ << "\n";
 
+    ss << " L world: " << L_world_ << "\n";
+    ss << " L camera: " << L_camera_ << "\n";
+    ss << " BB: " << to_string(bounding_box_) << "\n";
+
+    ss << "Object dimensions: ";
+    if(object_dimensions_) ss << *object_dimensions_ << "\n";
+    else ss << "none\n";
+
+    ss << "prev H current world: ";
+    if(prev_H_current_world_) ss << *prev_H_current_world_ << "\n";
+    else ss << " one\n";
+
+    ss << "prev H current L: ";
+    if(prev_H_current_L_) ss << *prev_H_current_L_ << "\n";
+    else ss << "none\n";
+
+    ss << "prev H current X: ";
+    if(prev_H_current_X_) ss << *prev_H_current_X_ << "\n";
+    else ss << "none\n";
+
+     ss << "Motion info: ";
     if(motion_info_) {
         ss << " Is moving " << motion_info_->is_moving_
            << " Has stopped " << motion_info_->has_stopped_;
+    }
+    else {
+        ss << "none";
     }
     return ss.str();
 }
@@ -106,8 +134,9 @@ bool ObjectPoseGT::operator==(const ObjectPoseGT& other) const {
     return frame_id_ == other.frame_id_ &&
         object_id_ == other.object_id_ &&
         L_camera_.equals(other.L_camera_) &&
-        L_world_.equals(other.L_world_);
-        // bounding_box_ == other.bounding_box_;
+        L_world_.equals(other.L_world_) &&
+        bounding_box_ == other.bounding_box_ &&
+        utils::equateGtsamOptionalValues(object_dimensions_, other.object_dimensions_);
         //TODO: not sure how to compare the std::optional as the underlying objects dont have operator==
 }
 
@@ -234,6 +263,14 @@ size_t GroundTruthInputPacket::calculateAndSetMotions(const GroundTruthInputPack
     return calculateAndSetMotions(previous_object_packet, motion_set);
 }
 
+bool GroundTruthInputPacket::operator==(const GroundTruthInputPacket& other) const
+{
+    return frame_id_ == other.frame_id_ &&
+        timestamp_ == other.timestamp_ &&
+        gtsam::traits<gtsam::Pose3>::Equals(X_world_, other.X_world_) &&
+        object_poses_ == other.object_poses_;
+}
+
 GroundTruthInputPacket::operator std::string() const {
     std::stringstream ss;
     ss << "FrameId: " << frame_id_
@@ -246,5 +283,81 @@ std::ostream& operator<<(std::ostream &os, const GroundTruthInputPacket& gt_pack
     os << (std::string)gt_packet;
     return os;
 }
+
+
+void to_json(json& j, const ObjectPoseGT::MotionInfo& motion_info) {
+    j["is_moving"] = motion_info.is_moving_;
+    j["has_stopped"] = motion_info.has_stopped_;
+}
+
+void from_json(const json& j, ObjectPoseGT::MotionInfo& motion_info) {
+    motion_info.is_moving_ = j["is_moving"].template get<bool>();
+    motion_info.has_stopped_ = j["has_stopped"].template get<bool>();
+}
+
+void to_json(json& j, const ObjectPoseGT& object_pose_gt) {
+    j["frame_id"] = object_pose_gt.frame_id_;
+    j["object_id"] = object_pose_gt.object_id_;
+
+    // gtsam conversion provided by nlohmann::adl_serializer specalization in JsonUtils.hpp
+    j["L_camera"] = object_pose_gt.L_camera_;
+    j["L_world"] = object_pose_gt.L_world_;
+    j["bounding_box"] = object_pose_gt.bounding_box_;
+
+    // we have json conversions for both std::optional AND eigen
+    j["object_dimensions"] = object_pose_gt.object_dimensions_;
+
+    j["prev_H_current_world"] = object_pose_gt.prev_H_current_world_;
+    j["prev_H_current_L"] = object_pose_gt.prev_H_current_L_;
+    j["prev_H_current_X"] = object_pose_gt.prev_H_current_X_;
+    j["motion_info"] = object_pose_gt.motion_info_;
+
+}
+
+void from_json(const json& j, ObjectPoseGT& object_pose_gt) {
+    object_pose_gt.frame_id_ = j["frame_id"].template get<FrameId>();
+    object_pose_gt.object_id_ = j["object_id"].template get<ObjectId>();
+
+    object_pose_gt.L_camera_ = j["L_camera"].template get<gtsam::Pose3>();
+    object_pose_gt.L_world_ = j["L_world"].template get<gtsam::Pose3>();
+    object_pose_gt.bounding_box_ = j["bounding_box"].template get<cv::Rect>();
+
+    object_pose_gt.object_dimensions_ = j["object_dimensions"].template get<std::optional<gtsam::Vector3>>();
+
+    object_pose_gt.prev_H_current_world_ = j["prev_H_current_world"].template get<std::optional<gtsam::Pose3>>();
+    object_pose_gt.prev_H_current_L_ = j["prev_H_current_L"].template get<std::optional<gtsam::Pose3>>();
+    object_pose_gt.prev_H_current_X_ = j["prev_H_current_X"].template get<std::optional<gtsam::Pose3>>();
+    object_pose_gt.motion_info_ = j["motion_info"].template get<std::optional<ObjectPoseGT::MotionInfo>>();
+
+}
+
+void to_json(json& j, const GroundTruthInputPacket& gt_packet) {
+    j["timestamp"] = gt_packet.timestamp_;
+    j["frame_id"] = gt_packet.frame_id_;
+    j["X_world"] = gt_packet.X_world_;
+    j["objects"] = gt_packet.object_poses_;
+}
+
+void from_json(const json& j, GroundTruthInputPacket& gt_packet) {
+    gt_packet.timestamp_ = j["timestamp"].template get<Timestamp>();
+    gt_packet.frame_id_ = j["frame_id"].template get<FrameId>();
+    gt_packet.X_world_ = j["X_world"].template get<gtsam::Pose3>();
+    gt_packet.object_poses_ = j["objects"].template get<std::vector<ObjectPoseGT>>();
+}
+
+void to_json(json& j, const GroundTruthPacketMap& gt_packet_map) {
+    //have to do manual conversion to stl map so the json library can do automagic conversion
+    //lots of copying
+    std::map<FrameId, GroundTruthInputPacket> stl_map = gt_packet_map;
+    j["ground_truths"] = stl_map;
+}
+
+void from_json(const json& j, GroundTruthPacketMap& gt_packet_map){
+    std::map<FrameId, GroundTruthInputPacket> stl_map =  j["ground_truths"].template get<std::map<FrameId, GroundTruthInputPacket>>();
+    //have to do manual conversion to stl map so the json library can do automagic conversion
+    //lots of copying
+    gt_packet_map = GroundTruthPacketMap(stl_map.begin(), stl_map.end());
+}
+
 
 } // dyno

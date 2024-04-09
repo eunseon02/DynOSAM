@@ -30,6 +30,9 @@
 #include <gtsam/geometry/Pose3.h> //for Pose3
 
 #include <glog/log_severity.h>
+#include <nlohmann/json.hpp>
+
+using json = nlohmann::json;
 
 
 namespace dyno {
@@ -88,6 +91,7 @@ struct ObjectPoseGT {
 
     operator std::string() const;
 
+    //TODO: dont really have full tests over this
     bool operator==(const ObjectPoseGT& other) const;
     friend std::ostream &operator<<(std::ostream &os, const ObjectPoseGT& object_pose);
 };
@@ -190,6 +194,7 @@ public:
 
     operator std::string() const;
 
+    bool operator==(const GroundTruthInputPacket& other) const;
     friend std::ostream &operator<<(std::ostream &os, const GroundTruthInputPacket& gt_packet);
 
 private:
@@ -197,8 +202,114 @@ private:
 
 };
 
-
+/// @brief FastMap from frame id to GroundTruthInputPacket
 using GroundTruthPacketMap = gtsam::FastMap<FrameId,  GroundTruthInputPacket>;
+
+
+/**
+ * @brief Below is the JSON seralize/deseralize functions for all the GroundTruthPacket types.
+ * We use the nlohmann::json library (https://json.nlohmann.me/) - see the Arbitrary types conversions
+ * section in the readme (https://github.com/nlohmann/json?tab=readme-ov-file#integration)
+ * for details on the implemententation.
+ */
+
+
+/**
+ * @brief Implements the required to_json (seralize) function for the nlohmann::json
+ * to automatically convert ObjectPoseGT::MotionInfo to a json type.
+ *
+ * Used internally when seralizing the ObjectPoseGT.
+ *
+ * @param j json&
+ * @param motion_info const ObjectPoseGT::MotionInfo&
+ */
+void to_json(json& j, const ObjectPoseGT::MotionInfo& motion_info);
+
+/**
+ * @brief Implements the required from_json (deseralizes) function for the nlohmann::json
+ * to automatically load ObjectPoseGT::MotionInfo from a json object.
+ *
+ * Used internally when deseralizing the ObjectPoseGT.
+ *
+ * @param j const json&
+ * @param motion_info  ObjectPoseGT::MotionInfo&
+ */
+void from_json(const json& j, ObjectPoseGT::MotionInfo& motion_info);
+
+
+/**
+ * @brief Implements the required to_json (seralize) function for the nlohmann::json
+ * to automatically convert ObjectPoseGT to a json type.
+ *
+ * Used internally when seralizing the GroundTruthInputPacket.
+ *
+ * @param j json&
+ * @param object_pose_gt  const ObjectPoseGT&
+ */
+void to_json(json& j, const ObjectPoseGT& object_pose_gt);
+
+/**
+ * @brief Implements the required from_json (deseralizes) function for the nlohmann::json
+ * to automatically load ObjectPoseGT from a json object.
+ *
+ * Used internally when deseralizing the GroundTruthInputPacket.
+ *
+ * @param j const json&
+ * @param object_pose_gt ObjectPoseGT&
+ */
+void from_json(const json& j, ObjectPoseGT& object_pose_gt);
+
+
+/**
+ * @brief Implements the required to_json (seralize) function for the nlohmann::json
+ * to automatically convert GroundTruthInputPacket to a json type.
+ *
+ * This allows code like:
+ *
+ * GroundTruthInputPacket gt_packet;
+ * using json = nlohmann::json;
+ * json j = gt_packet;
+ * auto gt_packet_2 = j.template get<GroundTruthInputPacket>();
+ *
+ * to work automagically.
+ *
+ * Note: we don't use adl (argument dependant lookup) because we control the namespace here
+ *
+ * @param j json&
+ * @param gt_packet const GroundTruthInputPacket&
+ */
+void to_json(json& j, const GroundTruthInputPacket& gt_packet);
+
+/**
+ * @brief Implements the required from_json (deseralizes) function for the nlohmann::json
+ * to automatically load GroundTruthInputPacket from a json object.
+ *
+ * @param j const json&
+ * @param gt_packet GroundTruthInputPacket&
+ */
+void from_json(const json& j, GroundTruthInputPacket& gt_packet);
+
+
+/**
+ * @brief Implements the required to_json (seralize) function for the nlohmann::json
+ * to automatically convert GroundTruthPacketMap to a json type.
+ *
+ * @param j json&
+ * @param gt_packet_map GroundTruthPacketMap&
+ */
+void to_json(json& j, const GroundTruthPacketMap& gt_packet_map);
+
+/**
+ * @brief Implements the required from_json (deseralizes) function for the nlohmann::json
+ * to automatically load GroundTruthPacketMap from a json object.
+ *
+ * @param j const json&
+ * @param gt_packet_map GroundTruthPacketMap&
+ */
+void from_json(const json& j, GroundTruthPacketMap& gt_packet_map);
+
+
+
 
 
 } //dyno

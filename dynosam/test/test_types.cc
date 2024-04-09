@@ -28,6 +28,9 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/utils/Variant.hpp"
 
+#include <nlohmann/json.hpp> //for gt packet seralize tests
+
+#include <dynosam/utils/JsonUtils.hpp>
 
 using namespace dyno;
 
@@ -562,6 +565,96 @@ TEST(GroundTruthInputPacket, findAssociatedObjectWithPtr) {
 
 
 }
+
+
+TEST(JsonIO, ObjectPoseGTIO) {
+    ObjectPoseGT object_pose_gt;
+
+    object_pose_gt.frame_id_ = 0;
+    object_pose_gt.object_id_ = 1;
+    object_pose_gt.L_camera_ = gtsam::Pose3::Identity();
+    object_pose_gt.L_world_ = gtsam::Pose3::Identity();
+    object_pose_gt.prev_H_current_L_ = gtsam::Pose3::Identity();
+
+    using json = nlohmann::json;
+    json j = object_pose_gt;
+
+    auto object_pose_gt_2 = j.template get<ObjectPoseGT>();
+    EXPECT_EQ(object_pose_gt, object_pose_gt_2);
+}
+
+
+
+TEST(JsonIO, GroundTruthInputPacketIO) {
+    GroundTruthInputPacket gt_packet;
+
+    using json = nlohmann::json;
+    json j = gt_packet;
+
+    auto gt_packet_2 = j.template get<GroundTruthInputPacket>();
+
+}
+
+
+TEST(JsonIO, GroundTruthPacketMapIO) {
+    ObjectPoseGT obj01;
+    obj01.frame_id_ = 0;
+    obj01.object_id_ = 1;
+
+    ObjectPoseGT obj02;
+    obj02.frame_id_ = 0;
+    obj02.object_id_ = 2;
+
+    ObjectPoseGT obj03;
+    obj03.frame_id_ = 0;
+    obj03.object_id_ = 3;
+
+    ObjectPoseGT obj11;
+    obj11.frame_id_ = 1;
+    obj11.object_id_ = 1;
+
+    ObjectPoseGT obj12;
+    obj12.frame_id_ = 1;
+    obj12.object_id_ = 2;
+
+    GroundTruthInputPacket packet_0;
+    packet_0.frame_id_ = 0;
+    packet_0.object_poses_.push_back(obj01);
+    packet_0.object_poses_.push_back(obj02);
+    packet_0.object_poses_.push_back(obj03);
+
+    GroundTruthInputPacket packet_1;
+    packet_1.frame_id_ = 1;
+    //put in out of order compared to packet_1
+    packet_1.object_poses_.push_back(obj12);
+    packet_1.object_poses_.push_back(obj11);
+
+    GroundTruthPacketMap gt_packet_map;
+    gt_packet_map.insert2(0, packet_0);
+    gt_packet_map.insert2(1, packet_1);
+
+    using json = nlohmann::json;
+    json j = gt_packet_map;
+
+    auto gt_packet_map_2 = j.template get<GroundTruthPacketMap>();
+    // EXPECT_EQ(gt_packet_map, gt_packet_map_2);
+
+}
+
+
+TEST(JsonIO, eigenJsonIO) {
+    Eigen::Matrix4d m;
+        m <<  1.0,   2.0,   3.0,   4.0,
+                11.0, 12.0, 13.0, 14.0,
+                21.0, 22.0, 23.0, 24.0,
+                31.0, 32.0, 33.0, 34.0;
+        nlohmann::json j = m;
+        // std::cerr << j.dump() << std::endl;
+        Eigen::Matrix4d m2 = j.get<Eigen::Matrix4d>();
+
+    EXPECT_TRUE(gtsam::assert_equal(m, m2));
+
+    }
 
 
 TEST(TrackedValueStatus, testIsTimeInvariant) {

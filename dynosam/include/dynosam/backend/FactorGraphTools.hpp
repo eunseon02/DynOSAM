@@ -360,8 +360,7 @@ struct DrawBlockJacobiansOptions {
 
         auto dyno_sam_colour_selector = [](gtsam::Key key) {
             SymbolChar chr = DynoChrExtractor(key);
-            //bit gross to use an obejct related function but this just gets us a nice colour
-            return ColourMap::getObjectColour((int)chr);
+            return ColourMap::generateUniqueColour((int)chr);
         };
 
         dyno_sam_options.colour_selector = dyno_sam_colour_selector;

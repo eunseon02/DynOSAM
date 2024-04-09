@@ -29,6 +29,9 @@
 #include "dynosam/utils/Tuple.hpp"
 #include "dynosam/common/Exceptions.hpp"
 
+#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/viz.hpp>
+
 
 #include <filesystem>
 #include <functional>
@@ -248,6 +251,29 @@ private:
     TimestampBaseLoader::Ptr timestamp_file_;
     bool are_loaders_set_{false};
 };
+
+
+// class PlaybackGui {
+
+// public:
+//     PlaybackGui();
+
+//     void draw();
+
+// private:
+//     static void onMouseCallback(const cv::viz::MouseEvent & event, void* gui);
+
+//     void drawButtons();
+
+// private:
+//     //! 2D visualization
+//     cv::viz::Viz3d window_;
+//     bool paused = false;
+//     cv::Rect pause_button_rect_;
+//     cv::Rect resume_button_rect_;
+//     cv::Mat frame_;
+
+// };
 
 
 template<typename... DataTypes>

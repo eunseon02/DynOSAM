@@ -39,6 +39,11 @@ std::string to_string<cv::Size>(const cv::Size& t) {
   return "[h=" + std::to_string(t.height) + " w=" + std::to_string(t.width) + "]";
 }
 
+template<>
+std::string to_string<cv::Rect>(const cv::Rect& t) {
+  return "[x=]" + std::to_string(t.x) + " y=" + std::to_string(t.y) + " h=" + std::to_string(t.height) + " w=" + std::to_string(t.width) + "]";
+}
+
 
 namespace utils {
 
@@ -238,10 +243,6 @@ void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, cons
   const cv::Point& tlc = bounding_box.tl();
   const auto left = tlc.x;
   const auto top = tlc.y - label_size.height - base_line;
-  // Bottom right corner.
-  cv::Point brc = cv::Point(left + label_size.width, top);
-  // Draw white rectangle.
-  // cv::rectangle(image, tlc, brc, colour, kThickness);
   // Put the label on the black rectangle.
   cv::putText(image, label, cv::Point(left, top + label_size.height), kFontFace, kFontScale, colour, kThickness);
 

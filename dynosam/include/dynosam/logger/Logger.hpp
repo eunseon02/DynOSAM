@@ -120,6 +120,15 @@ class EstimationModuleLogger {
 
 public:
   DYNO_POINTER_TYPEDEFS(EstimationModuleLogger)
+
+  /**
+   * @brief Construct a new Estimation Module Logger object.
+   *
+   * Module name is prefixed to the output file names which are hardcoded per log function.
+   * Unless otherwise specified, all the (base) functions operate per frame
+   *
+   * @param module_name
+   */
   EstimationModuleLogger(const std::string& module_name);
   //write to file on destructor
   virtual ~EstimationModuleLogger();

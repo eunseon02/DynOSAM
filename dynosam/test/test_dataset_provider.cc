@@ -135,12 +135,36 @@ TEST_F(DatasetProviderFixture, testGenericDatasetMockLoading) {
 
 }
 
+// TEST_F(DatasetProviderFixture, testOptionalGenericdataset) {
+//     FunctionalDataFolder<double>::Ptr loader1 = std::make_shared<FunctionalDataFolder<double>>(
+//         [=](size_t i) -> double {
+//             return (double)i;
+//         }
+//     );
+
+//     FunctionalDataFolder<int>::Ptr loader2 = std::make_shared<FunctionalDataFolder<int>>(
+//         [=](size_t i) ->int {
+//             return i;
+//         }
+//     );
+
+//     GenericDataset<double, std::optional<int>> dataset_with_optional(sandbox, loader1, loader2)
+// }
+
+
 TEST(DynoDataset, testDummy) {
 
     // KittiDataLoader dd("/root/data/kitti/0000");
     // dd.spin();
 
 }
+
+
+// TEST(PlaybackGui, creation) {
+//     PlaybackGui pg;
+
+//     while(true) pg.draw();
+// }
 
 
 
