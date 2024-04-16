@@ -30,13 +30,16 @@
 
 namespace dyno {
 
+
+static constexpr char kRgbdFrontendOutputJsonFile[] = "rgbd_frontend_output.bson";
+
 /**
  * @brief Determines which frontend module to load.
  *
  *
  *
  */
-enum class FrontendType {
+enum FrontendType {
     kRGBD = 0,
     kMono = 1
 };

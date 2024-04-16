@@ -50,11 +50,14 @@ public:
     using Input = INPUT;
     using Output = OUTPUT;
     using Base = SIMOPipelineModule<Input, Output>;
+    using BaseMIMO = typename Base::Base;
+
     using This = PipelineModuleProcessor<Input, Output>;
     using typename Base::InputConstSharedPtr;
     using typename Base::OutputConstSharedPtr;
     using typename Base::OutputQueue;
     using typename Base::InputQueue;
+    using typename Base::OutputRegistra;
 
     DYNO_POINTER_TYPEDEFS(This)
 

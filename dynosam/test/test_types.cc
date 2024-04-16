@@ -24,6 +24,7 @@
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/utils/Variant.hpp"
@@ -31,6 +32,10 @@
 #include <nlohmann/json.hpp> //for gt packet seralize tests
 
 #include <dynosam/utils/JsonUtils.hpp>
+
+#include "internal/helpers.hpp"
+
+#include <filesystem>
 
 using namespace dyno;
 
@@ -85,6 +90,15 @@ using namespace dyno;
 // //     // EXPECT_THROW({checkAndThrow(false);}, DynosamException);
 // //     // EXPECT_NO_THROW({checkAndThrow(true);});
 // // }
+
+
+TEST(GtsamUtils, isGtsamValueType) {
+    EXPECT_TRUE(is_gtsam_value_v<gtsam::Pose3>);
+    EXPECT_TRUE(is_gtsam_value_v<gtsam::Point3>);
+    // EXPECT_FALSE(is_gtsam_value_v<double>);
+    EXPECT_FALSE(is_gtsam_value_v<ImageType::RGBMono>);
+}
+
 
 TEST(VariantTypes, isVariant) {
     using Var = std::variant<int, std::string>;
@@ -567,6 +581,18 @@ TEST(GroundTruthInputPacket, findAssociatedObjectWithPtr) {
 }
 
 
+TEST(JsonIO, ReferenceFrameValue) {
+    ReferenceFrameValue<gtsam::Pose3> ref_frame(gtsam::Pose3::Identity(), ReferenceFrame::GLOBAL);
+
+    using json = nlohmann::json;
+    json j = ref_frame;
+
+    auto ref_frame_load = j.template get<ReferenceFrameValue<gtsam::Pose3>>();
+    //TODO: needs equals operator
+    // EXPECT_EQ(kp_load, kp);
+}
+
+
 TEST(JsonIO, ObjectPoseGTIO) {
     ObjectPoseGT object_pose_gt;
 
@@ -581,6 +607,54 @@ TEST(JsonIO, ObjectPoseGTIO) {
 
     auto object_pose_gt_2 = j.template get<ObjectPoseGT>();
     EXPECT_EQ(object_pose_gt, object_pose_gt_2);
+}
+
+TEST(JsonIO, TrackedValueStatusKp) {
+    StatusKeypointMeasurement kp = dyno_testing::makeStatusKeypointMeasurement(
+        4, 3, 1, Keypoint(0, 1)
+    );
+
+    using json = nlohmann::json;
+    json j = (KeypointStatus)kp;
+
+
+    auto kp_load = j.template get<KeypointStatus>();
+    // TODO: needs equals operator
+    EXPECT_EQ(kp_load, kp);
+}
+
+
+
+TEST(JsonIO, TrackedValueStatusKps) {
+    StatusKeypointMeasurements measurements;
+    for(size_t i = 0; i < 10; i++) {
+        measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(
+            i, background_label, 0
+        ));
+
+    }
+    using json = nlohmann::json;
+    json j = measurements;
+
+    auto measurements_load = j.template get<StatusKeypointMeasurements>();
+    EXPECT_EQ(measurements, measurements);
+}
+
+
+TEST(JsonIO, RGBDInstanceOutputPacket) {
+    auto scenario = dyno_testing::makeDefaultScenario();
+
+    std::map<FrameId, RGBDInstanceOutputPacket> rgbd_output;
+
+    for(size_t i = 0; i < 10; i++) {
+        auto output = scenario.getOutput(i);
+        rgbd_output.insert({i, *output});
+    }
+
+    using json = nlohmann::json;
+    json j = rgbd_output;
+    std::map<FrameId, RGBDInstanceOutputPacket> rgbd_output_loaded = j.template get<std::map<FrameId, RGBDInstanceOutputPacket>>();
+    EXPECT_EQ(rgbd_output_loaded, rgbd_output);
 }
 
 
@@ -637,7 +711,7 @@ TEST(JsonIO, GroundTruthPacketMapIO) {
     json j = gt_packet_map;
 
     auto gt_packet_map_2 = j.template get<GroundTruthPacketMap>();
-    // EXPECT_EQ(gt_packet_map, gt_packet_map_2);
+    EXPECT_EQ(gt_packet_map, gt_packet_map_2);
 
 }
 
@@ -653,9 +727,51 @@ TEST(JsonIO, eigenJsonIO) {
         Eigen::Matrix4d m2 = j.get<Eigen::Matrix4d>();
 
     EXPECT_TRUE(gtsam::assert_equal(m, m2));
+}
+
+namespace fs = std::filesystem;
+class JsonIOWithFiles : public ::testing::Test
+{
+public:
+  JsonIOWithFiles()
+  {
+  }
+
+protected:
+  virtual void SetUp()
+  {
+    fs::create_directory(sandbox);
+  }
+  virtual void TearDown()
+  {
+    fs::remove_all(sandbox);
+  }
+
+  const fs::path sandbox{"/tmp/sandbox_json"};
+
+};
+
+
+
+TEST_F(JsonIOWithFiles, testSimpleBison) {
+    StatusKeypointMeasurements measurements;
+    for(size_t i = 0; i < 10; i++) {
+        measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(
+            i, background_label, 0
+        ));
 
     }
 
+    fs::path tmp_bison_path = sandbox / "simple_bison.bson";
+    std::string tmp_bison_path_str = tmp_bison_path;
+
+    JsonConverter::WriteOutJson(measurements, tmp_bison_path_str, JsonConverter::Format::BSON);
+
+    StatusKeypointMeasurements measurements_read;
+    EXPECT_TRUE(JsonConverter::ReadInJson(measurements_read, tmp_bison_path_str, JsonConverter::Format::BSON));
+    EXPECT_EQ(measurements_read, measurements);
+
+}
 
 TEST(TrackedValueStatus, testIsTimeInvariant) {
     TrackedValueStatus<Keypoint> status_time_invariant(

@@ -11,3 +11,11 @@
 --starting_frame=-1
 --ending_frame=-1
 --use_backend=true
+
+--save_frontend_json=true
+
+# load the frontend using a .bson file
+# all the other parameters remain but the dataprovider is bypassed
+# and the bson file is searched for on output_path / <output_file>.json
+# where the output file name is determined by the frontend mode (RGB, mono)
+--frontend_from_file=true

@@ -144,14 +144,27 @@ public:
     BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, ImageDisplayQueue* display_queue, bool use_logger = true)
     : Base(params, display_queue, use_logger), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
 
-    virtual ~BackendModuleType() = default;
+    virtual ~BackendModuleType() {
+        // if(logger_) {
+        //     //write out logging -> do this here as we dont want to this type of logging per frame
+        //     //we can just wait till the end and write out everything still in the map
+        //     //the get landmarks call will have more than just the values in the map
+        //     //collect all tracklets and their ids
+        //     gtsam::FastMap<TrackletId, ObjectId> tracklet_object_id_mapping;
+        //     for(const auto& [tracklet_id, lmk_node] : map_->getLandmarks()) {
+        //         tracklet_object_id_mapping.insert2(tracklet_id, lmk_node->getObjectId());
+        //     }
+        //     logger_->logTrackletIdToObjectId(tracklet_object_id_mapping);
+        // }
+
+    }
 
     inline const typename MapType::Ptr getMap() {  return map_; }
     inline const typename OptimizerType::Ptr getOptimzier() {  return optimizer_; }
 
     //factor graph helper functions
     bool safeAddObjectSmoothingFactor(
-        gtsam::Key motion_key_k_1, gtsam::Key motion_key_k, const gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors)
+        gtsam::Key motion_key_k_1, gtsam::Key motion_key_k, const gtsam::Values& new_values, gtsam::NonlinearFactorGraph& factors) const
     {
         CHECK(object_smoothing_noise_);
         CHECK_EQ(object_smoothing_noise_->dim(), 6u);

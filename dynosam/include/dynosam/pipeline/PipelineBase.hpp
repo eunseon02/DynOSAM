@@ -115,6 +115,22 @@ private:
   std::atomic_bool is_shutdown_{ false };
 };
 
+/**
+ * @brief Defines type alias's for a single type (e.g INPUT or OUTPUT)
+ * which will be used within a PipelineModule.
+ *
+ * Defines the type, a shared_ptr to a const type and a ThreadsafeQueue using the
+ * const ptr type
+ *
+ * @tparam TYPE
+ */
+template <typename TYPE>
+struct PipelineIOTypeTraits {
+  using Type = TYPE;
+  using TypeConstSharedPtr = std::shared_ptr<const Type>;
+  using TypeQueue = ThreadsafeQueue<TypeConstSharedPtr>;
+};
+
 
 /**
  * @brief A PipelineModule is responsible for taking data from an input (or input queues) processing it, and sending it to an output queue (or queues)
@@ -132,13 +148,16 @@ template <typename INPUT, typename OUTPUT>
 class PipelineModule : public PipelineBase
 {
 public:
-  using InputConstSharedPtr = std::shared_ptr<const INPUT>;
-  //! The output is instead a shared ptr, since many users might need the output
-  // using OutputConstUniquePtr = std::unique_ptr<const OUTPUT>;
-  using OutputConstSharedPtr = std::shared_ptr<const OUTPUT>;
+  using InputTypeTraits = PipelineIOTypeTraits<INPUT>;
+  using OutputTypeTraits = PipelineIOTypeTraits<OUTPUT>;
 
-  using OutputQueue = ThreadsafeQueue<OutputConstSharedPtr>;
-  using InputQueue = ThreadsafeQueue<InputConstSharedPtr>;
+  using InputConstSharedPtr = typename InputTypeTraits::TypeConstSharedPtr;
+  //! The output is instead a shared ptr, since many users might need the output
+  using OutputConstSharedPtr = typename OutputTypeTraits::TypeConstSharedPtr;
+
+  using InputQueue = typename InputTypeTraits::TypeQueue;
+  using OutputQueue = typename OutputTypeTraits::TypeQueue;
+
 
   using OnProcessCallback = std::function<void(const InputConstSharedPtr&, const OutputConstSharedPtr&)>;
 
@@ -179,17 +198,45 @@ private:
   std::vector<OnProcessCallback> on_process_callbacks_;
 };
 
+template <typename PAYLOAD>
+struct QueueRegistra {
+public:
+  using This = QueueRegistra<PAYLOAD>;
+  using Queue = typename PipelineIOTypeTraits<PAYLOAD>::TypeQueue;
+
+  DYNO_POINTER_TYPEDEFS(This)
+
+  QueueRegistra(std::vector<Queue*>* queues) : queues_(CHECK_NOTNULL(queues)) {}
+
+  void registerQueue(Queue* queue) {
+    CHECK_NOTNULL(queue);
+    CHECK_NOTNULL(queues_);
+    //TODO: not thread safe?
+    queues_->push_back(queue);
+  }
+
+private:
+  //! Poitner to a vector of queue pointers (owned by the PipelineModule)
+  //! Will only have the lifetime of the derived MIMOPipelineModule that created it
+  std::vector<Queue*>* queues_;
+};
+
 // MultiInputMultiOutput -> abstract class and user must implement the getInputPacket
 template <typename INPUT, typename OUTPUT>
 class MIMOPipelineModule : public PipelineModule<INPUT, OUTPUT>
 {
 public:
   using Base = PipelineModule<INPUT, OUTPUT>; //Base
+  using This = MIMOPipelineModule<INPUT, OUTPUT>;
+
+  DYNO_POINTER_TYPEDEFS(This)
 
   using typename Base::OutputConstSharedPtr;
   using typename Base::InputConstSharedPtr;
   using typename Base::InputQueue;
   using typename Base::OutputQueue;
+
+  using OutputRegistra = QueueRegistra<OUTPUT>;
 
   //! Callback used to send data to other pipeline modules, makes use of
   //! shared pointer since the data may be shared between several modules.
@@ -201,6 +248,18 @@ public:
   }
 
   void registerOutputQueue(OutputQueue* output_queue);
+
+  /**
+   * @brief Constructs an output registra for the internal vector of output queues
+   * Basically provides a way to add queues to the pipeline separate to the pipeline itself.
+   * This is useful as the registra is only templated on the OUTPUT so we can simply any
+   * external templating which only concerns itself with output types
+   *
+   * @return typename QueueRegistra<OUTPUT>::Ptr
+   */
+  typename OutputRegistra::Ptr getOutputRegistra() {
+    return std::make_shared<OutputRegistra>(&output_queues_);
+  }
 
 protected:
   bool pushOutputPacket(const OutputConstSharedPtr& output_packet) const override;
@@ -225,10 +284,13 @@ public:
   using This = SIMOPipelineModule<INPUT, OUTPUT>;
   using Base = MIMOPipelineModule<INPUT, OUTPUT>;
 
+  DYNO_POINTER_TYPEDEFS(This)
+
   using typename Base::InputConstSharedPtr;
   using typename Base::OutputConstSharedPtr;
   using typename Base::OutputQueue;
   using typename Base::InputQueue;
+  using typename Base::OutputRegistra;
 
   using Base::isShutdown;
   // using Base::module_name_;

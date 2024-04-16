@@ -102,6 +102,10 @@ public:
     const typename FrameNodeM::Ptr getFrame(FrameId frame_id) const;
     const typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const;
 
+    const gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr>& getLandmarks() const {
+        return landmarks_;
+    }
+
     TrackletIds getStaticTrackletsByFrame(FrameId frame_id) const;
 
     //object related queries
@@ -146,7 +150,7 @@ public:
     inline const gtsam::Values& getValues() const { return values_; }
     //TODO: this should be the FULL graph but need to verify how we update this (ie.e when optimization happens and then how we update the estimates)
     inline const gtsam::NonlinearFactorGraph& getGraph() const { return graph_; }
-    inline const gtsam::Values& getInitialValues() const { return values_; }
+    inline const gtsam::Values& getInitialValues() const { return initial_; }
 
     bool exists(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
         return (values_.exists(key) || new_values.exists(key));
@@ -154,7 +158,7 @@ public:
 
     template<typename ValueType>
     ValueType at(gtsam::Key key, const gtsam::Values& new_values = gtsam::Values()) const {
-        StateQuery<ValueType> state_query = this->query(key);
+        StateQuery<ValueType> state_query = this->query<ValueType>(key);
         if(state_query) {
             return state_query.get();
         }

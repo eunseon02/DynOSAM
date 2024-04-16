@@ -74,6 +74,16 @@ public:
     inline bool hasCamera() const { return (bool)camera_; }
     inline Timestamp getTimestamp() const { return timestamp_; }
     inline FrameId getFrameId() const { return frame_id_; }
+
+    bool operator==(const FrontendOutputPacketBase& other) const {
+        return frontend_type_ == other.frontend_type_ &&
+            static_keypoint_measurements_ == other.static_keypoint_measurements_ &&
+            dynamic_keypoint_measurements_ == other.dynamic_keypoint_measurements_ &&
+            gtsam::traits<gtsam::Pose3>::Equals(T_world_camera_, other.T_world_camera_) &&
+            timestamp_ == other.timestamp_ &&
+            frame_id_ == other.timestamp_;
+            //TODO: no camera or gt packket
+    }
 };
 
 } //dyno

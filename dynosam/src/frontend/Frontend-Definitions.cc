@@ -21,16 +21,10 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/frontend/Frontend-Definitions.hpp"
 
-#include <gflags/gflags.h>
+namespace dyno {
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+// decltype(kRgbdFrontendOutputJsonFile) constexpr kRgbdFrontendOutputJsonFile;
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
+} //dyno

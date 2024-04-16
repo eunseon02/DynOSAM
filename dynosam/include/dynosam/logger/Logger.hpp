@@ -104,15 +104,6 @@ class OfstreamWrapper {
 
   static bool WriteOutCsvWriter(const CsvWriter& csv, const std::string& filename);
 
-  //T must be json seralizable
-  template<typename T>
-  static bool WriteOutJson(const T& value, const std::string& filename, bool append_mode = false) {
-    OfstreamWrapper ofsw(filename, append_mode);
-    writeJson<T>(ofsw.ofstream_, value);
-
-    return true;
-  }
-
  public:
   std::ofstream ofstream_;
   const std::string filename_;
@@ -122,6 +113,92 @@ class OfstreamWrapper {
  protected:
   void openLogFile(const std::string& output_file_name,
                    bool open_file_in_append_mode = false);
+};
+
+
+// wrapper to write a type t that is json seralizable to an open ofstream
+//with a set width
+template<typename T>
+std::ofstream& writeJson(std::ofstream& os, const T& t) {
+    //T must be json seralizable
+    const json j = t;
+    os << std::setw(4) << j;
+    return os;
+};
+
+
+class JsonConverter {
+public:
+  using json = nlohmann::json;
+
+  enum Format {
+    NORMAL,
+    BSON
+  };
+
+  //T must be json seralizable
+  template<typename T>
+  static void WriteOutJson(const T& value, const std::string& filepath, const Format& fmt = Format::BSON) {
+    if(fmt == Format::BSON) {
+      WriteBson<T>(value, filepath);
+    }
+    else {
+      CHECK(false) << "normal json not implemented";
+    }
+  }
+
+  template<typename T>
+  static bool ReadInJson(T& value, const std::string& filepath, const Format& fmt = Format::BSON) {
+    if(fmt == Format::BSON) {
+      return ReadBson(value, filepath);
+    }
+    else {
+      CHECK(false) << "normal json not implemented";
+    }
+  }
+
+private:
+  template<typename T>
+  static void WriteBson(const T& value, const std::string& filepath) {
+    VLOG(5) << "Writing bson data to filepath: " << filepath;
+
+    json j;
+    j["data"] = value;
+    auto v_bson = json::to_bson(j);
+
+    std::ofstream bsonfile(filepath.c_str(), std::ios_base::out | std::ios::binary);
+    bsonfile.write((char*)&v_bson[0], v_bson.size() * sizeof(v_bson[0]));
+    bsonfile.close();
+  }
+
+  template<typename T>
+  static bool ReadBson(T& value, const std::string& filepath) {
+    VLOG(5) << "Reading bson data from filepath: " << filepath;
+    std::ifstream file(filepath, std::ios::binary);
+
+    if (!file.is_open()) {
+        return false;
+    }
+
+     // Get the size of the file
+    file.seekg(0, std::ios::end);
+    const std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // Create a vector to store the file content
+    std::vector<std::uint8_t> content;
+    content.reserve(file_size); // Reserve space to avoid reallocation
+
+     // Read the file content into the vector
+    content.insert(content.begin(),
+                       std::istreambuf_iterator<char>(file),
+                       std::istreambuf_iterator<char>());
+    const json json_instance_read = json::from_bson(content);
+
+    value = json_instance_read["data"].template get<T>();
+    return true;
+  }
+
 };
 
 
@@ -135,7 +212,9 @@ public:
    * @brief Construct a new Estimation Module Logger object.
    *
    * Module name is prefixed to the output file names which are hardcoded per log function.
-   * Unless otherwise specified, all the (base) functions operate per frame
+   * Unless otherwise specified, all the (base) functions operate per frame.
+   *
+   * Will write to the file path sepcified by FLAGS_output_path
    *
    * @param module_name
    */

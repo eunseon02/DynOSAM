@@ -41,12 +41,15 @@
 
 #include "tf2_ros/transform_broadcaster.h"
 
+#include <opencv4/opencv2/videoio.hpp>
+
 
 namespace dyno {
 
 class FrontendDisplayRos : public FrontendDisplay, DisplayRos {
 public:
     FrontendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node);
+    ~FrontendDisplayRos();
 
     void spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) override;
 
@@ -95,6 +98,8 @@ private:
 
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
+
+    std::unique_ptr<cv::VideoWriter> video_writer_; //for now
 
 };
 

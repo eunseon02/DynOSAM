@@ -36,6 +36,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
 
 public:
     RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    ~RGBDInstanceFrontendModule();
 
     using SpinReturn = FrontendModule::SpinReturn;
 
@@ -84,6 +85,10 @@ private:
     void propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id);
     //updates object poses
     void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id);
+
+
+    //used when we want to seralize the output to json via the FLAGS_save_frontend_json flag
+    std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
 
 
 

@@ -68,7 +68,10 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node:
 
     tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*node_);
 
+}
 
+FrontendDisplayRos::~FrontendDisplayRos() {
+    if(video_writer_) video_writer_->release();
 }
 
 void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& frontend_output) {
@@ -278,7 +281,31 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
     // 2D image visualisation using opencv
     {
         // 2D bounding box
-        cv::Mat rgb_with_bbx = rgbd_frontend_output->debug_imagery_->detected_bounding_boxes;
+        // cv::Mat rgb_with_bbx = rgbd_frontend_output->debug_imagery_->detected_bounding_boxes;
+        cv::Mat rgb_with_bbx;
+        rgbd_frontend_output->debug_imagery_->tracking_image.copyTo(rgb_with_bbx);
+        const cv::Size rgb_size = rgb_with_bbx.size();
+
+        // LOG(INFO) << to_string(rgb_size);
+
+        // if(!rgb_size.empty() && !video_writer_) {
+        //     LOG(INFO) << to_string(cv::Size(rgb_with_bbx.cols, rgb_with_bbx.rows));
+        //     video_writer_ = std::make_unique<cv::VideoWriter>(getOutputFilePath("tracking_video.avi"),
+        //         cv::VideoWriter::fourcc('M','P','4', '2'), 10, rgb_size);
+        //     //cv::VideoWriter::fourcc('m','p','4', '2')
+
+        //     LOG(ERROR) << "here";
+
+        //     // video_writer_->set(cv::CAP_PROP_FRAME_WIDTH, rgb_with_bbx.cols);
+        //     // video_writer_->set(cv::CAP_PROP_FRAME_HEIGHT, rgb_with_bbx.rows);
+        // }
+
+        // if(video_writer_) {
+        //     // LOG(FATAL) << video_writer_->get(cv::CAP_PROP_FRAME_WIDTH);
+        //     // cv::Size s = cv::Size((int) video_writer_->get(cv::CAP_PROP_FRAME_WIDTH), (int) video_writer_->get(cv::CAP_PROP_FRAME_HEIGHT));
+        //     // CHECK_EQ(s, cv::Size(rgb_with_bbx.cols, rgb_with_bbx.rows));
+        // }
+
 
         const StatusKeypointMeasurements& obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
         for(const StatusKeypointMeasurement& this_px : obj_px) {
@@ -329,25 +356,33 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 }
             }
             line_length = cv_line.size();
-            for (int i_line = 0; i_line < line_length-1; i_line++){
-                double alpha = (double) i_line / ((double) line_length);
-                cv::Scalar grad_colour = colour;
-                grad_colour[0] = (255.0 - colour[0]) * alpha + colour[0];
-                grad_colour[1] = (255.0 - colour[0]) * alpha + colour[1];
-                grad_colour[2] = (255.0 - colour[0]) * alpha + colour[2];
-                cv::arrowedLine(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], grad_colour, line_thinkness-1, cv::LINE_AA, 0, 0.3);
-            }
+            //TODO: removed prediction arrow for now!!
+            // for (int i_line = 0; i_line < line_length-1; i_line++){
+            //     double alpha = (double) i_line / ((double) line_length);
+            //     cv::Scalar grad_colour = colour;
+            //     grad_colour[0] = (255.0 - colour[0]) * alpha + colour[0];
+            //     grad_colour[1] = (255.0 - colour[0]) * alpha + colour[1];
+            //     grad_colour[2] = (255.0 - colour[0]) * alpha + colour[2];
+            //     cv::arrowedLine(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], grad_colour, line_thinkness-1, cv::LINE_AA, 0, 0.3);
+            // }
 
         }
 
+        // cv::resize(rgb_with_bbx, rgb_with_bbx, cv::Size(1280, 720) , 0, 0, CV_INTER_LINEAR);
+        // if(video_writer_)  {
+        //     CHECK(video_writer_->isOpened());
+        //     video_writer_->write(rgb_with_bbx);
+        // }
+
+
         cv::imshow("RGB with object bounding boxes", rgb_with_bbx);
 
-        // int frame_id = rgbd_frontend_output->frame_.frame_id_;
+        int frame_id = rgbd_frontend_output->getFrameId();
         // cv::Mat rgb_objects;
         // rgbd_frontend_output->frame_.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
 
         // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+".png", rgb_objects);
-        // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+"_bbx.png", rgb_with_bbx);
+        cv::imwrite(getOutputFilePath("images/" + std::to_string(frame_id)+".jpg"), rgb_with_bbx);
     }
 
     {

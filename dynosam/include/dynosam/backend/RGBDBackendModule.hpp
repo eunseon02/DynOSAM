@@ -40,8 +40,7 @@ namespace dyno {
 
 using RGBDBackendModuleTraits = BackendModuleTraits<RGBDInstanceOutputPacket, Landmark>;
 
-//TODO: nice to do some tempalting so that the module knows the expected input type to cast to which also knows the measurement type!!!
-//so we can use this to define the map<M> type
+
 class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
 public:
@@ -62,15 +61,15 @@ public:
     SpinReturn boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
     SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
-    //TODO: taken from MonoBackendModule
-     //adds pose to the new values and a prior on this pose to the new_factors
-    void addInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    // //TODO: taken from MonoBackendModule
+    //  //adds pose to the new values and a prior on this pose to the new_factors
+    // void addInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-    //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
-    void addOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    // //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
+    // void addOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-    void updateStaticObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
-    void updateDynamicObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
+    // void updateStaticObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
+    // void updateDynamicObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
 
 
 
@@ -84,11 +83,34 @@ public:
 
     // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
 
+    struct UpdateImpl {
+        DYNO_POINTER_TYPEDEFS(UpdateImpl)
+
+        RGBDBackendModule* parent_;
+        UpdateImpl(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
+
+        //TODO: (jesse) shouldn't these all be const?
+        virtual void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+        virtual void updateOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+        virtual void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+    };
+
+    struct UpdateImplInWorld : public UpdateImpl {
+        UpdateImplInWorld(RGBDBackendModule* parent) : UpdateImpl(parent) {}
+
+        void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+        void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+    };
+
 
 public:
     // std::unique_ptr<DynoISAM2> smoother_;
     // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
+    UpdateImpl::UniquePtr updater_;
+
 
     using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;
     KeyTimestampMap timestamp_map_;

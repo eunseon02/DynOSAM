@@ -135,4 +135,23 @@ std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
 }
 
 
+BackendLogger::BackendLogger()
+  : EstimationModuleLogger("backend"),
+    tracklet_to_object_id_file_name_("tracklet_to_object_id.csv")
+{
+  tracklet_to_object_id_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "tracklet_id", "object_id"));
 }
+
+void BackendLogger::logTrackletIdToObjectId(const gtsam::FastMap<TrackletId, ObjectId>& mapping) {
+  for(const auto&[tracklet_id, object_id] : mapping) {
+    *tracklet_to_object_id_csv_ << tracklet_id << object_id;
+  }
+}
+
+BackendLogger::~BackendLogger() {
+  OfstreamWrapper::WriteOutCsvWriter(*tracklet_to_object_id_csv_, tracklet_to_object_id_file_name_);
+}
+
+
+} //dyno

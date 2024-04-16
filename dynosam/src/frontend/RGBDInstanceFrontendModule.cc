@@ -27,6 +27,7 @@
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/TimingStats.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
@@ -50,6 +51,15 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     if(FLAGS_use_frontend_logger) {
         logger_ = std::make_unique<RGBDFrontendLogger>();
     }
+}
+
+RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
+    if(FLAGS_save_frontend_json) {
+        LOG(INFO) << "Saving frontend output as json";
+        const std::string file_path = getOutputFilePath(kRgbdFrontendOutputJsonFile);
+        JsonConverter::WriteOutJson(output_packet_record_, file_path, JsonConverter::Format::BSON);
+    }
+
 }
 
 FrontendModule::ImageValidationResult
@@ -183,7 +193,9 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
 
 
-    auto output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, input->optional_gt_, debug_imagery);
+    RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, input->optional_gt_, debug_imagery);
+
+    if(FLAGS_save_frontend_json) output_packet_record_.insert({output->getFrameId(), output});
 
     if(logger_) {
         logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);

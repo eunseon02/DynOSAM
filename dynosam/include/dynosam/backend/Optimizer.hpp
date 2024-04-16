@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/Map.hpp"
@@ -87,6 +88,8 @@ public:
             gtsam::NonlinearFactorGraph graph;
 
             last_optimzied_state_ = state_k;
+
+            utils::TimingStatsCollector scoped_timer("optimizer.optimize");
             std::tie(estimate, graph) = this->optimize();
 
             // update internal estimate and graph values to reflect the updated optimized state

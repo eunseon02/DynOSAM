@@ -136,7 +136,10 @@ bool ObjectPoseGT::operator==(const ObjectPoseGT& other) const {
         L_camera_.equals(other.L_camera_) &&
         L_world_.equals(other.L_world_) &&
         bounding_box_ == other.bounding_box_ &&
-        utils::equateGtsamOptionalValues(object_dimensions_, other.object_dimensions_);
+        utils::equateGtsamOptionalValues(object_dimensions_, other.object_dimensions_) &&
+        utils::equateGtsamOptionalValues(prev_H_current_world_, other.prev_H_current_world_) &&
+        utils::equateGtsamOptionalValues(prev_H_current_L_, other.prev_H_current_L_) &&
+        utils::equateGtsamOptionalValues(prev_H_current_X_, other.prev_H_current_X_);
         //TODO: not sure how to compare the std::optional as the underlying objects dont have operator==
 }
 

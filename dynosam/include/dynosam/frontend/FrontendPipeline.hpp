@@ -28,9 +28,77 @@
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/pipeline/PipelineModuleProcessor.hpp"
 
+#include "dynosam/logger/Logger.hpp"
+
+
 namespace dyno {
 
 using FrontendPipeline = PipelineModuleProcessor<FrontendInputPacketBase, FrontendOutputPacketBase>;
+
+/// @brief module traits of the associated backend...
+/// @tparam MODULE_TRAITS
+template<class MODULE_TRAITS>
+class FrontendOfflinePipeline : public MIMOPipelineModule<NullPipelinePayload, FrontendOutputPacketBase> {
+
+public:
+    using This = FrontendOfflinePipeline<MODULE_TRAITS>;
+    using Base =  MIMOPipelineModule<NullPipelinePayload, FrontendOutputPacketBase>;
+    using ModuleTraits = MODULE_TRAITS;
+    //A Dervied BackedInputPacket type (e.g. RGBDOutputPacketType)
+    using DerivedPacketType = typename ModuleTraits::DerivedPacketType;
+    using DerivedPacketTypePtr = std::shared_ptr<DerivedPacketType>;
+
+    DYNO_POINTER_TYPEDEFS(This)
+
+    //! Map of frames to (derived) frontend packets
+    //! Same format as the seralized bson from the frontend
+    using FrontendPacketMap = std::map<FrameId, DerivedPacketTypePtr>;
+
+    using typename Base::InputConstSharedPtr;
+    using typename Base::OutputConstSharedPtr;
+
+    explicit FrontendOfflinePipeline(const std::string& module_name, const std::string& bsjon_file_path)
+        : Base(module_name) {
+
+            if(!JsonConverter::ReadInJson(frontend_output_packets_, bsjon_file_path, JsonConverter::BSON)) {
+                LOG(FATAL) << "Failed to load frontend bson from: " << bsjon_file_path;
+            }
+            current_packet_ = frontend_output_packets_.cbegin();
+        }
+
+    InputConstSharedPtr getInputPacket() override {
+        static auto output = std::make_shared<NullPipelinePayload>();
+        return output;
+    }
+
+    inline OutputConstSharedPtr process(const InputConstSharedPtr&) override {
+        if(!hasWork()) {
+            this->shutdown();
+            return nullptr;
+        }
+        auto output = current_packet_->second;
+        current_packet_++;
+        return output;
+    }
+
+    inline const FrontendPacketMap& getFrontendOutputPackets() const { return frontend_output_packets_; }
+
+protected:
+    void shutdownQueues() override { current_packet_ = frontend_output_packets_.end();  }
+    bool hasWork() const override { return current_packet_ != frontend_output_packets_.cend(); }
+
+
+private:
+    //!same format as the output_packet_record_ in the frontend
+    //! expected to be seralized in this form to a json file which this pipeline will then
+    //! load and send directly to the frontend
+    FrontendPacketMap frontend_output_packets_;
+    typename FrontendPacketMap::const_iterator current_packet_;
+
+
+
+
+};
 
 
 } //dyno

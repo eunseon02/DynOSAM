@@ -36,6 +36,12 @@ CsvWriter::CsvWriter(const CsvHeader& header, const std::string& seperator)
     checkAndThrow<InvalidCsvHeaderException>((column_number_ > 0u), "CsvHeader cannot be empty! (size of 0)");
 }
 
+
+CsvReader::CsvReader(const std::string& path) {
+    infile_.open(path);
+}
+
+
 CsvWriter::~CsvWriter() { resetContent();}
 
 CsvWriter& CsvWriter::add(const char *str){

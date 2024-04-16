@@ -40,10 +40,10 @@ FrontendModule::FrontendModule(const FrontendParams& params, ImageDisplayQueue* 
 FrontendModule::~FrontendModule() {
     VLOG(5) << "Destructing frontend module";
 
-    if(!gt_packet_map_.empty()) {
-        //OfstreamWrapper will ensure this goes to the FLAGS_output_path
-        OfstreamWrapper::WriteOutJson(gt_packet_map_, "ground_truths.json");
-    }
+    // if(!gt_packet_map_.empty()) {
+    //     //OfstreamWrapper will ensure this goes to the FLAGS_output_path
+    //     OfstreamWrapper::WriteOutJson(gt_packet_map_, "ground_truths.json");
+    // }
 }
 
 void FrontendModule::validateInput(const FrontendInputPacketBase::ConstPtr& input) const {

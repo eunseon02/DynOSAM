@@ -27,6 +27,8 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/backend/Optimizer.hpp"
 
+#include "simulator.hpp"
+
 #include <gtest/gtest.h>
 #include <ament_index_cpp/get_package_prefix.hpp>
 
@@ -96,6 +98,47 @@ inline Camera makeDefaultCamera() {
 
 inline Camera::Ptr makeDefaultCameraPtr() {
   return std::make_shared<Camera>(makeDefaultCameraParams());
+}
+
+
+inline  dyno_testing::RGBDScenario makeDefaultScenario() {
+  dyno_testing::ScenarioBody::Ptr camera = std::make_shared<dyno_testing::ScenarioBody>(
+        std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+            gtsam::Pose3::Identity(),
+            //motion only in x
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.1, 0, 0))
+        )
+    );
+    //needs to be at least 3 overlap so we can meet requirements in graph
+    //TODO: how can we do 1 point but with lots of overlap (even infinity overlap?)
+    dyno_testing::RGBDScenario scenario(
+        camera,
+        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(8, 3)
+    );
+
+    //add one obect
+    const size_t num_points = 3;
+    dyno_testing::ObjectBody::Ptr object1 = std::make_shared<dyno_testing::ObjectBody>(
+        std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
+            //motion only in x
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))
+        ),
+        std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(num_points)
+    );
+
+    dyno_testing::ObjectBody::Ptr object2 = std::make_shared<dyno_testing::ObjectBody>(
+        std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
+            //motion only in x
+            gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))
+        ),
+        std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(num_points)
+    );
+
+    scenario.addObjectBody(1, object1);
+    scenario.addObjectBody(2, object2);
+    return scenario;
 }
 
 

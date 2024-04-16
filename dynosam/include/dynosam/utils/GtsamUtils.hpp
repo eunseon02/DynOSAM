@@ -25,6 +25,7 @@
 
 #include "dynosam/utils/Numerical.hpp"
 
+#include <type_traits>
 #include <optional>
 
 #include <eigen3/Eigen/Core> //must be included before opencv
@@ -54,6 +55,15 @@ template <class T>
 using enable_if_gtsam_factor = std::enable_if_t<is_gtsam_factor_v<T>>;
 
 
+template<class T, class = std::void_t<>>
+struct is_gtsam_value : std::false_type {};
+
+template<class T>
+struct is_gtsam_value<T, std::void_t<decltype(gtsam::traits<T>::Equals)>> : std::true_type{};
+
+
+template <class T>
+static constexpr bool is_gtsam_value_v = is_gtsam_value<T>::value;
 
 namespace opengv {
 typedef Eigen::Matrix<double, 3, 4> transformation_t;
@@ -65,6 +75,8 @@ namespace dyno
 namespace utils
 {
 
+
+//TODO: (jesse) coudl replace with binary predicate... I guess...?
 /**
  * @brief Check if two objects wrapped in std::optional are equal.
  * If both are std::nullopt, function will return true
@@ -135,6 +147,9 @@ cv::Mat gtsamMatrix3ToCvMat(const gtsam::Matrix3& rot);
 cv::Mat gtsamVector3ToCvMat(const gtsam::Vector3& tran);
 cv::Point3d gtsamVector3ToCvPoint3(const gtsam::Vector3& tran);
 
+
+
+
 /**
  * @brief Perturbs a gtsam::Value type object via sampling a normal distribution using
  * the sigmas provided. The length of the sigmas must match the dimension of the value
@@ -151,6 +166,7 @@ T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());
   //! Make static so that the generator (internal to the sampler) remains in memory during calls
   //! and that we actually get a random distribution
+  //TODO: (jesse)yeah, but we pass different sigmas and seeds to it, so wont this mean it just doesnt get updated?
   static gtsam::Sampler sample(sigmas, seed);
 
   gtsam::Vector delta(sample.sample()); //delta should be the tangent vector
@@ -161,6 +177,12 @@ template<typename T>
 T perturbWithNoise(const T& t, double sigma, int32_t seed = 42) {
   gtsam::Vector sigmas = gtsam::Vector::Constant(gtsam::traits<T>::dimension, sigma);
   return perturbWithNoise<T>(t, sigmas, seed);
+}
+
+template<typename T>
+T createRandomAroundIdentity(double sigma, int32_t seed = 52) {
+  T t = gtsam::traits<T>::Identity();
+  return perturbWithNoise(t, sigma, seed);
 }
 
 

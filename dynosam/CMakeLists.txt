@@ -98,6 +98,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
   src/frontend/RGBDInstance-Definitions.cc
+  src/frontend/Frontend-Definitions.cc
 
   src/backend/BackendDefinitions.cc
   src/backend/BackendPipeline.cc

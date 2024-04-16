@@ -24,6 +24,7 @@
 #include "internal/simulator.hpp"
 #include "internal/helpers.hpp"
 
+#include "dynosam/backend/BackendPipeline.hpp"
 #include "dynosam/backend/IncrementalOptimizer.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"

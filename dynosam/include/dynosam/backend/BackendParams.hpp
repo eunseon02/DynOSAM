@@ -45,7 +45,6 @@ struct BackendParams {
     double static_point_noise_sigma_ = 0.06; //! Isotropic noise used on PoseToPointFactor for static points
     double dynamic_point_noise_sigma_ = 0.0125; //! Isotropic noise used on PoseToPointFactor for dynamic points
 
-
     double odometry_rotation_sigma_ = 0.02; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = 0.01; //! sigma used to construct the noise model on the translation component of the odomety (between factor)
 
@@ -55,6 +54,9 @@ struct BackendParams {
     double motion_ternary_factor_noise_sigma_ = 0.001;
 
     bool use_logger_ = true;
+
+    size_t min_static_obs_ = 2u;
+    size_t min_dynamic_obs_ = 3u;
 
     static BackendParams fromYaml(const std::string& file_path);
 

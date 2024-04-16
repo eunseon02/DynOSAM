@@ -326,6 +326,7 @@ public:
     virtual int datasetSize() const override {
         //this is very gross - the ending_frame_id_ will only get set after the first call to spin, but this is what we want to return
         //so the value may change depending on if setEndingFrame has been called and/or when datasetSize is called!!!!!
+        //TODO: (jesse).... not sure why i did it like this... could just set starting ending frame in the setStart/End function?
         if(is_first_spin_) {
             return (int)BaseDynoDataset::getDatasetSize();
         }

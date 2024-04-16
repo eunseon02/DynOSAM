@@ -20,17 +20,96 @@
  *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  *   SOFTWARE.
  */
+#include "internal/simulator.hpp"
+#include "internal/helpers.hpp"
+
+#include "dynosam/utils/SafeCast.hpp"
+
+#include "dynosam/pipeline/PipelineBase.hpp"
+#include "dynosam/pipeline/PipelinePayload.hpp"
+#include "dynosam/common/ModuleBase.hpp"
+
+#include "dynosam/frontend/FrontendPipeline.hpp"
+#include "dynosam/backend/RGBDBackendModule.hpp"
+
+#include <filesystem>
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <variant>
 #include <type_traits>
 
-#include "dynosam/pipeline/PipelineBase.hpp"
-#include "dynosam/pipeline/PipelinePayload.hpp"
-#include "dynosam/common/ModuleBase.hpp"
-
 using namespace dyno;
+
+
+namespace fs = std::filesystem;
+class FrontendWithFiles : public ::testing::Test
+{
+public:
+  FrontendWithFiles()
+  {
+  }
+
+protected:
+  virtual void SetUp()
+  {
+    fs::create_directory(sandbox);
+  }
+  virtual void TearDown()
+  {
+    fs::remove_all(sandbox);
+  }
+
+  const fs::path sandbox{"/tmp/sandbox_json_backend"};
+
+};
+
+
+//TODO: why is this in the backend testing... oh well...
+TEST_F(FrontendWithFiles, testLoadingFrontendWithJson) {
+    using namespace dyno;
+    auto scenario = dyno_testing::makeDefaultScenario();
+
+    std::map<FrameId, RGBDInstanceOutputPacket::Ptr> rgbd_output;
+
+    for(size_t i = 0; i < 10; i++) {
+        auto output = scenario.getOutput(i);
+        rgbd_output.insert({i, output});
+    }
+
+    fs::path tmp_bison_path = sandbox / "simple_bison.bson";
+    std::string tmp_bison_path_str = tmp_bison_path;
+
+    JsonConverter::WriteOutJson(rgbd_output, tmp_bison_path_str, JsonConverter::Format::BSON);
+
+    FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits> offline_backed("offline-rgbdfrontend", tmp_bison_path_str);
+
+    ThreadsafeQueue<FrontendOutputPacketBase::ConstPtr> queue;
+    offline_backed.registerOutputQueue(&queue);
+
+     int consumed = 0;
+    while(offline_backed.spinOnce()) {
+        FrontendOutputPacketBase::ConstPtr base;
+        bool result = queue.popBlocking(base);
+
+        EXPECT_TRUE(result);
+        EXPECT_TRUE(base != nullptr);
+        RGBDInstanceOutputPacket::ConstPtr derived = safeCast<FrontendOutputPacketBase, RGBDInstanceOutputPacket>(base);
+        EXPECT_TRUE(derived != nullptr);
+
+        //this value indexed by consume will be wrong if pop blocking doesnt work
+        EXPECT_EQ(*derived, *rgbd_output.at(consumed));
+        consumed++;
+    }
+
+    //should spin until the pipeline is shutdown which happens when we dont have any more data
+    offline_backed.spin();
+    EXPECT_TRUE(offline_backed.isShutdown());
+    EXPECT_EQ(consumed, 10); //we should habve processed data 10 tiuems
+
+}
+
+
 
 //https://www.cppstories.com/2018/09/visit-variants/
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };

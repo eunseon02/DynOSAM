@@ -22,6 +22,9 @@
  */
 #pragma once
 
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
+
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <iostream>
@@ -37,17 +40,36 @@ using json = nlohmann::json;
 
 namespace dyno {
 
-// wrapper to write a type t that is json seralizable to an open ofstream
-//with a set width
-template<typename T>
-std::ofstream& writeJson(std::ofstream& os, const T& t) {
-    //T must be json seralizable
-    const json j = t;
-    os << std::setw(4) << j;
-    return os;
-};
+// map KeyPointType values to JSON as strings
+NLOHMANN_JSON_SERIALIZE_ENUM( KeyPointType, {
+    {STATIC, "static"},
+    {DYNAMIC, "dynamic"},
+})
 
-}
+
+// map ReferenceFrame values to JSON as strings
+NLOHMANN_JSON_SERIALIZE_ENUM( ReferenceFrame, {
+    {GLOBAL, "global"},
+    {LOCAL, "local"},
+    {OBJECT, "object"},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM( LandmarkStatus::Method, {
+    {LandmarkStatus::Method::MEASURED, "measured"},
+    {LandmarkStatus::Method::TRIANGULATED, "triangulated"},
+    {LandmarkStatus::Method::OPTIMIZED, "optimized"},
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM( FrontendType, {
+    {kRGBD, "RGB"},
+    {kMono, "Mono"},
+})
+
+//forward declare - IO definition is in .cc file
+class FrontendOutputPacketBase;
+class RGBDInstanceOutputPacket;
+
+} //dyno
 
 
 /**
@@ -95,6 +117,26 @@ namespace nlohmann {
         }
     };
 
+    template <typename T>
+    struct adl_serializer<std::shared_ptr<T>> {
+        static void to_json(json& j, const std::shared_ptr<T>& opt) {
+            if (opt == nullptr) {
+                j = nullptr;
+            } else {
+              j = *opt; // this will call adl_serializer<T>::to_json which will
+                        // find the free function to_json in T's namespace!
+            }
+        }
+
+        static void from_json(const json& j, std::shared_ptr<T>& opt) {
+            if (j.is_null()) {
+                opt = opt;
+            } else {
+                opt = std::make_shared<T>(j.template get<T>());
+            }
+        }
+    };
+
     /**
      * @brief General template on Eigen. Somewhat experimental...
      *
@@ -112,8 +154,8 @@ namespace nlohmann {
      */
     template<typename Scalar, int Rows, int Cols>
     struct adl_serializer<Eigen::Matrix<Scalar, Rows, Cols>> {
-        static_assert(Rows != Eigen::Dynamic, "Not implemented for dynamic rows");
-        static_assert(Cols != Eigen::Dynamic, "Not implemented for dynamic cols");
+        // static_assert(Rows != Eigen::Dynamic, "Not implemented for dynamic rows");
+        // static_assert(Cols != Eigen::Dynamic, "Not implemented for dynamic cols");
 
         static void to_json(json& j, const Eigen::Matrix<Scalar, Rows, Cols>& matrix) {
             for (int row = 0; row < matrix.rows(); ++row) {
@@ -137,6 +179,7 @@ namespace nlohmann {
     };
 
 
+    //begin POSE3
     template <>
     struct adl_serializer<gtsam::Pose3> {
         static void to_json(json& j, const gtsam::Pose3& pose) {
@@ -172,6 +215,24 @@ namespace nlohmann {
             pose = gtsam::Pose3(rotation, translation);
         }
     };
+    //end POSE3
+
+
+    // //begin gtsam::FastMap
+    template<typename KEY, typename VALUE>
+    struct adl_serializer<gtsam::FastMap<KEY, VALUE>> {
+        using Map = gtsam::FastMap<KEY, VALUE>;
+
+        static void to_json(json& j, const gtsam::FastMap<KEY, VALUE>& map) {
+            j = static_cast<typename Map::Base>(map);
+        }
+
+        static void from_json(const json& j, gtsam::FastMap<KEY, VALUE>& map) {
+            map = Map(j.template get<typename Map::Base>());
+        }
+    };
+    // //end gtsam::FastMap
+
 
     template <typename T>
     struct adl_serializer<cv::Rect_<T>> {
@@ -191,4 +252,82 @@ namespace nlohmann {
             rect = cv::Rect_<T>(x, y, width, height);
         }
     };
+
+    //definitions of seralization functions.
+    //implementation in .cc
+    template <>
+    struct adl_serializer<dyno::RGBDInstanceOutputPacket> {
+        static void to_json(json& j, const dyno::RGBDInstanceOutputPacket& input);
+        static dyno::RGBDInstanceOutputPacket from_json(const json& j);
+    };
+
+    // template <>
+    // struct adl_serializer<dyno::FrontendOutputPacketBase> {
+    //     static void to_json(json& j, const dyno::FrontendOutputPacketBase& input);
+    //     static dyno::FrontendOutputPacketBase from_json(const json& j);
+    // };
+
+    template <typename T>
+    struct adl_serializer<dyno::ReferenceFrameValue<T>> {
+        static void to_json(json& j, const dyno::ReferenceFrameValue<T>& value) {
+            j["estimate"] = static_cast<T>(value);
+            j["reference_frame"] = static_cast<dyno::ReferenceFrame>(value);
+
+        }
+        static void from_json(const json& j, dyno::ReferenceFrameValue<T>& value) {
+            T estimate = j["estimate"].template get<T>();
+            dyno::ReferenceFrame rf = j["reference_frame"].template get<dyno::ReferenceFrame>();
+            value = dyno::ReferenceFrameValue<T>(estimate, rf);
+        }
+    };
+
+
+
+
+} //nlohmann
+
+//restart dyno nanmespace after we have defined all the 3rd party librariers
+//to avoid the "Specialization of member function template after instantiation error, and order of member functions" error
+namespace dyno {
+
+inline void to_json(json& j, const KeypointStatus& status) {
+    //expect value to be seralizable
+    j["value"] = (json)status.value();
+    j["frame_id"] = status.frameId();
+    j["tracklet_id"] = status.trackletId();
+    j["object_id"] = status.objectId();
+    j["kp_type"] = (json)status.kp_type_;
 }
+
+inline void from_json(const json& j, KeypointStatus& status) {
+    Keypoint value = j["value"].template get<Keypoint>();
+    FrameId frame_id = j["frame_id"].template get<FrameId>();
+    TrackletId tracklet_id = j["tracklet_id"].template get<TrackletId>();
+    ObjectId object_id = j["object_id"].template get<ObjectId>();
+    KeyPointType kp_type = j["kp_type"].template get<KeyPointType>();
+
+    status = KeypointStatus(value, frame_id, tracklet_id, object_id, kp_type);
+}
+
+inline void to_json(json& j, const LandmarkStatus& status) {
+    //expect value to be seralizable
+    j["value"] = (json)status.value();
+    j["frame_id"] = status.frameId();
+    j["tracklet_id"] = status.trackletId();
+    j["object_id"] = status.objectId();
+    j["reference_frame"] = status.referenceFrame();
+    j["method"] = (json)status.method_;
+}
+
+inline void from_json(const json& j, LandmarkStatus& status) {
+    Landmark value = j["value"].template get<Landmark>();
+    FrameId frame_id = j["frame_id"].template get<FrameId>();
+    TrackletId tracklet_id = j["tracklet_id"].template get<TrackletId>();
+    ObjectId object_id = j["object_id"].template get<ObjectId>();
+    ReferenceFrame rf = j["reference_frame"].template get<ReferenceFrame>();
+    LandmarkStatus::Method method = j["method"].template get<LandmarkStatus::Method>();
+
+    status = LandmarkStatus(value, frame_id, tracklet_id, object_id, rf, method);
+}
+
+} //dyno

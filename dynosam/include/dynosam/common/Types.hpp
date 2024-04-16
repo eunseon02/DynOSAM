@@ -129,7 +129,7 @@ enum KeyPointType {
 };
 
 
-enum class ReferenceFrame {
+enum ReferenceFrame {
   GLOBAL,
   LOCAL,
   OBJECT
@@ -150,7 +150,7 @@ struct ReferenceFrameValue {
   using ConstEstimate = std::add_const_t<Estimate>; //!	Const qualification of M. Regardless whether M is aleady const qualified.
 
   Estimate estimate_;
-  const ReferenceFrame frame_;
+  ReferenceFrame frame_;
 
   ReferenceFrameValue() {}
   ReferenceFrameValue(ConstEstimate& estimate, ReferenceFrame frame) : estimate_(estimate), frame_(frame) {}
@@ -175,6 +175,9 @@ public:
   //NOTE:this is possibly dangerous if we are not careful with casting (e.g. int to FrameId) since
   //the overflow coulld land us at a meaningless frame
   static constexpr auto MeaninglessFrame = std::numeric_limits<FrameId>::max();
+
+  //for IO
+  TrackedValueStatus() {}
 
   //not we will have implicit casting of all other frame_ids to int here which could be dangerous
   TrackedValueStatus(
@@ -202,6 +205,14 @@ public:
 
   ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
   const ReferenceFrameValue<Value>& referenceFrameValue() const { return value_; }
+
+  bool operator==(const This& other) const {
+    return gtsam::traits<Value>::Equals(this->value(), other.value()) &&
+      frame_id_ == other.frame_id_ &&
+      tracklet_id_ == other.tracklet_id_ &&
+      label_ == other.label_ &&
+      this->referenceFrame() == other.referenceFrame();
+  }
 
   friend std::ostream &operator<<(std::ostream &os, const This& t) {
     os << type_name<Value>() << ": " << t.value() << "\n";
@@ -252,8 +263,10 @@ inline constexpr bool IsDerivedTrackedValueStatus = std::is_base_of_v<TrackedVal
 struct LandmarkStatus : public TrackedValueStatus<Landmark> {
     using Base = TrackedValueStatus<Landmark>;
     using Base::Value;
-    enum class Method { MEASURED, TRIANGULATED, OPTIMIZED };
+    enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
     Method method_;
+
+    LandmarkStatus() {}
 
     /**
      * @brief Construct a new Landmark Status object
@@ -294,6 +307,10 @@ struct LandmarkStatus : public TrackedValueStatus<Landmark> {
       return LandmarkStatus(lmk, frame_id, tracklet_id, label, ReferenceFrame::GLOBAL, method);
     }
 
+    bool operator==(const LandmarkStatus& other) const {
+      return static_cast<const Base&>(*this) == static_cast<const Base&>(other) && method_ == other.method_;
+    }
+
 
 };
 
@@ -307,6 +324,9 @@ struct KeypointStatus : public TrackedValueStatus<Keypoint> {
   using Base = TrackedValueStatus<Keypoint>;
   using Base::Value;
   KeyPointType kp_type_;
+
+  // for I/O
+  KeypointStatus() {}
 
   /**
    * @brief Construct a new Keypoint Status object
@@ -330,6 +350,10 @@ struct KeypointStatus : public TrackedValueStatus<Keypoint> {
     CHECK(label != background_label);
     return KeypointStatus(kp, frame_id, tracklet_id, label, KeyPointType::DYNAMIC);
   }
+
+   bool operator==(const KeypointStatus& other) const {
+      return static_cast<const Base&>(*this) == static_cast<const Base&>(other) && kp_type_ == other.kp_type_;
+    }
 };
 
 
@@ -411,6 +435,8 @@ inline std::string container_to_string(const Container& container, const std::st
   }
   return ss.str();
 }
+
+
 
 
 

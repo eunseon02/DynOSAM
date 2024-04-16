@@ -52,6 +52,8 @@
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/base/Matrix.h>
 
+#include <eigen3/unsupported/Eigen/MatrixFunctions>
+#include <eigen3/unsupported/Eigen/KroneckerProduct>
 
 
 #include <string>
@@ -228,6 +230,147 @@ struct Node {
 //     // Node preVisitor;
 //     // no_op postVisitor;
 //     // gtsam::treeTraversal::DepthFirstForest(isam, rootdata, preVisitor, postVisitor);
+
+// }
+
+// //https://github.com/zhixy/SolveAXXB/blob/master/axxb/conventionalaxxbsvdsolver.cc
+// TEST(CodeConcepts, sylvesterEquation) {
+//     // Eigen::MatrixXd A;
+//     // A.resize(4, 4);
+//     // A << 1, 0, 2, 3,
+//     //      4, 1, 0, 2,
+//     //      0, 5, 5, 6,
+//     //      1, 7, 9, 0;
+
+//     gtsam::Pose3 L_k_1 = dyno::utils::createRandomAroundIdentity<gtsam::Pose3>(0.1);
+//     gtsam::Pose3 L_k_1_H_k = dyno::utils::createRandomAroundIdentity<gtsam::Pose3>(0.03);
+
+//     //L_k = L_K_1 * ^{L_k}_kH_{k-1}
+//     gtsam::Pose3 L_k = L_k_1 * L_k_1_H_k ;
+//     gtsam::Pose3 W_k_1_H_k = L_k_1 * L_k_1_H_k * L_k_1.inverse();
+
+
+
+//     Eigen::MatrixXd A = W_k_1_H_k.matrix();
+//     Eigen::MatrixXd B = L_k_1_H_k.matrix();
+
+//     //1 as we only have one A here
+//     Eigen::MatrixXd m = Eigen::MatrixXd::Zero(12*1,12);
+//     Eigen::VectorXd b = Eigen::VectorXd::Zero(12*1);
+
+//     Eigen::Matrix3d Ra = A.topLeftCorner(3,3);
+//     Eigen::Vector3d Ta = A.topRightCorner(3,1);
+//     Eigen::Matrix3d Rb = B.topLeftCorner(3,3);
+//     Eigen::Vector3d Tb = B.topRightCorner(3,1);
+
+//     m.block<9,9>(12*0,0) = Eigen::MatrixXd::Identity(9,9) - Eigen::kroneckerProduct(Ra,Rb);
+//     m.block<3,9>(12*0+9,0) = Eigen::kroneckerProduct(Eigen::MatrixXd::Identity(3,3),Tb.transpose());
+//     m.block<3,3>(12*0+9,9) = Eigen::MatrixXd::Identity(3,3) - Ra;
+//     b.block<3,1>(12*0+9,0) = Ta;
+
+//     // //different to skew in gtsam...
+//     // auto skew =[](const Eigen::Vector3d& u) {
+//     //     Eigen::Matrix3d u_hat = Eigen::MatrixXd::Zero(3,3);
+//     //     u_hat(0,1) = u(2);
+//     //     u_hat(1,0) = -u(2);
+//     //     u_hat(0,2) = -u(1);
+//     //     u_hat(2,0) = u(1);
+//     //     u_hat(1,2) = u(0);
+//     //     u_hat(2,1) = -u(0);
+//     //     return u_hat;
+//     // };
+//     // Eigen::Matrix3d Ta_skew = skew(Ta);
+//     // // m.block<3,9>(12*0+9,0) = Eigen::kroneckerProduct(Eigen::MatrixXd::Identity(3,3),Tb.transpose());
+//     // // m.block<3,3>(12*0+9,9) = Eigen::MatrixXd::Identity(3,3) - Ra;
+//     // // b.block<3,1>(12*0+9,0) = Ta;
+//     // m.block<3,9>(12*0+9,0) = Eigen::kroneckerProduct(Ta_skew,Tb.transpose());
+//     // m.block<3,3>(12*0+9,9) = Ta_skew - Ta_skew*Ra;
+
+//     // Eigen::JacobiSVD<Eigen::MatrixXd> svd( m, Eigen::ComputeFullV | Eigen::ComputeFullU );
+//     // CHECK(svd.computeV())<<"fail to compute V";
+
+//     Eigen::Matrix<double, 12, 1> x = m.bdcSvd(Eigen::ComputeThinU | Eigen::ComputeThinV).solve(b);
+//     Eigen::Matrix3d R = Eigen::Map< Eigen::Matrix<double, 3, 3, Eigen::RowMajor> >(x.data()); //row major
+
+//     LOG(INFO) << x;
+
+//     Eigen::JacobiSVD<Eigen::MatrixXd> svd(R, Eigen::ComputeThinU | Eigen::ComputeThinV);
+//     gtsam::Matrix44 handeyetransformation = gtsam::Matrix44::Identity();
+//     handeyetransformation.topLeftCorner(3,3) = svd.matrixU() * svd.matrixV().transpose();
+//     handeyetransformation.topRightCorner(3,1) = x.block<3,1>(9,0);
+
+//     handeyetransformation.topRightCorner(3,1) = x.block<3,1>(9,0);
+
+
+//     // Eigen::Matrix3d R_alpha;
+//     // R_alpha.row(0) = svd.matrixV().block<3,1>(0,11).transpose();
+//     // R_alpha.row(1) = svd.matrixV().block<3,1>(3,11).transpose();
+//     // R_alpha.row(2) = svd.matrixV().block<3,1>(6,11).transpose();
+//     // //double a = std::fabs(R_alpha.determinant());
+//     // //double alpha = R_alpha.determinant()/(pow(std::fabs(R_alpha.determinant()),4./3.));
+//     // double det = R_alpha.determinant();
+//     // double alpha = std::pow(std::abs(det),4./3.)/det;
+//     // Eigen::HouseholderQR<Eigen::Matrix3d> qr(R_alpha/alpha);
+
+//     // gtsam::Matrix44 handeyetransformation = gtsam::Matrix44::Identity();
+//     // Eigen::Matrix3d Q = qr.householderQ();
+//     // Eigen::Matrix3d Rwithscale = alpha*Q.transpose()*R_alpha;
+//     // Eigen::Vector3d R_diagonal = Rwithscale.diagonal();
+//     // for(int i=0;i<3;i++)
+//     // {
+//     //     handeyetransformation.block<3,1>(0,i) = int(R_diagonal(i)>=0?1:-1)*Q.col(i);
+//     // }
+
+//     // handeyetransformation.topRightCorner(3,1) = svd.matrixV().block<3,1>(9,11)/alpha;
+
+//     // LOG(INFO) << A;
+//     // // LOG(INFO) << B;
+//     // LOG(INFO) << handeyetransformation;
+
+
+//     // // gtsam::Matrix44 calc_C = A*handeyetransformation - handeyetransformation * B;
+//     LOG(INFO) << L_k_1;
+
+//      LOG(INFO) << A*handeyetransformation;
+//     LOG(INFO) << handeyetransformation * B;
+
+//     LOG(INFO) << handeyetransformation;
+
+
+
+//     // Eigen::RealSchur<Eigen::MatrixXd> SchurA(A);
+//     // Eigen::MatrixXd R = SchurA.matrixT();
+//     // Eigen::MatrixXd U = SchurA.matrixU();
+
+
+//     // // Eigen::MatrixXd B = -A.transpose();
+//     // Eigen::MatrixXd B;
+//     // B.resize(2, 2);
+//     // B << 0, -1,
+//     //      1, 0;
+
+//     // Eigen::RealSchur<Eigen::MatrixXd> SchurB(B);
+//     // Eigen::MatrixXd S = SchurB.matrixT();
+//     // Eigen::MatrixXd V = SchurB.matrixU();
+
+//     // //C
+//     // // Eigen::MatrixXd I_33 =  gtsam::Matrix33::Zero();
+//     // Eigen::MatrixXd C;
+//     // C.resize(4, 2);
+//     // C << 1, 0,
+//     //      2, 0,
+//     //      0, 3,
+//     //      1, 1;
+
+//     // Eigen::MatrixXd F = (U.adjoint() * C) * V;
+
+//     // Eigen::MatrixXd Y = Eigen::internal::matrix_function_solve_triangular_sylvester(R, S, F);
+
+//     // Eigen::MatrixXd X = (U * Y) * V.adjoint();
+//     // LOG(INFO) << "X= " << X;
+
+//     // Eigen::MatrixXd C_calc = A * X + X * B;
+//     // LOG(INFO) << "C calc= " << C_calc;
 
 // }
 

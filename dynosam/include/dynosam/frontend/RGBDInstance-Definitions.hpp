@@ -126,6 +126,15 @@ public:
     const BbxPerObject& getObjectBbxes() const {
         return object_bbxes_;
     }
+
+
+    bool operator==(const RGBDInstanceOutputPacket& other) const {
+        return static_cast<const FrontendOutputPacketBase&>(*this) == static_cast<const FrontendOutputPacketBase&>(other) &&
+            static_landmarks_ == other.static_landmarks_ &&
+            dynamic_landmarks_ == other.dynamic_landmarks_;
+            //TODO: no estimated_motions_, propogated_object_poses_... becuase of gtsam...
+    }
+
 private:
     CloudPerObject object_clouds_; //! Point clouds per object extracted from dynamic_landmarks_ in the world frame
     BbxPerObject object_bbxes_; //! Bounding boxes per object extracted from the object_clouds_

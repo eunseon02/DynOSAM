@@ -73,6 +73,22 @@ public:
 
 };
 
+class CsvReader
+{
+
+public:
+    DYNO_POINTER_TYPEDEFS(CsvReader)
+
+    CsvReader(const std::string& path);
+
+
+private:
+    std::ifstream infile_;
+
+
+
+};
+
 
 // Modified from: https://github.com/al-eax/CSVWriter/blob/master/include/CSVWriter.h
 class CsvWriter

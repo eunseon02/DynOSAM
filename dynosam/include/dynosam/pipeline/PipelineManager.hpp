@@ -73,12 +73,24 @@ private:
     template<typename Measurement>
     typename Optimizer<Measurement>::Ptr createOptimizer(OptimizerType optimizer_type) const;
 
+    void loadPipelines(const CameraParams& camera_params, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display);
 
 private:
     const DynoParams params_;
-    FrontendPipeline::UniquePtr frontend_pipeline_{nullptr};
+    const bool use_offline_frontend_;
+
+    //! Use the pipeline base version of the frontend pipeline
+    //! This allows us to have different pipelines to provide data to the backend (e.g. load seralized data)
+    //! which have different templates
+    PipelineBase::UniquePtr frontend_pipeline_{nullptr};
     FrontendPipeline::InputQueue frontend_input_queue_;
     FrontendPipeline::OutputQueue frontend_viz_input_queue_;
+
+    ///TODO: another hack to get the final size of the dataset
+    //depending on use_offline_frontend_ this either gets the size from the dataset
+    //of from the FrontendOfflinePipeline
+    //currently only works for RGB!!
+    std::function<FrameId()> get_dataset_size_;
 
     BackendPipeline::UniquePtr backend_pipeline_{nullptr};
     FrontendPipeline::OutputQueue backend_input_queue_;
@@ -118,16 +130,13 @@ typename Optimizer<Measurement>::Ptr DynoPipelineManager::createOptimizer(Optimi
         LOG(INFO) << "Constructing batch optimizer";
 
         BatchOptimizerParams batch_params;
-
-        //construct function to get end of dataset
-        auto get_last_frame = [=]() -> FrameId {
-            CHECK(data_loader_) << "Data Loader is null when accessing get_last_frame_ in BatchOptimizerParams";
-            return data_loader_->datasetSize();
-        };
-        batch_params.get_last_frame = get_last_frame;
+        CHECK(get_dataset_size_) << "dataset size function must be set - right now only works with RBG!!";
+        batch_params.get_last_frame = get_dataset_size_;
 
         return std::make_shared<BatchOptimizer<Measurement>>(batch_params);
     }
 }
+
+
 
 } //dyno

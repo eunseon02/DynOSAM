@@ -174,6 +174,8 @@ private:
 
 class DebugInfo {
 public:
+    DYNO_POINTER_TYPEDEFS(DebugInfo)
+
     int num_static_factors = 0; //num new static factors added
     int num_new_static_points = 0;
 
@@ -206,7 +208,14 @@ public:
 class BackendLogger : public EstimationModuleLogger {
 public:
     DYNO_POINTER_TYPEDEFS(BackendLogger)
-    BackendLogger() : EstimationModuleLogger("backend") {}
+    BackendLogger();
+    ~BackendLogger();
+
+    void logTrackletIdToObjectId(const gtsam::FastMap<TrackletId, ObjectId>& mapping);
+
+private:
+    const std::string tracklet_to_object_id_file_name_;
+    CsvWriter::UniquePtr tracklet_to_object_id_csv_;
 };
 
 
