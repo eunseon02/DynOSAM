@@ -464,7 +464,7 @@ TEST(CodeConcepts, drawInformationMatrix) {
     //     // if the landmark variable included in this factor has not yet been added
     //     // to the initial variable value estimate, add it
     //     if (!initial_estimate.exists(gtsam::Symbol('l', l))) {
-    //         gtsam::Pose3 camPose = initial_estimate.at<gtsam::Pose3>(gtsam::Symbol('x', x));
+            // gtsam::Pose3 camPose = initial_estimate.at<gtsam::Pose3>(gtsam::Symbol('x', x));
     //         // transformFrom() transforms the input Point3 from the camera pose space,
     //         // camPose, to the global space
     //         gtsam::Point3 worldPoint = camPose.transformFrom(gtsam::Point3(X, Y, Z));

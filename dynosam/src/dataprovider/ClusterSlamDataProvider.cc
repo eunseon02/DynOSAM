@@ -535,18 +535,29 @@ private:
             // the pose of each cluster except for the first line - that line represents the camera pose.
             for(size_t i = 0; i < poses.size(); i++) {
 
-                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
                 //pose is in world coordinate convention so we put into camera convention (the camera_to_world.inverse())
-                gtsam::Pose3 pose = camera_to_world.inverse() * poses.at(i);
+                // gtsam::Pose3 pose = camera_to_world.inverse() * poses.at(i);
+                gtsam::Pose3 pose = poses.at(i);
+
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+
+                // LOG(INFO) << pose;
+
+                // pose = camera_to_world.inverse() * pose;
+
+                // LOG(INFO) << pose;
+
 
                 if(!initial_frame_set) {
                     //expect very first pose (first frame, and first pose within that frame) to be the first camera pose
                     initial_pose = pose;
                     initial_frame_set = true;
+                     LOG(INFO) << pose;
                 }
 
                 // offset initial pose so we start at "0, 0, 0"
                 pose = initial_pose.inverse() * pose;
+
 
                 if(i == 0) {
                     gt_packet.X_world_ = pose;

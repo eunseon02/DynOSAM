@@ -33,6 +33,7 @@
 #include <iostream>
 #include <string>
 #include <unordered_map>
+#include <filesystem>
 
 #include <glog/logging.h>
 
@@ -40,6 +41,9 @@
 
 
 namespace dyno {
+
+  namespace fs = std::filesystem;
+
 
 /**
  * @brief Constructs a file path (using the file name) where the root of the path is
@@ -97,22 +101,31 @@ static inline void OpenFile(const std::string& output_filename,
 // Wrapper for std::ofstream to open/close it when created/destructed.
 class OfstreamWrapper {
  public:
+
   OfstreamWrapper(const std::string& filename,
                   const bool& open_file_in_append_mode = false);
+
+  OfstreamWrapper(const std::string& filename,
+                  const std::string& output_path,
+                  const bool& open_file_in_append_mode = false);
+
   virtual ~OfstreamWrapper();
   void closeAndOpenLogFile();
 
   static bool WriteOutCsvWriter(const CsvWriter& csv, const std::string& filename);
 
+  fs::path getFilePath() const;
+
  public:
-  std::ofstream ofstream_;
   const std::string filename_;
   const std::string output_path_;
   const bool open_file_in_append_mode_ = false;
 
+  std::ofstream ofstream_;
+
+
  protected:
-  void openLogFile(const std::string& output_file_name,
-                   bool open_file_in_append_mode = false);
+  void openLogFile(bool open_file_in_append_mode = false);
 };
 
 

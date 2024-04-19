@@ -20,8 +20,10 @@ Panels:
         - /Dynamic Points Init1/Status1
         - /Newly Scaled Dynamic Points1
         - /Composed object paths (opt)1
+        - /TF1
+        - /TF1/Frames1
       Splitter Ratio: 0.6119691133499146
-    Tree Height: 636
+    Tree Height: 635
   - Class: rviz_common/Selection
     Name: Selection
   - Class: rviz_common/Tool Properties
@@ -237,7 +239,7 @@ Visualization Manager:
           Scale: 1
           Value: true
         Value: true
-      Enabled: false
+      Enabled: true
       Keep: 1
       Name: Odometry (GT)
       Position Tolerance: 0.10000000149011612
@@ -258,7 +260,7 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/odom
-      Value: false
+      Value: true
     - Alpha: 1
       Buffer Length: 1
       Class: rviz_default_plugins/Path
@@ -394,17 +396,17 @@ Visualization Manager:
         Value: /dynosam/ground_truth/object_poses
       Value: false
     - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
+      Enabled: true
       Name: Object Paths (GT)
       Namespaces:
-        {}
+        gt_frontend_composed_object_path: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /dynosam/ground_truth/object_paths
-      Value: false
+      Value: true
     - Angle Tolerance: 0.10000000149011612
       Class: rviz_default_plugins/Odometry
       Covariance:
@@ -564,6 +566,70 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /dynosam/backend/composed_object_poses
       Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        FC_lidar:
+          Value: true
+        FC_lidar_mount:
+          Value: true
+        FL_drive:
+          Value: true
+        FL_steer:
+          Value: true
+        FR_drive:
+          Value: true
+        FR_steer:
+          Value: true
+        RC_lidar:
+          Value: true
+        RC_lidar_mount:
+          Value: true
+        RL_drive:
+          Value: true
+        RL_gps:
+          Value: true
+        RL_steer:
+          Value: true
+        RR_drive:
+          Value: true
+        RR_gps:
+          Value: true
+        RR_steer:
+          Value: true
+        base_footprint:
+          Value: true
+        base_link:
+          Value: true
+        camera:
+          Value: false
+        imu_link:
+          Value: true
+        robot:
+          Value: true
+        sonde:
+          Value: true
+        sonde_mount:
+          Value: true
+        sonde_tip:
+          Value: true
+        world:
+          Value: false
+      Marker Scale: 5
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        world:
+          camera:
+            {}
+          robot:
+            {}
+      Update Interval: 0
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -610,35 +676,35 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 30.366931915283203
+      Distance: 95.54246520996094
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: -1.0606906414031982
-        Y: 8.562071800231934
-        Z: 106.42842864990234
+        X: 3.565370798110962
+        Y: 41.799659729003906
+        Z: 58.29789733886719
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.1347973793745041
+      Pitch: -0.8897969722747803
       Target Frame: world
       Value: Orbit (rviz_default_plugins)
-      Yaw: 4.703569412231445
+      Yaw: 4.673561096191406
     Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 927
+  Height: 926
   Hide Left Dock: false
   Hide Right Dock: false
   Image:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000020800000305fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b00000305000000c700fffffffa000000020100000003fb0000000a0049006d0061006700650000000000ffffffff0000005a00fffffffb0000000a0049006d0061006700650000000000ffffffff0000000000000000fb000000100044006900730070006c00610079007301000000000000017c0000015600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d0061006700650100000251000000f00000000000000000000000010000010000000305fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003b00000305000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000006b50000003efc0100000002fb0000000800540069006d00650100000000000006b50000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000003a10000030500000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd00000004000000000000020800000304fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b00000304000000c700fffffffa000000020100000003fb0000000a0049006d0061006700650000000000ffffffff0000005a00fffffffb0000000a0049006d0061006700650000000000ffffffff0000000000000000fb000000100044006900730070006c00610079007301000000000000017c0000015600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d0061006700650100000251000000f00000000000000000000000010000010000000304fc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003b00000304000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000006b40000003efc0100000002fb0000000800540069006d00650100000000000006b40000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000003a00000030400000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:
@@ -647,6 +713,6 @@ Window Geometry:
     collapsed: false
   Views:
     collapsed: false
-  Width: 1717
-  X: 51
+  Width: 1716
+  X: 54
   Y: 75

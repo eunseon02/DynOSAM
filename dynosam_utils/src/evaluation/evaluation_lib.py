@@ -25,7 +25,7 @@ logger = logging.getLogger("dynosam_eval")
 _ch = logging.StreamHandler()
 _ch.setLevel(logging.DEBUG)
 _ch.setFormatter(logging.Formatter(
-    fmt='[%(levelname)s] %(name)s: %(message)s'))
+    fmt='[%(levelname)s][%(filename)s:%(lineno)d] %(name)s: %(message)s'))
 # add ch to logger
 logger.addHandler(_ch)
 
@@ -378,93 +378,100 @@ class EgoObjectMotionEvaluator(Evaluator):
         return [(fig_traj, "Trajectires")]
 
 
-# These files will match the output logger file names from Logger.cc
-# and will match the frontend and backend output log files
-_frontend_motion_error_log = "frontend_object_motion_error_log.csv"
-_frontend_object_pose_log = "frontend_object_pose_log.csv"
-_frontend_object_pose_error_log = "frontend_object_pose_errors_log.csv"
-_frontend_camera_pose_error_log = "frontend_camera_pose_error_log.csv"
-_frontend_camera_pose_log = "frontend_camera_pose_log.csv"
-_frontend_map_point_log = "frontend_map_points_log.csv"
+class DataFiles:
+    def __init__(self, prefix:str, **kwargs) -> None:
+        # These files will match the output logger file names from Logger.cc
+        # as the prefix here is the prefix used in the logger
+        self.prefix = prefix
+        self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
+        self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
 
-_backend_motion_error_log = "backend_object_motion_error_log.csv"
-_backend_object_pose_log = "backend_object_pose_log.csv"
-_backend_object_pose_error_log = "backend_object_pose_errors_log.csv"
-_backend_camera_pose_error_log = "backend_camera_pose_error_log.csv"
-_backend_camera_pose_log = "backend_camera_pose_log.csv"
+        self.motion_error_log = prefix + "_object_motion_error_log.csv"
+        self.object_pose_log = prefix + "_object_pose_log.csv"
+        self.object_pose_error_log = prefix + "_object_pose_errors_log.csv"
+        self.camera_pose_error_log = prefix + "_camera_pose_error_log.csv"
+        self.camera_pose_log = prefix + "_camera_pose_log.csv"
+        self.map_point_log = prefix + "_map_points_log.csv"
+
+    def __str__(self):
+        return "DataFiles - prefix: {}, result file name: {}, plot collection name: {}".format(
+            self.prefix,
+            self.results_file_name,
+            self.plot_collection_name
+        )
 
 
 class DatasetEvaluator:
     def __init__(self, output_folder_path:str, args) -> None:
         self._output_folder_path = output_folder_path
         self._args = args
-        # frontend file paths
-        self._frontend_motion_error_log_path = self._create_existing_file_path(_frontend_motion_error_log)
-        self._frontend_object_pose_log_path = self._create_existing_file_path(_frontend_object_pose_log)
-        self._frontend_object_pose_error_log_path = self._create_existing_file_path(_frontend_object_pose_error_log)
-        self._frontend_camera_pose_error_log_path = self._create_existing_file_path(_frontend_camera_pose_error_log)
-        self._frontend_camera_pose_log_path = self._create_existing_file_path(_frontend_camera_pose_log)
-
-        # backend file paths
-        self._backend_motion_error_log_path = self._create_existing_file_path(_backend_motion_error_log)
-        self._backend_object_pose_log_path = self._create_existing_file_path(_backend_object_pose_log)
-        self._backend_object_pose_error_log_path = self._create_existing_file_path(_backend_object_pose_error_log)
-        self._backend_camera_pose_error_log_path = self._create_existing_file_path(_backend_camera_pose_error_log)
-        self._backend_camera_pose_log_path = self._create_existing_file_path(_backend_camera_pose_log)
-
 
     def run_analysis(self):
         logger.info("Running analysis using files at output path {}".format(self._output_folder_path))
-        # analyse frontend object motion error
-        if self._frontend_motion_error_log_path is None:
-            logger.fatal("No file {} to analyse".format(_frontend_motion_error_log), exc_info=1)
-            raise FileNotFoundError(_frontend_motion_error_log)
 
-        frontend_motion_eval = MotionErrorEvaluator(
-            self._frontend_motion_error_log_path,
-            self._frontend_object_pose_log_path,
-            self._frontend_object_pose_error_log_path)
+        frontend_files = DataFiles("frontend")
+        self.run_single_analysis(frontend_files)
 
+        backend_files = DataFiles("backend")
+        self.run_single_analysis(backend_files)
 
-        frontend_camera_pose_eval = CameraPoseEvaluator(
-            self._frontend_camera_pose_error_log_path,
-            self._frontend_camera_pose_log_path
+    def run_single_analysis(self, datafiles: DataFiles):
+        prefix = datafiles.prefix
+
+        #TODO: this does not work...?
+        analysis_logger = logger.getChild(prefix)
+
+        analysis_logger.info("Running analysis with datafile prefix: {}".format(prefix))
+        motion_error_log_path = self._create_existing_file_path(datafiles.motion_error_log)
+        object_pose_log_path = self._create_existing_file_path(datafiles.object_pose_log)
+        object_pose_error_log_path = self._create_existing_file_path(datafiles.object_pose_error_log)
+        camera_pose_error_log_path = self._create_existing_file_path(datafiles.camera_pose_error_log)
+        camera_pose_log_path = self._create_existing_file_path(datafiles.camera_pose_log)
+
+        evaluators = []
+        motion_eval = self._check_and_cosntruct_generic_eval(
+            MotionErrorEvaluator,
+            motion_error_log_path,
+            object_pose_log_path,
+            object_pose_error_log_path
         )
 
-        backend_motion_eval = MotionErrorEvaluator(
-            self._backend_motion_error_log_path,
-            self._backend_object_pose_log_path,
-            self._backend_object_pose_error_log_path)
-
-
-        backend_camera_pose_eval = CameraPoseEvaluator(
-            self._backend_camera_pose_error_log_path,
-            self._backend_camera_pose_log_path
+        camera_pose_eval = self._check_and_cosntruct_generic_eval(
+            CameraPoseEvaluator,
+            camera_pose_error_log_path,
+            camera_pose_log_path
         )
 
-        self._save_results_file("fontend_results", [frontend_motion_eval, frontend_camera_pose_eval])
-        self._save_results_file("backend_results", [backend_motion_eval, backend_camera_pose_eval])
+        if motion_eval:
+            analysis_logger.info("Adding motion eval")
+            evaluators.append(motion_eval)
 
-        frontend_all_eval = EgoObjectMotionEvaluator(frontend_camera_pose_eval, frontend_motion_eval)
-        backend_all_eval = EgoObjectMotionEvaluator(backend_camera_pose_eval, backend_motion_eval)
+        if camera_pose_eval:
+            analysis_logger.info("Adding camera pose eval")
+            evaluators.append(camera_pose_eval)
 
-        frontend_plot_collection = evo_plot.PlotCollection("Frontend")
-        add_eval_plot(frontend_plot_collection, frontend_camera_pose_eval)
-        add_eval_plot(frontend_plot_collection, frontend_motion_eval)
-        add_eval_plot(frontend_plot_collection, frontend_all_eval)
+        self._save_results_file(datafiles.results_file_name, evaluators)
 
-        backend_plot_collection = evo_plot.PlotCollection("Backend")
-        add_eval_plot(backend_plot_collection, backend_camera_pose_eval)
-        add_eval_plot(backend_plot_collection, backend_motion_eval)
-        add_eval_plot(backend_plot_collection, backend_all_eval)
+        if camera_pose_eval and motion_eval:
+            analysis_logger.info("Adding EgoObjectMotionEvaluator")
+            evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
+
+        plot_collection_name = datafiles.plot_collection_name
+        analysis_logger.info("Constructing plot collection {}".format(plot_collection_name))
+        plot_collection = evo_plot.PlotCollection(plot_collection_name)
+
+        for evals  in evaluators:
+            add_eval_plot(plot_collection, evals)
 
 
-        frontend_plot_collection.show()
-        backend_plot_collection.show()
-
+        plot_collection.show()
 
 
     def _save_results_file(self, file_name: str, evaluators: List[Evaluator]):
+        if len(evaluators) == 0:
+            logger.warning("No evaluators provided to save results!")
+            return
+
         output_file_name = self._create_new_file_path(file_name) + ".json"
 
         logger.info("Writing results json to file {}".format(output_file_name))
@@ -473,7 +480,9 @@ class DatasetEvaluator:
 
         for evals  in evaluators:
             result = evals.get_results_yaml()
-            output_json.update(result)
+
+            if result:
+                output_json.update(result)
 
         import json
 
@@ -485,8 +494,8 @@ class DatasetEvaluator:
 
     def _create_existing_file_path(self, file:str) -> Optional[str]:
         """
-        Create a full file path at the output folder path using the input file name.
-        Exists the file to exist
+        Create a full file path at the output folder path using the input file name to an existing file path.
+        Checks that a file exists at the path given
 
         Args:
             file (str): Input file name
@@ -499,3 +508,21 @@ class DatasetEvaluator:
         if not os.path.exists(file_path):
             return None
         return file_path
+
+    def _check_and_cosntruct_generic_eval(self, cls, *args):
+        import inspect
+
+        if not inspect.isclass(cls):
+            logger.fatal("Argument cls ({}) shoudl be a class type and not an instance".format(cls))
+
+        if not issubclass(cls, Evaluator):
+            logger.fatal("Argument cls ({}) must derive from Evaluator!".format(cls.__name__))
+
+        for arg in args:
+            assert isinstance(arg, str)
+            if arg is None:
+                logger.warning("Expected file path is none when constructing evaluator {} with args: {}".format(cls.__name__, args))
+                return None
+
+        logger.info("Constructor evaluator: {}".format(cls.__name__))
+        return cls(*args)

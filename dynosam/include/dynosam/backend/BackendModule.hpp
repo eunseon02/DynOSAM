@@ -94,7 +94,7 @@ protected:
     //NOTE: this is copied directly from the frontend module.
     GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor).
 
-    BackendLogger::UniquePtr logger_;
+    BackendLogger::UniquePtr logger_; //should be parsed in so we can change the prefix for experiments!!
     BackendSpinState spin_state_; //! Spin state of the backend. Updated in the backend module base via InputCallback (see BackendModule constructor).
 
     // //! Camera related parameters

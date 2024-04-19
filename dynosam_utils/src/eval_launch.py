@@ -99,18 +99,62 @@ def parser():
     return shared_parser
 
 
-"""
-can run as python3 eval_launch.py <args>
-any additional args will be parsed to the dyno_sam_launch.py file so can be used as GFLAGS
-e.g python3 eval_launch.py --output_path=/root/results/DynoSAM/ to set the GFLAG
-"""
-def main(parsed_args, unknown_args):
-    """Run demo nodes via launch."""
-    datset_path = parsed_args.dataset_path
+def run(parsed_args, unknown_args):
+    """
+    Runs the dynosam launch file with given input arguments.
+    The input arguments are twofold:
+    parsed_args is a dictionary of "cmd line" arguments that generally come from the argument parser.
+    Parsed args must contain keys for
+        - dataset_path: str
+        - output_path: str
+        - name: str
+        - run_pipeline: bool
+        - run_analysis: bool
+    and optionally
+        - params_path: str
+    This should be a dictioanry of values rather than an argument parser instance.
+
+    unknown args are a list of additional arguments that will be parsed to the dynosam launch file
+    and appended to the **argv array in the actual executable. These should include arguments we want to actually
+    process in the program and should include additional gflags that we want to modify directly (e.g. in the form --flag=value)
+
+    Args:
+        parsed_args (_type_): _description_
+        unknown_args (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    if "dataset_path" not in parsed_args:
+        log.fatal("dataset_path key is missing from parsed args!")
+
+    if "output_path" not in parsed_args:
+        log.fatal("output_path key is missing from parsed args!")
+
+    if "name" not in parsed_args:
+        log.fatal("name key is missing from parsed args!")
+
+    if "run_pipeline" not in parsed_args:
+        log.fatal("run_pipeline key is missing from parsed args!")
+
+    if "run_analysis" not in parsed_args:
+        log.fatal("run_analysis key is missing from parsed args!")
+
+    datset_path = parsed_args["dataset_path"]
+    output_path = parsed_args["output_path"]
+    name = parsed_args["name"]
+    run_pipeline = parsed_args["run_pipeline"]
+    run_analysis = parsed_args["run_analysis"]
+
+    # print(parsed_args)
+
 
     launch_arguments={'dataset_path': datset_path}
-    if parsed_args.params_path:
-        launch_arguments.update({"params_path": parsed_args.params_path})
+
+    # if params path is not provided, the dyno_sam_launch will search for this
+    # on the default path anyway (as specified in the launch file)
+    if "params_path" in parsed_args and parsed_args["params_path"]:
+        launch_arguments.update({"params_path": parsed_args["params_path"]})
 
 
     ld = IncludeLaunchDescription(
@@ -120,13 +164,12 @@ def main(parsed_args, unknown_args):
         launch_arguments=launch_arguments.items(),
     )
 
-    output_folder_path = os.path.join(parsed_args.output_path, parsed_args.name)
+    output_folder_path = os.path.join(output_path, name)
     create_full_path_if_not_exists(output_folder_path)
 
     unknown_args.append("--output_path={}".format(output_folder_path))
 
     running_success = True
-    run_pipeline = parsed_args.run_pipeline
     if run_pipeline:
         # parse arguments down to the actual launch file
         # these will be appended to the Node(arguments=...) parameter and can be used
@@ -136,7 +179,6 @@ def main(parsed_args, unknown_args):
         running_success = ls.run()
 
 
-    run_analysis = parsed_args.run_analysis
     if run_analysis:
         evaluator =  eval.DatasetEvaluator(output_folder_path, parsed_args)
         evaluator.run_analysis()
@@ -156,4 +198,6 @@ if __name__ == '__main__':
     # pipeline. unknown are cmdline args not registered to the parser and will be additional arguments that
     # the user wants to parse to the LaunchService as real args to be used as GFLAGS.
     args, unknown = parser.parse_known_args()
-    sys.exit(main(args, unknown))
+    args_dictionary = vars(args)
+
+    sys.exit(run(args_dictionary, unknown))

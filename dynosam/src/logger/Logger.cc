@@ -35,8 +35,9 @@ DEFINE_string(output_path, "./", "Path where to store dynosam's log output.");
 
 namespace dyno {
 
+namespace fs = std::filesystem;
+
 std::string getOutputFilePath(const std::string& file_name) {
-  namespace fs = std::filesystem;
   fs::path out_path(FLAGS_output_path);
   return out_path / file_name;
 }
@@ -54,8 +55,14 @@ void writeStatisticsSummaryToFile(const std::string& file_name) {
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,
                                  const bool& open_file_in_append_mode)
-    : filename_(filename), output_path_(FLAGS_output_path) {
-  openLogFile(filename, open_file_in_append_mode);
+    : OfstreamWrapper(filename, FLAGS_output_path, open_file_in_append_mode) {}
+
+
+OfstreamWrapper::OfstreamWrapper(const std::string& filename,
+                const std::string& output_path,
+                const bool& open_file_in_append_mode)
+  : filename_(filename), output_path_(output_path) {
+    openLogFile(open_file_in_append_mode);
 }
 
 // This destructor will directly close the log file when the wrapper is
@@ -81,13 +88,21 @@ bool OfstreamWrapper::WriteOutCsvWriter(const CsvWriter& csv, const std::string&
     return csv.write(ofsw.ofstream_);
 }
 
-void OfstreamWrapper::openLogFile(const std::string& output_file_name,
-                                  bool open_file_in_append_mode) {
-  CHECK(!output_file_name.empty());
-  LOG(INFO) << "Opening output file: " << output_file_name.c_str();
-  OpenFile(output_path_ + '/' + output_file_name,
+void OfstreamWrapper::openLogFile(bool open_file_in_append_mode) {
+  CHECK(!filename_.empty());
+  CHECK(!output_path_.empty());
+  LOG(INFO) << "Opening output file: " << filename_.c_str();
+  OpenFile((std::string)getFilePath(),
            &ofstream_,
            open_file_in_append_mode);
+}
+
+
+fs::path OfstreamWrapper::getFilePath() const {
+  fs::path fs_out_path(output_path_);
+  if(!fs::exists(fs_out_path))  throw std::runtime_error("OfstreamWrapper - Output path does not exist: " + output_path_);
+
+  return fs_out_path / fs::path(filename_);
 }
 
 
