@@ -117,6 +117,8 @@ add_library(${PROJECT_NAME} SHARED
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
+  src/factors/LandmarkQuadricFactor.cc
+  src/factors/ObjectKinematicFactor.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineDefinitions.cc
@@ -271,6 +273,7 @@ if(BUILD_TESTING)
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/internal/simulator.cc
+    test/test_landmark_quadric_factor.cc
     test/test_tools.cc
     test/test_map.cc
     test/test_pipelines.cc

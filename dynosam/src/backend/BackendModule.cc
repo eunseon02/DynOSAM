@@ -22,14 +22,16 @@
  */
 
 #include "dynosam/backend/BackendModule.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 
 #include <glog/logging.h>
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue, bool use_logger)
+BackendModule::BackendModule(const BackendParams& params, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue)
     :   Base("backend"),
         base_params_(params),
+        logger_(std::move(logger)),
         display_queue_(display_queue)
 
 {
@@ -49,13 +51,10 @@ BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* dis
             previous_spin_state.iteration + 1
         );
 
-
     });
 
-    if(use_logger) {
-        VLOG(5) << "Using backend logger";
-        logger_ = std::make_unique<BackendLogger>();
-    }
+    if(logger_) LOG(INFO) << "Using backend logger: " << logger_->moduleName();
+
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {

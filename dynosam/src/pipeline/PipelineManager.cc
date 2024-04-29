@@ -263,7 +263,9 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
 
             if(FLAGS_use_backend) {
                 LOG(INFO) << "Construcing RGBD backend";
-                backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, optimzier, &display_queue_);
+                auto logger = std::make_unique<BackendLogger>("rgbd");
+
+                backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, optimzier, std::move(logger), &display_queue_);
             }
             else if(use_offline_frontend_) {
                 LOG(WARNING) << "FLAGS_use_backend is false but use_offline_frontend (FLAGS_frontend_from_file) us true. "

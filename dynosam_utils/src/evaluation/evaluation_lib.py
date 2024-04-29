@@ -412,8 +412,10 @@ class DatasetEvaluator:
         frontend_files = DataFiles("frontend")
         self.run_single_analysis(frontend_files)
 
-        backend_files = DataFiles("backend")
-        self.run_single_analysis(backend_files)
+        # backend_files = DataFiles("backend")
+        # self.run_single_analysis(backend_files)
+
+        self.run_single_analysis(DataFiles("rgbd_primitive_backend"))
 
     def run_single_analysis(self, datafiles: DataFiles):
         prefix = datafiles.prefix

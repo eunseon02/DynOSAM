@@ -2,3 +2,5 @@
 
 --init_object_pose_from_gt=false
 --use_frontend_logger=true
+
+--semantic_mask_step_size=3

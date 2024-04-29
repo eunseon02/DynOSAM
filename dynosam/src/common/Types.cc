@@ -32,6 +32,8 @@
 DEFINE_bool(init_object_pose_from_gt, false , "If true, then the viz pose from the frontend/backend will start from the gt");
 DEFINE_bool(save_frontend_json, false, "If true, then the output of the frontend will be saved as a binarized json file");
 DEFINE_bool(frontend_from_file, false, "If true, the frontend will try and load all the data from a seralized json file");
+DEFINE_bool(use_smoothing_factor, true, "If the backend should use the smoothing factor between motions");
+
 
 
 namespace dyno {

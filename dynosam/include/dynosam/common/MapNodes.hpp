@@ -277,11 +277,13 @@ public:
     gtsam::Key makePoseKey() const;
 
     gtsam::Key makeObjectMotionKey(ObjectId object_id) const;
+    gtsam::Key makeObjectPoseKey(ObjectId object_id) const;
 
     //get pose estimate
     StateQuery<gtsam::Pose3> getPoseEstimate() const;
     //get object motion estimate
     StateQuery<gtsam::Pose3> getObjectMotionEstimate(ObjectId object_id) const;
+    StateQuery<gtsam::Pose3> getObjectPoseEstimate(ObjectId object_id) const;
     //get dynamic point estimate (at this frame)??
     //O(logN)
     StateQuery<Landmark> getDynamicLandmarkEstimate(TrackletId tracklet_id) const;
@@ -350,7 +352,11 @@ public:
 
     //this recomputed everything everytime
     //eventually should cache things but for now its okay
-    gtsam::FastMap<FrameId, gtsam::Pose3> computePoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt = true) const;
+    gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt = true) const;
+
+    /// @brief Looks for values with L key - does not guarantee that poses are consequative, but will be in order
+    /// @return
+    gtsam::FastMap<FrameId, gtsam::Pose3> computeEstimatedPoseMap() const;
 
 
     //this could take a while?
@@ -363,18 +369,23 @@ public:
 
     StateQuery<gtsam::Pose3> getMotionEstimate(FrameId frame_id) const;
 
+    //only checks in the map
+    bool hasMotionEstimate(FrameId frame_id, gtsam::Pose3* motion = nullptr) const;
+    bool hasMotionEstimate(FrameId frame_id, gtsam::Pose3& motion) const;
+
+    //may not be included, depending on the type
+    //this will also affect the way the pose map is computed?!!
+    //TODO: test
+    StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) const;
+
+    //TODO: test
+    bool hasPoseEstimate(FrameId frame_id, gtsam::Pose3* pose = nullptr) const;
+    bool hasPoseEstimate(FrameId frame_id, gtsam::Pose3& pose) const;
+
+
     /// @brief A pair of Const LandmarkNodePtr's
     using LandmarkNodePair = std::pair<const LandmarkNodePtr<MEASUREMENT>, const LandmarkNodePtr<MEASUREMENT>>;
 
-    // /**
-    //  * @brief Constructs a set of landmark node pointers that have measurements in the requested frame
-    //  * and the previous frame (frame_id - 1u) and therefore are valid to be used for constructing a motion
-    //  * pairs
-    //  *
-    //  * @param frame_id
-    //  * @return LandmarkNodePtrSet<MEASUREMENT>
-    //  */
-    // LandmarkNodePtrSet<MEASUREMENT> getMotionLandmarsSeenAtFrame(FrameId frame_id) const;
 
 };
 

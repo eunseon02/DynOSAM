@@ -31,6 +31,7 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(dynosam REQUIRED)
 find_package(PCL REQUIRED)
+find_package(rclpy REQUIRED)
 
 # setup targets
 include_directories(
@@ -123,6 +124,8 @@ ament_target_dependencies(dynosam_node "rclcpp" "std_msgs"
 "dynosam"
 )
 
+#install python scripts/modules
+ament_python_install_package(${PROJECT_NAME})
 
 
 install(TARGETS

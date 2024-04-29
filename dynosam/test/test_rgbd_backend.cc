@@ -87,14 +87,15 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     // scenario.addObjectBody(2, object2);
 
     dyno::Map3d::Ptr map = dyno::Map3d::create();
-    std::shared_ptr<dyno::IncrementalOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::IncrementalOptimizer<dyno::Landmark>>();
+    // std::shared_ptr<dyno::IncrementalOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::IncrementalOptimizer<dyno::Landmark>>();
+    std::shared_ptr<dyno_testing::DummyOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno_testing::DummyOptimizer<dyno::Landmark>>();
     // std::shared_ptr<dyno::ISAMOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::ISAMOptimizer<dyno::Landmark>>();
     dyno::RGBDBackendModule backend(
         dyno::BackendParams{},
         map,
         optimizer);
 
-    for(size_t i = 0; i < 10; i++) {
+    for(size_t i = 0; i < 7; i++) {
         auto output = scenario.getOutput(i);
 
         std::stringstream ss;
@@ -154,51 +155,56 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         // // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
         // dyno::factor_graph_tools::saveBayesTree(*bayesTree, dyno::getOutputFilePath("elimated_tree.dot"), dyno::DynoLikeKeyFormatter);
 
-        const auto& dynosam2_result = optimizer->getResult();
+        // const auto& dynosam2_result = optimizer->getResult();
 
-        gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
-        for(const auto& key : dynosam2_result.reeliminatedKeys) {
-            coloured_affected_keys.insert2(key, "red");
-        }
+        // gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+        // for(const auto& key : dynosam2_result.reeliminatedKeys) {
+        //     coloured_affected_keys.insert2(key, "red");
+        // }
 
-        // const auto& smoother = optimizer->getSmoother().bayesTree();
-        const auto& smoother = optimizer->getSmoother();
+        // // const auto& smoother = optimizer->getSmoother().bayesTree();
+        // const auto& smoother = optimizer->getSmoother();
 
-        // smoother.calculateBestEstimate();
-        if(smoother.roots().empty()) {
-            continue;
-        }
+        // // smoother.calculateBestEstimate();
+        // if(smoother.roots().empty()) {
+        //     continue;
+        // }
 
-        dyno::factor_graph_tools::saveBayesTree(
-            smoother,
-            dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) + ".dot"),
-            dyno::DynoLikeKeyFormatter,
-            coloured_affected_keys);
+        // dyno::factor_graph_tools::saveBayesTree(
+        //     smoother,
+        //     dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) + ".dot"),
+        //     dyno::DynoLikeKeyFormatter,
+        //     coloured_affected_keys);
 
-        {
-            gtsam::KeySet marginalize_keys = dyno::factor_graph_tools::travsersal::getLeafKeys(smoother);
-            gtsam::PrintKeySet(marginalize_keys, "Leaf keys", dyno::DynoLikeKeyFormatter);
+        // {
+        //     gtsam::KeySet marginalize_keys = dyno::factor_graph_tools::travsersal::getLeafKeys(smoother);
+        //     gtsam::PrintKeySet(marginalize_keys, "Leaf keys", dyno::DynoLikeKeyFormatter);
 
-            gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
-            for(const auto& key : marginalize_keys) {
-                coloured_affected_keys.insert2(key, "blue");
-            }
+        //     gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+        //     for(const auto& key : marginalize_keys) {
+        //         coloured_affected_keys.insert2(key, "blue");
+        //     }
 
-            dyno::factor_graph_tools::saveBayesTree(
-                smoother,
-                dyno::getOutputFilePath("rgbd_bayes_tree_leaf.dot"),
-                dyno::DynoLikeKeyFormatter,
-                coloured_affected_keys);
+        //     dyno::factor_graph_tools::saveBayesTree(
+        //         smoother,
+        //         dyno::getOutputFilePath("rgbd_bayes_tree_leaf.dot"),
+        //         dyno::DynoLikeKeyFormatter,
+        //         coloured_affected_keys);
 
-        }
+        // }
 
-        smoother.getFactorsUnsafe().saveGraph(dyno::getOutputFilePath("smoother_graph_" + std::to_string(i) + ".dot"), dyno::DynoLikeKeyFormatter);
+        // smoother.getFactorsUnsafe().saveGraph(dyno::getOutputFilePath("smoother_graph_" + std::to_string(i) + ".dot"), dyno::DynoLikeKeyFormatter);
 
-        backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
+        // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
 
-    // backend.saveGraph();
+    backend.saveGraph();
+    //graph depends on optimzier used
+    //dummy one will += new factors so should be the full graph
+    // gtsam::NonlinearFactorGraph full_graph = optimizer->getFactors();
+    // full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+
     // backend.saveTree();
 
 

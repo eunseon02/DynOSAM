@@ -125,7 +125,7 @@ private:
  * @tparam TYPE
  */
 template <typename TYPE>
-struct PipelineIOTypeTraits {
+struct PipelineTypeTraits {
   using Type = TYPE;
   using TypeConstSharedPtr = std::shared_ptr<const Type>;
   using TypeQueue = ThreadsafeQueue<TypeConstSharedPtr>;
@@ -148,8 +148,8 @@ template <typename INPUT, typename OUTPUT>
 class PipelineModule : public PipelineBase
 {
 public:
-  using InputTypeTraits = PipelineIOTypeTraits<INPUT>;
-  using OutputTypeTraits = PipelineIOTypeTraits<OUTPUT>;
+  using InputTypeTraits = PipelineTypeTraits<INPUT>;
+  using OutputTypeTraits = PipelineTypeTraits<OUTPUT>;
 
   using InputConstSharedPtr = typename InputTypeTraits::TypeConstSharedPtr;
   //! The output is instead a shared ptr, since many users might need the output
@@ -202,7 +202,7 @@ template <typename PAYLOAD>
 struct QueueRegistra {
 public:
   using This = QueueRegistra<PAYLOAD>;
-  using Queue = typename PipelineIOTypeTraits<PAYLOAD>::TypeQueue;
+  using Queue = typename PipelineTypeTraits<PAYLOAD>::TypeQueue;
 
   DYNO_POINTER_TYPEDEFS(This)
 

@@ -249,6 +249,8 @@ public:
   //logs to object bounding boxes
   virtual void logObjectBbxes(FrameId frame_id, const BbxPerObject& object_bbxes);
 
+  inline const std::string& moduleName() const { return module_name_; }
+
 protected:
   const std::string module_name_;
 

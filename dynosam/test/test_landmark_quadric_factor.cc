@@ -21,17 +21,41 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/factors/LandmarkQuadricFactor.hpp"
 
-#include <gflags/gflags.h>
+#include <glog/logging.h>
+#include <gtest/gtest.h>
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+using namespace dyno;
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
+TEST(LandmarkQuadricFactor, residualBasicWithPointOnEllipse) {
+
+    //test when radii = (3, 3, 3) (so denom = 9)
+    //and then we construct a point m = 1, 2, 2 = 1 + 4 + 4 = 9
+    gtsam::Point3 m_local(1, 2, 2);
+    gtsam::Vector3 P(3, 3, 3);
+    gtsam::Pose3 I = gtsam::Pose3::Identity();
+
+    const gtsam::Vector1 error = LandmarkQuadricFactor::residual(
+        m_local, I, P
+    );
+    EXPECT_TRUE(gtsam::assert_equal(error, gtsam::Vector1{0.0}));
+
+
+}
+
+TEST(LandmarkQuadricFactor, residualOnSphere) {
+
+    //plug into ellipoide equation
+    //matches distance to center of sphere + 1
+    gtsam::Point3 m_local(6, 6, 3);
+    gtsam::Vector3 P(3, 3, 3);
+    gtsam::Pose3 I = gtsam::Pose3::Identity();
+
+    const gtsam::Vector1 error = LandmarkQuadricFactor::residual(
+        m_local, I, P
+    );
+    EXPECT_TRUE(gtsam::assert_equal(error, gtsam::Vector1{8.0}));
+
+
+}

@@ -72,7 +72,7 @@ public:
     using Base = ModuleBase<BackendInputPacket, BackendOutputPacket>;
     using Base::SpinReturn;
 
-    BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue, bool use_logger);
+    BackendModule(const BackendParams& params, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue);
     virtual ~BackendModule() = default;
 
 
@@ -94,14 +94,15 @@ protected:
     //NOTE: this is copied directly from the frontend module.
     GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor).
 
-    BackendLogger::UniquePtr logger_; //should be parsed in so we can change the prefix for experiments!!
+    BackendLogger::UniquePtr logger_{nullptr};
+    ImageDisplayQueue* display_queue_{nullptr}; //! Optional display queue
+
     BackendSpinState spin_state_; //! Spin state of the backend. Updated in the backend module base via InputCallback (see BackendModule constructor).
 
     // //! Camera related parameters
     // Camera::Ptr camera_;
     // boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
 
-    ImageDisplayQueue* display_queue_{nullptr}; //! Optional display queue
 
     //params for factors
     SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
@@ -141,8 +142,8 @@ public:
     using InputConstPtr = DerivedPacketTypeConstPtr;
     using OutputConstPtr = Base::OutputConstPtr;
 
-    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, ImageDisplayQueue* display_queue, bool use_logger = true)
-    : Base(params, display_queue, use_logger), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
+    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue)
+    : Base(params, std::move(logger), display_queue), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
 
     virtual ~BackendModuleType() {
         // if(logger_) {
@@ -194,12 +195,12 @@ public:
         return false;
     }
 
-    //gets all object poses. This iterates over each object in the map
-    //and recomputes all the object poses given the values in the map
-    ObjectPoseMap getObjectPoses(bool init_translation_from_gt) const;
+    // //gets all object poses. This iterates over each object in the map
+    // //and recomputes all the object poses given the values in the map
+    // ObjectPoseMap getObjectPoses(bool init_translation_from_gt) const;
 
 
-    void logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses);
+    // void logBackendFromMap(FrameId frame_k);
 
 protected:
     virtual SpinReturn boostrapSpinImpl(InputConstPtr input) = 0;
@@ -227,45 +228,48 @@ private:
 
 };
 
-template<class MODULE_TRAITS>
-ObjectPoseMap BackendModuleType<MODULE_TRAITS>::getObjectPoses(bool init_translation_from_gt) const {
-    const ObjectIds object_ids = map_->getObjectIds();
-    ObjectPoseMap object_pose_map;
+// template<class MODULE_TRAITS>
+// ObjectPoseMap BackendModuleType<MODULE_TRAITS>::getObjectPoses(bool init_translation_from_gt) const {
+//     const ObjectIds object_ids = map_->getObjectIds();
+//     ObjectPoseMap object_pose_map;
 
-    for(auto object_id : object_ids) {
-        const auto& object_node = map_->getObject(object_id);
-        object_pose_map.insert2(
-            object_id, object_node->computePoseMap(gt_packet_map_, init_translation_from_gt));
-    }
-    return object_pose_map;
-}
+//     for(auto object_id : object_ids) {
+//         const auto& object_node = map_->getObject(object_id);
+//         object_pose_map.insert2(
+//             object_id, object_node->computePoseMap(gt_packet_map_, init_translation_from_gt));
+//     }
+//     return object_pose_map;
+// }
 
-template<class MODULE_TRAITS>
-void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k, const ObjectPoseMap& object_poses) {
-    if(!logger_) {
-        return;
-    }
+// template<class MODULE_TRAITS>
+// void BackendModuleType<MODULE_TRAITS>::logBackendFromMap(FrameId frame_k) {
+//     if(!logger_) {
+//         return;
+//     }
 
-    //get MotionestimateMap
-    const MotionEstimateMap motions = map_->getMotionEstimates(frame_k);
-    logger_->logObjectMotion(gt_packet_map_, frame_k, motions);
+//     //TODO: only composed poses?
+//     auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
 
-    StateQuery<gtsam::Pose3> X_k_query = map_->getPoseEstimate(frame_k);
+//     //get MotionestimateMap
+//     const MotionEstimateMap motions = map_->getMotionEstimates(frame_k);
+//     logger_->logObjectMotion(gt_packet_map_, frame_k, motions);
 
-    if(X_k_query) {
-        std::optional<gtsam::Pose3> X_k_1_query;
-        if(frame_k > 0) {
-            X_k_1_query = map_->getPoseEstimate(frame_k - 1u);
-        }
-        logger_->logCameraPose(gt_packet_map_, frame_k, X_k_query.get(), X_k_1_query);
-    }
-    else {
-        LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
-    }
+//     StateQuery<gtsam::Pose3> X_k_query = map_->getPoseEstimate(frame_k);
+
+//     if(X_k_query) {
+//         std::optional<gtsam::Pose3> X_k_1_query;
+//         if(frame_k > 0) {
+//             X_k_1_query = map_->getPoseEstimate(frame_k - 1u);
+//         }
+//         logger_->logCameraPose(gt_packet_map_, frame_k, X_k_query.get(), X_k_1_query);
+//     }
+//     else {
+//         LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
+//     }
 
 
-    logger_->logObjectPose(gt_packet_map_, frame_k, object_poses);
-}
+//     logger_->logObjectPose(gt_packet_map_, frame_k, composed_poses);
+// }
 
 
 

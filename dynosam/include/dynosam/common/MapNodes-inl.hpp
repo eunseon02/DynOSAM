@@ -67,6 +67,15 @@ gtsam::Key FrameNode<MEASUREMENT>::makeObjectMotionKey(ObjectId object_id) const
 }
 
 template<typename MEASUREMENT>
+gtsam::Key FrameNode<MEASUREMENT>::makeObjectPoseKey(ObjectId object_id) const {
+     if(!objectObserved(object_id)) {
+        throw DynosamException("Object pose key requested" + std::to_string(object_id) + " at frame " +  std::to_string(frame_id) + " but object is not observed in this frame");
+    }
+    return ObjectPoseSymbol(object_id, this->frame_id);
+}
+
+
+template<typename MEASUREMENT>
 bool FrameNode<MEASUREMENT>::objectMotionExpected(ObjectId object_id) const {
     return objectObserved(object_id) && objectObservedInPrevious(object_id);
 }
@@ -74,7 +83,11 @@ bool FrameNode<MEASUREMENT>::objectMotionExpected(ObjectId object_id) const {
 template<typename MEASUREMENT>
 StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getPoseEstimate() const {
     return this->map_ptr_->template query<gtsam::Pose3>(makePoseKey());
+}
 
+template<typename MEASUREMENT>
+StateQuery<gtsam::Pose3> FrameNode<MEASUREMENT>::getObjectPoseEstimate(ObjectId object_id) const {
+    return this->map_ptr_->template query<gtsam::Pose3>(makeObjectPoseKey(object_id));
 }
 
 template<typename MEASUREMENT>
@@ -347,6 +360,52 @@ StateQuery<gtsam::Pose3> ObjectNode<MEASUREMENT>::getMotionEstimate(FrameId fram
 }
 
 template<typename MEASUREMENT>
+bool ObjectNode<MEASUREMENT>::hasMotionEstimate(FrameId frame_id, gtsam::Pose3* motion) const {
+    StateQuery<gtsam::Pose3> query = this->getMotionEstimate(frame_id);
+    if(query) {
+        //only set motion if valid, return true anyway
+        if(motion) *motion = *query;
+        return true;
+    }
+    return false;
+}
+
+template<typename MEASUREMENT>
+bool ObjectNode<MEASUREMENT>::hasMotionEstimate(FrameId frame_id, gtsam::Pose3& motion) const {
+    return this->hasMotionEstimate(frame_id, &motion);
+}
+
+template<typename MEASUREMENT>
+StateQuery<gtsam::Pose3> ObjectNode<MEASUREMENT>::getPoseEstimate(FrameId frame_id) const {
+    //basically the same code as in getMotionEstimate
+    const auto seen_frames = this->getSeenFrames();
+
+    auto frame_itr = seen_frames.find(frame_id);
+    if(frame_itr == seen_frames.end()) {
+        throw DynosamException("Pose estimate query failed: object " + std::to_string(getId()) + " was not seen at frame " + std::to_string(frame_id));
+    }
+
+    const auto& frame_ptr = *frame_itr;
+    return frame_ptr->getObjectPoseEstimate(this->getId());
+}
+
+template<typename MEASUREMENT>
+bool ObjectNode<MEASUREMENT>::hasPoseEstimate(FrameId frame_id, gtsam::Pose3* pose) const {
+    StateQuery<gtsam::Pose3> query = this->getPoseEstimate(frame_id);
+    if(query) {
+        //only set pose if valid, return true anyway
+        if(pose) *pose = *query;
+        return true;
+    }
+    return false;
+}
+
+template<typename MEASUREMENT>
+bool ObjectNode<MEASUREMENT>::hasPoseEstimate(FrameId frame_id, gtsam::Pose3& pose) const{
+    return this->hasPoseEstimate(frame_id, &pose);
+}
+
+template<typename MEASUREMENT>
 FrameNodePtrSet<MEASUREMENT> ObjectNode<MEASUREMENT>::getSeenFrames() const {
     FrameNodePtrSet<MEASUREMENT> seen_frames;
     for(const auto& lmks : dynamic_landmarks) {
@@ -356,7 +415,7 @@ FrameNodePtrSet<MEASUREMENT> ObjectNode<MEASUREMENT>::getSeenFrames() const {
 }
 
 template<typename MEASUREMENT>
-gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computePoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt) const {
+gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeComposedPoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt) const {
     //similar logic to how we compute the poses from the gt in the frontend
     //if init_translation_from_gt -> take the translation part from gt else compute the centroid of the point cloud at the first seen frame
     //always take rotation from gt currently
@@ -433,10 +492,6 @@ gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computePoseMap(co
         const FrameId frame_id_k = frame_node_ptr->getId();
         const FrameId frame_id_k_1 = frame_id_k - 1u;
 
-        // const bool motion_expected = frame_node_ptr->objectMotionExpected(obejct_id);
-        // if(motion_expected) {
-
-        // }
         const StateQuery<gtsam::Pose3> motion_query = frame_node_ptr->getObjectMotionEstimate(obejct_id);
         if(!motion_query) {
             LOG(WARNING) << "Cannot propofate pose of object " << object_id << " to frame " << frame_id_k << " as the motion query failed. Skipping";
@@ -464,6 +519,25 @@ gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computePoseMap(co
     }
 
     return pose_map;
+}
+
+template<typename MEASUREMENT>
+gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeEstimatedPoseMap() const {
+    gtsam::FastMap<FrameId, gtsam::Pose3> pose_map;
+
+    const auto& seen_frames = this->getSeenFrames();
+    for(auto itr = seen_frames.begin(); itr != seen_frames.end(); itr++) {
+        auto frame_node_ptr = *itr;
+        const FrameId frame_id_k = frame_node_ptr->getId();
+
+        gtsam::Pose3 pose_estimate;
+        if(this->hasPoseEstimate(frame_id_k, pose_estimate)) {
+            pose_map.insert2(frame_id_k, pose_estimate);
+        }
+    }
+
+    return pose_map;
+
 }
 
 

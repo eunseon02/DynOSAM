@@ -57,13 +57,35 @@ TEST(DynamicObjectSymbol, testReconstructMotionInfo) {
 
 }
 
-TEST(DynamicObjectSymbol, testReconstructMotionInfoFromOtherSymbol) {
+TEST(DynamicObjectSymbol, testReconstrucPoseInfo) {
 
-    gtsam::Key motion_key = CameraPoseSymbol(10);
+    gtsam::Key pose_key = ObjectPoseSymbol(12, 12);
 
     ObjectId recovered_object_id;
     FrameId recovered_frame_id;
-    EXPECT_FALSE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
+    EXPECT_TRUE(reconstructPoseInfo(pose_key, recovered_object_id, recovered_frame_id));
+
+    EXPECT_EQ(recovered_object_id, 12);
+    EXPECT_EQ(recovered_frame_id, 12);
+
+}
+
+TEST(DynamicObjectSymbol, testReconstructMotionInfoFromOtherSymbol) {
+
+    {
+        gtsam::Key motion_key = CameraPoseSymbol(10);
+
+        ObjectId recovered_object_id;
+        FrameId recovered_frame_id;
+        EXPECT_FALSE(reconstructMotionInfo(motion_key, recovered_object_id, recovered_frame_id));
+    }
+
+    {
+        gtsam::Key pose_key = ObjectPoseSymbol(10, 12);
+        ObjectId recovered_object_id;
+        FrameId recovered_frame_id;
+        EXPECT_FALSE(reconstructMotionInfo(pose_key, recovered_object_id, recovered_frame_id));
+    }
 }
 
 TEST(BackendDefinitions, testDynoChrExtractor) {

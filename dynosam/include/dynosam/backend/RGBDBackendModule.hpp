@@ -28,6 +28,8 @@
 #include "dynosam/common/Map.hpp"
 
 #include "dynosam/backend/DynoISAM2.hpp"
+#include "dynosam/common/Flags.hpp"
+
 
 #include <gtsam/nonlinear/Values.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
@@ -48,11 +50,12 @@ public:
     using RGBDMap = Base::MapType;
     using RGBDOptimizer = Base::OptimizerType;
 
-    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, ImageDisplayQueue* display_queue = nullptr);
+    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, BackendLogger::UniquePtr logger = nullptr, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
     using SpinReturn = Base::SpinReturn;
 
+    //TODO: move to optimizer and put into pipeline manager where we know the type and bind write output to shutdown procedure
     void saveGraph(const std::string& file = "rgbd_graph.dot");
     void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
 
@@ -95,13 +98,24 @@ public:
 
         virtual void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
         virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+
+        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) = 0;
+
     };
 
     struct UpdateImplInWorld : public UpdateImpl {
         UpdateImplInWorld(RGBDBackendModule* parent) : UpdateImpl(parent) {}
 
         void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
-        void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+    };
+
+    struct UpdateImplInWorldPrimitives : public UpdateImplInWorld {
+        UpdateImplInWorldPrimitives(RGBDBackendModule* parent) : UpdateImplInWorld(parent) {}
+
+        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
     };
 
 
@@ -132,6 +146,15 @@ public:
     //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
     //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
     gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
+
+    //internal datastructure to store which objects were added (to the values and now appear in the map)
+    //at THIS frame and for which frames this object is new
+    //in the case that the object already has a history, the set should contain only one ite, which is this frame
+    //in the case that the object has just been added, it will be added for N frames, since we go back and add object points
+    //this is cleared everry spin
+    //generally this refers to which frame object measurements will be added as factors to the map
+    //but in the world-centric case, this also related to values
+    gtsam::FastMap<ObjectId, std::set<FrameId>> new_object_measurements_per_frame_;
 
     DebugInfo debug_info_;
 

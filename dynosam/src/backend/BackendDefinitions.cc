@@ -32,18 +32,12 @@
 
 namespace dyno {
 
-
-bool checkIfLabeledSymbol(gtsam::Key key) {
-  const gtsam::LabeledSymbol asLabeledSymbol(key);
-  return (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0);
-}
-
-bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id) {
-  //assume motion key is a labelled symbol
+static bool internalReconstructInfo(gtsam::Key key, SymbolChar expected_chr, ObjectId& object_label, FrameId& frame_id) {
+  //assume motion/pose key is a labelled symbol
   if(!checkIfLabeledSymbol(key)) {return false; }
 
   const gtsam::LabeledSymbol as_labeled_symbol(key);
-  if(as_labeled_symbol.chr() != kObjectMotionSymbolChar) { return false;}
+  if(as_labeled_symbol.chr() != expected_chr) { return false;}
 
   frame_id = static_cast<FrameId>(as_labeled_symbol.index());
 
@@ -52,12 +46,26 @@ bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& fram
   return true;
 }
 
+
+bool checkIfLabeledSymbol(gtsam::Key key) {
+  const gtsam::LabeledSymbol asLabeledSymbol(key);
+  return (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0);
+}
+
+bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id) {
+  return internalReconstructInfo(key, kObjectMotionSymbolChar, object_label, frame_id);
+}
+
+bool reconstructPoseInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id) {
+  return internalReconstructInfo(key, kObjectPoseSymbolChar, object_label, frame_id);
+}
+
 std::string DynoLikeKeyFormatter(gtsam::Key key)
 {
   const gtsam::LabeledSymbol asLabeledSymbol(key);
   if (asLabeledSymbol.chr() > 0 && asLabeledSymbol.label() > 0) {
     //if used as motion
-    if(asLabeledSymbol.chr() == kObjectMotionSymbolChar) {
+    if(asLabeledSymbol.chr() == kObjectMotionSymbolChar || asLabeledSymbol.chr() == kObjectPoseSymbolChar) {
       return (std::string) asLabeledSymbol;
     }
     return (std::string) asLabeledSymbol;
@@ -109,6 +117,15 @@ std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
       ss << "H: label" << object_label << ", frames: " << frame_id - 1 << " -> " << frame_id;
       return ss.str();
     }
+    else if(asLabeledSymbol.chr() == kObjectPoseSymbolChar) {
+      ObjectId object_label;
+      FrameId frame_id;
+      CHECK(reconstructPoseInfo(asLabeledSymbol, object_label, frame_id));
+
+      std::stringstream ss;
+      ss << "K: label" << object_label << ", frame: " << frame_id;
+      return ss.str();
+    }
     return (std::string) asLabeledSymbol;
   }
 
@@ -135,12 +152,17 @@ std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
 }
 
 
-BackendLogger::BackendLogger()
-  : EstimationModuleLogger("backend"),
+BackendLogger::BackendLogger(const std::string& name_prefix)
+  : EstimationModuleLogger(name_prefix + "_backend"),
     tracklet_to_object_id_file_name_("tracklet_to_object_id.csv")
 {
+  ellipsoid_radii_file_name_ = module_name_ + "_ellipsoid_radii.csv";
+
   tracklet_to_object_id_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "tracklet_id", "object_id"));
+
+  ellipsoid_radii_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "object_id", "a", "b", "c"));
 }
 
 void BackendLogger::logTrackletIdToObjectId(const gtsam::FastMap<TrackletId, ObjectId>& mapping) {
@@ -149,7 +171,15 @@ void BackendLogger::logTrackletIdToObjectId(const gtsam::FastMap<TrackletId, Obj
   }
 }
 
+void BackendLogger::logEllipsoids(const gtsam::FastMap<ObjectId, gtsam::Vector3>& mapping) {
+  for(const auto&[object_id, radii] : mapping) {
+    *ellipsoid_radii_csv_ << object_id << radii(0) << radii(1) << radii(2);
+  }
+}
+
+
 BackendLogger::~BackendLogger() {
+  OfstreamWrapper::WriteOutCsvWriter(*ellipsoid_radii_csv_, ellipsoid_radii_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*tracklet_to_object_id_csv_, tracklet_to_object_id_file_name_);
 }
 

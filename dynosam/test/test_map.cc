@@ -422,3 +422,69 @@ TEST(Map, testEstimateWithStaticAndDynamicViaLmk) {
 TEST(Map, testEstimateWithStaticAndDynamicViaFrame) {
 
 }
+
+
+TEST(Map, testObjectNodeWithOnlyMotion) {
+    Map2d::Ptr map = Map2d::create();
+
+    //create dynamic observations for object 1 at frames 0 and 1
+    StatusKeypointMeasurements measurements;
+     //tracklet 1, dynamic, frame 0
+    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
+    //tracklet 1, dynamic, frame 1
+    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
+
+    gtsam::Values estimate;
+    //add motion only at frame 1
+    const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
+    estimate.insert(ObjectMotionSymbol(1, 1), pose_estimate);
+
+    map->updateObservations(measurements);
+    map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
+
+    ObjectNode2d::Ptr object1 = map->getObject(1);
+    EXPECT_TRUE(object1->getMotionEstimate(1));
+
+    gtsam::Pose3 recovered_pose_estimate;
+    EXPECT_TRUE(object1->hasMotionEstimate(1, &recovered_pose_estimate));
+    //check nullptr version
+    EXPECT_TRUE(object1->hasMotionEstimate(1));
+    EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
+
+    //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
+    //we just dont have an estimate of the pose
+    EXPECT_FALSE(object1->getPoseEstimate(0));
+    EXPECT_FALSE(object1->getPoseEstimate(1));
+}
+
+TEST(Map, testObjectNodeWithOnlyPose) {
+    Map2d::Ptr map = Map2d::create();
+
+    //create dynamic observations for object 1 at frames 0 and 1
+    StatusKeypointMeasurements measurements;
+     //tracklet 1, dynamic, frame 0
+    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
+    //tracklet 1, dynamic, frame 1
+    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
+
+    gtsam::Values estimate;
+    //add motion only at frame 1
+    const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
+    estimate.insert(ObjectPoseSymbol(1, 1), pose_estimate);
+
+    map->updateObservations(measurements);
+    map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
+
+    ObjectNode2d::Ptr object1 = map->getObject(1);
+    EXPECT_TRUE(object1->getPoseEstimate(1));
+
+    gtsam::Pose3 recovered_pose_estimate;
+    EXPECT_TRUE(object1->hasPoseEstimate(1, &recovered_pose_estimate));
+    //check nullptr version
+    EXPECT_TRUE(object1->hasPoseEstimate(1));
+    EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
+
+    //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
+    //we just dont have an estimate of the motion
+    EXPECT_FALSE(object1->getMotionEstimate(1));
+}
