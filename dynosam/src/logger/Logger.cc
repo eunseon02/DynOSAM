@@ -108,41 +108,52 @@ fs::path OfstreamWrapper::getFilePath() const {
 
 EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
   : module_name_(module_name),
-    object_motion_errors_file_name_(module_name_ + "_object_motion_error_log.csv"),
-    object_pose_errors_file_name_(module_name_ + "_object_pose_errors_log.csv"),
     object_pose_file_name_(module_name_ + "_object_pose_log.csv"),
+    object_motion_file_name_(module_name_ + "_object_motion_log.csv"),
     object_bbx_file_name_(module_name_ + "_object_bbx_log.csv"),
-    camera_pose_errors_file_name_(module_name_ + "_camera_pose_error_log.csv"),
+    // camera_pose_errors_file_name_(module_name_ + "_camera_pose_error_log.csv"),
     camera_pose_file_name_(module_name_ + "_camera_pose_log.csv"),
     map_points_file_name_(module_name_ + "_map_points_log.csv")
 {
-  object_motion_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-            "frame_id",
-            "object_id",
-            "t_err", "r_err"));
+  // object_motion_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  //           "frame_id",
+  //           "object_id",
+  //           "t_err", "r_err"));
 
-  object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-            "frame_id",
-            "object_id",
-            "t_abs_err", "r_abs_err",
-            "t_rel_err", "r_rel_err"));
+  // object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  //           "frame_id",
+  //           "object_id",
+  //           "t_abs_err", "r_abs_err",
+  //           "t_rel_err", "r_rel_err"));
 
 
-  camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-            "frame_id",
-            "t_abs_err", "r_abs_err",
-            "t_rel_err", "r_rel_err"));
+  // camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  //           "frame_id",
+  //           "t_abs_err", "r_abs_err",
+  //           "t_rel_err", "r_rel_err"));
 
   camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "x", "y", "z",
-            "roll", "pitch" , "yaw"));
+            "roll", "pitch" , "yaw",
+            "gt_x", "gt_y", "gt_z",
+            "gt_roll", "gt_pitch", "gt_yaw"));
 
   object_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
             "x", "y", "z",
-            "roll", "pitch" , "yaw"));
+            "roll", "pitch" , "yaw",
+            "gt_x", "gt_y", "gt_z",
+            "gt_roll", "gt_pitch", "gt_yaw"));
+
+  object_motion_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+            "frame_id",
+            "object_id",
+            "x", "y", "z",
+            "roll", "pitch" , "yaw",
+            "gt_x", "gt_y", "gt_z",
+            "gt_roll", "gt_pitch", "gt_yaw"));
 
   map_points_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
@@ -150,11 +161,11 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
             "tracklet_id",
             "x_world", "y_world", "z_world"));
 
-  object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-            "frame_id",
-            "object_id",
-            "t_abs_err", "r_abs_err",
-            "t_rel_err", "r_rel_err"));
+  // object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
+  //           "frame_id",
+  //           "object_id",
+  //           "t_abs_err", "r_abs_err",
+  //           "t_rel_err", "r_rel_err"));
 
   object_bbx_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
@@ -169,12 +180,14 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
 EstimationModuleLogger::~EstimationModuleLogger() {
   LOG(INFO) << "Writing out " << module_name_ << " logger...";
 
-  OfstreamWrapper::WriteOutCsvWriter(*object_motion_errors_csv_, object_motion_errors_file_name_);
-  OfstreamWrapper::WriteOutCsvWriter(*object_pose_errors_csv_, object_pose_errors_file_name_);
+  // OfstreamWrapper::WriteOutCsvWriter(*object_motion_errors_csv_, object_motion_errors_file_name_);
+  // OfstreamWrapper::WriteOutCsvWriter(*object_pose_errors_csv_, object_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_pose_csv_, object_pose_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_bbx_csv_, object_bbx_file_name_);
 
-  OfstreamWrapper::WriteOutCsvWriter(*camera_pose_errors_csv_, camera_pose_errors_file_name_);
+  OfstreamWrapper::WriteOutCsvWriter(*object_motion_csv_, object_motion_file_name_);
+
+  // OfstreamWrapper::WriteOutCsvWriter(*camera_pose_errors_csv_, camera_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
 
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
@@ -190,25 +203,36 @@ void EstimationModuleLogger::logObjectMotion(const GroundTruthPacketMap& gt_pack
 
     for(const auto& [object_id, motions] : motion_estimates) {
 
-        //TODO: -1, -1 if can not find gt motion? This will message with average!!
-        utils::TRErrorPair motion_error(-1, -1);
         ObjectPoseGT object_pose_gt;
         if(!gt_packet.getObject(object_id, object_pose_gt)) {
             LOG(ERROR) << "Could not find gt object at frame " << frame_id << " for object Id" << object_id;
         }
         else {
             const gtsam::Pose3& estimate = motions;
-            motion_error = utils::TRErrorPair::CalculatePoseError(estimate, *object_pose_gt.prev_H_current_world_);
-        }
+            const gtsam::Pose3& gt_motion = *object_pose_gt.prev_H_current_world_;
 
-        //frame_id, object_id, t_err, r_error
-        *object_motion_errors_csv_ << frame_id << object_id << motion_error.translation_ << motion_error.rot_;
+            const auto& rot = estimate.rotation();
+            const auto& gt_rot = gt_motion.rotation();
+
+            *object_motion_csv_ <<
+              frame_id << object_id <<
+              estimate.x() << estimate.y() << estimate.z() << rot.roll() << rot.pitch() << rot.yaw() <<
+              gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
+
+        }
 
     }
 }
 
 //assume poses are in world?
 void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses) {
+  const FrameId frame_id_k_1 = frame_id - 1u;
+
+  if(!gt_packets.exists(frame_id) || !gt_packets.exists(frame_id_k_1)) {
+    LOG(WARNING) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
+    return;
+  }
+
   //assume object poses get logged in frame order!!!
   for(const auto&[object_id, poses_map] : propogated_poses) {
       //do not draw if in current frame
@@ -217,20 +241,8 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
           continue;
       }
 
-      const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
-      const auto rot = L_world_k.rotation();
-      *object_pose_csv_ << frame_id << object_id << L_world_k.x() << L_world_k.y() << L_world_k.z() << rot.roll() << rot.pitch() << rot.yaw();
-
-      const FrameId frame_id_k_1 = frame_id - 1u;
       if(!poses_map.exists(frame_id_k_1)) {
           continue;
-      }
-
-      const gtsam::Pose3& L_world_k_1 = poses_map.at(frame_id_k_1);
-
-      if(!gt_packets.exists(frame_id) || !gt_packets.exists(frame_id_k_1)) {
-        LOG(WARNING) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
-        return;
       }
 
       const GroundTruthInputPacket& gt_packet_k = gt_packets.at(frame_id);
@@ -243,20 +255,22 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
         CHECK_NOTNULL(object_gt_k_1);
         //get gt poses
         const auto& gt_L_world_k = object_gt_k->L_world_;
+        const auto& gt_rot_k = gt_L_world_k.rotation();
         const auto& gt_L_world_k_1 = object_gt_k_1->L_world_;
 
-        utils::TRErrorPair absolute_pose_error = utils::TRErrorPair::CalculatePoseError(L_world_k, gt_L_world_k);
-        utils::TRErrorPair relative_pose_error = utils::TRErrorPair::CalculateRelativePoseError(L_world_k_1, L_world_k, gt_L_world_k_1, gt_L_world_k);
-
-         //frame_id, object_id, t_abs_err, r_abs_error, t_rel_error, r_rel_error
-        *object_pose_errors_csv_ << frame_id << object_id << absolute_pose_error.translation_ << absolute_pose_error.rot_ << relative_pose_error.translation_ << relative_pose_error.rot_;
-
+        const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
+        const auto rot = L_world_k.rotation();
+        //write out object pose with gt
+        *object_pose_csv_ <<
+          frame_id << object_id <<
+          L_world_k.x() << L_world_k.y() << L_world_k.z() << rot.roll() << rot.pitch() << rot.yaw() <<
+          gt_L_world_k.x() << gt_L_world_k.y() << gt_L_world_k.z() << gt_rot_k.roll() << gt_rot_k.pitch() << gt_rot_k.yaw();
       }
 
   }
 }
 
-void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera, std::optional<const gtsam::Pose3> T_world_camera_k_1) {
+void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera) {
   if(!gt_packets.exists(frame_id)) {
         LOG(WARNING) << "No gt packet at frame id " << frame_id << ". Unable to log object motions";
         return;
@@ -265,24 +279,12 @@ void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packet
     const GroundTruthInputPacket& gt_packet_k = gt_packets.at(frame_id);
     const gtsam::Pose3 gt_T_world_camera_k = gt_packet_k.X_world_;
 
-    utils::TRErrorPair absolute_pose_error = utils::TRErrorPair::CalculatePoseError(T_world_camera,gt_T_world_camera_k);
-
-    utils::TRErrorPair relative_pose_error(0, 0);
-
-    const FrameId frame_id_k_1 = frame_id - 1;
-    //if we have a previous gt packet AND a provided estimate
-    if(gt_packets.exists(frame_id_k_1) && T_world_camera_k_1) {
-        const GroundTruthInputPacket& gt_packet_k_1 = gt_packets.at(frame_id_k_1);
-        const gtsam::Pose3 gt_T_world_camera_k_1 = gt_packet_k_1.X_world_;
-        relative_pose_error = utils::TRErrorPair::CalculateRelativePoseError(T_world_camera_k_1.value(), T_world_camera, gt_T_world_camera_k_1, gt_T_world_camera_k);
-    }
-
-
-    //frame_id, t_abs_err, r_abs_error, t_rel_error, r_rel_error
-    *camera_pose_errors_csv_ << frame_id << absolute_pose_error.translation_ << absolute_pose_error.rot_ << relative_pose_error.translation_ << relative_pose_error.rot_;
-
-    const auto rot = T_world_camera.rotation();
-    *camera_pose_csv_ << frame_id << T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.roll() << rot.pitch() << rot.yaw();
+    const auto& rot = T_world_camera.rotation();
+    const auto& gt_rot = gt_T_world_camera_k.rotation();
+    *camera_pose_csv_ <<
+      frame_id <<
+      T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.roll() << rot.pitch() << rot.yaw() <<
+      gt_T_world_camera_k.x() << gt_T_world_camera_k.y() << gt_T_world_camera_k.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
 }
 
 void EstimationModuleLogger::logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks) {

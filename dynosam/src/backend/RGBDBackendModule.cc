@@ -1389,11 +1389,7 @@ void RGBDBackendModule::UpdateImplInWorld::logBackendFromMap(FrameId frame_k, RG
     StateQuery<gtsam::Pose3> X_k_query = map->getPoseEstimate(frame_k);
 
     if(X_k_query) {
-        std::optional<gtsam::Pose3> X_k_1_query;
-        if(frame_k > 0) {
-            X_k_1_query = map->getPoseEstimate(frame_k - 1u);
-        }
-        logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get(), X_k_1_query);
+        logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get());
     }
     else {
         LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
@@ -1511,6 +1507,17 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::updateDynamicObservations(F
                 gtsam::Point3 translation = pclPointToGtsam(centroid);
                 new_values.insert(object_pose_key, gtsam::Pose3(gtsam::Rot3::Identity(), translation));
 
+                if(object_node->getFirstSeenFrame() == frame_id) {
+                    //first time the object is seen
+                    //sanity check -> Parmaeters should not exist yet!!
+                    CHECK(!map->exists(quadric_sym, new_values));
+                    new_factors.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(
+                        object_pose_key,
+                        new_values.at<gtsam::Pose3>(object_pose_key),
+                        gtsam::noiseModel::Isotropic::Sigma(6u, 0.05)
+                    );
+                }
+
             }
 
             int num_quadric_factors = 0;
@@ -1524,7 +1531,7 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::updateDynamicObservations(F
                         object_point_key,
                         object_pose_key,
                         quadric_sym,
-                        gtsam::noiseModel::Isotropic::Sigma(1u, 0.8)
+                        gtsam::noiseModel::Isotropic::Sigma(1u, 1.5)
                     );
 
 
@@ -1544,7 +1551,7 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::updateDynamicObservations(F
                             object_motion_key,
                             previous_object_pose_key,
                             object_pose_key,
-                            gtsam::noiseModel::Isotropic::Sigma(6u, 0.001)
+                            gtsam::noiseModel::Isotropic::Sigma(6u, 0.01)
                         );
 
                 }
@@ -1569,11 +1576,12 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::logBackendFromMap(FrameId f
     const auto& gt_packet_map = parent_->gt_packet_map_;
 
     const ObjectIds object_ids = map->getObjectIds();
-    ObjectPoseMap composed_object_pose_map;
+    ObjectPoseMap estimated_object_pose_map;
 
     for(auto object_id : object_ids) {
+        //TODO: only get objects that are in this frame!!!?
         const auto& object_node = map->getObject(object_id);
-        composed_object_pose_map.insert2(
+        estimated_object_pose_map.insert2(
             //composed poses
             object_id, object_node->computeEstimatedPoseMap());
     }
@@ -1585,18 +1593,14 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::logBackendFromMap(FrameId f
     StateQuery<gtsam::Pose3> X_k_query = map->getPoseEstimate(frame_k);
 
     if(X_k_query) {
-        std::optional<gtsam::Pose3> X_k_1_query;
-        if(frame_k > 0) {
-            X_k_1_query = map->getPoseEstimate(frame_k - 1u);
-        }
-        logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get(), X_k_1_query);
+        logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get());
     }
     else {
         LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
     }
 
 
-    logger.logObjectPose(gt_packet_map, frame_k, composed_object_pose_map);
+    logger.logObjectPose(gt_packet_map, frame_k, estimated_object_pose_map);
 }
 
 

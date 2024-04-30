@@ -178,7 +178,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     propogateObjectPoses(motion_estimates, frame->frame_id_);
 
     if(logger_) {
-        logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_, previous_frame->T_world_camera_);
+        logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_);
         logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
     }
 

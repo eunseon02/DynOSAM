@@ -1,7 +1,11 @@
 from typing import Optional, List, Tuple, Dict, TypeAlias
 import numpy as np
-from evo.core import trajectory
+from evo.core import trajectory, sync, metrics
+from evo.tools import plot
 
+from .tools import align_trajectory
+
+import matplotlib.pyplot as plt
 
 
 ## {object_id: { frame_id: [t_error: float, r_error: float] }}
@@ -44,3 +48,42 @@ def analyse_object_pose_errors(object_pose_errors: ObjectPoseErrorDict) -> dict:
             "n_frame" : len(per_frame_dict)
         }
     return object_pose_error_result_yaml
+
+
+
+def sync_and_align_trajectories(traj_est: trajectory.PosePath3D, traj_ref: trajectory.PosePath3D,
+                                discard_n_end_poses=-1) -> trajectory.PosePath3D:
+    import copy
+    # We copy to distinguish another version that may be created
+    traj_ref = copy.deepcopy(traj_ref)
+
+    # assume synched and in order!
+    # traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est)
+    traj_est = align_trajectory(traj_est, traj_ref, correct_scale = False,
+                                                   n=discard_n_end_poses)
+    return traj_est, traj_ref
+
+def plot_metric(metric, plot_title="", figsize=(8,8), fig = None):
+    """ Adds a metric plot to a plot collection.
+
+        Args:
+            plot_collection: a PlotCollection containing plots.
+            metric: an evo.core.metric object with statistics and information.
+            plot_title: a string representing the title of the plot.
+            figsize: a 2-tuple representing the figure size.
+
+        Returns:
+            A plt figure.
+    """
+    if not fig:
+        fig = plt.figure(figsize=figsize)
+    stats = metric.get_all_statistics()
+
+    ax = fig.gca()
+
+    plot.error_array(ax, metric.error, statistics=stats,
+                        title=plot_title,
+                        xlabel="Keyframe index [-]",
+                        ylabel=plot_title + " " + metric.unit.value)
+
+    return fig

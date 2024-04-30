@@ -238,11 +238,11 @@ public:
   //logs to motion errors
   virtual void logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
 
-  //logs to object pose errors and the object pose itself (to a differnet file)
+  //logs object pose (to a differnet file)
   virtual void logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses);
 
-  //logs to camera pose errors and the camera pose itself (to a differnet file)
-  virtual void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera, std::optional<const gtsam::Pose3> T_world_camera_k_1);
+  //logs camera pose (to a differnet file)
+  virtual void logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera);
 
   virtual void logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks);
 
@@ -254,22 +254,21 @@ public:
 protected:
   const std::string module_name_;
 
-  const std::string object_motion_errors_file_name_;
-  const std::string object_pose_errors_file_name_;
+  //TODO: dont all these errors as evo will do it for us!!
   const std::string object_pose_file_name_;
+  const std::string object_motion_file_name_;
   const std::string object_bbx_file_name_;
 
-  const std::string camera_pose_errors_file_name_;
+  // const std::string camera_pose_errors_file_name_;
   const std::string camera_pose_file_name_;
 
   const std::string map_points_file_name_;
 
-  CsvWriter::UniquePtr object_motion_errors_csv_;
-  CsvWriter::UniquePtr object_pose_errors_csv_;
   CsvWriter::UniquePtr object_pose_csv_;
+  CsvWriter::UniquePtr object_motion_csv_;
   CsvWriter::UniquePtr object_bbx_csv_;
 
-  CsvWriter::UniquePtr camera_pose_errors_csv_;
+  // CsvWriter::UniquePtr camera_pose_errors_csv_;
   CsvWriter::UniquePtr camera_pose_csv_;
 
   CsvWriter::UniquePtr map_points_csv_;

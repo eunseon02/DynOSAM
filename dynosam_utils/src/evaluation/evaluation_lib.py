@@ -6,17 +6,19 @@ import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
 from evo.core import lie_algebra
-from evo.core import trajectory
+from evo.core import trajectory, metrics
 import evo.tools.plot as evo_plot
 
-from .tools import so3_from_euler
+from .tools import so3_from_euler, common_entries
 from .result_types import (
     MotionErrorDict,
     ObjectPoseDict,
     ObjectTrajDict,
     ObjectPoseErrorDict,
     analyse_motion_error_dict,
-    analyse_object_pose_errors
+    analyse_object_pose_errors,
+    plot_metric,
+    sync_and_align_trajectories
 )
 
 logger = logging.getLogger("dynosam_eval")
@@ -53,115 +55,153 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
 class Evaluator(ABC):
 
     @abstractmethod
-    def get_results_yaml() -> dict:
-        pass
-
-    @abstractmethod
-    def make_plot() -> Optional[List[Tuple[plt.figure, str]]]:
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         pass
 
 
-def add_eval_plot(plot_collection: evo_plot.PlotCollection, evaluator: Evaluator):
-    plots = evaluator.make_plot()
-
-    if plots is None:
-        return False
-
-    for fig_name in plots:
-        plot_collection.add_figure(
-            name = fig_name[1],
-            fig=fig_name[0])
-    return True
 
 
 
 class MotionErrorEvaluator(Evaluator):
-    def __init__(self, motion_error_log:str, object_pose_log:str, object_pose_error_log:str) -> None:
-        self._motion_error_log = motion_error_log
+    def __init__(self, object_motion_log:str, object_pose_log:str) -> None:
+        self._object_motion_log = object_motion_log
         self._object_pose_log = object_pose_log
-        self._object_pose_error_log = object_pose_error_log
 
-        self._motion_error_log_file = read_csv(self._motion_error_log, ["frame_id", "object_id", "t_err", "r_err"])
-        self._object_pose_log_file = read_csv(self._object_pose_log, ["frame_id", "object_id", "x", "y", "z", "roll", "pitch", "yaw"])
-        self._object_pose_error_log_file = read_csv(self._object_pose_error_log, ["frame_id", "object_id", "t_abs_err", "r_abs_err", "t_rel_err", "r_rel_err"])
+        self._object_pose_log_file = read_csv(self._object_pose_log,
+                                              ["frame_id", "object_id",
+                                               "x", "y", "z", "roll", "pitch", "yaw",
+                                               "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
+
+        self._object_motion_log_file = read_csv(self._object_motion_log,
+                                            ["frame_id", "object_id",
+                                            "x", "y", "z", "roll", "pitch", "yaw",
+                                            "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
 
 
-        # result dictionary in the form
-        # [object_id][frame_id]{[t_error, r_error]}
-        self._motion_error_dict: MotionErrorDict = MotionErrorEvaluator._construct_motion_error_dict(self._motion_error_log_file)
+        # TODO: dont need dynosam to do the error metrics for us - let evo do it all, just record all the se3 things
+        # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
         # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
-        self._object_poses_dict: ObjectPoseDict = {}
-        self._object_poses_traj: ObjectTrajDict = {}
-        self._object_poses_dict, self._object_poses_traj = MotionErrorEvaluator._construction_object_poses(self._object_pose_log_file)
+        self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file)
+        self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file)
 
-        self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
+        # self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
 
 
 
     @property
-    def object_poses_traj(self) -> ObjectTrajDict:
+    def object_poses_traj(self) -> trajectory.PoseTrajectory3D:
         return self._object_poses_traj
 
     @property
-    def object_pose_errors(self) -> ObjectPoseErrorDict:
-        return self._object_pose_error_dict
+    def object_poses_traj_ref(self) -> trajectory.PoseTrajectory3D:
+        return self._object_poses_traj_ref
 
-    @property
-    def object_motion_errors(self) -> MotionErrorDict:
-        return self._motion_error_dict
 
-    def get_results_yaml(self) -> dict:
-        return {"object_motion_error": analyse_motion_error_dict(self.object_motion_errors),
-                "object_pose_errors": analyse_object_pose_errors(self.object_pose_errors)}
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
+        # prepare results dict
+        results["objects"] = {}
+        for object_id, _, _ in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
+            results["objects"][object_id] = {}
 
-    def make_plot(self) -> Optional[List[Tuple[plt.figure, str]]]:
-        fig_traj = plt.figure(figsize=(8,8))
-        plot_mode = evo_plot.PlotMode.xyz
+        self._process_motion_traj(plot_collection, results)
+        self._process_pose_traj(plot_collection, results)
 
-        ax_traj = evo_plot.prepare_axis(fig_traj, plot_mode)
 
-        for object_id, traj in self._object_poses_traj.items():
-            evo_plot.traj(ax_traj, plot_mode, traj, label=str(object_id), plot_start_end_markers=True)
-        # evo_plot.trajectories(fig_traj, self._object_poses_traj, plot_mode=evo_plot.PlotMode.xyz)
-        ax_traj.autoscale(True)
+    def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
+        for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
+            data = (object_traj_ref, object_traj)
 
-        return [(fig_traj, "Obj Traj")]
+            # only interested in APE as this matches our error metrics
+            ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+            ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+
+            ape_trans.process_data(data)
+            ape_rot.process_data(data)
+
+            results_per_object = {}
+            results_per_object["ape_translation"] = ape_trans.get_all_statistics()
+            results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
+
+            # exepct results to already have results["objects"][id]["motions"] prepared
+            results["objects"][object_id]["motions"] = results_per_object
+
+            plot_collection.add_figure(
+                    f"Object_Motion_translation_{object_id}",
+                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}")
+                )
+
+            plot_collection.add_figure(
+                f"Object_Motion_rotation_{object_id}",
+                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}")
+            )
+
+    def _process_pose_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
+        # est and ref object trajectories
+        # this is used to draw the trajectories
+        object_trajectories = {}
+
+
+        fig_all_object_traj = plt.figure(figsize=(8,8))
+
+        for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
+            data = (object_traj_ref, object_traj)
+
+            # add reference edges
+            # TODO: doesnt seem to work?
+            evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
+
+
+            # TODO: align?
+            object_trajectories[f"Object {object_id}"] = object_traj
+            object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
+
+            logger.info(f"Logging pose metrics for object {object_id}")
+
+
+            ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+            ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+
+            rpe_trans = metrics.RPE(metrics.PoseRelation.translation_part,
+                            1.0, metrics.Unit.frames, 0.0, False)
+            rpe_rot = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
+                          1.0, metrics.Unit.frames, 1.0, False)
+
+            ape_trans.process_data(data)
+            ape_rot.process_data(data)
+
+            rpe_trans.process_data(data)
+            rpe_rot.process_data(data)
+
+            results_per_object = {}
+            results_per_object["ape_translation"] = ape_trans.get_all_statistics()
+            results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
+            results_per_object["rpe_translation"] = rpe_trans.get_all_statistics()
+            results_per_object["rpe_translation"] = rpe_rot.get_all_statistics()
+
+            # exepct results to already have results["objects"][id]["poses"] prepared
+            results["objects"][object_id]["poses"] = results_per_object
+
+
+            plot_collection.add_figure(
+                    f"Object_Pose_RPE_translation_{object_id}",
+                    plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}")
+                )
+
+            plot_collection.add_figure(
+                f"Object_Pose_APE_rotation_{object_id}",
+                plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}")
+            )
+
+        # add collected trajectories to fig
+        # correspondence edges already added
+        evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+
+        plot_collection.add_figure(
+            "Obj Trajectories", fig_all_object_traj
+        )
 
     @staticmethod
-    def _construct_motion_error_dict(motion_error_log_file: csv.DictReader) -> MotionErrorDict:
-        """
-        Constructs a motion error dict using the error results contained in the motion_error_log_file.
-        The motion_error_log_file is expected to have header ["frame_id", "object_id", "t_err", "r_err"]
-        The motion_error_dictwill have form
-        {
-            object_id: {
-                frame_id: [t_error: float, r_error: float]
-            }
-        }
-
-        Args:
-            motion_error_log_file (csv.DictReader): Input reader
-
-        Returns:
-            MotionErrorDict: Motion error dict
-        """
-        motion_error_dict: MotionErrorDict = {}
-
-        for row in motion_error_log_file:
-            object_id = int(row["object_id"])
-            frame_id = int(row["frame_id"])
-
-            if not object_id in motion_error_dict:
-                motion_error_dict[object_id] = {}
-
-            motion_error_dict[object_id][frame_id] = [
-                float(row["t_err"]),
-                float(row["r_err"])
-            ]
-        return motion_error_dict
-
-    @staticmethod
-    def _construction_object_poses(object_poses_log_file: csv.DictReader) -> Tuple[ObjectPoseDict, ObjectTrajDict]:
+    def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader) -> Tuple[ObjectPoseDict, ObjectTrajDict]:
         """
         Constructs dictionaries representing the object poses from the object_poses_log_file.
         The object_poses_log_file is expected to have a header with the form ["frame_id", "object_id", "x", "y", "z", "roll", "pitch", "yaw"].
@@ -186,21 +226,26 @@ class MotionErrorEvaluator(Evaluator):
         Returns:
             Tuple[ObjectPoseDict, ObjectTrajDict]: _description_
         """
-        object_poses_dict: ObjectPoseDict = {}
+
+        timestamps = []
 
         # assume frames are ordered!!!
         # used to construct the pose trajectires with evo
         object_poses_tmp_dict = {}
+        object_poses_ref_tmp_dict = {}
 
         for row in object_poses_log_file:
             frame_id = int(row["frame_id"])
             object_id = int(row["object_id"])
 
             if object_id not in object_poses_tmp_dict:
-                object_poses_tmp_dict[object_id] = []
+                object_poses_tmp_dict[object_id] = {"traj": [], "timestamps": []}
 
-            if object_id not in object_poses_dict:
-                object_poses_dict[object_id] = {}
+            # if object_id not in object_poses_dict:
+            #     object_poses_dict[object_id] = {}
+
+            if object_id not in object_poses_ref_tmp_dict:
+                object_poses_ref_tmp_dict[object_id] = {"traj": [], "timestamps": []}
 
             translation = np.array([
                 float(row["x"]),
@@ -216,91 +261,74 @@ class MotionErrorEvaluator(Evaluator):
             order = "xyz",
             degrees=False)
 
+            translation_ref = np.array([
+                float(row["gt_x"]),
+                float(row["gt_y"]),
+                float(row["gt_z"])
+            ])
+
+            rotation_ref = so3_from_euler(np.array([
+                float(row["gt_roll"]),
+                float(row["gt_pitch"]),
+                float(row["gt_yaw"])
+            ]),
+            order = "xyz",
+            degrees=False)
+
             # frome evo
             T = lie_algebra.se3(rotation, translation)
+            T_ref = lie_algebra.se3(rotation_ref, translation_ref)
 
-            #log t in the nested dictionary
-            object_poses_dict[object_id] = {frame_id: T}
+            # #log t in the nested dictionary
+            # object_poses_dict[object_id] = {frame_id: T}
+            # object_poses_dict_ref[object_id] = {frame_id: T_ref}
             #log t in tmp object
-            object_poses_tmp_dict[object_id].append(T)
+            object_poses_tmp_dict[object_id]["traj"].append(T)
+            object_poses_tmp_dict[object_id]["timestamps"].append(frame_id)
+            object_poses_ref_tmp_dict[object_id]["traj"].append(T_ref)
+            object_poses_ref_tmp_dict[object_id]["timestamps"].append(frame_id)
+
 
         # {object_id: trajectory.PosePath3D}
         object_poses_traj: ObjectTrajDict  = {}
-        for object_id, poses in object_poses_tmp_dict.items():
-            # This will need the poses to be in order?
-            object_poses_traj[object_id] = trajectory.PosePath3D(poses_se3=poses)
+        object_poses_traj_ref: ObjectTrajDict  = {}
 
-        return object_poses_dict, object_poses_traj
+        for object_id, est, ref in common_entries(object_poses_tmp_dict, object_poses_ref_tmp_dict):
+            poses_est = est["traj"]
+            poses_ref = ref["traj"]
 
-    @staticmethod
-    def _construct_pose_error_dict(object_pose_error_log_file: csv.DictReader) -> ObjectPoseErrorDict:
-        """
-        Constructs a object pose error dict using the error results contained in the object_pose_error_log_file.
-        The object pose error is expected to have header ["frame_id", "object_id", "t_abs_err", "r_abs_err", "t_rel_err", "r_rel_err"].
-        The object pose error dict will have form
-        {
-            object_id: {
-                frame_id: [t_abs_err: float, r_abs_err: float, t_rel_err: float, r_rel_err: float]
-            }
-        }
+            timestamps = np.array(est["timestamps"])
+            timestamps_ref = np.array(ref["timestamps"])
+            # This will need the poses to be in order
+            # assume est and ref are the same size
+            if len(poses_est) < 2:
+                continue
 
+            object_poses_traj[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps)
+            object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref)
 
-        Args:
-            object_pose_error_log_file (csv.DictReader): _description_
-
-        Raises:
-            FileNotFoundError: _description_
-
-        Returns:
-            ObjectPoseErrorDict: _description_
-        """
-        object_pose_error_dict: ObjectPoseErrorDict = {}
-
-        for row in object_pose_error_log_file:
-            object_id = int(row["object_id"])
-            frame_id = int(row["frame_id"])
-
-            if not object_id in object_pose_error_dict:
-                object_pose_error_dict[object_id] = {}
-
-            object_pose_error_dict[object_id][frame_id] = [
-                float(row["t_abs_err"]),
-                float(row["r_abs_err"]),
-                float(row["t_rel_err"]),
-                float(row["r_rel_err"])
-            ]
-        return object_pose_error_dict
+        return object_poses_traj, object_poses_traj_ref
 
 
 
 class CameraPoseEvaluator(Evaluator):
-    def __init__(self, camera_pose_error_log:str, camera_pose_log:str) -> None:
-        self._camera_pose_error_log:str = camera_pose_error_log
+
+    def __init__(self, camera_pose_log:str) -> None:
         self._camera_pose_log:str = camera_pose_log
 
-        self._camera_pose_error_file = read_csv(self._camera_pose_error_log, ["frame_id", "t_abs_err", "r_abs_err", "t_rel_err", "r_rel_err"])
-        self._camera_pose_file = read_csv(self._camera_pose_log, ["frame_id", "x", "y", "z", "roll", "pitch", "yaw"])
-
-        # in same form as input but now everything is a float
-        # key is frame_id and then array
-        self._camera_error_dict = {}
-
-        for row in self._camera_pose_error_file:
-            frame_id = int(row["frame_id"])
-            self._camera_error_dict[frame_id] = [
-                float(row["t_abs_err"]),
-                float(row["r_abs_err"]),
-                float(row["t_rel_err"]),
-                float(row["r_rel_err"])
-            ]
-
-        # saved as homogenous matrix, key is frame_id
-        self._camera_pose_dict = {}
+        self._camera_pose_file = read_csv(self._camera_pose_log,
+                                          ["frame_id",
+                                           "x", "y", "z", "roll", "pitch", "yaw",
+                                           "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
 
         poses = []
+        poses_ref = []
+
+        timestamps = []
 
         for row in self._camera_pose_file:
             frame_id = int(row["frame_id"])
+            timestamps.append(frame_id)
 
             translation = np.array([
                 float(row["x"]),
@@ -316,45 +344,108 @@ class CameraPoseEvaluator(Evaluator):
             order = "xyz",
             degrees=False)
 
+            translation_ref = np.array([
+                float(row["gt_x"]),
+                float(row["gt_y"]),
+                float(row["gt_z"])
+            ])
+
+            rotation_ref = so3_from_euler(np.array([
+                float(row["gt_roll"]),
+                float(row["gt_pitch"]),
+                float(row["gt_yaw"])
+            ]),
+            order = "xyz",
+            degrees=False)
+
+
             # frome evo
             T = lie_algebra.se3(rotation, translation)
-            self._camera_pose_dict[frame_id] = T
-            poses.append(T)
+            T_ref = lie_algebra.se3(rotation_ref, translation_ref)
 
-        self._camera_pose_traj = trajectory.PosePath3D(poses_se3=poses)
+            poses.append(T)
+            poses_ref.append(T_ref)
+
+        self._camera_pose_traj = trajectory.PoseTrajectory3D(poses_se3=poses, timestamps=timestamps)
+        self._camera_pose_traj_ref = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps)
 
     @property
-    def camera_pose_traj(self) -> trajectory.PosePath3D:
+    def camera_pose_traj(self) -> trajectory.PoseTrajectory3D:
         return self._camera_pose_traj
 
-    def get_results_yaml(self) -> dict:
-        result_yaml = {}
-        #"frame_id" : {"t_abs_error": val, .... "r_rel_err": val}
-        errors = self._camera_error_dict
-        # absolute errors
-        t_abs_err_np = np.array([errors[frame][0] for frame in errors.keys() if errors[frame][0] != -1])
-        r_abs_err_np = np.array([errors[frame][1] for frame in errors.keys() if errors[frame][1] != -1])
-        # relative errors
-        t_rel_err_np = np.array([errors[frame][2] for frame in errors.keys() if errors[frame][2] != -1])
-        r_rel_err_np = np.array([errors[frame][3] for frame in errors.keys() if errors[frame][3] != -1])
+    @property
+    def camera_pose_traj_ref(self) -> trajectory.PoseTrajectory3D:
+        return self._camera_pose_traj_ref
 
-        result_yaml = {
-            "avg_t_abs_err" : np.average(t_abs_err_np),
-            "avg_r_abs_err" : np.average(r_abs_err_np),
-            "avg_t_rel_err" : np.average(t_rel_err_np),
-            "avg_r_rel_err" : np.average(r_rel_err_np)
-        }
 
-        return {"camera_pose": result_yaml}
-
-    def make_plot(self) -> Optional[List[Tuple[plt.figure, str]]]:
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         fig_traj = plt.figure(figsize=(8,8))
-        plot_mode = evo_plot.PlotMode.xyz
 
-        ax_traj = evo_plot.prepare_axis(fig_traj, plot_mode)
-        evo_plot.traj(ax_traj, plot_mode, self._camera_pose_traj)
+        traj_est_vo = self.camera_pose_traj
+        traj_ref_vo = self.camera_pose_traj_ref
 
-        return [(fig_traj, "Camera Trajectory")]
+        traj_est_vo, traj_ref_vo = sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
+
+        # used to draw trajectories for plot collection
+        trajectories = {}
+        trajectories["Estimated VO"] = traj_est_vo
+        trajectories["Ground Truth VO"] = traj_ref_vo
+
+        evo_plot.trajectories(fig_traj, trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        evo_plot.draw_correspondence_edges(fig_traj.gca(), traj_est_vo, traj_ref_vo, evo_plot.PlotMode.xyz)
+
+        # ax_traj = evo_plot.prepare_axis(fig_traj, plot_mode)
+        # evo_plot.traj(ax_traj, plot_mode, self._camera_pose_traj, color="")
+
+        plot_collection.add_figure(
+            "Camera Trajectory",
+            fig_traj
+        )
+
+        data = (traj_ref_vo, traj_est_vo)
+
+        ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+        ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+
+        rpe_trans = metrics.RPE(metrics.PoseRelation.translation_part,
+                        1.0, metrics.Unit.frames, 0.0, False)
+        rpe_rot = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
+                        1.0, metrics.Unit.frames, 1.0, False)
+
+        ape_trans.process_data(data)
+        ape_rot.process_data(data)
+        rpe_trans.process_data(data)
+        rpe_rot.process_data(data)
+
+
+        plot_collection.add_figure(
+                    "VO_APE_translation",
+                    plot_metric(ape_trans, f"VO APE Translation")
+                )
+
+        plot_collection.add_figure(
+                    "VO_APE_rotation",
+                    plot_metric(ape_trans, f"VO APE Rotation")
+                )
+
+        plot_collection.add_figure(
+                    "VO_RPE_translation",
+                    plot_metric(rpe_trans, f"VO RPE Translation")
+                )
+
+        plot_collection.add_figure(
+                    "VO_RPE_rotation",
+                    plot_metric(rpe_rot, f"VO RPE Rotation")
+                )
+
+        # update results dict that will be saved to file
+        results["vo"] = {}
+        results["vo"]["ape_translation"] = ape_trans.get_all_statistics()
+        results["vo"]["ape_rotation"] = ape_rot.get_all_statistics()
+        results["vo"]["rpe_translation"] = rpe_trans.get_all_statistics()
+        results["vo"]["rpe_translation"] = rpe_rot.get_all_statistics()
+
+
 
 class EgoObjectMotionEvaluator(Evaluator):
 
@@ -365,7 +456,7 @@ class EgoObjectMotionEvaluator(Evaluator):
     def get_results_yaml(self) -> dict:
         return None
 
-    def make_plot(self) -> Optional[List[Tuple[plt.figure, str]]]:
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         fig_traj = plt.figure(figsize=(8,8))
         camera_traj = self._camera_eval.camera_pose_traj
         object_trajs = self._object_eval.object_poses_traj
@@ -375,7 +466,10 @@ class EgoObjectMotionEvaluator(Evaluator):
 
         evo_plot.trajectories(fig_traj, all_traj, plot_mode=evo_plot.PlotMode.xyz)
 
-        return [(fig_traj, "Trajectires")]
+        plot_collection.add_figure(
+            "Trajectories",
+            fig_traj
+        )
 
 
 class DataFiles:
@@ -386,10 +480,8 @@ class DataFiles:
         self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
         self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
 
-        self.motion_error_log = prefix + "_object_motion_error_log.csv"
         self.object_pose_log = prefix + "_object_pose_log.csv"
-        self.object_pose_error_log = prefix + "_object_pose_errors_log.csv"
-        self.camera_pose_error_log = prefix + "_camera_pose_error_log.csv"
+        self.object_motion_log = prefix + "_object_motion_log.csv"
         self.camera_pose_log = prefix + "_camera_pose_log.csv"
         self.map_point_log = prefix + "_map_points_log.csv"
 
@@ -413,7 +505,7 @@ class DatasetEvaluator:
         self.run_single_analysis(frontend_files)
 
         # backend_files = DataFiles("backend")
-        # self.run_single_analysis(backend_files)
+        # self.run_single_analysis(DataFiles("rgbd_backend"))
 
         self.run_single_analysis(DataFiles("rgbd_primitive_backend"))
 
@@ -424,24 +516,23 @@ class DatasetEvaluator:
         analysis_logger = logger.getChild(prefix)
 
         analysis_logger.info("Running analysis with datafile prefix: {}".format(prefix))
-        motion_error_log_path = self._create_existing_file_path(datafiles.motion_error_log)
+        # motion_error_log_path = self._create_existing_file_path(datafiles.motion_error_log)
         object_pose_log_path = self._create_existing_file_path(datafiles.object_pose_log)
-        object_pose_error_log_path = self._create_existing_file_path(datafiles.object_pose_error_log)
-        camera_pose_error_log_path = self._create_existing_file_path(datafiles.camera_pose_error_log)
+        object_motion_log_path = self._create_existing_file_path(datafiles.object_motion_log)
+        # object_pose_error_log_path = self._create_existing_file_path(datafiles.object_pose_error_log)
+        # camera_pose_error_log_path = self._create_existing_file_path(datafiles.camera_pose_error_log)
         camera_pose_log_path = self._create_existing_file_path(datafiles.camera_pose_log)
 
         evaluators = []
         motion_eval = self._check_and_cosntruct_generic_eval(
             MotionErrorEvaluator,
-            motion_error_log_path,
-            object_pose_log_path,
-            object_pose_error_log_path
+            object_motion_log_path,
+            object_pose_log_path
         )
 
         camera_pose_eval = self._check_and_cosntruct_generic_eval(
             CameraPoseEvaluator,
-            camera_pose_error_log_path,
-            camera_pose_log_path
+            camera_pose_log_path,
         )
 
         if motion_eval:
@@ -452,8 +543,6 @@ class DatasetEvaluator:
             analysis_logger.info("Adding camera pose eval")
             evaluators.append(camera_pose_eval)
 
-        self._save_results_file(datafiles.results_file_name, evaluators)
-
         if camera_pose_eval and motion_eval:
             analysis_logger.info("Adding EgoObjectMotionEvaluator")
             evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
@@ -462,34 +551,26 @@ class DatasetEvaluator:
         analysis_logger.info("Constructing plot collection {}".format(plot_collection_name))
         plot_collection = evo_plot.PlotCollection(plot_collection_name)
 
-        for evals  in evaluators:
-            add_eval_plot(plot_collection, evals)
+        result_dict = {}
 
+        for evals  in evaluators:
+            evals.process(plot_collection, result_dict)
+
+        if len(result_dict) > 0:
+            self._save_results_dict(datafiles.results_file_name, result_dict)
 
         plot_collection.show()
 
 
-    def _save_results_file(self, file_name: str, evaluators: List[Evaluator]):
-        if len(evaluators) == 0:
-            logger.warning("No evaluators provided to save results!")
-            return
-
+    def _save_results_dict(self, file_name: str, results: Dict):
         output_file_name = self._create_new_file_path(file_name) + ".json"
 
         logger.info("Writing results json to file {}".format(output_file_name))
 
-        output_json = {}
-
-        for evals  in evaluators:
-            result = evals.get_results_yaml()
-
-            if result:
-                output_json.update(result)
-
         import json
 
         with open(output_file_name, "w") as output_file:
-            json.dump(output_json, output_file)
+            json.dump(results, output_file)
 
     def _create_new_file_path(self, file:str) -> str:
         return os.path.join(self._output_folder_path, file)

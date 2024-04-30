@@ -71,10 +71,10 @@ gtsam::Vector1 LandmarkQuadricFactor::residual(const gtsam::Point3& m_world, con
 
     const gtsam::Matrix44 L_inverse_matrix = L_world.inverse().matrix();
     gtsam::Vector4 m_world_homogenous(m_world(0), m_world(1), m_world(2), 1);
-    gtsam::Vector4 m_local_homogenous = L_inverse_matrix * m_world_homogenous;
+    // gtsam::Vector4 m_local_homogenous = L_inverse_matrix * m_world_homogenous;
 
-    double error = m_local_homogenous.transpose() * Q * m_local_homogenous;
-    // double error = m_world_homogenous.transpose() * (L_inverse_matrix.transpose() * Q * L_inverse_matrix) * m_world_homogenous;
+    // double error = m_local_homogenous.transpose() * Q * m_local_homogenous;
+    double error = m_world_homogenous.transpose() * (L_inverse_matrix.transpose() * Q * L_inverse_matrix) * m_world_homogenous;
     return gtsam::Vector1(error);
 }
 
