@@ -25,31 +25,36 @@
 
 #include <dynosam/pipeline/PipelineManager.hpp>
 #include <dynosam/utils/Statistics.hpp>
+#include <dynosam/pipeline/PipelineParams.hpp>
 
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
 
 namespace dyno {
 
-class DynoPipelineManagerRos : public rclcpp::Node {
+class DynoNode : public rclcpp::Node {
 
 public:
-    explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
-    ~DynoPipelineManagerRos() = default;
+    explicit DynoNode(const std::string& node_name, const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    virtual ~DynoNode() = default;
 
-    bool spinOnce() {
-        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());
-
-        return CHECK_NOTNULL(pipeline_)->spin();
-    }
+    virtual bool spinOnce() {}
 
     std::string getStats() const {
         return utils::Statistics::Print();
     }
 
-private:
+
+protected:
+    const DynoParams& dynoParams() {
+        CHECK_NOTNULL(dyno_params_);
+        return *dyno_params_;
+    }
+
     std::string getParamsPath();
     std::string getDatasetPath();
+
+private:
 
     /**
      * @brief Retrieves a std::string param (under param_name) which is expected to be a file path
@@ -60,6 +65,22 @@ private:
      * @return std::string
      */
     std::string searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description = "");
+
+    std::unique_ptr<DynoParams> dyno_params_;
+
+};
+
+class DynoPipelineManagerRos : public DynoNode {
+
+public:
+    explicit DynoPipelineManagerRos(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
+    ~DynoPipelineManagerRos() = default;
+
+    bool spinOnce() override {
+        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());
+
+        return CHECK_NOTNULL(pipeline_)->spin();
+    }
 
 private:
     DynoPipelineManager::UniquePtr pipeline_;

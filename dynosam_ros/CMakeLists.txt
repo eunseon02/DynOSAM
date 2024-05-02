@@ -113,6 +113,10 @@ install(DIRECTORY
 #   DESTINATION share/${PROJECT_NAME}
 # )
 
+
+#install python scripts/modules
+ament_python_install_package(${PROJECT_NAME})
+
 #####exec test#########
 add_executable(dynosam_node src/dynosam_node.cc)
 target_link_libraries(dynosam_node
@@ -120,17 +124,26 @@ target_link_libraries(dynosam_node
   ${PCL_LIBRARIES}
 
 )
-ament_target_dependencies(dynosam_node "rclcpp" "std_msgs"
-"dynosam"
-)
-
-#install python scripts/modules
-ament_python_install_package(${PROJECT_NAME})
-
+ament_target_dependencies(dynosam_node "rclcpp" "std_msgs" "dynosam")
 
 install(TARGETS
   dynosam_node
   DESTINATION lib/${PROJECT_NAME})
+
+
+
+add_executable(dynosam_experiments_node src/backend_experiments_node.cc)
+target_link_libraries(dynosam_experiments_node
+  ${PROJECT_NAME}
+  ${PCL_LIBRARIES}
+)
+
+ament_target_dependencies(dynosam_experiments_node "rclcpp" "std_msgs" "dynosam")
+
+install(TARGETS
+dynosam_experiments_node
+  DESTINATION lib/${PROJECT_NAME})
+
 
 
 

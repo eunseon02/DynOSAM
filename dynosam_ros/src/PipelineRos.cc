@@ -41,40 +41,24 @@
 
 namespace dyno {
 
-DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : Node("dynosam", options)
+DynoNode::DynoNode(const std::string& node_name, const rclcpp::NodeOptions& options) : Node(node_name, options)
 {
-    RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoPipelineManagerRos");
+    RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoNode");
 
     const std::string params_path = getParamsPath();
-    const std::string dataset_path = getDatasetPath();
-
-    RCLCPP_INFO_STREAM(this->get_logger(), "Loading Dyno VIO params from: " << params_path);
-    RCLCPP_INFO_STREAM(this->get_logger(), "Loading dataset from: " << dataset_path);
-
-    dyno::DynoParams params(params_path);
-
-    dyno::DataProvider::Ptr data_loader = dyno::DataProviderFactory::Create(dataset_path, params_path, static_cast<dyno::DatasetType>(params.data_provider_type_));
-    RCLCPP_INFO_STREAM(this->get_logger(), "Constructed data loader");
-
-    DisplayParams display_params{};
-    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(display_params, this->create_sub_node("frontend_viz"));
-    auto backend_display = std::make_shared<dyno::BackendDisplayRos>(display_params, this->create_sub_node("backend_viz"));
-
-
-    pipeline_ = std::make_unique<DynoPipelineManager>(params, data_loader, frontend_display, backend_display);
+    dyno_params_ = std::make_unique<DynoParams>(params_path);
 }
 
-
-std::string DynoPipelineManagerRos::getParamsPath() {
+std::string DynoNode::getParamsPath() {
      return searchForPathWithParams("params_folder_path", "dynosam/params/",
         "Path to the folder containing the yaml files with the DynoVIO parameters.");
 }
 
-std::string DynoPipelineManagerRos::getDatasetPath() {
+std::string DynoNode::getDatasetPath() {
     return searchForPathWithParams("dataset_path", "dataset", "Path to the dataset.");
 }
 
-std::string DynoPipelineManagerRos::searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description) {
+std::string DynoNode::searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description) {
     auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
     param_desc.description = description;
 
@@ -91,5 +75,33 @@ std::string DynoPipelineManagerRos::searchForPathWithParams(const std::string& p
     throwExceptionIfPathInvalid(path);
     return path;
 }
+
+
+DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : DynoNode("dynosam", options)
+{
+    RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoPipelineManagerRos");
+
+    const std::string params_path = getParamsPath();
+    const std::string dataset_path = getDatasetPath();
+
+    RCLCPP_INFO_STREAM(this->get_logger(), "Loading Dyno VIO params from: " << params_path);
+    RCLCPP_INFO_STREAM(this->get_logger(), "Loading dataset from: " << dataset_path);
+
+    // get from base which has already loaded it!!
+    auto params = dynoParams();
+
+
+    //TODO: this should be the base!!!
+    dyno::DataProvider::Ptr data_loader = dyno::DataProviderFactory::Create(dataset_path, params_path, static_cast<dyno::DatasetType>(params.data_provider_type_));
+    RCLCPP_INFO_STREAM(this->get_logger(), "Constructed data loader");
+
+    DisplayParams display_params{};
+    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(display_params, this->create_sub_node("frontend_viz"));
+    auto backend_display = std::make_shared<dyno::BackendDisplayRos>(display_params, this->create_sub_node("backend_viz"));
+
+
+    pipeline_ = std::make_unique<DynoPipelineManager>(params, data_loader, frontend_display, backend_display);
+}
+
 
 }
