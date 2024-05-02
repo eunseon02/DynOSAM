@@ -28,10 +28,9 @@
 
 namespace dyno {
 
-BackendModule::BackendModule(const BackendParams& params, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue)
+BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue)
     :   Base("backend"),
         base_params_(params),
-        logger_(std::move(logger)),
         display_queue_(display_queue)
 
 {
@@ -52,9 +51,6 @@ BackendModule::BackendModule(const BackendParams& params, BackendLogger::UniqueP
         );
 
     });
-
-    if(logger_) LOG(INFO) << "Using backend logger: " << logger_->moduleName();
-
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {

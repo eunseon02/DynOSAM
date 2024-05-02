@@ -35,3 +35,4 @@ DECLARE_bool(init_object_pose_from_gt);
 DECLARE_bool(save_frontend_json);
 DECLARE_bool(frontend_from_file);
 DECLARE_bool(use_smoothing_factor);
+DECLARE_int32(backend_updater_enum);

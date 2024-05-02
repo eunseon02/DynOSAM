@@ -56,7 +56,7 @@ public:
     BackendParams backend_params_;
     CameraParams camera_params_;
 
-    int data_provider_type_; //Kitti, VirtualKitti, Online...
+    int data_provider_type_; //Kitti, VirtualKitti, Online... # TODO: currently set with flagfile
 
     FrontendType frontend_type_ = FrontendType::kRGBD;
     OptimizerType optimizer_type_ = OptimizerType::kBatch;

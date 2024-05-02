@@ -72,7 +72,7 @@ public:
     using Base = ModuleBase<BackendInputPacket, BackendOutputPacket>;
     using Base::SpinReturn;
 
-    BackendModule(const BackendParams& params, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue);
+    BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue);
     virtual ~BackendModule() = default;
 
 
@@ -93,8 +93,6 @@ protected:
     const BackendParams base_params_;
     //NOTE: this is copied directly from the frontend module.
     GroundTruthPacketMap gt_packet_map_; //! Updated in the backend module base via InputCallback (see BackendModule constructor).
-
-    BackendLogger::UniquePtr logger_{nullptr};
     ImageDisplayQueue* display_queue_{nullptr}; //! Optional display queue
 
     BackendSpinState spin_state_; //! Spin state of the backend. Updated in the backend module base via InputCallback (see BackendModule constructor).
@@ -142,8 +140,8 @@ public:
     using InputConstPtr = DerivedPacketTypeConstPtr;
     using OutputConstPtr = Base::OutputConstPtr;
 
-    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue)
-    : Base(params, std::move(logger), display_queue), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
+    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, ImageDisplayQueue* display_queue)
+    : Base(params, display_queue), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
 
     virtual ~BackendModuleType() {
         // if(logger_) {

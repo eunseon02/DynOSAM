@@ -4,3 +4,8 @@
 ```
 ros2 bag record -e "dynosam\/(.*)"
 ```
+
+
+requires a Latex compiler for the analysis
+- pip3 install pylatex (for the python package)
+- sudo apt-get install texlive-latex-base texlive-fonts-extra texlive-science(for the compiler)

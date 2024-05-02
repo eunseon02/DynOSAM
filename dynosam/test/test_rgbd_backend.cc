@@ -91,9 +91,11 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     std::shared_ptr<dyno_testing::DummyOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno_testing::DummyOptimizer<dyno::Landmark>>();
     // std::shared_ptr<dyno::ISAMOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::ISAMOptimizer<dyno::Landmark>>();
     dyno::RGBDBackendModule backend(
-        dyno::BackendParams{},
+        dyno::BackendParams().useLogger(false),
         map,
-        optimizer);
+        optimizer,
+        dyno::RGBDBackendModule::UpdaterType::MotionInWorld
+        );
 
     for(size_t i = 0; i < 7; i++) {
         auto output = scenario.getOutput(i);

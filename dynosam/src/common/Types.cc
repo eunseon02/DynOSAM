@@ -34,6 +34,9 @@ DEFINE_bool(save_frontend_json, false, "If true, then the output of the frontend
 DEFINE_bool(frontend_from_file, false, "If true, the frontend will try and load all the data from a seralized json file");
 DEFINE_bool(use_smoothing_factor, true, "If the backend should use the smoothing factor between motions");
 
+DEFINE_int32(backend_updater_enum, 0, "Which UpdaterType the backend should use and should match an enum in whatever backend module type is loaded");
+
+
 
 
 namespace dyno {

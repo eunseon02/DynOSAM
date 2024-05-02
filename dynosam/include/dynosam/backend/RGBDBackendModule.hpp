@@ -42,7 +42,6 @@ namespace dyno {
 
 using RGBDBackendModuleTraits = BackendModuleTraits<RGBDInstanceOutputPacket, Landmark>;
 
-
 class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
 public:
@@ -50,7 +49,11 @@ public:
     using RGBDMap = Base::MapType;
     using RGBDOptimizer = Base::OptimizerType;
 
-    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, BackendLogger::UniquePtr logger = nullptr, ImageDisplayQueue* display_queue = nullptr);
+    enum UpdaterType {
+        MotionInWorld,
+    };
+
+    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, const UpdaterType& updater_type, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
     using SpinReturn = Base::SpinReturn;
@@ -92,6 +95,8 @@ public:
         RGBDBackendModule* parent_;
         UpdateImpl(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
 
+        virtual std::string name() const = 0;
+
         //TODO: (jesse) shouldn't these all be const?
         virtual void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
         virtual void updateOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
@@ -109,6 +114,8 @@ public:
         void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
         virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
         virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+
+        inline std::string name() const override { return "rgbd_motion_world"; }
     };
 
     struct UpdateImplInWorldPrimitives : public UpdateImplInWorld {
@@ -116,6 +123,8 @@ public:
 
         virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
         virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+
+        inline std::string name() const override { return "rgbd_motion_world_primitive"; }
     };
 
 
@@ -124,6 +133,10 @@ public:
     // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
     UpdateImpl::UniquePtr updater_;
+
+    //logger here!!
+    BackendLogger::UniquePtr logger_{nullptr};
+
 
 
     using KeyTimestampMap = gtsam::IncrementalFixedLagSmoother::KeyTimestampMap;

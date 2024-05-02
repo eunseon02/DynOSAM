@@ -76,6 +76,10 @@ def parser():
                                 help="Absolute path to the params to dun Dynosam with.",
                                 required=False)
 
+    input_opts.add_argument("-l", "--launch_file", type=str,
+                                help="Which dynosam launch file to run!.",
+                                default="dyno_sam_launch.py")
+
 
     evaluation_opts.add_argument("-r", "--run_pipeline", action="store_true",
                                  help="Run dyno?")
@@ -110,6 +114,7 @@ def run(parsed_args, unknown_args):
         - name: str
         - run_pipeline: bool
         - run_analysis: bool
+        - launch_file: str
     and optionally
         - params_path: str
     This should be a dictioanry of values rather than an argument parser instance.
@@ -140,14 +145,15 @@ def run(parsed_args, unknown_args):
     if "run_analysis" not in parsed_args:
         log.fatal("run_analysis key is missing from parsed args!")
 
+    if "launch_file" not in parsed_args:
+        log.fatal("launch_file key is missing from parsed args!")
+
     datset_path = parsed_args["dataset_path"]
     output_path = parsed_args["output_path"]
     name = parsed_args["name"]
     run_pipeline = parsed_args["run_pipeline"]
     run_analysis = parsed_args["run_analysis"]
-
-    # print(parsed_args)
-
+    launch_file = parsed_args["launch_file"]
 
     launch_arguments={'dataset_path': datset_path}
 
@@ -157,10 +163,13 @@ def run(parsed_args, unknown_args):
         launch_arguments.update({"params_path": parsed_args["params_path"]})
 
 
+    log.info(f"Running lauch using dynosam_ros launch file {launch_file}")
+
+    dynosam_launch_file = os.path.join(
+            get_package_share_directory('dynosam_ros'), 'launch', launch_file)
+
     ld = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource([os.path.join(
-            get_package_share_directory('dynosam_ros'), 'launch'),
-            '/dyno_sam_launch.py']),
+        PythonLaunchDescriptionSource([dynosam_launch_file]),
         launch_arguments=launch_arguments.items(),
     )
 

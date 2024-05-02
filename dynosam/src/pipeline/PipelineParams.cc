@@ -24,6 +24,8 @@
 #include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/utils/YamlParser.hpp"
 
+DEFINE_int32(data_provider_type, 0,"Which data provider (loader) to use. Associated with specific datasets");
+
 namespace dyno {
 
 DynoParams::DynoParams(const std::string& params_folder_path) {
@@ -36,7 +38,9 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
     pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
 
-    pipeline_parser.getYamlParam("data_provider_type", &data_provider_type_);
+    //TODO: is now flagfile!!
+    // pipeline_parser.getYamlParam("data_provider_type", &data_provider_type_);
+    data_provider_type_ = FLAGS_data_provider_type;
 
     int frontend_type_i;
     pipeline_parser.getYamlParam("frontend_type", &frontend_type_i);

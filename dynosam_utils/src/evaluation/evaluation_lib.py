@@ -143,6 +143,14 @@ class MotionErrorEvaluator(Evaluator):
 
         fig_all_object_traj = plt.figure(figsize=(8,8))
 
+        # max_x = 0
+        # max_y = 0
+        # max_z = 0
+
+        # min_x = np.inf
+        # min_y = np.inf
+        # min_z = np.inf
+
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
             data = (object_traj_ref, object_traj)
 
@@ -150,13 +158,22 @@ class MotionErrorEvaluator(Evaluator):
             # TODO: doesnt seem to work?
             evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
+            positions_xyz = object_traj.positions_xyz
+
+            # max_x = max(max_x, np.max(positions_xyz, axis=0)[0])
+            # max_y = max(max_y, np.max(positions_xyz, axis=0)[1])
+            # max_z = max(max_z, np.max(positions_xyz, axis=0)[2])
+
+            # min_x = min(min_x, np.min(positions_xyz, axis=0)[0])
+            # min_y = min(min_y, np.min(positions_xyz, axis=0)[1])
+            # min_z = min(min_z, np.min(positions_xyz, axis=0)[2])
+
 
             # TODO: align?
             object_trajectories[f"Object {object_id}"] = object_traj
             object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
 
-            logger.info(f"Logging pose metrics for object {object_id}")
-
+            logger.debug(f"Logging pose metrics for object {object_id}")
 
             ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
             ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
@@ -176,7 +193,7 @@ class MotionErrorEvaluator(Evaluator):
             results_per_object["ape_translation"] = ape_trans.get_all_statistics()
             results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
             results_per_object["rpe_translation"] = rpe_trans.get_all_statistics()
-            results_per_object["rpe_translation"] = rpe_rot.get_all_statistics()
+            results_per_object["rpe_rotation"] = rpe_rot.get_all_statistics()
 
             # exepct results to already have results["objects"][id]["poses"] prepared
             results["objects"][object_id]["poses"] = results_per_object
@@ -194,7 +211,10 @@ class MotionErrorEvaluator(Evaluator):
 
         # add collected trajectories to fig
         # correspondence edges already added
+        # TODO: fix size issue!!
         evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # ax = fig_all_object_traj.gca()
+
 
         plot_collection.add_figure(
             "Obj Trajectories", fig_all_object_traj
@@ -443,7 +463,7 @@ class CameraPoseEvaluator(Evaluator):
         results["vo"]["ape_translation"] = ape_trans.get_all_statistics()
         results["vo"]["ape_rotation"] = ape_rot.get_all_statistics()
         results["vo"]["rpe_translation"] = rpe_trans.get_all_statistics()
-        results["vo"]["rpe_translation"] = rpe_rot.get_all_statistics()
+        results["vo"]["rpe_rotation"] = rpe_rot.get_all_statistics()
 
 
 
@@ -480,13 +500,24 @@ class DataFiles:
         self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
         self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
 
-        self.object_pose_log = prefix + "_object_pose_log.csv"
-        self.object_motion_log = prefix + "_object_motion_log.csv"
-        self.camera_pose_log = prefix + "_camera_pose_log.csv"
-        self.map_point_log = prefix + "_map_points_log.csv"
+    @property
+    def object_pose_log(self):
+        return self.prefix + "_object_pose_log.csv"
+
+    @property
+    def object_motion_log(self):
+        return self.prefix + "_object_motion_log.csv"
+
+    @property
+    def camera_pose_log(self):
+        return self.prefix + "_camera_pose_log.csv"
+
+    @property
+    def map_point_log(self):
+        return self.prefix + "_map_points_log.csv"
 
     def __str__(self):
-        return "DataFiles - prefix: {}, result file name: {}, plot collection name: {}".format(
+        return "DataFiles [\n\tprefix: {}\n\tresult file name: {}\n\tplot collection name: {}".format(
             self.prefix,
             self.results_file_name,
             self.plot_collection_name
@@ -501,26 +532,60 @@ class DatasetEvaluator:
     def run_analysis(self):
         logger.info("Running analysis using files at output path {}".format(self._output_folder_path))
 
-        frontend_files = DataFiles("frontend")
-        self.run_single_analysis(frontend_files)
+        possible_path_prefixes = self._search_for_datafiles()
+        logger.info(f"Searching for datafiles using prefixes {possible_path_prefixes}")
 
-        # backend_files = DataFiles("backend")
-        # self.run_single_analysis(DataFiles("rgbd_backend"))
+        from .formatting_utils import LatexTableFormatter
 
-        self.run_single_analysis(DataFiles("rgbd_primitive_backend"))
+        table_formatter = LatexTableFormatter()
 
-    def run_single_analysis(self, datafiles: DataFiles):
+        for prefixs in possible_path_prefixes:
+            data_files = DataFiles(prefixs)
+            data = self.run_and_save_single_analysis(data_files)
+
+            if data is None:
+                continue
+
+            plot_collection, results = data
+
+            table_formatter.add_results(data_files.plot_collection_name, results)
+            # right now just save metric plots per prefix
+            plot_collection.export(
+                self._create_new_file_path(data_files.plot_collection_name + "_metrics" + ".pdf"),
+                confirm_overwrite=False)
+
+        table_formatter.save_pdf(self._create_new_file_path("result_tables"))
+
+            # # plot_collection.show()
+            # self._save_to_pdf(data_files.plot_collection_name, plot_collection, results)
+            # # TEST
+            # plot_collection.export(self._create_new_file_path(data_files.plot_collection_name + ".pdf"))
+
+    def run_and_save_single_analysis(self, datafiles: DataFiles) -> Tuple[evo_plot.PlotCollection, Dict]:
+        try:
+            data = self._run_single_analysis(datafiles)
+            result_dict = data[1]
+            if len(result_dict) > 0:
+                self._save_results_dict_json(datafiles.results_file_name, result_dict)
+                logger.info(f"Successfully ran analysis for datafiles {datafiles} and saving results json")
+            else:
+                logger.info(f"Ran analysis for datafiles {datafiles} with no error but not saving results json")
+
+            return data
+        except Exception as e:
+            import traceback
+            logger.warning(f"Failed to run analysis for datafiles {datafiles}: error was {traceback.format_exc()}")
+            return None
+
+    def _run_single_analysis(self, datafiles: DataFiles) -> Tuple[evo_plot.PlotCollection, Dict]:
         prefix = datafiles.prefix
 
         #TODO: this does not work...?
         analysis_logger = logger.getChild(prefix)
 
         analysis_logger.info("Running analysis with datafile prefix: {}".format(prefix))
-        # motion_error_log_path = self._create_existing_file_path(datafiles.motion_error_log)
         object_pose_log_path = self._create_existing_file_path(datafiles.object_pose_log)
         object_motion_log_path = self._create_existing_file_path(datafiles.object_motion_log)
-        # object_pose_error_log_path = self._create_existing_file_path(datafiles.object_pose_error_log)
-        # camera_pose_error_log_path = self._create_existing_file_path(datafiles.camera_pose_error_log)
         camera_pose_log_path = self._create_existing_file_path(datafiles.camera_pose_log)
 
         evaluators = []
@@ -556,13 +621,48 @@ class DatasetEvaluator:
         for evals  in evaluators:
             evals.process(plot_collection, result_dict)
 
-        if len(result_dict) > 0:
-            self._save_results_dict(datafiles.results_file_name, result_dict)
+        # plot_collection.show()
+        return plot_collection, result_dict
 
-        plot_collection.show()
+    def _search_for_datafiles(self):
+        from pathlib import Path
+        output_folder_path = Path(self._output_folder_path)
+
+        path_prefix_set = set()
+
+        dummy_data_files = DataFiles("")
+
+        def get_datafile_properties(data_files: DataFiles):
+            # get functions relating to file paths of expected output logs
+            # note: we dont look at ALL the possible properties of DataFiles, just the main ones
+            return [
+                data_files.camera_pose_log,
+                data_files.object_motion_log,
+                data_files.object_pose_log
+            ]
 
 
-    def _save_results_dict(self, file_name: str, results: Dict):
+        # these strings will return the names of the output log files, the suffix of which
+        # we want to find in the output_folder_path
+        data_files = get_datafile_properties(dummy_data_files)
+
+        for p in output_folder_path.iterdir():
+            # p is absolute path
+            if p.is_file():
+                found_file_name = p.name
+                # expect file name of loggers to be suffixed with the output of data_file_property_functons
+                for expected_log_suffx_name in data_files:
+                    # found file name should be in the form prefix_suffix
+                    # e.g. rgbd_backend_object_pose_log.csv
+                    # where rgbd_backend is the prefix_we want to find
+                    # and _object_pose_log is a known suffux to a log file
+                    if found_file_name.endswith(expected_log_suffx_name):
+                        possible_prefix = found_file_name.removesuffix(expected_log_suffx_name)
+                        path_prefix_set.add(possible_prefix)
+        return list(path_prefix_set)
+
+
+    def _save_results_dict_json(self, file_name: str, results: Dict):
         output_file_name = self._create_new_file_path(file_name) + ".json"
 
         logger.info("Writing results json to file {}".format(output_file_name))
@@ -607,5 +707,5 @@ class DatasetEvaluator:
                 logger.warning("Expected file path is none when constructing evaluator {} with args: {}".format(cls.__name__, args))
                 return None
 
-        logger.info("Constructor evaluator: {}".format(cls.__name__))
+        logger.debug("Constructor evaluator: {}".format(cls.__name__))
         return cls(*args)

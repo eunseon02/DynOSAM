@@ -46,8 +46,8 @@
 
 namespace dyno {
 
-RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d::Ptr map, RGBDOptimizer::Ptr optimizer, BackendLogger::UniquePtr logger, ImageDisplayQueue* display_queue)
-    : Base(backend_params, map, optimizer, std::move(logger), display_queue)
+RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d::Ptr map, RGBDOptimizer::Ptr optimizer, const UpdaterType& updater_type, ImageDisplayQueue* display_queue)
+    : Base(backend_params, map, optimizer, display_queue)
 {
     CHECK_NOTNULL(map);
     CHECK_NOTNULL(map_);
@@ -75,13 +75,20 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
     CHECK_NOTNULL(dynamic_point_noise_);
     CHECK_NOTNULL(landmark_motion_noise_);
 
-    // updater_ = std::make_unique<UpdateImplInWorld>(this);
-    updater_ = std::make_unique<UpdateImplInWorldPrimitives>(this);
+    if(updater_type == UpdaterType::MotionInWorld) {
+        updater_ = std::make_unique<UpdateImplInWorld>(this);
+        LOG(INFO) << "Using UpdateImplInWorld";
+    }
+    else {
+        CHECK(false) << "Not implemented";
+    }
+
+    // updater_ = std::make_unique<UpdateImplInWorldPrimitives>(this);
     CHECK_NOTNULL(updater_);
 
-    //TODO:hack to update logger
-    if(logger_) {
-        logger_ = std::make_unique<BackendLogger>("rgbd_primitive");
+    if(backend_params.use_logger_) {
+        logger_ = std::make_unique<BackendLogger>(updater_->name());
+        LOG(INFO) << "Creating backend logger with name " << logger_->moduleName();
     }
 
 
@@ -90,20 +97,20 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
 RGBDBackendModule::~RGBDBackendModule() {
     LOG(INFO) << "Destructing RGBDBackendModule";
 
-    //TODO: for now - this module does not know if we have poses in the graph
-    if(logger_) {
-        gtsam::FastMap<ObjectId, gtsam::Vector3> estimated_radii;
-        for(ObjectId object_id : map_->getObjectIds()) {
-            gtsam::Vector3 P;
-            if(map_->safeGet(P, ObjectQuadricSymbol(object_id))) {
-                estimated_radii.insert2(object_id, P);
-            }
-        }
+    // //TODO: for now - this module does not know if we have poses in the graph
+    // if(logger_) {
+    //     gtsam::FastMap<ObjectId, gtsam::Vector3> estimated_radii;
+    //     for(ObjectId object_id : map_->getObjectIds()) {
+    //         gtsam::Vector3 P;
+    //         if(map_->safeGet(P, ObjectQuadricSymbol(object_id))) {
+    //             estimated_radii.insert2(object_id, P);
+    //         }
+    //     }
 
-        if(!estimated_radii.empty()) {
-            logger_->logEllipsoids(estimated_radii);
-        }
-    }
+    //     if(!estimated_radii.empty()) {
+    //         logger_->logEllipsoids(estimated_radii);
+    //     }
+    // }
 
 }
 

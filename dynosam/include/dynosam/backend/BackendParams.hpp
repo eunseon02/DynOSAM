@@ -53,12 +53,17 @@ struct BackendParams {
 
     double motion_ternary_factor_noise_sigma_ = 0.001;
 
-    bool use_logger_ = true;
+    bool use_logger_ = true; //TODO: make param!?
 
     size_t min_static_obs_ = 2u;
     size_t min_dynamic_obs_ = 3u;
 
     static BackendParams fromYaml(const std::string& file_path);
+
+    BackendParams& useLogger(bool value) {
+        this->use_logger_ = value;
+        return *this;
+    }
 
 };
 
