@@ -317,8 +317,8 @@ public:
 };
 
 
-//additional loaders are depth, semantic/motion mask, pixel level semantics, camera pose gt and gt input packet
-class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
+//additional loaders are depth, semantic/motion mask, camera pose gt and gt input packet
+class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket> {
 
 public:
 
@@ -354,8 +354,8 @@ public:
      *  /flow
      *  /image_0
      *  /motion
-     *  /semantic
-     *  /pixel_semantics (TODO: shoudl change semantic and pixel semantics to instance_mask and semantics)
+    //  *  /semantic
+    //  *  /pixel_semantics (TODO: shoudl change semantic and pixel semantics to instance_mask and semantics)
      *  /object_pose.txt
      *  /pose_gt.txt
      *  /times.txt
@@ -363,7 +363,7 @@ public:
      * @param dataset_path
      * @param params
      */
-    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
+    KittiDataLoader(const fs::path& dataset_path, const Params& params) : DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose3, GroundTruthInputPacket>(
         dataset_path), params_(params)
     {
         TimestampFile::Ptr timestamp_file =  std::make_shared<TimestampFile>();
@@ -386,7 +386,7 @@ public:
         }
         CHECK_NOTNULL(mask_folder);
 
-        KittiClassSegmentationDataFolder::Ptr pixel_level_semantics_folder = std::make_shared<KittiClassSegmentationDataFolder>();
+        // KittiClassSegmentationDataFolder::Ptr pixel_level_semantics_folder = std::make_shared<KittiClassSegmentationDataFolder>();
 
         KittiCameraPoseFolder::Ptr camera_pose_folder = std::make_shared<KittiCameraPoseFolder>();
         KittiObjectPoseFolder::Ptr object_pose_gt_folder = std::make_shared<KittiObjectPoseFolder>(
@@ -405,7 +405,7 @@ public:
             std::make_shared<OpticalFlowDataFolder>(),
             std::make_shared<DepthDataFolder>(),
             mask_folder,
-            pixel_level_semantics_folder,
+            // pixel_level_semantics_folder,
             camera_pose_folder,
             object_pose_gt_folder
         );
@@ -416,7 +416,6 @@ public:
             cv::Mat optical_flow,
             cv::Mat depth,
             cv::Mat instance_mask,
-            cv::Mat pixel_semantics,
             gtsam::Pose3 camera_pose_gt,
             GroundTruthInputPacket gt_object_pose_gt) -> bool
         {
@@ -435,8 +434,7 @@ public:
                     ImageWrapper<ImageType::RGBMono>(rgb),
                     ImageWrapper<ImageType::Depth>(depth),
                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                    ImageWrapper<ImageType::MotionMask>(instance_mask),
-                    ImageWrapper<ImageType::ClassSegmentation>(pixel_semantics));
+                    ImageWrapper<ImageType::MotionMask>(instance_mask));
             }
             else {
                 image_container = ImageContainer::Create(

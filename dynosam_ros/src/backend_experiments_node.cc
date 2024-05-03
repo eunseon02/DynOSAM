@@ -22,25 +22,130 @@
  */
 
 #include "dynosam_ros/PipelineRos.hpp"
-
+#include "dynosam_ros/Utils.hpp"
 
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
+#include <dynosam/backend/RGBDBackendModule.hpp>
 #include <dynosam/common/Map.hpp>
 #include <dynosam/backend/Optimizer.hpp>
 #include <dynosam/logger/Logger.hpp>
 
 #include <glog/logging.h>
 
+#include "rclcpp/rclcpp.hpp"
+#include "rclcpp/executor.hpp"
+
 namespace dyno {
 
-class BackendExperimentsNode {
+class BackendExperimentsNode : public DynoNode {
 
 public:
-    BackendExperimentsNode : DynoNode("dynosam_experiments")
+    BackendExperimentsNode() : DynoNode("dynosam_experiments")
     {
+        RCLCPP_INFO_STREAM(this->get_logger(), "Starting BackendExperimentsNode");
+
+        auto data_loader = this->createDataProvider();
+        auto params = this->getDynoParams();
+
+        CameraParams camera_params;
+        if(params.prefer_data_provider_camera_params_ && data_loader->getCameraParams().has_value()) {
+            LOG(INFO) << "Using camera params from DataProvider, not the config in the CameraParams.yaml!";
+            camera_params = *data_loader->getCameraParams();
+        }
+        else {
+            LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
+            camera_params = params.camera_params_;
+        }
+
+        Camera::Ptr camera = std::make_shared<Camera>(camera_params);
+
+        using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
+        using MapType = RGBDBackendModule::MapType;
+        using OptimizerType = RGBDBackendModule::OptimizerType;
+        using MeasurementType = RGBDBackendModule::MeasurementType;
+
+        typename MapType::Ptr map = MapType::create();
+
+
+        LOG(INFO) << "Offline RGBD frontend";
+        const std::string file_path = getOutputFilePath(kRgbdFrontendOutputJsonFile);
+
+        using OfflineFrontend = FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
+
+        OfflineFrontend::UniquePtr offline_frontend = std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path);
+
+        //raw ptr type becuase we cannot copy the unique ptr!! This is only becuase
+                //we need it in the lambda function which is a temporary solution
+        OfflineFrontend* offline_frontend_ptr = offline_frontend.get();
+
+        std::function<FrameId()> get_dataset_size = [offline_frontend_ptr]() -> FrameId {
+                //get frame id of the final frame saved
+                return CHECK_NOTNULL(offline_frontend_ptr)->getFrontendOutputPackets().rbegin()->first;
+            };
+
+        //right now only batch
+        BatchOptimizerParams batch_params;
+        CHECK(get_dataset_size) << "dataset size function must be set - right now only works with RBG!!";
+        batch_params.get_last_frame = get_dataset_size;
+
+        auto optimizer = std::make_shared<BatchOptimizer<MeasurementType>>(batch_params);
+
+        //TODO: make better params!!
+        auto updater_type = static_cast<RGBDBackendModule::UpdaterType>(
+            FLAGS_backend_updater_enum
+        );
+
+        auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, optimizer, updater_type);
+
+        backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
+        backend_pipeline_->parallelRun(params.parallel_run_);
+        //also register connection between front and back
+        offline_frontend_ptr->registerOutputQueue(&backend_input_queue_);
+        //NO OUTPUT!!
+
+         //convert pipeline to base type
+        frontend_pipeline_ = std::move(offline_frontend);
 
     }
 
+     bool spinOnce() override {
+       if(frontend_pipeline_->isWorking()) {
+                    frontend_pipeline_->spinOnce();
+                    backend_pipeline_->spinOnce();
+            return true;
+        }
+        return false;
+     }
+
+private:
+
+    PipelineBase::UniquePtr frontend_pipeline_{nullptr};
+    BackendPipeline::UniquePtr backend_pipeline_{nullptr};
+    FrontendPipeline::OutputQueue backend_input_queue_;
 };
 
+} //dyno
+
+
+int main(int argc, char* argv[]) {
+    auto non_ros_args = dyno::initRosAndLogging(argc, argv);
+
+    rclcpp::NodeOptions options;
+    options.arguments(non_ros_args);
+    options.use_intra_process_comms(true);
+
+    // LOG(INFO) << FLAGS_test_flag;
+
+    rclcpp::executors::SingleThreadedExecutor exec;
+    auto ros_pipeline = std::make_shared<dyno::BackendExperimentsNode>();
+
+    exec.add_node(ros_pipeline);
+    while(rclcpp::ok()) {
+        if(!ros_pipeline->spinOnce()) {
+            break;
+        }
+        exec.spin_some();
+    }
+
+    ros_pipeline.reset();
 }

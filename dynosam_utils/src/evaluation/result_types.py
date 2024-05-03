@@ -81,9 +81,13 @@ def plot_metric(metric, plot_title="", figsize=(8,8), fig = None):
 
     ax = fig.gca()
 
+    # remove from stats
+    del stats["rmse"]
+    del stats["sse"]
+
     plot.error_array(ax, metric.error, statistics=stats,
                         title=plot_title,
-                        xlabel="Keyframe index [-]",
+                        xlabel="Frame Index [-]",
                         ylabel=plot_title + " " + metric.unit.value)
 
     return fig

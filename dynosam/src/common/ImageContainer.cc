@@ -105,6 +105,18 @@ ImageContainer::Ptr ImageContainer::Create(
         const ImageWrapper<ImageType::RGBMono>& img,
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask)
+{
+    return Create(timestamp, frame_id, img, depth, optical_flow, ImageWrapper<ImageType::SemanticMask>(), motion_mask, ImageWrapper<ImageType::ClassSegmentation>());
+
+}
+
+ImageContainer::Ptr ImageContainer::Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::MotionMask>& motion_mask,
         const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation) {
 

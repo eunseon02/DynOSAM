@@ -9,7 +9,14 @@ from evo.core import lie_algebra
 from evo.core import trajectory, metrics
 import evo.tools.plot as evo_plot
 
-from .tools import so3_from_euler, common_entries
+from .tools import (
+    so3_from_euler,
+    common_entries,
+    set_axes_equal,
+    transform_camera_trajectory_to_world,
+    TrajectoryHelper
+)
+
 from .result_types import (
     MotionErrorDict,
     ObjectPoseDict,
@@ -89,11 +96,11 @@ class MotionErrorEvaluator(Evaluator):
 
 
     @property
-    def object_poses_traj(self) -> trajectory.PoseTrajectory3D:
+    def object_poses_traj(self) -> ObjectTrajDict:
         return self._object_poses_traj
 
     @property
-    def object_poses_traj_ref(self) -> trajectory.PoseTrajectory3D:
+    def object_poses_traj_ref(self) -> ObjectTrajDict:
         return self._object_poses_traj_ref
 
 
@@ -143,13 +150,7 @@ class MotionErrorEvaluator(Evaluator):
 
         fig_all_object_traj = plt.figure(figsize=(8,8))
 
-        # max_x = 0
-        # max_y = 0
-        # max_z = 0
-
-        # min_x = np.inf
-        # min_y = np.inf
-        # min_z = np.inf
+        trajectory_helper = TrajectoryHelper()
 
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
             data = (object_traj_ref, object_traj)
@@ -158,16 +159,7 @@ class MotionErrorEvaluator(Evaluator):
             # TODO: doesnt seem to work?
             evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
-            positions_xyz = object_traj.positions_xyz
-
-            # max_x = max(max_x, np.max(positions_xyz, axis=0)[0])
-            # max_y = max(max_y, np.max(positions_xyz, axis=0)[1])
-            # max_z = max(max_z, np.max(positions_xyz, axis=0)[2])
-
-            # min_x = min(min_x, np.min(positions_xyz, axis=0)[0])
-            # min_y = min(min_y, np.min(positions_xyz, axis=0)[1])
-            # min_z = min(min_z, np.min(positions_xyz, axis=0)[2])
-
+            trajectory_helper.append(object_traj)
 
             # TODO: align?
             object_trajectories[f"Object {object_id}"] = object_traj
@@ -213,7 +205,9 @@ class MotionErrorEvaluator(Evaluator):
         # correspondence edges already added
         # TODO: fix size issue!!
         evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
-        # ax = fig_all_object_traj.gca()
+        ax = fig_all_object_traj.gca()
+        trajectory_helper.set_ax_limits(ax)
+
 
 
         plot_collection.add_figure(
@@ -324,8 +318,10 @@ class MotionErrorEvaluator(Evaluator):
             if len(poses_est) < 2:
                 continue
 
-            object_poses_traj[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps)
-            object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref)
+            object_poses_traj[object_id] = transform_camera_trajectory_to_world(
+                trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps))
+            object_poses_traj_ref[object_id] = transform_camera_trajectory_to_world(
+                trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref))
 
         return object_poses_traj, object_poses_traj_ref
 
@@ -386,8 +382,10 @@ class CameraPoseEvaluator(Evaluator):
             poses.append(T)
             poses_ref.append(T_ref)
 
-        self._camera_pose_traj = trajectory.PoseTrajectory3D(poses_se3=poses, timestamps=timestamps)
-        self._camera_pose_traj_ref = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps)
+        self._camera_pose_traj = transform_camera_trajectory_to_world(
+            trajectory.PoseTrajectory3D(poses_se3=poses, timestamps=timestamps))
+        self._camera_pose_traj_ref = transform_camera_trajectory_to_world(
+            trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps))
 
     @property
     def camera_pose_traj(self) -> trajectory.PoseTrajectory3D:
@@ -481,10 +479,16 @@ class EgoObjectMotionEvaluator(Evaluator):
         camera_traj = self._camera_eval.camera_pose_traj
         object_trajs = self._object_eval.object_poses_traj
 
+        trajectory_helper = TrajectoryHelper()
+        trajectory_helper.append(camera_traj)
+        trajectory_helper.append(object_trajs)
+
         all_traj = object_trajs
         all_traj["Camera"] = camera_traj
 
         evo_plot.trajectories(fig_traj, all_traj, plot_mode=evo_plot.PlotMode.xyz)
+
+        trajectory_helper.set_ax_limits(fig_traj.gca())
 
         plot_collection.add_figure(
             "Trajectories",
@@ -553,6 +557,9 @@ class DatasetEvaluator:
             plot_collection.export(
                 self._create_new_file_path(data_files.plot_collection_name + "_metrics" + ".pdf"),
                 confirm_overwrite=False)
+
+            # plot_collection.show()
+
 
         table_formatter.save_pdf(self._create_new_file_path("result_tables"))
 

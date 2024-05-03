@@ -339,6 +339,24 @@ public:
         const ImageWrapper<ImageType::MotionMask>& motion_mask,
         const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
+    /**
+     * @brief Construct an image container equivalent to RGBD + Motion Mask input
+     *
+     * @param timestamp
+     * @param frame_id
+     * @param img
+     * @param depth
+     * @param optical_flow
+     * @param motion_mask
+     * @return ImageContainer::Ptr
+     */
+    static ImageContainer::Ptr Create(
+        const Timestamp timestamp,
+        const FrameId frame_id,
+        const ImageWrapper<ImageType::RGBMono>& img,
+        const ImageWrapper<ImageType::Depth>& depth,
+        const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
+        const ImageWrapper<ImageType::MotionMask>& motion_mask);
 protected:
     /**
      * @brief Static construction of a full image container and calls validateSetup on the resulting object.

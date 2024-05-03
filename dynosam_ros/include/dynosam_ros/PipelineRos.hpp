@@ -25,6 +25,7 @@
 
 #include <dynosam/pipeline/PipelineManager.hpp>
 #include <dynosam/utils/Statistics.hpp>
+#include <dynosam/dataprovider/DataProvider.hpp>
 #include <dynosam/pipeline/PipelineParams.hpp>
 
 #include "rclcpp/node.hpp"
@@ -38,21 +39,24 @@ public:
     explicit DynoNode(const std::string& node_name, const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
     virtual ~DynoNode() = default;
 
-    virtual bool spinOnce() {}
+    virtual bool spinOnce() {return true;}
 
     std::string getStats() const {
         return utils::Statistics::Print();
     }
 
-
-protected:
-    const DynoParams& dynoParams() {
+    const DynoParams& getDynoParams() {
         CHECK_NOTNULL(dyno_params_);
         return *dyno_params_;
     }
 
-    std::string getParamsPath();
-    std::string getDatasetPath();
+    inline std::string getParamsPath() { return searchForPathWithParams("params_folder_path", "dynosam/params/",
+        "Path to the folder containing the yaml files with the DynoVIO parameters.");; }
+    inline std::string getDatasetPath() { return searchForPathWithParams("dataset_path", "dataset", "Path to the dataset."); }
+
+protected:
+    //NOT cached!!
+    virtual dyno::DataProvider::Ptr createDataProvider();
 
 private:
 
@@ -67,6 +71,7 @@ private:
     std::string searchForPathWithParams(const std::string& param_name, const std::string& default_path, const std::string& description = "");
 
     std::unique_ptr<DynoParams> dyno_params_;
+
 
 };
 
