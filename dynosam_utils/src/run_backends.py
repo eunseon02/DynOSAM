@@ -23,17 +23,17 @@ def run_cluster_backend_sequnce(path, name):
     run_backend_sequnce(path, name, 2)
 
 if __name__ == '__main__':
-    # run_kitti_backend_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0005",
-    #     "kitti_0005"
-    # )
+    run_kitti_backend_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0004",
+        "kitti_0004"
+    )
 
     # run_kitti_backend_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0003",
     #     "kitti_0003"
     # )
 
-    run_cluster_backend_sequnce(
-        "/root/data/cluster_slam/CARLA-L1",
-        "carla_l1"
-    )
+    # run_cluster_backend_sequnce(
+    #     "/root/data/cluster_slam/CARLA-L1",
+    #     "carla_l1"
+    # )

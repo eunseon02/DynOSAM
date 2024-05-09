@@ -1,9 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 from evo.core.lie_algebra import se3
 from evo.core.trajectory import PosePath3D
 
+import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
+
 
 from typing import List
 import typing
@@ -39,6 +42,50 @@ def common_entries(*dcts):
         return
     for i in set(dcts[0]).intersection(*dcts[1:]):
         yield (i,) + tuple(d[i] for d in dcts)
+
+# values between 0 and 1
+def hsv_to_rgb(h:float, s:float, v:float, a:float = 1) -> tuple:
+    import colorsys
+    return colorsys.hsv_to_rgb(h, s, v)
+    # if s:
+    #     if h == 1.0: h = 0.0
+    #     i = int(h*6.0); f = h*6.0 - i
+
+    #     w = v * (1.0 - s)
+    #     q = v * (1.0 - s * f)
+    #     t = v * (1.0 - s * (1.0 - f))
+
+    #     if i==0: return (v, t, w, a)
+    #     if i==1: return (q, v, w, a)
+    #     if i==2: return (w, v, t, a)
+    #     if i==3: return (w, q, v, a)
+    #     if i==4: return (t, w, v, a)
+    #     if i==5: return (v, w, q, a)
+    # else: return (v, v, v, a)
+
+def generate_unique_colour(id: int, saturation: float = 0.5, value: float = 0.95):
+    import math
+    phi = (1 + math.sqrt(5))/2.0
+    n = id * phi - math.floor(id * phi)
+    # hue = math.floor(n * 256)
+
+    colour = hsv_to_rgb(n, saturation, value)
+    # put values between 0 and 255
+    result = list(map(lambda x: math.floor(x * 256), colour))
+    #return r,g,b component of result
+    return result[:3]
+
+
+def rgb_to_hex_string(*args) -> str:
+    if len(args) == 1 and isinstance(args[0], list) and len(args[0]) == 3:
+        # If a single list with 3 elements is provided
+        r, g, b = args[0]
+    elif len(args) == 3:
+        # If three separate arguments are provided
+        r,g,b = args
+    else:
+        raise ValueError("Invalid input. Please provide either a list of 3 elements or 3 separate arguments.")
+    return '#{:02x}{:02x}{:02x}'.format(r, g, b)
 
 
 # https://github.com/qcr/quadricslam/blob/master/src/quadricslam/visualisation.py
@@ -114,6 +161,76 @@ class TrajectoryHelper:
         ax.set_xlim3d([self.min_x, self.max_x])
         ax.set_ylim3d([self.min_y, self.max_y])
         set_axes_equal(ax)
+
+
+
+# modification of evo.trajectories
+def plot_object_trajectories(
+        fig: Figure,
+        obj_trajectories: typing.Dict[str, evo_trajectory.PosePath3D],
+        obj_trajectories_ref: typing.Dict[str, evo_trajectory.PosePath3D],
+        plot_mode=evo_plot.PlotMode.xy,
+        title: str = "",
+        subplot_arg: int = 111,
+        plot_start_end_markers: bool = False,
+        length_unit: evo_plot.Unit = evo_plot.Unit.meters) -> None:
+
+    if len(obj_trajectories) != len(obj_trajectories_ref):
+        raise evo_plot.PlotException(f"Expected trajectories and ref trajectories to have the same length {len(obj_trajectories)} != {len(obj_trajectories_ref)}")
+
+    ax = evo_plot.prepare_axis(fig, plot_mode, subplot_arg, length_unit)
+    if title:
+        ax.set_title(title)
+
+    cmap_colors = None
+    import collections
+    import matplotlib.cm as cm
+    import itertools
+    import seaborn as sns
+
+    if evo_plot.SETTINGS.plot_multi_cmap.lower() != "none" and isinstance(
+            obj_trajectories, collections.abc.Iterable):
+        cmap = getattr(cm, evo_plot.SETTINGS.plot_multi_cmap)
+        cmap_colors = iter(cmap(np.linspace(0, 1, len(obj_trajectories))))
+
+    color_palette = itertools.cycle(sns.color_palette())
+
+    # helper function
+    def draw_impl(t, style: str = '-',name="", alpha: float = 1.0, shift_color: bool = False):
+        if cmap_colors is None:
+            color = next(color_palette)
+        else:
+            color = next(cmap_colors)
+
+        if shift_color:
+            import colorsys
+            hsv_color = colorsys.rgb_to_hsv(color[0], color[1], color[1])
+            # shift slightly
+            h = hsv_color[0] + 0.1
+            color = colorsys.hsv_to_rgb(h, hsv_color[1], hsv_color[2])
+
+        if evo_plot.SETTINGS.plot_usetex:
+            name = name.replace("_", "\\_")
+        evo_plot.traj(ax, plot_mode, t, style, color, name,
+             plot_start_end_markers=plot_start_end_markers, alpha=alpha)
+
+    def draw(traj: typing.Any, **kwargs):
+        if isinstance(traj, evo_trajectory.PosePath3D):
+            draw_impl(traj, **kwargs)
+        elif isinstance(traj, dict):
+            for name, t in traj.items():
+                draw_impl(t,name=name,**kwargs)
+        else:
+            for t in traj:
+                draw_impl(t, **kwargs)
+
+    draw(obj_trajectories, style='-')
+    # reset colours
+    color_palette = itertools.cycle(sns.color_palette())
+    draw(obj_trajectories_ref, style='-', alpha=0.8, shift_color=True)
+
+
+
 
 
 #from v1.0 of evo as this function seems to have become depcirated!!

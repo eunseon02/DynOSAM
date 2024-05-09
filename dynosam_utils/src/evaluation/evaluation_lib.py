@@ -12,18 +12,15 @@ import evo.tools.plot as evo_plot
 from .tools import (
     so3_from_euler,
     common_entries,
-    set_axes_equal,
     transform_camera_trajectory_to_world,
-    TrajectoryHelper
+    TrajectoryHelper,
 )
 
+import evaluation.tools as tools
+
 from .result_types import (
-    MotionErrorDict,
     ObjectPoseDict,
     ObjectTrajDict,
-    ObjectPoseErrorDict,
-    analyse_motion_error_dict,
-    analyse_object_pose_errors,
     plot_metric,
     sync_and_align_trajectories
 )
@@ -118,6 +115,8 @@ class MotionErrorEvaluator(Evaluator):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
             data = (object_traj_ref, object_traj)
 
+            object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
+
             # only interested in APE as this matches our error metrics
             ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
             ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
@@ -146,7 +145,7 @@ class MotionErrorEvaluator(Evaluator):
         # est and ref object trajectories
         # this is used to draw the trajectories
         object_trajectories = {}
-
+        object_trajectories_ref = {}
 
         fig_all_object_traj = plt.figure(figsize=(8,8))
 
@@ -155,15 +154,21 @@ class MotionErrorEvaluator(Evaluator):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
             data = (object_traj_ref, object_traj)
 
+            object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
+
             # add reference edges
             # TODO: doesnt seem to work?
             evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
             trajectory_helper.append(object_traj)
 
-            # TODO: align?
+            # # TODO: align?
             object_trajectories[f"Object {object_id}"] = object_traj
-            object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
+            # object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
+            object_trajectories_ref[f"Ground Truth Object {object_id}"] = object_traj_ref
+
+            # object_trajectories[object_id] = object_traj
+            # object_trajectories_ref[object_id] = object_traj_ref
 
             logger.debug(f"Logging pose metrics for object {object_id}")
 
@@ -204,10 +209,12 @@ class MotionErrorEvaluator(Evaluator):
         # add collected trajectories to fig
         # correspondence edges already added
         # TODO: fix size issue!!
-        evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # tools.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # tools.trajectories(fig_all_object_traj, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
         ax = fig_all_object_traj.gca()
         trajectory_helper.set_ax_limits(ax)
-
 
 
         plot_collection.add_figure(
@@ -240,7 +247,7 @@ class MotionErrorEvaluator(Evaluator):
         Returns:
             Tuple[ObjectPoseDict, ObjectTrajDict]: _description_
         """
-
+        # must be floats if we want to align/sync
         timestamps = []
 
         # assume frames are ordered!!!
@@ -249,14 +256,11 @@ class MotionErrorEvaluator(Evaluator):
         object_poses_ref_tmp_dict = {}
 
         for row in object_poses_log_file:
-            frame_id = int(row["frame_id"])
+            frame_id = float(row["frame_id"])
             object_id = int(row["object_id"])
 
             if object_id not in object_poses_tmp_dict:
                 object_poses_tmp_dict[object_id] = {"traj": [], "timestamps": []}
-
-            # if object_id not in object_poses_dict:
-            #     object_poses_dict[object_id] = {}
 
             if object_id not in object_poses_ref_tmp_dict:
                 object_poses_ref_tmp_dict[object_id] = {"traj": [], "timestamps": []}
@@ -293,10 +297,6 @@ class MotionErrorEvaluator(Evaluator):
             T = lie_algebra.se3(rotation, translation)
             T_ref = lie_algebra.se3(rotation_ref, translation_ref)
 
-            # #log t in the nested dictionary
-            # object_poses_dict[object_id] = {frame_id: T}
-            # object_poses_dict_ref[object_id] = {frame_id: T_ref}
-            #log t in tmp object
             object_poses_tmp_dict[object_id]["traj"].append(T)
             object_poses_tmp_dict[object_id]["timestamps"].append(frame_id)
             object_poses_ref_tmp_dict[object_id]["traj"].append(T_ref)
@@ -343,7 +343,7 @@ class CameraPoseEvaluator(Evaluator):
         timestamps = []
 
         for row in self._camera_pose_file:
-            frame_id = int(row["frame_id"])
+            frame_id = float(row["frame_id"])
             timestamps.append(frame_id)
 
             translation = np.array([
@@ -470,9 +470,6 @@ class EgoObjectMotionEvaluator(Evaluator):
     def __init__(self, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator):
         self._camera_eval = camera_eval
         self._object_eval = object_eval
-
-    def get_results_yaml(self) -> dict:
-        return None
 
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         fig_traj = plt.figure(figsize=(8,8))

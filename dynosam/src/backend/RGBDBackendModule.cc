@@ -1611,6 +1611,10 @@ void RGBDBackendModule::UpdateImplInWorldPrimitives::logBackendFromMap(FrameId f
 }
 
 
+// void RGBDBackendModule::UpdateImplInWorldPrimitives::updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) {
+
+
+
 //TODO: these functions can go in base
 void RGBDBackendModule::saveGraph(const std::string& file) {
 

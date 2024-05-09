@@ -118,6 +118,7 @@ public:
         inline std::string name() const override { return "rgbd_motion_world"; }
     };
 
+
     struct UpdateImplInWorldPrimitives : public UpdateImplInWorld {
         UpdateImplInWorldPrimitives(RGBDBackendModule* parent) : UpdateImplInWorld(parent) {}
 
@@ -127,6 +128,13 @@ public:
         inline std::string name() const override { return "rgbd_motion_world_primitive"; }
     };
 
+    // struct UpdateImplInWorldObjectPoses : public UpdateImplInWorldPrimitives {
+    //     UpdateImplInWorldObjectPoses(RGBDBackendModule* parent) : UpdateImplInWorldPrimitives(parent) {}
+
+    //     virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+
+    //     inline std::string name() const override { return "rgbd_motion_world_object_poses"; }
+    // };
 
 public:
     // std::unique_ptr<DynoISAM2> smoother_;
