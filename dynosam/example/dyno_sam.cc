@@ -166,6 +166,7 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 
 
 #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
+#include "dynosam/dataprovider/OMDDataProvider.hpp"
 
 int main(int argc, char* argv[]) {
 
@@ -176,19 +177,20 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+    // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+    OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
 
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
+    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
 
-        cv::imshow("RGB", rgb);
-        cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
-        cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+    //     cv::imshow("RGB", rgb);
+    //     cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
+    //     cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
 
-        cv::waitKey(1);
-        return true;
-    });
+    //     cv::waitKey(1);
+    //     return true;
+    // });
 
-    while(loader.spin()) {}
+    // while(loader.spin()) {}
 
 
 }

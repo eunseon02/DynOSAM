@@ -27,8 +27,6 @@
 #include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
-#include <boost/filesystem.hpp>
-
 #include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
 #include "dynosam/common/Algorithms.hpp"
 
@@ -37,10 +35,6 @@
 
 #include <glog/logging.h>
 #include <fstream>
-
-#include <boost/algorithm/string/split.hpp>
-#include <boost/algorithm/string.hpp>
-
 #include <png++/png.hpp> //libpng-dev
 
 
@@ -620,19 +614,6 @@ private:
         return poses;
     }
 
-     /**
-     * @brief Returns a ORDERED vector of all files in the given directory.
-     *
-     * @param folder_path
-     * @return std::vector<std::filesystem::path>
-     */
-    std::vector<std::filesystem::path> getAllFilesInDir(const std::string& folder_path) {
-        std::vector<std::filesystem::path> files_in_directory;
-        std::copy(std::filesystem::directory_iterator(folder_path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
-        std::sort(files_in_directory.begin(), files_in_directory.end());
-        return files_in_directory;
-
-    }
 
 private:
     const std::string left_images_folder_path_;
