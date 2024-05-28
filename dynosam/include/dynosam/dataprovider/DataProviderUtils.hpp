@@ -114,6 +114,6 @@ bool getLine(std::ifstream& fstream, std::vector<std::string>& split_lines);
  * @param input const std::string&
  * @return std::vector<std::string>
  */
-std::vector<std::string> trimAndSplit(const std::string& input);
+std::vector<std::string> trimAndSplit(const std::string& input, const std::string& delimiter = " ");
 
 } //dyno

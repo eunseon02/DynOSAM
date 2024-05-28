@@ -167,10 +167,10 @@ void removeStaticObjectFromMask(const cv::Mat& instance_mask, cv::Mat& motion_ma
 }
 
 
- std::vector<std::string> trimAndSplit(const std::string& input) {
+ std::vector<std::string> trimAndSplit(const std::string& input, const std::string& delimiter) {
     std::string trim_input = boost::algorithm::trim_right_copy(input);
     std::vector<std::string> split_line;
-    boost::algorithm::split(split_line, trim_input, boost::is_any_of(" "));
+    boost::algorithm::split(split_line, trim_input, boost::is_any_of(delimiter));
     return split_line;
 }
 

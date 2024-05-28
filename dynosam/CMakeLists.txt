@@ -135,7 +135,7 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/Statistics.cc
   src/utils/TimingStats.cc
   src/utils/Metrics.cc
-  src/utils/CsvWriter.cc
+  src/utils/CsvParser.cc
   src/utils/JsonUtils.cc
 
   src/visualizer/ColourMap.cc
@@ -281,7 +281,7 @@ if(BUILD_TESTING)
     test/test_structured_containers.cc
     test/test_triangulation.cc
     test/test_backend_structures.cc
-    test/test_csvwriter.cc
+    test/test_csv.cc
     test/test_rgbd_backend.cc
     test/test_algorithms.cc
     test/test_viz.cc

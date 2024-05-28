@@ -52,7 +52,7 @@
  */
 
 #include "dynosam/utils/Statistics.hpp"
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/utils/CsvParser.hpp"
 
 #include <cmath>
 #include <fstream>

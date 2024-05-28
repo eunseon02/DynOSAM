@@ -40,7 +40,6 @@ include_directories(
   ${EIGEN3_INCLUDE_DIRS}
   ${PCL_INCLUDE_DIRS}
 )
-include_directories(include)
 
 
 # build library

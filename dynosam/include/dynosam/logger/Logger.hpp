@@ -23,7 +23,7 @@
 #pragma once
 
 #include "dynosam/utils/JsonUtils.hpp"
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/utils/CsvParser.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/PointCloudProcess.hpp"

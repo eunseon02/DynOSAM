@@ -21,7 +21,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/utils/CsvParser.hpp"
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -59,10 +59,52 @@ TEST(CsvHeader, testToStringOneHeader) {
 
 }
 
+TEST(CsvReader, testReadSimpleRowNoHeader) {
+    CsvReader::Row row;
+
+    EXPECT_EQ(row.size(), 0);
+
+    std::stringstream ss;
+    ss << "jesse, viorela,yiduo,  mik";
+
+    row << ss;
+    EXPECT_EQ(row.size(), 4);
+    EXPECT_EQ(row[0], "jesse");
+    EXPECT_EQ(row[1], "viorela");
+    EXPECT_EQ(row[2], "yiduo");
+    EXPECT_EQ(row[3], "mik");
+}
+
+TEST(CsvReader, testReadSimpleIterator) {
+
+    std::stringstream ss;
+    ss << "jesse, viorela,yiduo,  mik\n";
+    ss << "nic, jack,will,ryan";
+
+    CsvReader csv_reader(ss);
+    auto it = csv_reader.begin();
+    CsvReader::Row row = *it;
+    EXPECT_EQ(row.size(), 4);
+    EXPECT_EQ(row[0], "jesse");
+    EXPECT_EQ(row[1], "viorela");
+    EXPECT_EQ(row[2], "yiduo");
+    EXPECT_EQ(row[3], "mik");
+
+    it++;
+    row = *it;
+    EXPECT_EQ(row.size(), 4);
+    EXPECT_EQ(row[0], "nic");
+    EXPECT_EQ(row[1], "jack");
+    EXPECT_EQ(row[2], "will");
+    EXPECT_EQ(row[3], "ryan");
+
+}
+
 
 TEST(CsvWriter, testInvalidHeaderConstruction) {
     EXPECT_THROW({CsvWriter(CsvHeader{});}, InvalidCsvHeaderException);
 }
+
 
 
 TEST(CsvWriter, testBasicWrite) {

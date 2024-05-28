@@ -21,10 +21,54 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/utils/CsvWriter.hpp"
+#include "dynosam/utils/CsvParser.hpp"
+
+#include <boost/algorithm/string.hpp>
 #include <glog/logging.h>
 
 namespace dyno {
+
+CsvReader::Row::Row(const std::string& line, const CsvHeader& header, const char delimiter)
+    : line_(line), header_(header), delimiter_(delimiter)
+    {
+        pos_data_.emplace_back(-1);
+        std::string::size_type pos = 0;
+        while((pos = line_.find(delimiter_, pos)) != std::string::npos)
+        {
+            pos_data_.emplace_back(pos);
+            ++pos;
+        }
+        // This checks for a trailing comma with no data after it.
+        pos = line_.size();
+        pos_data_.emplace_back(pos);
+
+        //if usable header provided (one of non zero size, ie. non default header)
+        //check that the number of elements in the parsed input string matches the expected
+        //number of cols in the header
+        if (usableHeader() && this->size() != header_.size()) {
+            std::stringstream ss;
+            ss << "Invalid row construction using a valid CsvHeader: input row has length " << this->size()
+                << " and header has size " << header_.size() << " with column values - " << header_.toString();
+            throw std::runtime_error(ss.str());
+        }
+    }
+
+std::string CsvReader::Row::operator[](std::size_t index) const {
+    size_t size = pos_data_[index + 1] -  (pos_data_[index] + 1);
+    std::string_view view = std::string_view(&line_[pos_data_[index] + 1], size);
+    std::string val = {view.begin(), view.end()};
+
+    //removes all the leading and trailing white spaces.
+    boost::algorithm::trim(val);
+    return val;
+}
+
+CsvReader::Row CsvReader::Row::FromStream(std::istream& istream, const CsvHeader& header, const char delimiter) {
+    std::string line;
+    std::getline(istream, line);
+    return Row(line, header, delimiter);
+}
+
 
 CsvWriter::CsvWriter(const CsvHeader& header, const std::string& seperator)
     :   header_(header),
@@ -36,10 +80,6 @@ CsvWriter::CsvWriter(const CsvHeader& header, const std::string& seperator)
     checkAndThrow<InvalidCsvHeaderException>((column_number_ > 0u), "CsvHeader cannot be empty! (size of 0)");
 }
 
-
-CsvReader::CsvReader(const std::string& path) {
-    infile_.open(path);
-}
 
 
 CsvWriter::~CsvWriter() { resetContent();}
