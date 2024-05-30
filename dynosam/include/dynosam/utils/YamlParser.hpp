@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/utils/Macros.hpp"
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/dataprovider/DataProviderUtils.hpp" //for throwExceptionIfPathInvalid
 
 #include <stdlib.h>
@@ -125,8 +126,10 @@ class YamlParser {
     try {
       CHECK_NOTNULL(fs)->open(filepath, cv::FileStorage::READ);
     } catch (cv::Exception& e) {
-      LOG(FATAL) << "Cannot open file: " << filepath << '\n'
-                 << "OpenCV error code: " << e.msg;
+      throw DynosamException(
+        "Cannot open file: " + filepath + '\n' + "OpenCV error code: " + e.msg
+        + " (remember that the first line should be: %YAML:1.0)!"
+      );
     }
     LOG_IF(FATAL, !fs->isOpened())
         << "Cannot open file in parseYAML: " << filepath

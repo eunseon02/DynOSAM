@@ -34,10 +34,10 @@ if __name__ == '__main__':
     #     "kitti_0004"
     # )
 
-    run_kitti_frontend_sequence(
-        "/root/data/vdo_slam/kitti/kitti/0005",
-        "kitti_0005"
-    )
+    # run_kitti_frontend_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0005",
+    #     "kitti_0005"
+    # )
 
     # run_kitti_frontend_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0000",
@@ -49,7 +49,7 @@ if __name__ == '__main__':
     #     "kitti_0003"
     # )
 
-    # run_cluster_vo_frontend_sequence(
-    #     "/root/data/cluster_slam/CARLA-L1",
-    #     "carla_l1"
-    # )
+    run_cluster_vo_frontend_sequence(
+        "/root/data/cluster_slam/CARLA-L1",
+        "carla_l1"
+    )

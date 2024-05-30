@@ -138,6 +138,26 @@ bool ThreadsafeTemporalBuffer<ValueType, AllocatorType>::getNewestValue(ValueTyp
 }
 
 template <typename ValueType, typename AllocatorType>
+Timestamp ThreadsafeTemporalBuffer<ValueType, AllocatorType>::getOldestTimestamp() const
+{
+  ValueType value;
+  Timestamp t;
+  CHECK(getOldestValue(&value, &t));
+  (void)value;
+  return t;
+}
+
+template <typename ValueType, typename AllocatorType>
+Timestamp ThreadsafeTemporalBuffer<ValueType, AllocatorType>::getNewestTimestamp() const
+{
+  ValueType value;
+  Timestamp t;
+  CHECK(getNewestValue(&value, &t));
+  (void)value;
+  return t;
+}
+
+template <typename ValueType, typename AllocatorType>
 bool ThreadsafeTemporalBuffer<ValueType, AllocatorType>::getValueAtTime(Timestamp timestamp, ValueType* value) const
 {
   CHECK_NOTNULL(value);

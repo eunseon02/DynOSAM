@@ -272,6 +272,10 @@ TEST_F(ThreadsafeTemporalBufferFixture, GetNearestValueToTimeMaxDeltaSmallWorks)
   EXPECT_TRUE(buffer_.getNearestValueToTime(0.063, kMaxDelta, &retrieved_item));
   EXPECT_EQ(retrieved_item.timestamp, 0.06);
 
+  Timestamp retrieved_timestamp;
+  EXPECT_TRUE(buffer_.getNearestValueToTime(0.063, kMaxDelta, &retrieved_item, &retrieved_timestamp));
+  EXPECT_EQ(retrieved_timestamp, 0.06);
+
   buffer_.clear();
 }
 

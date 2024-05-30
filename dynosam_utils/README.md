@@ -12,3 +12,14 @@ requires a Latex compiler for the analysis
 
 
 - python3 eval_launch.py --dataset_path=/root/data/vdo_slam/kitti/kitti/0004 --name kitti_0004 --run_analysis
+
+
+## Errors
+If matplot lib errors e.g.
+```
+raise RuntimeError(
+RuntimeError: latex was not able to process the following string:
+b'lp'...)
+
+```
+Possibly missing rendering packages: sudo apt-get install texlive-latex-extra texlive-fonts-recommended dvipng cm-super

@@ -1404,6 +1404,23 @@ void RGBDBackendModule::UpdateImplInWorld::logBackendFromMap(FrameId frame_k, RG
 
 
     logger.logObjectPose(gt_packet_map, frame_k, composed_object_pose_map);
+
+
+    if(map->frameExists(frame_k)) {
+        StatusLandmarkEstimates static_map = map->getStaticMap(frame_k);
+        // LOG(INFO) << "static map size " << static_map.size();
+        StatusLandmarkEstimates dynamic_map = map->getDynamicMap(frame_k);
+        // LOG(INFO) << "dynamic map size " << dynamic_map.size();
+
+        CHECK(X_k_query); //actually not needed for points in world!!
+        logger.logPoints(frame_k, *X_k_query, static_map);
+        logger.logPoints(frame_k, *X_k_query, dynamic_map);
+    }
+
+
+
+
+
 }
 
 

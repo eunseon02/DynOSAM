@@ -29,6 +29,8 @@
 #include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
+#include "dynosam/pipeline/ThreadSafeTemporalBuffer.hpp"
+
 #include <glog/logging.h>
 #include <filesystem>
 
@@ -43,12 +45,14 @@ public:
     :   rgbd_folder_path_(file_path + "/rgbd"),
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
-        vicon_file_path_(file_path + "/vicon.csv")
+        vicon_file_path_(file_path + "/vicon.csv"),
+        kalibr_file_path_(file_path + "/kalibr.yaml")
     {
         throwExceptionIfPathInvalid(rgbd_folder_path_);
         throwExceptionIfPathInvalid(instance_masks_folder_);
         throwExceptionIfPathInvalid(optical_flow_folder_path_);
         throwExceptionIfPathInvalid(vicon_file_path_);
+        throwExceptionIfPathInvalid(kalibr_file_path_);
 
         //first load images and size
         //the size will be used as a refernce for all other loaders
@@ -73,7 +77,82 @@ public:
         CHECK_EQ(instance_masks_image_paths_.size(), optical_flow_image_paths_.size());
 
         setGroundTruthPacketFromVicon(ground_truth_packets_);
+
+        setIntrisics();
     }
+
+    size_t size() const {
+        return dataset_size_;
+    }
+
+    cv::Mat getRGB(size_t idx) const {
+        CHECK_LT(idx, rgb_image_paths_.size());
+
+        cv::Mat rgb;
+        loadRGB(rgb_image_paths_.at(idx), rgb);
+        CHECK(!rgb.empty());
+
+        //this set of images are loaded as 8UC4
+        // CHECK_EQ(rgb.type(), CV_8UC4) << "Somehow the image type has changed...";
+        // rgb.convertTo(rgb, CV_8UC3);
+
+        //debug check -> draw keypoints on image!
+        // const LandmarksMap& kps_map = left_landmarks_map_.at(idx);
+
+        // for(const auto&[landmark_id, kp] : kps_map) {
+        //     const auto cluster_id = landmark_mapping_.at(landmark_id);
+
+        //     cv::Point2f pt(utils::gtsamPointToCv(kp));
+        //     utils::drawCircleInPlace(rgb, pt, ColourMap::getObjectColour(cluster_id));
+        // }
+
+        return rgb;
+    }
+
+    cv::Mat getOpticalFlow(size_t idx) const {
+        CHECK_LT(idx,optical_flow_image_paths_.size());
+
+        cv::Mat flow;
+        loadFlow(optical_flow_image_paths_.at(idx), flow);
+        CHECK(!flow.empty());
+        return flow;
+    }
+
+    cv::Mat getInstanceMask(size_t idx) const {
+        CHECK_LT(idx, rgb_image_paths_.size());
+        CHECK_LT(idx, dataset_size_);
+
+        cv::Mat mask, relabelled_mask;
+        loadMask(instance_masks_image_paths_.at(idx), mask);
+        CHECK(!mask.empty());
+
+        // associateDetectedBBWithObject(mask, idx, relabelled_mask);
+
+        return mask;
+    }
+
+    cv::Mat getDepthImage(size_t idx) const {
+        CHECK_LT(idx, aligned_depth_image_paths_.size());
+
+        cv::Mat depth;
+        loadDepth(aligned_depth_image_paths_.at(idx), depth);
+        CHECK(!depth.empty());
+
+        return depth;
+    }
+
+    const GroundTruthInputPacket& getGtPacket(size_t idx) const {
+        return ground_truth_packets_.at(idx);
+    }
+
+    const CameraParams& getLeftCameraParams() const {
+        return rgbd_camera_params;
+    }
+
+    double getTimestamp(size_t idx) {
+        return static_cast<double>(times_.at(idx));
+    }
+
 
 private:
     void loadFlowImagesAndSize(std::vector<std::string>& images_paths, size_t& dataset_size) {
@@ -85,6 +164,10 @@ private:
             throwExceptionIfPathInvalid(file_path);
             images_paths.push_back(file_path);
         }
+   }
+
+   inline Timestamp toTimestamp(double time_sec, double time_nsec) const {
+    return (Timestamp)time_sec + (Timestamp)time_nsec / 1e+9;
    }
 
    void loadRGBDImagesAndTime() {
@@ -183,9 +266,8 @@ private:
             int frame_num = row.at<int>(0);
             double time_sec = row.at<double>(1);
             double time_nsec = row.at<double>(2);
-            // LOG(INFO) << frame_num;
 
-            Timestamp time = (Timestamp)time_sec + (Timestamp)time_nsec / 1e+9;
+            Timestamp time = toTimestamp(time_sec, time_nsec);
             times_.push_back(time);
             timestamp_frame_map_.insert({time, frame_num});
 
@@ -207,19 +289,19 @@ private:
         //skip header
         ++it;
 
-        //firstly map the vicon timestamp system to frame ids
-
+        using ObjectIdPosePair = std::pair<ObjectId, gtsam::Pose3>;
+        //map vicon timestamps to their closest camera id timestamp
+        ThreadsafeTemporalBuffer<ObjectIdPosePair> vicon_timestamp_buffer;
         gtsam::FastMap<FrameId, std::vector<ObjectPoseGT>> temp_object_poses;
 
-        FrameId frame_id = 0;
-        for(it; it != csv_reader.end(); it++) {
+        for(; it != csv_reader.end(); it++) {
             const auto row = *it;
             //Though the stereo camera, RGB-D camera, and IMU were recorded on the same machine,
             //they are not hardware synchronized. The Vicon was recorded on a separate system with an unknown temporal offset
             //and clock drift.
-            // double time_sec = row.at<double>(0);
-            // double time_nsec = row.at<double>(1);
-
+            double time_sec = row.at<double>(0);
+            double time_nsec = row.at<double>(1);
+            Timestamp vicon_time = toTimestamp(time_sec, time_nsec);
             //object is in the form boxX or sensor payload (the camera)
             std::string object = row.at<std::string>(2);
             ObjectId object_id;
@@ -247,74 +329,193 @@ private:
             double tz = row.at<double>(9);
 
             gtsam::Pose3 pose(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
-
-            // Timestamp time = (Timestamp)time_sec + (Timestamp)time_nsec / 1e+9;
-
-            if(!ground_truth_packets.exists(frame_id)) {
-                GroundTruthInputPacket gt_packet;
-                gt_packet.frame_id_ = frame_id;
-                // gt_packet.timestamp_ = time;
-                ground_truth_packets.insert2(frame_id, gt_packet);
-            }
-
-        //     if(!temp_object_poses.exists(frame_id)) {
-        //         temp_object_poses.insert2(frame_id, std::vector<ObjectPoseGT>{});
-        //     }
-
-        //     std::vector<ObjectPoseGT>& tmp_object_vector = temp_object_poses.at(frame_id);
-
-        //     GroundTruthInputPacket& gt_packet = ground_truth_packets.at(frame_id);
-
-        //     if(frame_id > 0) {
-        //         //check we have the previous frame!! (ie.e we process in order!)
-        //         CHECK(ground_truth_packets.exists(frame_id-1));
-        //     }
-
-        //     //values should already be set when we add the gt_packet to the map earlier
-        //     CHECK_EQ(gt_packet.frame_id_,frame_id);
-        //     CHECK_EQ(gt_packet.timestamp_,time);
-
-        //     if(object_id == 0) {
-        //         gt_packet.X_world_ = pose;
-        //     }
-        //     else {
-        //         ObjectPoseGT object_pose_gt;
-        //         object_pose_gt.frame_id_ = frame_id;
-        //         object_pose_gt.object_id_ = object_id;
-        //         object_pose_gt.L_world_ = pose;
-        //         //cannot set L_camera yet as we might not have the camera pose
-        //         tmp_object_vector.push_back(object_pose_gt);
-        //     }
-
-        //     //want one less than the number of flow images
-        //     //assume that we get all the ground truth timestamps in order!!!!!
-        //     //need to exit here as we only load timestamps (timestamp_frame_map_)
-        //     //up to the size of the dataset!!!
-            if(ground_truth_packets.size() + 1 >= dataset_size_) {
-                break;
-            }
-
-            frame_id++;
+            vicon_timestamp_buffer.addValue(vicon_time, std::make_pair(object_id, pose));
 
         }
 
-        // for(auto& [frame_id, gt_packet] : ground_truth_packets) {
-        //     //get object vector for the tmp list
-        //     auto& unprocessed_objects = temp_object_poses.at(gt_packet.frame_id_);
-        //     for(auto& object_pose_gt : unprocessed_objects) {
-        //         object_pose_gt.L_camera_ = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
-        //         CHECK_EQ(frame_id, object_pose_gt.frame_id_);
-        //     }
+        //convert camera times to map for lookup
+        ThreadsafeTemporalBuffer<FrameId> camera_timestamp_buffer;
+        for(Timestamp camera_times : times_) {
+            CHECK(timestamp_frame_map_.exists(camera_times));
+            camera_timestamp_buffer.addValue(camera_times, timestamp_frame_map_.at(camera_times));
+        }
+        //dataset size is number of optical flow images - we want one less camera image!!
+        CHECK_EQ(camera_timestamp_buffer.size(), dataset_size_ - 1);
+        const auto earliest_camera_timestamp = camera_timestamp_buffer.getOldestTimestamp();
+        const auto latest_camera_timestamp = camera_timestamp_buffer.getNewestTimestamp();
 
-        //     gt_packet.object_poses_ = unprocessed_objects;
+        //this is very slow!!!
+        for(const auto& [vicon_timestamp, object_id_pose_pair] : vicon_timestamp_buffer.buffered_values()) {
+            const ObjectId object_id = object_id_pose_pair.first;
+            const gtsam::Pose3& pose = object_id_pose_pair.second;
 
-        //     if(frame_id > 0) {
-        //         const GroundTruthInputPacket& previous_gt_packet = ground_truth_packets.at(frame_id - 1);
-        //         gt_packet.calculateAndSetMotions(previous_gt_packet);
-        //     }
-        // }
+            //dont include if less than first or greater than last camera time
+            if (vicon_timestamp < earliest_camera_timestamp || vicon_timestamp > latest_camera_timestamp) {
+                continue;
+            }
+
+            //get closest camera timestamp to the vicon timestamp - this is the value we want to interpolate
+            //to as as this will be the timestamp of the frame we actually use
+            //the min delta should really be the delta between camera frames. According to the associated RA-L
+            //paper the rate of the RGBD sensor is 30Hz = 0.033
+            //the rate of the vicon system is 200Hz
+            constexpr static auto approx_rgbd_frame_rate = 0.033;
+            FrameId frame_id;
+            Timestamp camera_timestamp;
+            if(!camera_timestamp_buffer.getNearestValueToTime(vicon_timestamp, approx_rgbd_frame_rate, &frame_id, &camera_timestamp)) {
+                continue;
+                //TODO: throw warning?
+            }
+
+            if (fpEqual(camera_timestamp, vicon_timestamp)) {
+                //TODO: found exact match!!!!
+                DLOG(INFO) << "Exact mattch found for frame " << frame_id << " " << camera_timestamp << " " << vicon_timestamp << " object id: " << object_id;
+
+                if(!ground_truth_packets.exists(frame_id)) {
+                    GroundTruthInputPacket gt_packet;
+                    gt_packet.frame_id_ = frame_id;
+                    gt_packet.timestamp_ = camera_timestamp;
+                    ground_truth_packets.insert2(frame_id, gt_packet);
+                }
+
+                if(!temp_object_poses.exists(frame_id)) {
+                    temp_object_poses.insert2(frame_id, std::vector<ObjectPoseGT>{});
+                }
+
+                GroundTruthInputPacket& gt_packet = ground_truth_packets.at(frame_id);
+
+                std::vector<ObjectPoseGT>& tmp_object_vector = temp_object_poses.at(frame_id);
+
+                if(object_id == 0) {
+                    gt_packet.X_world_ = pose;
+                }
+                else {
+                    ObjectPoseGT object_pose_gt;
+                    object_pose_gt.frame_id_ = frame_id;
+                    object_pose_gt.object_id_ = object_id;
+                    object_pose_gt.L_world_ = pose;
+                    //cannot set L_camera yet as we might not have the camera pose
+
+                    //if object is already in the vector dont add
+                    //this is 'wrong' but currently we dont interpolate the gt data
+                    auto it_this = std::find_if(tmp_object_vector.begin(), tmp_object_vector.end(),
+                        [=](const ObjectPoseGT& gt_object) { return gt_object.object_id_ == object_id; });
+                    if(it_this == tmp_object_vector.end()) {
+                        tmp_object_vector.push_back(object_pose_gt);
+                    }
+                }
+            }
+            else {
+                LOG(FATAL) << "Currently expecting vicon and camera tiemstamp data to have at least one synched timestamp per frame!!";
+            }
+
+            //it seems that everything is very fast so (maybe a hack?) we'll just take the cloestst timestamp
+
+
+            // //get closest timestamp before and after
+            // //there will be an edge case on the first and last valid vicon timestamp
+            // //ie. the first one that is > earliest_camera_timestamp and the last one that is
+            // //smaller than latest_camera_timestamp as there will bot be a camera timestamp
+            // //either side of this one!
+            // Timestamp camera_timestamp_before, camera_timestamp_after; //before and after the queried vicon value
+            // FrameId frame_id_before, frame_id_after;
+            // bool has_camera_value_before = camera_timestamp_buffer.getValueAtOrBeforeTime(
+            //     vicon_timestamp,
+            //     &camera_timestamp_before,
+            //     &frame_id_before
+            // );
+
+            // bool has_camera_value_after = camera_timestamp_buffer.getValueAtOrBeforeTime(
+            //     vicon_timestamp,
+            //     &camera_timestamp_after,
+            //     &frame_id_after
+            // );
+
+            // if(has_camera_value_before) {
+            //     CHECK_LT(camera_timestamp_before, vicon_timestamp);
+            //     CHECK_LT(camera_timestamp_before, camera_timestamp);
+            // }
+
+            // if(has_camera_value_after) {
+            //     CHECK_GT(camera_timestamp_after, vicon_timestamp);
+            //     CHECK_GT(camera_timestamp_after, camera_timestamp);
+            // }
+
+
+
+
+        }
+
+        //assumes we get one for every frame!!!!?
+        FrameId previous_frame = 0;
+        for(auto& [frame_id, gt_packet] : ground_truth_packets) {
+            //get object vector for the tmp list
+            auto& unprocessed_objects = temp_object_poses.at(gt_packet.frame_id_);
+            for(auto& object_pose_gt : unprocessed_objects) {
+                object_pose_gt.L_camera_ = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
+                CHECK_EQ(frame_id, object_pose_gt.frame_id_);
+            }
+
+            gt_packet.object_poses_ = unprocessed_objects;
+
+            if(frame_id > 0) {
+                const GroundTruthInputPacket& previous_gt_packet = ground_truth_packets.at(frame_id - 1);
+                gt_packet.calculateAndSetMotions(previous_gt_packet);
+                CHECK_EQ(frame_id - 1, previous_frame) << "Frames are not in ascending order!!!";
+            }
+
+            previous_frame = frame_id;
+        }
+
+        CHECK_EQ(ground_truth_packets.size(), times_.size());
+    }
+
+    void setIntrisics() {
+        YamlParser yaml_parser(kalibr_file_path_);
+
+        //NOTE: expect the rgbd camera to always be cam2
+        CameraParams::IntrinsicsCoeffs intrinsics;
+        std::vector<double> intrinsics_v;
+        yaml_parser.getNestedYamlParam("cam2", "intrinsics", &intrinsics_v);
+        CHECK_EQ(intrinsics_v.size(), 4u);
+        intrinsics.resize(4u);
+        // Move elements from one to the other.
+        std::copy_n(std::make_move_iterator(intrinsics_v.begin()),
+                    intrinsics.size(),
+                    intrinsics.begin());
+
+        std::vector<int> resolution;
+        yaml_parser.getNestedYamlParam("cam2", "resolution", &resolution);
+        CHECK_EQ(resolution.size(), 2);
+        cv::Size image_size(resolution[0], resolution[1]);
+
+        std::string distortion_model, camera_model;
+        yaml_parser.getNestedYamlParam("cam2", "distortion_model", &distortion_model);
+        yaml_parser.getNestedYamlParam("cam2", "camera_model", &camera_model);
+        auto model = CameraParams::stringToDistortion(distortion_model, camera_model);
+
+        rgbd_camera_params = CameraParams(
+            intrinsics,
+            CameraParams::DistortionCoeffs{0, 0, 0,0},
+            image_size,
+            model
+        );
 
     }
+
+    // void associateDetectedBBWithObject(const cv::Mat& instance_mask, FrameId frame_id, cv::Mat& relabelled_mask) const {
+    //     const GroundTruthInputPacket& gt_packet = getGtPacket(frame_id);
+    //     ObjectIds object_ids = vision_tools::getObjectLabels(instance_mask);
+    //     const size_t n = object_ids.size();
+
+    //     instance_mask.copyTo(relabelled_mask);
+
+    //     if(n == 0) {
+    //         return;
+    //     }
+
+    //     //get
+    // }
 
 
 
@@ -323,19 +524,37 @@ private:
     const std::string instance_masks_folder_;
     const std::string optical_flow_folder_path_;
     const std::string vicon_file_path_;
+    const std::string kalibr_file_path_;
 
     std::vector<std::string> rgb_image_paths_; //index from 0 to match the naming convention of the dataset
     std::vector<std::string> aligned_depth_image_paths_;
     std::vector<Timestamp> times_; //loaded from rgbd.csv file and associated with rgbd images. Should be the same length as rgb/aligned depth files
-    //timestamps between vicon (gt) and camera (from rgbd) are not synchronized!! Which to use!!!?
-    std::map<Timestamp, FrameId> timestamp_frame_map_;
+    //timestamps between vicon (gt) and camera (from rgbd) are not synchronized!!
+    gtsam::FastMap<Timestamp, FrameId> timestamp_frame_map_;
 
     std::vector<std::string> optical_flow_image_paths_;
     std::vector<std::string> instance_masks_image_paths_;
 
     GroundTruthPacketMap ground_truth_packets_;
     size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /optical_flow folder which is one per frame
+    CameraParams rgbd_camera_params;
 
+};
+
+struct OMMTimestampLoader : public TimestampBaseLoader {
+
+    OMDAllLoader::Ptr loader_;
+
+    OMMTimestampLoader(OMDAllLoader::Ptr loader) : loader_(CHECK_NOTNULL(loader)) {}
+    std::string getFolderName() const override { return ""; }
+
+    size_t size() const override {
+        return loader_->size();
+    }
+
+    double getItem(size_t idx) override {
+        return loader_->getTimestamp(idx);
+    }
 };
 
 
@@ -344,6 +563,51 @@ OMDDataLoader::OMDDataLoader(const fs::path& dataset_path) : OMDDatasetProvider(
 
     //this would go out of scope but we capture it in the functional loaders
     auto loader = std::make_shared<OMDAllLoader>(dataset_path);
+    auto timestamp_loader = std::make_shared<OMMTimestampLoader>(loader);
+
+    left_camera_params_ = loader->getLeftCameraParams();
+
+    CHECK(getCameraParams());
+
+    auto rgb_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
+        [loader](size_t idx) {
+            return loader->getRGB(idx);
+        }
+    );
+
+    auto optical_flow_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
+        [loader](size_t idx) {
+            return loader->getOpticalFlow(idx);
+        }
+    );
+
+    auto depth_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
+        [loader](size_t idx) {
+            return loader->getDepthImage(idx);
+        }
+    );
+
+    auto instance_mask_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
+        [loader](size_t idx) {
+            return loader->getInstanceMask(idx);
+        }
+    );
+
+
+    auto gt_loader = std::make_shared<FunctionalDataFolder<GroundTruthInputPacket>>(
+        [loader](size_t idx) {
+            return loader->getGtPacket(idx);
+        }
+    );
+
+    this->setLoaders(
+        timestamp_loader,
+        rgb_loader,
+        optical_flow_loader,
+        depth_loader,
+        instance_mask_loader,
+        gt_loader
+    );
 }
 
 } //dyno

@@ -132,6 +132,7 @@ public:
     //TODO: test
     StatusLandmarkEstimates getFullStaticMap() const;
     StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const;
+    StatusLandmarkEstimates getStaticMap(FrameId frame_id) const;
 
 
     MotionEstimateMap getMotionEstimates(FrameId frame_id) const;

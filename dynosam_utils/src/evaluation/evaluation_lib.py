@@ -578,7 +578,7 @@ class DatasetEvaluator:
             return data
         except Exception as e:
             import traceback
-            logger.warning(f"Failed to run analysis for datafiles {datafiles}: error was {traceback.format_exc()}")
+            logger.warning(f"Failed to run analysis for datafiles {datafiles}: error was \n{traceback.format_exc()}")
             return None
 
     def _run_single_analysis(self, datafiles: DataFiles) -> Tuple[evo_plot.PlotCollection, Dict]:
@@ -706,10 +706,11 @@ class DatasetEvaluator:
             logger.fatal("Argument cls ({}) must derive from Evaluator!".format(cls.__name__))
 
         for arg in args:
-            assert isinstance(arg, str)
             if arg is None:
                 logger.warning("Expected file path is none when constructing evaluator {} with args: {}".format(cls.__name__, args))
                 return None
+            assert isinstance(arg, str), "arg is not a string"
+
 
         logger.debug("Constructor evaluator: {}".format(cls.__name__))
         return cls(*args)

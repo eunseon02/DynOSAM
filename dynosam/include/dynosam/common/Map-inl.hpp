@@ -174,6 +174,11 @@ StatusLandmarkEstimates Map<MEASUREMENT>::getDynamicMap(FrameId frame_id) const 
 }
 
 template<typename MEASUREMENT>
+StatusLandmarkEstimates Map<MEASUREMENT>::getStaticMap(FrameId frame_id) const {
+    return CHECK_NOTNULL(this->getFrame(frame_id))->getAllStaticLandmarkEstimates();
+}
+
+template<typename MEASUREMENT>
 MotionEstimateMap Map<MEASUREMENT>::getMotionEstimates(FrameId frame_id) const {
     MotionEstimateMap motion_estimates;
     const auto frame_k_node = this->getFrame(frame_id);
