@@ -5,7 +5,7 @@
 # default output path - almost always overwritten when using the provided launch files
 --output_path=/root/results/DynoSAM/
 
-# KITTI: 0, VIRTUAL_KITTI: 1, CLUSTER: 2
+# KITTI: 0, VIRTUAL_KITTI: 1, CLUSTER: 2, OMD: 3
 --data_provider_type=0
 
 # flags for the dataset loaders in the DataProviderFactory

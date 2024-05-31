@@ -33,7 +33,8 @@ namespace dyno {
 enum DatasetType {
     KITTI,
     VIRTUAL_KITTI,
-    CLUSTER
+    CLUSTER,
+    OMD //oxford multi-motion dataset
 };
 
 

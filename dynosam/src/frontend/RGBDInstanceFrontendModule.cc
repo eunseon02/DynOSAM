@@ -48,6 +48,12 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
 
+    //TODO: copies from Frame.cc -lots of places this is used!!!
+    const CameraParams& cam_params = camera->getParams();
+    cv::Mat P = cam_params.getCameraMatrix();
+    cv::Mat R = cv::Mat::eye(3,3,CV_32FC1);
+    undistorter_ = std::make_shared<UndistorterRectifier>(P, cam_params, R);
+
     if(FLAGS_use_frontend_logger) {
         logger_ = std::make_unique<RGBDFrontendLogger>();
     }
@@ -71,6 +77,10 @@ FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
 
     ImageContainer::Ptr image_container = input->image_container_;
+    // ImageContainer::Ptr image_container = ImageContainer::RectifyImages(distorted_image_container, *undistorter_);
+    // ImageContainer::Ptr image_container = std::make_shared<ImageContainer>();
+    // vision_tools::rectifyImages(*distorted_image_container, *image_container, *undistorter_);
+
 
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
@@ -104,7 +114,13 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
+    // ImageContainer::Ptr image_container = input->image_container_;
     ImageContainer::Ptr image_container = input->image_container_;
+    // ImageContainer::Ptr image_container = ImageContainer::RectifyImages(distorted_image_container, *undistorter_);
+
+    // ImageContainer::Ptr image_container = std::make_shared<ImageContainer>();
+    // vision_tools::rectifyImages(*distorted_image_container, *image_container, *undistorter_);
+
     //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
     //and then subsequently elimate non-moving objects later on

@@ -91,6 +91,7 @@ private:
     std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
 
 
+    UndistorterRectifier::Ptr undistorter_; //TODO: lots of places this is used!! Streamline so we do undistortion once!!
 
 
 };

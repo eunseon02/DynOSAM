@@ -129,8 +129,14 @@ void removeStaticObjectFromMask(const cv::Mat& instance_mask, cv::Mat& motion_ma
     //collect only moving labels
     std::vector<int> moving_labels;
     for(const ObjectPoseGT& object_pose_gt : gt_packet.object_poses_) {
-        CHECK(object_pose_gt.motion_info_)
-            << "Object Pose GT does not have motion info set! Cannot determine of object is moving or not!";
+        // LOG_IF(WARNING, !object_pose_gt.motion_info_)
+        //     << "Object Pose GT (object " << object_pose_gt.object_id_ << ", frame " << object_pose_gt.frame_id_ << " does not have motion info set! Cannot determine of object is moving or not!";
+
+        if(!object_pose_gt.motion_info_) {
+            LOG(WARNING) << "Object Pose GT (object " << object_pose_gt.object_id_ << ", frame " << object_pose_gt.frame_id_ << " does not have motion info set! Cannot determine of object is moving or not!";
+            continue;
+        }
+
         const auto& motion_info = *object_pose_gt.motion_info_;
         const ObjectId& object_id = object_pose_gt.object_id_;
         if(motion_info.is_moving_) {

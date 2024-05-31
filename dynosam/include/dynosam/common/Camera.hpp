@@ -161,7 +161,6 @@ public:
     return camera_params_;
   }
 
-
 private:
     const CameraParams camera_params_;
     std::unique_ptr<CameraImpl> camera_impl_;

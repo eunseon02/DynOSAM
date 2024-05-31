@@ -58,6 +58,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     //take "copy" of tracking_images which is then given to the frame
     //this will mean that the tracking images (input) are not necessarily the same as the ones inside the returned frame
     TrackingInputImages input_images = tracking_images;
+    info_.frame_id = frame_id;
+
 
     if(initial_computation_) {
         //intitial computation

@@ -159,14 +159,53 @@ void UndistorterRectifier::undistortRectifyImage(const cv::Mat& img,
 {
   CHECK_EQ(map_x_.size, img.size);
   CHECK_EQ(map_y_.size, img.size);
-  cv::remap(img,
+
+  const auto original_image_type = img.type();
+  //convert the input image into a CV type compatible with the rectify maps
+  cv::Mat converted_img = img;
+  img.copyTo(converted_img, kRectifyImageType);
+
+  cv::remap(converted_img,
             undistorted_img,
             map_x_,
             map_y_,
             remap_interpolation_type_,
             remap_use_constant_border_type_ ? cv::BORDER_CONSTANT
                                             : cv::BORDER_REPLICATE);
+
+  //convert back to the original input image type
+  undistorted_img.convertTo(undistorted_img, original_image_type);
+
 }
+
+
+void UndistorterRectifier::undistortRectifyKeypoints(const Keypoints& keypoints,
+                                    Keypoints& undistorted_keypoints) const
+{
+  undistorted_keypoints.clear();
+  UndistorterRectifier::UndistortRectifyKeypoints(
+      keypoints, undistorted_keypoints, cam_params_, R_, P_);
+}
+
+
+// void UndistorterRectifier::undistortRectifyKeypoints(FeatureContainer* features) const
+// {
+//   CHECK_NOTNULL(features);
+//   Keypoints keypoints, undistorted_keypoints;
+
+//   //fill keypoints
+//   for (const auto& feature : *features) {
+//     keypoints.push_back(feature->keypoint_);
+//   }
+
+//   UndistorterRectifier::UndistortRectifyKeypoints(
+//       keypoints, undistorted_keypoints, cam_params_, R_, P_);
+
+//   CHECK_EQ(undistorted_keypoints.size(), features->size());
+//   //udpate keypoints
+//   for
+// }
+
 
 
 void UndistorterRectifier::initUndistortRectifyMaps(
@@ -177,7 +216,7 @@ void UndistorterRectifier::initUndistortRectifyMaps(
     cv::Mat* map_y) {
   CHECK_NOTNULL(map_x);
   CHECK_NOTNULL(map_y);
-  static constexpr int kImageType = CV_32FC1;
+  // static constexpr int kImageType = CV_32FC1;
   // static constexpr int kImageType = CV_16SC2;
 
   const cv::Size image_size = cam_params.imageSize();
@@ -189,8 +228,8 @@ void UndistorterRectifier::initUndistortRectifyMaps(
   cv::Mat map_x_float, map_y_float;
   switch (distortion_model) {
     case DistortionModel::NONE: {
-      map_x_float.create(image_size, kImageType);
-      map_y_float.create(image_size, kImageType);
+      map_x_float.create(image_size, kRectifyImageType);
+      map_y_float.create(image_size, kRectifyImageType);
     } break;
     case DistortionModel::RADTAN: {
       cv::initUndistortRectifyMap(
@@ -200,7 +239,7 @@ void UndistorterRectifier::initUndistortRectifyMaps(
           R,
           P,
           image_size,
-          kImageType,
+          kRectifyImageType,
           // Output:
           map_x_float,
           map_y_float);
@@ -214,7 +253,7 @@ void UndistorterRectifier::initUndistortRectifyMaps(
           R,
           P,
           image_size,
-          kImageType,
+          kRectifyImageType,
           // Output:
           map_x_float,
           map_y_float);

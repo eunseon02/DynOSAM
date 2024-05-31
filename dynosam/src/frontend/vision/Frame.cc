@@ -212,6 +212,7 @@ Frame::ConstructCorrespondanceFunc<Landmark, gtsam::Vector3> Frame::landmarkWorl
         //eventuall map?
         Landmark lmk_w = previous_frame.backProjectToWorld(previous_feature->tracklet_id_);
 
+        //TODO: what if image is already undistorted
         gtsam::Vector3 projected_versor = undistorter_->undistortKeypointAndGetProjectedVersor(current_feature->keypoint_);
         return TrackletCorrespondance(previous_feature->tracklet_id_, lmk_w, projected_versor);
     };

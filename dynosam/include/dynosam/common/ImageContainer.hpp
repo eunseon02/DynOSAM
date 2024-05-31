@@ -86,6 +86,7 @@ public:
     }
     virtual ~ImageContainerSubset() = default;
 
+
     //TODO: need to do test for default assignment
     //eg ImageContainerSubset sub;
     //sub = ImageContainerSubset(...types...)
@@ -234,6 +235,7 @@ protected:
 
 
 
+class UndistorterRectifier; //TODO:!!
 
 class ImageContainer : public ImageContainerSubset<
     ImageType::RGBMono,
@@ -297,8 +299,6 @@ public:
     inline Timestamp getTimestamp() const { return timestamp_; }
     inline FrameId getFrameId() const { return frame_id_; }
 
-
-
     std::string toString() const;
 
     /**
@@ -357,6 +357,11 @@ public:
         const ImageWrapper<ImageType::Depth>& depth,
         const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
         const ImageWrapper<ImageType::MotionMask>& motion_mask);
+    //TODO:would be nice to have this in the base class (maybe )
+    //TODO: this should really be a free function which is templated but issues making it nice and elegant (easily template deducted + ImageCotnainer has const variables in it)
+    //ideally also templated on the base class!!
+    static ImageContainer::Ptr RectifyImages(ImageContainer::Ptr images, const UndistorterRectifier& undistorter);
+
 protected:
     /**
      * @brief Static construction of a full image container and calls validateSetup on the resulting object.

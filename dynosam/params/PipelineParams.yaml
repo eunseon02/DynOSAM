@@ -2,10 +2,6 @@
 
 parallel_run: 0
 
-# KITTI: 0, VIRTUAL_KITTI: 1, CLUSTER: 2
-# data_provider_type: 0
-# TODO: need to make flag file!!!
-
 
 #RGBD instance = 0, MONO instance = 1 (same as FrontendType)
 frontend_type: 0

@@ -32,6 +32,8 @@
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 
+#include "dynosam/common/ImageContainer.hpp"
+
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
 
@@ -68,6 +70,38 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
  * @return false
  */
 bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect);
+
+
+// /**
+//  * @brief Fully rectifies all images in the ImageContainerSubset
+//  *
+//  * Quite slow :)
+//  *
+//  * @tparam ImageTypes
+//  * @param images
+//  * @param undistorted_images
+//  * @param undistorted
+//  * @return ImageContainerSubset<ImageTypes...>
+//  */
+// template<typename... ImageTypes>
+// void rectifyImages(const ImageContainerSubset<ImageTypes...>& images, ImageContainerSubset<ImageTypes...>& undistorted_images, const UndistorterRectifier& undistorter) {
+//     //do deep copy (the underlying ImageWrapper class has a deep copy in its copy constructor so
+//     //the image data is cloned)
+//     using ImageSet = ImageContainerSubset<ImageTypes...>;
+//     undistorted_images = ImageSet(images);
+
+//     static constexpr size_t N = ImageSet::N;
+//     for (size_t i = 0; i < N; i++) {
+//         internal::select_apply<N>(i, [&](auto I){
+//             using ImageType = typename ImageSet::ImageTypeStruct<I>;
+
+//             //get reference to image and modify in place
+//             cv::Mat& distorted_image = undistorted_images.template get<ImageType>();
+//             undistorter.undistortRectifyImage(distorted_image, distorted_image);
+
+//         });
+//     }
+// }
 
 
 } //vision_tools

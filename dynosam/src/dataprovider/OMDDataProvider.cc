@@ -29,6 +29,9 @@
 #include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
+#include "dynosam/frontend/vision/VisionTools.hpp" //for getObjectLabels
+#include "dynosam/common/Algorithms.hpp"
+
 #include "dynosam/pipeline/ThreadSafeTemporalBuffer.hpp"
 
 #include <glog/logging.h>
@@ -126,9 +129,14 @@ public:
         loadMask(instance_masks_image_paths_.at(idx), mask);
         CHECK(!mask.empty());
 
-        // associateDetectedBBWithObject(mask, idx, relabelled_mask);
+        associateGTWithObject(mask, getDepthImage(idx), idx, relabelled_mask);
 
-        return mask;
+        // cv::Mat mask_viz = ImageType::SemanticMask::toRGB(relabelled_mask);
+
+        // cv::imshow("Relabelled mask", mask_viz);
+        // cv::waitKey(1);
+
+        return relabelled_mask;
     }
 
     cv::Mat getDepthImage(size_t idx) const {
@@ -136,7 +144,12 @@ public:
 
         cv::Mat depth;
         loadDepth(aligned_depth_image_paths_.at(idx), depth);
+        // loadRGB(aligned_depth_image_paths_.at(idx), depth);
         CHECK(!depth.empty());
+        // CHECK(depth.type() == CV_16UC1);
+
+        //The D435 publishes depth in "16-bit unsigned integers in millimeter resolution."
+        depth /= 1000.0;
 
         return depth;
     }
@@ -146,7 +159,7 @@ public:
     }
 
     const CameraParams& getLeftCameraParams() const {
-        return rgbd_camera_params;
+        return rgbd_camera_params_;
     }
 
     double getTimestamp(size_t idx) {
@@ -261,7 +274,7 @@ private:
         //skip header
         ++it;
 
-        for(it; it != csv_reader.end(); it++) {
+        for(; it != csv_reader.end(); it++) {
             const auto row = *it;
             int frame_num = row.at<int>(0);
             double time_sec = row.at<double>(1);
@@ -280,6 +293,12 @@ private:
 
    }
 
+   struct ViconPoseData {
+        Timestamp timestamp;
+        gtsam::Pose3 pose;
+        ObjectId object_id;
+   };
+
 
     void setGroundTruthPacketFromVicon(GroundTruthPacketMap& ground_truth_packets) {
         LOG(INFO) << "Loading object/camera pose gt from vicon: " << vicon_file_path_;
@@ -290,8 +309,7 @@ private:
         ++it;
 
         using ObjectIdPosePair = std::pair<ObjectId, gtsam::Pose3>;
-        //map vicon timestamps to their closest camera id timestamp
-        ThreadsafeTemporalBuffer<ObjectIdPosePair> vicon_timestamp_buffer;
+        std::vector<ViconPoseData> vicon_pose_data;
         gtsam::FastMap<FrameId, std::vector<ObjectPoseGT>> temp_object_poses;
 
         for(; it != csv_reader.end(); it++) {
@@ -329,7 +347,12 @@ private:
             double tz = row.at<double>(9);
 
             gtsam::Pose3 pose(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
-            vicon_timestamp_buffer.addValue(vicon_time, std::make_pair(object_id, pose));
+            ViconPoseData vicon_data;
+            vicon_data.timestamp = vicon_time;
+            vicon_data.object_id = object_id;
+            vicon_data.pose = pose;
+            vicon_pose_data.push_back(vicon_data);
+            // vicon_timestamp_buffer.addValue(vicon_time, std::make_pair(object_id, pose));
 
         }
 
@@ -345,14 +368,19 @@ private:
         const auto latest_camera_timestamp = camera_timestamp_buffer.getNewestTimestamp();
 
         //this is very slow!!!
-        for(const auto& [vicon_timestamp, object_id_pose_pair] : vicon_timestamp_buffer.buffered_values()) {
-            const ObjectId object_id = object_id_pose_pair.first;
-            const gtsam::Pose3& pose = object_id_pose_pair.second;
+        for(const auto& vicon_data : vicon_pose_data) {
+            const ObjectId object_id = vicon_data.object_id;
+            const gtsam::Pose3& pose = vicon_data.pose;
+            const Timestamp& vicon_timestamp = vicon_data.timestamp;
+
+            // LOG(INFO) << "Found object id " << object_id;
 
             //dont include if less than first or greater than last camera time
             if (vicon_timestamp < earliest_camera_timestamp || vicon_timestamp > latest_camera_timestamp) {
                 continue;
             }
+
+
 
             //get closest camera timestamp to the vicon timestamp - this is the value we want to interpolate
             //to as as this will be the timestamp of the frame we actually use
@@ -369,7 +397,7 @@ private:
 
             if (fpEqual(camera_timestamp, vicon_timestamp)) {
                 //TODO: found exact match!!!!
-                DLOG(INFO) << "Exact mattch found for frame " << frame_id << " " << camera_timestamp << " " << vicon_timestamp << " object id: " << object_id;
+                // DLOG(INFO) << "Exact mattch found for frame " << frame_id << " " << camera_timestamp << " " << vicon_timestamp << " object id: " << object_id;
 
                 if(!ground_truth_packets.exists(frame_id)) {
                     GroundTruthInputPacket gt_packet;
@@ -484,6 +512,9 @@ private:
                     intrinsics.size(),
                     intrinsics.begin());
 
+        CameraParams::DistortionCoeffs distortion;
+        yaml_parser.getNestedYamlParam("cam2", "distortion_coeffs", &distortion);
+
         std::vector<int> resolution;
         yaml_parser.getNestedYamlParam("cam2", "resolution", &resolution);
         CHECK_EQ(resolution.size(), 2);
@@ -494,28 +525,119 @@ private:
         yaml_parser.getNestedYamlParam("cam2", "camera_model", &camera_model);
         auto model = CameraParams::stringToDistortion(distortion_model, camera_model);
 
-        rgbd_camera_params = CameraParams(
+        rgbd_camera_params_ = CameraParams(
             intrinsics,
-            CameraParams::DistortionCoeffs{0, 0, 0,0},
+            distortion,
             image_size,
             model
         );
 
+        LOG(INFO) << rgbd_camera_params_.toString();
+
     }
 
-    // void associateDetectedBBWithObject(const cv::Mat& instance_mask, FrameId frame_id, cv::Mat& relabelled_mask) const {
-    //     const GroundTruthInputPacket& gt_packet = getGtPacket(frame_id);
-    //     ObjectIds object_ids = vision_tools::getObjectLabels(instance_mask);
-    //     const size_t n = object_ids.size();
+    void associateGTWithObject(const cv::Mat& instance_mask, const cv::Mat& depth, FrameId frame_id, cv::Mat& relabelled_mask) const {
+        const GroundTruthInputPacket& gt_packet = getGtPacket(frame_id);
+        const ObjectIds gt_object_ids = gt_packet.getObjectIds();
 
-    //     instance_mask.copyTo(relabelled_mask);
+        ObjectIds object_ids = vision_tools::getObjectLabels(instance_mask);
+        const size_t n = object_ids.size();
 
-    //     if(n == 0) {
-    //         return;
-    //     }
+        instance_mask.copyTo(relabelled_mask);
 
-    //     //get
-    // }
+        if(n == 0) {
+            return;
+        }
+
+        //instance id (track id -> all keypoints for that cluster)
+        std::set<ObjectId> instance_id_set;
+        gtsam::FastMap<ObjectId, Keypoints> instance_kps;
+        gtsam::FastMap<ObjectId, Landmarks> instance_lmks;
+
+        Camera camera(rgbd_camera_params_);
+
+        //sample sparsely across image and fill instance_kps
+        int step = 3;
+        for (int i = 0; i < instance_mask.rows - step; i = i + step)
+        {
+            for (int j = 0; j < instance_mask.cols - step; j = j + step)
+            {
+                ObjectId instance_label = instance_mask.at<ObjectId>(i, j);
+                if(instance_label == background_label) {
+                    continue;
+                }
+                CHECK_NE(instance_label, background_label);
+
+                instance_id_set.insert(instance_label);
+
+                Keypoint keypoint(j, i);
+
+                if(!instance_kps.exists(instance_label)) {
+                    instance_kps.insert2(instance_label, Keypoints{});
+                }
+                instance_kps.at(instance_label).push_back(keypoint);
+
+                //lmk in camera frame
+                const Depth d = functional_keypoint::at<Depth>(keypoint, depth);
+                Landmark lmk;
+                camera.backProject(keypoint, d, &lmk);
+
+                if(!instance_lmks.exists(instance_label)) {
+                    instance_lmks.insert2(instance_label, Landmarks{});
+                }
+                instance_lmks.at(instance_label).push_back(lmk);
+            }
+        }
+
+        std::vector<int> instance_ids(instance_id_set.begin(), instance_id_set.end());
+        CHECK_EQ(instance_ids.size(), n);
+
+        //want to assign instance_ids to gt labels
+        const size_t m = gt_object_ids.size();
+
+        Eigen::MatrixXd cost;
+        cost.resize(n, m);
+
+        for(size_t rows = 0; rows < n; rows++) {
+            int instance_id = instance_ids.at(rows);
+            // all lmks in the camera frame for the detected mask
+            auto sampled_lmks = instance_lmks.at(instance_id);
+            Landmark avg_lmk_camera = gtsam::mean(sampled_lmks);
+            Landmark avg_lmk_world = gt_packet.X_world_ * avg_lmk_camera;
+
+            for(size_t cols = 0; cols < m; cols++) {
+                // LOG(INFO) << cols;
+                ObjectId gt_object_id = gt_object_ids.at(cols);
+                // LOG(INFO) << gt_object_id;
+
+                ObjectPoseGT gt_object_pose;
+                CHECK(gt_packet.getObject(gt_object_id, gt_object_pose));
+
+                gtsam::Point3 gt_translation = gt_object_pose.L_world_.translation();
+
+                //distance between the gt object pose (translation) and the cluster of detected points
+                cost(rows, cols) = gtsam::distance3(gt_translation, avg_lmk_world);
+
+            }
+        }
+
+        Eigen::VectorXi assignment;
+        internal::HungarianAlgorithm().solve(cost, assignment);
+
+        for(size_t i = 0; i < assignment.size(); i++) {
+            int j = assignment[i];
+
+            //the i-th object is assignment to the j-th cluster
+            ObjectId instance_id = instance_ids.at(i);
+            int assigned_object_id = gt_object_ids.at(j);
+
+            LOG(INFO) << "Relabelled " << instance_id << " to " << assigned_object_id;
+
+            const cv::Mat object_mask = relabelled_mask == instance_id;
+            relabelled_mask.setTo(cv::Scalar(assigned_object_id), object_mask);
+        }
+
+    }
 
 
 
@@ -537,7 +659,7 @@ private:
 
     GroundTruthPacketMap ground_truth_packets_;
     size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /optical_flow folder which is one per frame
-    CameraParams rgbd_camera_params;
+    CameraParams rgbd_camera_params_;
 
 };
 
@@ -608,6 +730,37 @@ OMDDataLoader::OMDDataLoader(const fs::path& dataset_path) : OMDDatasetProvider(
         instance_mask_loader,
         gt_loader
     );
+
+    auto callback = [&](size_t frame_id,
+        Timestamp timestamp,
+        cv::Mat rgb,
+        cv::Mat optical_flow,
+        cv::Mat depth,
+        cv::Mat instance_mask,
+        GroundTruthInputPacket gt_object_pose_gt) -> bool
+    {
+        CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
+
+        CHECK(ground_truth_packet_callback_);
+        if(ground_truth_packet_callback_) ground_truth_packet_callback_(gt_object_pose_gt);
+
+        ImageContainer::Ptr image_container = nullptr;
+        image_container = ImageContainer::Create(
+                timestamp,
+                frame_id,
+                ImageWrapper<ImageType::RGBMono>(rgb),
+                ImageWrapper<ImageType::Depth>(depth),
+                ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+        CHECK(image_container);
+        CHECK(image_container_callback_);
+        if(image_container_callback_) image_container_callback_(image_container);
+        return true;
+    };
+
+    this->setCallback(callback);
+
+    setStartingFrame(1u); ///have to start at at least 1 so we can index backwards with optical flow
 }
 
 } //dyno

@@ -259,9 +259,6 @@ public:
 
     TrackletIds collectTracklets(bool only_usable = true) const;
 
-    // //iterator (can be a filter iterator) where the iterator must iterate over Feature::Ptr's
-    // template<typename Iter, typename = std::enable_if_t<internal::is_feature_ptr_iterator<Iter>>
-    // TrackletIds collectTracklets(Iter iter) const;
 
 
 

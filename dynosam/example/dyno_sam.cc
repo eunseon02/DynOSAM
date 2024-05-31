@@ -149,7 +149,7 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 //         cv::imshow("RGB", rgb);
 //         cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
 //         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
-//         cv::imshow("Road semantics", image_container->getImageWrapper<ImageType::ClassSegmentation>().toRGB());
+//         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
 
 
 //         cv::waitKey(1);
@@ -182,9 +182,12 @@ int main(int argc, char* argv[]) {
 
     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
 
+        LOG(INFO) << frame_id << " " << timestamp;
+
         cv::imshow("RGB", rgb);
         cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+        cv::imshow("Depth", ImageType::Depth::toRGB(depth));
 
         cv::waitKey(1);
         return true;

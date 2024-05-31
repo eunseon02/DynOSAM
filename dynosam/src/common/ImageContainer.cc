@@ -23,7 +23,7 @@
 
 #include "dynosam/common/ImageContainer.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
-
+#include "dynosam/frontend/vision/UndistortRectifier.hpp" //annoything this has to be here - better make (undisort iamges) into a free fucntion later!!
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <exception>
@@ -54,6 +54,28 @@ ImageContainer::Ptr ImageContainer::Create(
         );
     container->validateSetup();
     return container;
+}
+
+
+ImageContainer::Ptr ImageContainer::RectifyImages(ImageContainer::Ptr images, const UndistorterRectifier& undistorter) {
+    //do deep copy (the underlying ImageWrapper class has a deep copy in its copy constructor so
+    //the image data is cloned)
+    ImageContainer::Ptr undistorted_images = std::make_shared<ImageContainer>(*images);
+
+    static constexpr size_t N = ImageContainer::N;
+    for (size_t i = 0; i < N; i++) {
+        internal::select_apply<N>(i, [&](auto I){
+            using ImageType = typename ImageContainer::ImageTypeStruct<I>;
+
+            //get reference to image and modify in place
+            //TODO: bug!!?
+            cv::Mat& distorted_image = undistorted_images->template get<ImageType>();
+            undistorter.undistortRectifyImage(distorted_image, distorted_image);
+
+        });
+    }
+
+    return undistorted_images;
 }
 
 
