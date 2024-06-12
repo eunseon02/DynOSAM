@@ -64,7 +64,7 @@ DataProvider::Ptr DataProviderFactory::Create(const std::string& dataset_folder_
         return loader;
     }
     else if (dataset_type == DatasetType::OMD) {
-        LOG(INFO) << "Using Cluster (SLAM) dataset at path: " << dataset_folder_path;
+        LOG(INFO) << "Using Oxford Multi-motion Dataset dataset at path: " << dataset_folder_path;
         auto loader = std::make_shared<OMDDataLoader>(dataset_folder_path);
         loader->setStartingFrame(FLAGS_starting_frame);
         loader->setEndingFrame(FLAGS_ending_frame);

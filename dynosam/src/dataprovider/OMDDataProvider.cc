@@ -49,13 +49,15 @@ public:
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         vicon_file_path_(file_path + "/vicon.csv"),
-        kalibr_file_path_(file_path + "/kalibr.yaml")
+        kalibr_file_path_(file_path + "/kalibr.yaml"),
+        vicon_calibration_file_path_(file_path + "/vicon.yaml")
     {
         throwExceptionIfPathInvalid(rgbd_folder_path_);
         throwExceptionIfPathInvalid(instance_masks_folder_);
         throwExceptionIfPathInvalid(optical_flow_folder_path_);
         throwExceptionIfPathInvalid(vicon_file_path_);
         throwExceptionIfPathInvalid(kalibr_file_path_);
+        throwExceptionIfPathInvalid(vicon_calibration_file_path_);
 
         //first load images and size
         //the size will be used as a refernce for all other loaders
@@ -81,7 +83,7 @@ public:
 
         setGroundTruthPacketFromVicon(ground_truth_packets_);
 
-        setIntrisics();
+        setIntrisicsAndTransforms();
     }
 
     size_t size() const {
@@ -147,9 +149,29 @@ public:
         // loadRGB(aligned_depth_image_paths_.at(idx), depth);
         CHECK(!depth.empty());
         // CHECK(depth.type() == CV_16UC1);
+        // depth.convertTo(depth, CV_64F);
 
         //The D435 publishes depth in "16-bit unsigned integers in millimeter resolution."
+        //TODO: paramterise and check why this is different for OMD
+        //why is dyno-sam so different that it needs the baseline scale factor as well as the scaling term
+        //is this just depth to dispartiy?
+        //imD.at<float>(i,j) = mbf/(imD.at<float>(i,j)/mDepthMapFactor);
         depth /= 1000.0;
+
+        // cv::Mat depth;
+        // const_disparity.copyTo(depth);
+        // for (int i = 0; i < depth.rows; i++)
+        // {
+        //     for (int j = 0; j < depth.cols; j++)
+        //     {
+        //         if (depth.at<double>(i, j) < 0) {
+        //             depth.at<double>(i, j) = 0;
+        //         }
+        //         else {
+        //             depth.at<double>(i, j) = 387.5744 / (depth.at<double>(i, j) / 1000.0);
+        //         }
+        //     }
+        // }
 
         return depth;
     }
@@ -295,7 +317,7 @@ private:
 
    struct ViconPoseData {
         Timestamp timestamp;
-        gtsam::Pose3 pose;
+        gtsam::Pose3 T_world_object; //or T_OA using the omd dataset notation, the inverse of what is given by the dataset (T_AO)
         ObjectId object_id;
    };
 
@@ -346,11 +368,18 @@ private:
             double ty = row.at<double>(8);
             double tz = row.at<double>(9);
 
-            gtsam::Pose3 pose(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
+            //transformation from object to world frame where world is the vicon frame
+            //given as T_AO in dataset paper
+            gtsam::Pose3 T_object_world(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
+            //world is the vicon frame
+            // gtsam::Pose3 T_world_object = T_object_world.inverse();
+            gtsam::Pose3 T_world_object = T_object_world;
+
+
             ViconPoseData vicon_data;
             vicon_data.timestamp = vicon_time;
             vicon_data.object_id = object_id;
-            vicon_data.pose = pose;
+            vicon_data.T_world_object = T_world_object;
             vicon_pose_data.push_back(vicon_data);
             // vicon_timestamp_buffer.addValue(vicon_time, std::make_pair(object_id, pose));
 
@@ -370,7 +399,7 @@ private:
         //this is very slow!!!
         for(const auto& vicon_data : vicon_pose_data) {
             const ObjectId object_id = vicon_data.object_id;
-            const gtsam::Pose3& pose = vicon_data.pose;
+            const gtsam::Pose3& T_world_object = vicon_data.T_world_object;
             const Timestamp& vicon_timestamp = vicon_data.timestamp;
 
             // LOG(INFO) << "Found object id " << object_id;
@@ -414,14 +443,27 @@ private:
 
                 std::vector<ObjectPoseGT>& tmp_object_vector = temp_object_poses.at(frame_id);
 
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+
                 if(object_id == 0) {
-                    gt_packet.X_world_ = pose;
+                    //if object is sensor payload we need to apply extra transforms to get T_world_depthcam from T_world_object
+                    //in this case T_world_object = T_world_apparatus (T_OA) as the object is the apparatus frame measured from the vicon
+                    //T_world_depthcam =  T_world_apparatus * T_apparatus_leftstereo * T_leftstereo_depthcam
+                    //where T_apparatus_leftstereo is given from the vicon.yaml config
+                    //and T_leftstereo_depthcam is constructed from the kalibr config
+                    gt_packet.X_world_ = T_world_object * T_apparatus_depthcam_;
+                     //now in camera convention!!!
+                    // gt_packet.X_world_ = camera_to_world.inverse() * gt_packet.X_world_;
                 }
                 else {
                     ObjectPoseGT object_pose_gt;
                     object_pose_gt.frame_id_ = frame_id;
                     object_pose_gt.object_id_ = object_id;
-                    object_pose_gt.L_world_ = pose;
+                    //if this is object, the transform is the object as seen in the vicon frame
+                    //we want it in the depth sensor frame
+                    //T_world_object -> T_vicon_object
+                    object_pose_gt.L_world_ = T_world_object;
+                    // object_pose_gt.L_world_ = camera_to_world.inverse() * object_pose_gt.L_world_;
                     //cannot set L_camera yet as we might not have the camera pose
 
                     //if object is already in the vector dont add
@@ -480,6 +522,7 @@ private:
             //get object vector for the tmp list
             auto& unprocessed_objects = temp_object_poses.at(gt_packet.frame_id_);
             for(auto& object_pose_gt : unprocessed_objects) {
+                //TODO: I think this is wrong!!
                 object_pose_gt.L_camera_ = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
                 CHECK_EQ(frame_id, object_pose_gt.frame_id_);
             }
@@ -498,8 +541,39 @@ private:
         CHECK_EQ(ground_truth_packets.size(), times_.size());
     }
 
-    void setIntrisics() {
+    void setIntrisicsAndTransforms() {
+        //kalirb file gives the rigid body transforms from the sensors to the apparatus frame
         YamlParser yaml_parser(kalibr_file_path_);
+
+        std::vector<double> v_cam1_cam0;
+        yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
+        //transform from cam1 into camera 0 frame
+        gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
+
+        std::vector<double> v_cam2_cam1;
+        yaml_parser.getNestedYamlParam("cam2", "T_cn_cnm1", &v_cam2_cam1);
+        //transform from cam2 into camera 1 frame
+        gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
+
+        //transformation from cam2 INTO cam0
+        //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
+        gtsam::Pose3 T_cam0_cam2 = T_cam0_cam1 * T_cam1_cam2;
+        T_leftstereo_depthcam_ = T_cam0_cam2;
+
+        //now load apparaturs to left camera (cam0) transform to put cam0 into the sensor frame (or A)
+        YamlParser vicon_yaml_parser(vicon_calibration_file_path_);
+        std::vector<double> v_apparatus_left;
+        vicon_yaml_parser.getYamlParam("T_apparatus_left", &v_apparatus_left);
+        //transformation from cam0 (left) into the apparatus (A) frame
+        gtsam::Pose3 T_apparatus_cam0 = utils::poseVectorToGtsamPose3(v_apparatus_left);
+        T_apparatus_leftstereo_ = T_apparatus_cam0;
+        //transform of cam2 (depth camera) into the apparatus (A) frame
+        //we can use the premultiply this with the measurement (inverse) from vicon.csv
+        //to put the vicon sensor pyload measurement into the depth frame which will match with our visual odometry
+        gtsam::Pose3 T_apparatus_cam2 = T_apparatus_cam0 * T_cam0_cam2;
+        T_apparatus_depthcam_ = T_apparatus_cam2;
+
+
 
         //NOTE: expect the rgbd camera to always be cam2
         CameraParams::IntrinsicsCoeffs intrinsics;
@@ -645,8 +719,9 @@ private:
     const std::string rgbd_folder_path_;
     const std::string instance_masks_folder_;
     const std::string optical_flow_folder_path_;
-    const std::string vicon_file_path_;
+    const std::string vicon_file_path_; //vicon measurement (.csv) file
     const std::string kalibr_file_path_;
+    const std::string vicon_calibration_file_path_; //vicon calibration (.yaml) file giving transform between left stereo and apparatus
 
     std::vector<std::string> rgb_image_paths_; //index from 0 to match the naming convention of the dataset
     std::vector<std::string> aligned_depth_image_paths_;
@@ -659,7 +734,12 @@ private:
 
     GroundTruthPacketMap ground_truth_packets_;
     size_t dataset_size_; //set in setGroundTruthPacket. Reflects the number of files in the /optical_flow folder which is one per frame
+
+    //below are set in the setIntrisicsAndTransforms
     CameraParams rgbd_camera_params_;
+    gtsam::Pose3 T_apparatus_leftstereo_; //T_AL or the transform from the left stereo to the apparaturs frame, as given in vicon.yaml
+    gtsam::Pose3 T_leftstereo_depthcam_; //T_LD or the transfrom from the depthcam to the left stereo. Given in the kalibr.yaml
+    gtsam::Pose3 T_apparatus_depthcam_; //T_AL * T_LD
 
 };
 
@@ -751,7 +831,7 @@ OMDDataLoader::OMDDataLoader(const fs::path& dataset_path) : OMDDatasetProvider(
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+                ImageWrapper<ImageType::MotionMask>(instance_mask));
         CHECK(image_container);
         CHECK(image_container_callback_);
         if(image_container_callback_) image_container_callback_(image_container);

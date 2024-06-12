@@ -27,6 +27,9 @@
 #include <gtsam/base/Vector.h> //for fpequal
 #include <gtsam/base/Matrix.h>
 
+#include <iostream>
+#include <fstream>
+
 namespace dyno  {
 
 
@@ -226,6 +229,18 @@ inline double calculateStandardDeviation(const std::vector<T, Eigen::aligned_all
   }
 
   return std::sqrt(sum/static_cast<double>(vec.size()));
+}
+
+
+inline bool writeMatrixWithPythonFormat(const gtsam::Matrix& matrix, const std::string& filename) {
+    std::ofstream file(filename);
+    if (file.is_open()) {
+        file << matrix.format(Eigen::IOFormat(Eigen::StreamPrecision, Eigen::DontAlignCols, " ", "\n"));
+        file.close();
+        return true;
+    } else {
+        return false;
+    }
 }
 
 

@@ -424,7 +424,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
       const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(keypoint, flow);
       const size_t cell_idx = grid.getCellIndex(keypoint);
 
-      if(grid.isOccupied(cell_idx)) {continue;}
+      //TODO: this is a problem for the omd dataset?
+      // if(grid.isOccupied(cell_idx)) {continue;}
 
       //TODO: why do we not check for shrunken image here?
       // if the predicted kp (ie the kp at k + 1) is out of bounds, dont construct the feature

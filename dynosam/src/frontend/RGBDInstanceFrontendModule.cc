@@ -203,6 +203,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
 
     debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
+    if(display_queue_) display_queue_->push(ImageToDisplay("Detected Bounding Box", ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>())));
     //use the tracking images from the frame NOT the input tracking images since the feature tracking
     //will do some modifications on the images (particularily the mask during mask propogation)
     debug_imagery.input_images = frame->tracking_images_;

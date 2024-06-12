@@ -34,6 +34,14 @@
 
 namespace dyno {
 
+// struct PerObjectStatus {
+//     ObjectId object_id;
+//     int num_track; //actual number of features tracked (ie. used)
+//     int num_sampled; //num new points sampled
+//     int num_outside_shrunken_image;
+//     int num_zero_flow;
+// }
+
 struct FeatureTrackerInfo {
     FrameId frame_id;
 
