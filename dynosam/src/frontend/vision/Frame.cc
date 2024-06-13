@@ -245,16 +245,23 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
         return false;
     }
 
-    const DynamicObjectObservation& observation = object_observations_.at(object_id);
-    // TODO: need to put back on - if we have motion mask, we should just mark all objects as moving CHECK(observation.marked_as_moving_);
-    const TrackletIds& tracklets = observation.object_features_;
+    // const DynamicObjectObservation& observation = object_observations_.at(object_id);
+    // // TODO: need to put back on - if we have motion mask, we should just mark all objects as moving CHECK(observation.marked_as_moving_);
+    // const TrackletIds& tracklets = observation.object_features_;
 
-    FeatureContainer feature_container;
-    for(const TrackletId tracklet : tracklets) {
-        if(isFeatureUsable(tracklet)) {
-            feature_container.add(this->at(tracklet));
-        }
-    }
+    // FeatureContainer feature_container;
+    // for(const TrackletId tracklet : tracklets) {
+    //     if(isFeatureUsable(tracklet)) {
+    //         feature_container.add(this->at(tracklet));
+    //     }
+    // }
+
+    auto current_dynamic_features_iterator = FeatureFilterIterator(
+        const_cast<FeatureContainer&>(this->dynamic_features_),
+        [object_id](const Feature::Ptr& f) -> bool {
+            return Feature::IsUsable(f) && f->instance_label_ == object_id;
+        });
+
 
     //make iterator for the previous dynamic features that ensure each feature is usable and has a matching instance label
     auto previous_dynamic_features_iterator = FeatureFilterIterator(
@@ -270,7 +277,7 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
         correspondences,
         previous_dynamic_features_iterator,
         //we iterate over the current feature container which should only contain features on the object
-        feature_container.beginUsable()
+        current_dynamic_features_iterator
     );
 
     // LOG(INFO) << "Found " << correspondences.size() << " correspondences for object instance " << object_id << " " << (correspondences.size() > 0u);
@@ -300,10 +307,14 @@ bool Frame::getDynamicCorrespondences(FeaturePairs& correspondences, const Frame
 
 
 void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth, double max_depth) {
-    auto iter = container.beginUsable();
+    // auto iter = container.beginUsable();
+    // auto iter = container.begin();
 
-    for(Feature::Ptr feature : iter) {
-        CHECK(feature->usable());
+    int count = 0;
+
+    //iterate over all features
+    for(Feature::Ptr feature : container) {
+        // CHECK(feature->usable());
         // const Feature::Ptr& feature = *iter;
         // const int x = functional_keypoint::u(feature->keypoint_);
         // const int y = functional_keypoint::v(feature->keypoint_);
@@ -312,16 +323,23 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
         if(d > max_depth || d <= 0) {
             feature->markInvalid();
-        }
-
-         //if now invalid or happens to be invalid from a previous frame, make depth invalid too
-        if(!feature->usable()) {
             feature->depth_ = Feature::invalid_depth;
+            count++;
         }
         else {
             feature->depth_ = d;
         }
+
+        //  //if now invalid or happens to be invalid from a previous frame, make depth invalid too
+        // if(!feature->usable()) {
+        //     feature->depth_ = Feature::invalid_depth;
+        // }
+        // else {
+        //     feature->depth_ = d;
+        // }
     }
+
+    LOG(INFO) << count << " features marked invalud due to depth out of " << container.size() << " with max depth " << max_depth;
 
 }
 
@@ -337,7 +355,8 @@ void Frame::constructDynamicObservations() {
 
         const ObjectId instance_label = dynamic_feature->instance_label_;
         //this check is just for sanity!
-        CHECK(std::find(instance_labels.begin(), instance_labels.end(), instance_label) != instance_labels.end());
+        CHECK(std::find(instance_labels.begin(), instance_labels.end(), instance_label) != instance_labels.end())
+            << "Missing " << instance_label << " in " << container_to_string(instance_labels);
 
         if(object_observations_.find(instance_label) == object_observations_.end()) {
             DynamicObjectObservation observation;

@@ -419,6 +419,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         *frame_k_1,
         object_id,
         frame_k->landmarkWorldKeypointCorrespondance());
+    //TODO:::
+    // CHECK(corr_result);
 
     const size_t& n_matches = dynamic_correspondences.size();
 

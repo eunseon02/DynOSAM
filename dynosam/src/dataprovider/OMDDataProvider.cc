@@ -698,6 +698,8 @@ private:
         Eigen::VectorXi assignment;
         internal::HungarianAlgorithm().solve(cost, assignment);
 
+        LOG(INFO) << " With " << n << " original ids and " << m << " gt ids";
+
         for(size_t i = 0; i < assignment.size(); i++) {
             int j = assignment[i];
 
@@ -708,7 +710,7 @@ private:
             LOG(INFO) << "Relabelled " << instance_id << " to " << assigned_object_id;
 
             const cv::Mat object_mask = relabelled_mask == instance_id;
-            relabelled_mask.setTo(cv::Scalar(assigned_object_id), object_mask);
+            // relabelled_mask.setTo(cv::Scalar(assigned_object_id), object_mask);
         }
 
     }

@@ -151,6 +151,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     CHECK(previous_frame);
+    CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
 
     LOG(INFO) << to_string(tracker_->getTrackerInfo());
 
@@ -168,13 +169,17 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
     {
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        vision_tools::trackDynamic(base_params_,*previous_frame, frame);
+        // vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
+
+    LOG(INFO) << "Done track!";
 
 
     MotionEstimateMap motion_estimates;
     ObjectIds failed_object_tracks;
     for(const auto& [object_id, observations] : frame->object_observations_) {
+
+        LOG(INFO) << "Solving motion for " << object_id << " with " << observations.numFeatures();
 
         if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
             VLOG(5) << "Could not solve motion for object " << object_id <<
@@ -337,7 +342,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     StatusLandmarkEstimates dynamic_landmarks;
     for(const auto& [object_id, obs] : frame.object_observations_) {
         CHECK_EQ(object_id, obs.instance_label_);
-        CHECK(obs.marked_as_moving_);
+        //TODO:
+        // CHECK(obs.marked_as_moving_);
 
         for(const TrackletId tracklet : obs.object_features_) {
             if(frame.isFeatureUsable(tracklet)) {

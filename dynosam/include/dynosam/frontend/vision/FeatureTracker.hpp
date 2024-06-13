@@ -34,13 +34,25 @@
 
 namespace dyno {
 
-// struct PerObjectStatus {
-//     ObjectId object_id;
-//     int num_track; //actual number of features tracked (ie. used)
-//     int num_sampled; //num new points sampled
-//     int num_outside_shrunken_image;
-//     int num_zero_flow;
+struct PerObjectStatus {
+    ObjectId object_id;
+    size_t num_previous_track{0}; //number of (inlier) features tracked in the previous frame that MAY be used
+    size_t num_track{0}; //actual number of features tracked (ie. used) from the previous frame - does not include newly sampled points!
+    size_t num_sampled{0}; //num new points sampled and added to the set of features
+    size_t num_outside_shrunken_image{0}; //sampled or tracked
+    size_t num_zero_flow{0}; //sampled or tracked
+    size_t num_tracked_with_different_label{0}; //number of points tracked from previous frame where the current label is different
+    size_t num_tracked_with_background_label{0}; //number of points tracked from previous frame wehre current label is the background
+    //would be nice to have some histogram data about each tracked point etc...
+
+    PerObjectStatus(ObjectId id) : object_id(id) {}
+};
+
+// template<>
+// inline std::string to_string(const PerObjectStatus& object_info) {
+
 // }
+
 
 struct FeatureTrackerInfo {
     FrameId frame_id;
@@ -49,8 +61,17 @@ struct FeatureTrackerInfo {
     size_t static_track_optical_flow;
     size_t static_track_detections;
 
+
+    inline PerObjectStatus& getObjectStatus(ObjectId object_id) {
+        if(!dynamic_track.exists(object_id)) {
+            dynamic_track.insert2(object_id, PerObjectStatus(object_id));
+        }
+
+        return dynamic_track.at(object_id);
+    }
     // num features tracked per dynamic object
-    gtsam::FastMap<ObjectId, size_t> dynamic_track;
+    // gtsam::FastMap<ObjectId, size_t> dynamic_track;
+    gtsam::FastMap<ObjectId, PerObjectStatus> dynamic_track;
 };
 
 template<>
@@ -61,8 +82,15 @@ inline std::string to_string(const FeatureTrackerInfo& info) {
        << "\t- # optical flow: " << info.static_track_optical_flow << "\n"
        << "\t- # detections: " << info.static_track_detections << "\n";
 
-    for(const auto& [object_id, num_tracks] : info.dynamic_track) {
-        ss << "\t- Object: " << object_id << " # features " << num_tracks << "\n";
+    for(const auto& [object_id, object_status] : info.dynamic_track) {
+        ss << "\t- Object: " << object_id << ": \n";
+        ss << "\t\t - num_previous_track " << object_status.num_previous_track << "\n";
+        ss << "\t\t - num_track " << object_status.num_track << "\n";
+        ss << "\t\t - num_sampled " << object_status.num_sampled << "\n";
+        ss << "\t\t - num_outside_shrunken_image " << object_status.num_outside_shrunken_image << "\n";
+        ss << "\t\t - num_zero_flow " << object_status.num_zero_flow << "\n";
+        ss << "\t\t - num_tracked_with_different_label " << object_status.num_tracked_with_different_label << "\n";
+        ss << "\t\t - num_tracked_with_background_label " << object_status.num_tracked_with_background_label << "\n";
     };
     return ss.str();
 
@@ -110,7 +138,7 @@ protected:
 
     void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);
-    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features, gtsam::FastMap<ObjectId, size_t>& n_dynamic_track);
+    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features);
 
     void propogateMask(TrackingInputImages& tracking_images);
 

@@ -83,6 +83,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/ClusterSlamDataProvider.cc
   src/dataprovider/OMDDataProvider.cc
   src/dataprovider/DatasetProvider.cc
+  src/dataprovider/ProjectAriaDataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc

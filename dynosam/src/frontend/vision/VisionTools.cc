@@ -89,6 +89,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     const size_t num_object_features = object_observation.object_features_.size();
     // LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
 
+    int feature_pairs_valid = 0;
     for(const TrackletId tracklet_id : object_observation.object_features_) {
       if(previous_dynamic_feature_container.exists(tracklet_id)) {
         CHECK(current_dynamic_feature_container.exists(tracklet_id));
@@ -112,6 +113,8 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 
         Landmark flow_world = lmk_current - lmk_previous ;
         double sf_norm = flow_world.norm();
+
+        feature_pairs_valid++;
 
         if (sf_norm<params.scene_flow_magnitude)
             sf_count = sf_count+1;
@@ -148,6 +151,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 
     }
 
+    VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out of " << num_object_features << " for instance  " << instance_label;
 
     if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
     {

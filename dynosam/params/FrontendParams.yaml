@@ -7,7 +7,7 @@ cell_size: 15 #kitti
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
 max_depth_static: 40.0
-max_depth_object: 25.0
+max_depth_object: 30.0
 
 #orb-extraction params
 n_features: 1200
@@ -18,8 +18,8 @@ min_threshold_fast: 7
 
 # shrink_row: 25 # KITTI
 # shrink_col: 200 # KITTI!!!
-shrink_row: 1
-shrink_col: 1
+# shrink_row: 1
+# shrink_col: 1
 
 
 tracker:
