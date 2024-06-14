@@ -69,6 +69,8 @@ public:
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features);
 
+    inline FrameId getFrameId() const { return frame_id_; }
+
     /**
      * @brief Gets the total number of static features observed at this frame. Includes usables (inliers) and outliers.
      *

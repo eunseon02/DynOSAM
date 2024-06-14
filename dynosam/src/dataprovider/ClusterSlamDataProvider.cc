@@ -481,16 +481,33 @@ private:
         Eigen::VectorXi assignment;
         internal::HungarianAlgorithm().solve(loged_costs, assignment);
 
+        // for(size_t i = 0; i < assignment.size(); i++) {
+        //     int j = assignment[i];
+
+        //     //the i-th object is assignment to the j-th cluster
+        //     ObjectId object_id = object_ids.at(i);
+        //     int assigned_custer = cluster_ids.at(j);
+
+        //     const cv::Mat object_mask = relabelled_mask == object_id;
+        //     relabelled_mask.setTo(cv::Scalar(assigned_custer), object_mask);
+        // }
+        ObjectIds old_labels = object_ids;
+        ObjectIds new_labels;
         for(size_t i = 0; i < assignment.size(); i++) {
             int j = assignment[i];
 
-            //the i-th object is assignment to the j-th cluster
-            ObjectId object_id = object_ids.at(i);
+            // //the i-th object is assignment to the j-th cluster
+            // ObjectId instance_id = instance_ids.at(i);
             int assigned_custer = cluster_ids.at(j);
+            new_labels.push_back(assigned_custer);
 
-            const cv::Mat object_mask = relabelled_mask == object_id;
-            relabelled_mask.setTo(cv::Scalar(assigned_custer), object_mask);
+            // LOG(INFO) << "Relabelled " << instance_id << " to " << assigned_object_id;
+
+            // const cv::Mat object_mask = relabelled_mask == instance_id;
+            // relabelled_mask.setTo(cv::Scalar(assigned_object_id), object_mask);
         }
+
+        vision_tools::relabelMasks(instance_mask, relabelled_mask, old_labels, new_labels);
 
     }
 

@@ -55,6 +55,7 @@ struct FrontendParams {
   int shrink_row = 0;
   int shrink_col = 0;
 
+
   //if the mono pipeline is selcted as the frontend then only mono related ransac variables will be used
   //if the pipeline is RGBD then the user can select either the pnp (3d2d ransac) or stereo (3d3d) solvers
   //for both object and ego motion

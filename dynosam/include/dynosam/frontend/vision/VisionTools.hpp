@@ -71,6 +71,8 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
  */
 bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect);
 
+void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels);
+
 
 // /**
 //  * @brief Fully rectifies all images in the ImageContainerSubset

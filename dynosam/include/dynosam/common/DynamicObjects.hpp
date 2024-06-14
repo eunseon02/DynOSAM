@@ -42,10 +42,8 @@ struct DynamicObjectObservation {
     DynamicObjectObservation() : object_features_(), tracking_label_(-1) {}
     DynamicObjectObservation(const TrackletIds& object_features, ObjectId tracking_label) : object_features_(object_features), tracking_label_(tracking_label) {}
 
-    // std::pair<cv::Scalar, std::string> getColourLabel(bool use_opencv_convention = false) const;
     inline size_t numFeatures() const { return object_features_.size(); }
-
-    // std:string getLabel() const;
+    inline bool hasBoundingBox() const { return !bounding_box_.empty(); }
 
 };
 

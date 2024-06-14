@@ -21,19 +21,20 @@
  *   SOFTWARE.
  */
 
-#pragma once
+#include "dynosam/common/byte_tracker/Detection.hpp"
+#include "dynosam/common/byte_tracker/Rect.hpp"
 
-#include <gflags/gflags.h>
+namespace dyno {
+namespace byte_track {
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+Detection::Detection(const TlwhRect &rect, float score)
+    : rect_(rect), score_(score) {}
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
+const TlwhRect &Detection::rect() const { return rect_; }
+float Detection::score() const { return score_; }
+
+void Detection::set_rect(const RectBase &rect) { rect_ = TlwhRect(rect); }
+void Detection::set_score(float score) { score_ = score; }
+
+}  // namespace byte_track
+}  // namespace dyno

@@ -72,7 +72,7 @@ ObjectIds getObjectLabels(const cv::Mat& image) {
 }
 
 
-
+//TODO: depricate!!
 std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const Frame& previous_frame, Frame::Ptr current_frame) {
   auto& objects_by_instance_label = current_frame->object_observations_;
 
@@ -294,6 +294,32 @@ bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& re
       rect = merged_rect;
   }
   return true;
+}
+
+
+void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels) {
+  if (old_labels.size() != old_labels.size()) {
+        throw std::invalid_argument("Old labels and new labels must have the same size");
+    }
+
+  // Create a map from old labels to new labels
+  std::unordered_map<ObjectId, ObjectId> label_map;
+  for (size_t i = 0; i < old_labels.size(); ++i) {
+      label_map[old_labels[i]] = new_labels[i];
+  }
+
+  mask.copyTo(relabelled_mask);
+  // / Relabel the pixels
+  for (int r = 0; r < relabelled_mask.rows; ++r) {
+      for (int c = 0; c < relabelled_mask.cols; ++c) {
+          ObjectId pixelValue = relabelled_mask.at<ObjectId>(r, c);
+          if (label_map.find(pixelValue) != label_map.end()) {
+              relabelled_mask.at<ObjectId>(r, c) = label_map[pixelValue];
+          }
+      }
+  }
+
+
 }
 
 } //vision_tools

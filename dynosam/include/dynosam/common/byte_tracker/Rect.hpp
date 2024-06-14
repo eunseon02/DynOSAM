@@ -23,17 +23,43 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
+#include <opencv4/opencv2/core/types.hpp> // for cv::Rect
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+namespace dyno {
+namespace byte_track {
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
+class RectBase {
+ public:
+  virtual ~RectBase() = default;
+
+  virtual float top() const = 0;
+  virtual float left() const = 0;
+  virtual float width() const = 0;
+  virtual float height() const = 0;
+
+  inline operator cv::Rect() const { return cv::Rect(this->left(), this->top(), this->width(), this->height()); }
+
+};
+
+float calc_iou(const RectBase& A, const RectBase& B);
+
+class TlwhRect : public RectBase {
+  float top_;
+  float left_;
+  float width_;
+  float height_;
+
+ public:
+  TlwhRect(float top = 0, float left = 0, float width = 0, float height = 0);
+
+  TlwhRect(const cv::Rect& cv_other);
+  TlwhRect(const RectBase& other);
+
+  virtual float top() const override;
+  virtual float left() const override;
+  virtual float width() const override;
+  virtual float height() const override;
+};
+
+}  // namespace byte_track
+}  // namespace dyno

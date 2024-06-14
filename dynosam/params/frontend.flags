@@ -1,6 +1,8 @@
 #!/bin/bash
 
+--use_byte_tracker=true
+
 --init_object_pose_from_gt=false
 --use_frontend_logger=true
 
---semantic_mask_step_size=3
+--semantic_mask_step_size=8

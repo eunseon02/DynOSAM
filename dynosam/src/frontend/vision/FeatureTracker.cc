@@ -204,6 +204,20 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
     }
   }
 
+  for(auto& object_observation_pair : current_frame.object_observations_) {
+      const ObjectId object_id = object_observation_pair.first;
+      const cv::Rect& bb = object_observation_pair.second.bounding_box_;
+
+      //TODO: if its marked as moving!!
+
+      if(bb.empty()) { continue; }
+
+      const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+      const std::string label = "Obj " + std::to_string(object_id);
+      utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
+
+  }
+
 
   return img_rgb;
 

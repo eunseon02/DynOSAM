@@ -35,6 +35,7 @@ DEFINE_bool(frontend_from_file, false, "If true, the frontend will try and load 
 DEFINE_bool(use_smoothing_factor, true, "If the backend should use the smoothing factor between motions");
 
 DEFINE_int32(backend_updater_enum, 0, "Which UpdaterType the backend should use and should match an enum in whatever backend module type is loaded");
+DEFINE_bool(use_byte_tracker, false, "If true, the ByteTracking will be used to associated objects between frames. Else, the instance label will be used as the object id");
 
 
 

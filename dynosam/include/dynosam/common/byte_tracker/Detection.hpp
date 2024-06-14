@@ -23,17 +23,42 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
+#include "dynosam/common/byte_tracker/Rect.hpp"
+#include "dynosam/utils/Macros.hpp"
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+#include <memory>
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
+namespace dyno {
+namespace byte_track {
+
+class DetectionBase {
+ public:
+    DYNO_POINTER_TYPEDEFS(DetectionBase)
+
+    virtual ~DetectionBase() = default;
+
+  virtual const RectBase &rect() const = 0;
+  virtual float score() const = 0;
+
+  virtual void set_rect(const RectBase &rect) = 0;
+  virtual void set_score(float score) = 0;
+};
+
+class Detection : public DetectionBase {
+  TlwhRect rect_;
+  float score_ = 0;
+
+ public:
+  DYNO_POINTER_TYPEDEFS(Detection)
+
+  Detection(const TlwhRect &rect, float score);
+
+  const TlwhRect &rect() const override;
+  float score() const override;
+
+  void set_rect(const RectBase &rect) override;
+  void set_score(float score) override;
+};
+
+}  // namespace byte_track
+}  // namespace dyno

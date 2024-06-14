@@ -23,17 +23,21 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
+#include "dynosam/common/byte_tracker/ByteTracker.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+namespace dyno {
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
+class ObjectTracker {
+
+public:
+    cv::Mat track(const cv::Mat& masks, FrameId frame_id);
+
+
+private:
+    byte_track::ByteTracker impl_tracker_;
+
+
+};
+
+}

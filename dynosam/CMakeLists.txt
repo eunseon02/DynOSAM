@@ -74,6 +74,13 @@ add_library(${PROJECT_NAME} SHARED
   src/common/Algorithms.cc
   src/common/StereoCamera.cc
 
+  src/common/byte_tracker/ByteTracker.cc
+  src/common/byte_tracker/Detection.cc
+  src/common/byte_tracker/KalmanFilter.cc
+  src/common/byte_tracker/Lapjv.cc
+  src/common/byte_tracker/Rect.cc
+  src/common/byte_tracker/Track.cc
+
   src/dataprovider/DataInterfacePipeline.cc
   src/dataprovider/DataProvider.cc
   src/dataprovider/DatasetLoader.cc
@@ -96,6 +103,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/MonoInstanceFrontendModule.cc
   src/frontend/vision/ORBextractor.cc
   src/frontend/vision/FeatureTracker.cc
+  src/frontend/vision/ObjectTracker.cc
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc

@@ -102,6 +102,7 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
+    objectTrack(tracking_images, input->getFrameId());
 
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
@@ -125,7 +126,9 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
     //and then subsequently elimate non-moving objects later on
     TrackingInputImages tracking_images;
-    if(image_container->hasSemanticMask()) {
+
+    const bool is_semantic_mask = image_container->hasSemanticMask();
+    if(is_semantic_mask) {
         CHECK(!image_container->hasMotionMask());
 
         auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
@@ -141,6 +144,8 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
+    objectTrack(tracking_images, input->getFrameId());
+
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("tracking_timer");
@@ -153,7 +158,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     CHECK(previous_frame);
     CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
 
-    LOG(INFO) << to_string(tracker_->getTrackerInfo());
+    VLOG(20) << to_string(tracker_->getTrackerInfo());
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
 
@@ -167,16 +172,15 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         LOG(ERROR) << "Could not solve for camera";
     }
 
-    {
-        utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        // vision_tools::trackDynamic(base_params_,*previous_frame, frame);
-    }
+    //mark observations as moving or not
+    //if semantic mask is used, then use scene flow to try and determine if an object is moving or not!!
+    determineDynamicObjects(*previous_frame, frame, is_semantic_mask);
 
-    LOG(INFO) << "Done track!";
 
 
     MotionEstimateMap motion_estimates;
     ObjectIds failed_object_tracks;
+
     for(const auto& [object_id, observations] : frame->object_observations_) {
 
         LOG(INFO) << "Solving motion for " << object_id << " with " << observations.numFeatures();
@@ -186,6 +190,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
                 " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
             failed_object_tracks.push_back(object_id);
         }
+
     }
 
     ///remove objects from the object observations list
@@ -208,7 +213,12 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
 
     debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
-    if(display_queue_) display_queue_->push(ImageToDisplay("Detected Bounding Box", ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>())));
+    // cv::imshow("Detected bb",  debug_imagery.detected_bounding_boxes);
+    // cv::imshow("Tracking",  debug_imagery.tracking_image);
+    // cv::imshow("Original bb",  ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>()));
+    // cv::imshow("Propogated bb",  ImageType::MotionMask::toRGB(frame->tracking_images_.get<ImageType::MotionMask>()));
+    // cv::waitKey(1);
+    // if(display_queue_) display_queue_->push(ImageToDisplay("Detected Bounding Box", ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>())));
     //use the tracking images from the frame NOT the input tracking images since the feature tracking
     //will do some modifications on the images (particularily the mask during mask propogation)
     debug_imagery.input_images = frame->tracking_images_;
@@ -295,6 +305,129 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     }
 }
 
+void RGBDInstanceFrontendModule::objectTrack(TrackingInputImages& tracking_images, FrameId frame_id) {
+
+    if(FLAGS_use_byte_tracker) {
+        utils::TimingStatsCollector track_dynamic_timer("object_tracker_2d");
+        cv::Mat& original_mask = tracking_images.get<ImageType::MotionMask>();
+        original_mask = object_tracker_.track(tracking_images.get<ImageType::MotionMask>(), frame_id);
+    }
+
+}
+
+void RGBDInstanceFrontendModule::determineDynamicObjects(const Frame& previous_frame, Frame::Ptr current_frame, bool used_semantic_mask) {
+    auto& objects_by_instance_label = current_frame->object_observations_;
+    const auto& params = base_params_;
+
+    //a motion mask was used - just go through all the object observations and mark as dynamic!!
+    if(!used_semantic_mask) {
+        for(auto& [label, object_observation] : objects_by_instance_label) {
+            object_observation.marked_as_moving_ = true;
+        }
+        return;
+    }
+
+    auto& previous_dynamic_feature_container = previous_frame.dynamic_features_;
+    auto& current_dynamic_feature_container = current_frame->dynamic_features_;
+
+    ObjectIds instance_labels_to_remove;
+
+    utils::TimingStatsCollector track_dynamic_timer("scene_flow_motion_seg");
+    //a semantic mask was used - determine motion segmentation with optical flow!!
+    for(auto& [label, object_observation] : objects_by_instance_label) {
+        double sf_min=100, sf_max=0, sf_mean=0, sf_count=0;
+        std::vector<int> sf_range(10,0);
+
+        const size_t num_object_features = object_observation.object_features_.size();
+        // LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
+
+        int feature_pairs_valid = 0;
+        for(const TrackletId tracklet_id : object_observation.object_features_) {
+            if(previous_dynamic_feature_container.exists(tracklet_id)) {
+            CHECK(current_dynamic_feature_container.exists(tracklet_id));
+
+                Feature::Ptr current_feature = current_dynamic_feature_container.getByTrackletId(tracklet_id);
+                Feature::Ptr previous_feature = previous_dynamic_feature_container.getByTrackletId(tracklet_id);
+
+                if(!previous_feature->usable()) {
+                    current_feature->markInvalid();
+                    continue;
+                }
+
+                //this can happen in situations such as the updateDepths when depths > thresh are marked invalud
+                if(!current_feature->usable()) { continue;}
+
+                CHECK(!previous_feature->isStatic());
+                CHECK(!current_feature->isStatic());
+
+                Landmark lmk_previous = previous_frame.backProjectToWorld(tracklet_id);
+                Landmark lmk_current = current_frame->backProjectToWorld(tracklet_id);
+
+                Landmark flow_world = lmk_current - lmk_previous ;
+                double sf_norm = flow_world.norm();
+
+                feature_pairs_valid++;
+
+                if (sf_norm<params.scene_flow_magnitude)
+                    sf_count = sf_count+1;
+                if(sf_norm<sf_min)
+                    sf_min = sf_norm;
+                if(sf_norm>sf_max)
+                    sf_max = sf_norm;
+                sf_mean = sf_mean + sf_norm;
+
+                {
+                    if (0.0<=sf_norm && sf_norm<0.05)
+                        sf_range[0] = sf_range[0] + 1;
+                    else if (0.05<=sf_norm && sf_norm<0.1)
+                        sf_range[1] = sf_range[1] + 1;
+                    else if (0.1<=sf_norm && sf_norm<0.2)
+                        sf_range[2] = sf_range[2] + 1;
+                    else if (0.2<=sf_norm && sf_norm<0.4)
+                        sf_range[3] = sf_range[3] + 1;
+                    else if (0.4<=sf_norm && sf_norm<0.8)
+                        sf_range[4] = sf_range[4] + 1;
+                    else if (0.8<=sf_norm && sf_norm<1.6)
+                        sf_range[5] = sf_range[5] + 1;
+                    else if (1.6<=sf_norm && sf_norm<3.2)
+                        sf_range[6] = sf_range[6] + 1;
+                    else if (3.2<=sf_norm && sf_norm<6.4)
+                        sf_range[7] = sf_range[7] + 1;
+                    else if (6.4<=sf_norm && sf_norm<12.8)
+                        sf_range[8] = sf_range[8] + 1;
+                    else if (12.8<=sf_norm && sf_norm<25.6)
+                        sf_range[9] = sf_range[9] + 1;
+                }
+
+            }
+
+        }
+
+        VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out of " << num_object_features << " for label  " << label;
+
+        if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
+        {
+            // label this object as static background
+            // LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;
+            instance_labels_to_remove.push_back(label);
+            object_observation.marked_as_moving_ = false;
+        }
+        else {
+            // LOG(INFO) << "Instance object " << instance_label << " marked as dynamic";
+            object_observation.marked_as_moving_ = true;
+        }
+    }
+
+    //we do the removal after the iteration so as not to mess up the loop
+    for(const auto label : instance_labels_to_remove) {
+        VLOG(30) << "Removing label " << label;
+        //TODO: this is really really slow!!
+        current_frame->moveObjectToStatic(label);
+        // LOG(INFO) << "Done Removing label " << label;
+    }
+}
+
+
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame,
@@ -343,7 +476,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     for(const auto& [object_id, obs] : frame.object_observations_) {
         CHECK_EQ(object_id, obs.instance_label_);
         //TODO:
-        // CHECK(obs.marked_as_moving_);
+        CHECK(obs.marked_as_moving_);
 
         for(const TrackletId tracklet : obs.object_features_) {
             if(frame.isFeatureUsable(tracklet)) {

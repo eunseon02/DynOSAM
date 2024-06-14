@@ -700,18 +700,23 @@ private:
 
         LOG(INFO) << " With " << n << " original ids and " << m << " gt ids";
 
+        ObjectIds old_labels = instance_ids;
+        ObjectIds new_labels;
         for(size_t i = 0; i < assignment.size(); i++) {
             int j = assignment[i];
 
-            //the i-th object is assignment to the j-th cluster
-            ObjectId instance_id = instance_ids.at(i);
+            // //the i-th object is assignment to the j-th cluster
+            // ObjectId instance_id = instance_ids.at(i);
             int assigned_object_id = gt_object_ids.at(j);
+            new_labels.push_back(assigned_object_id);
 
-            LOG(INFO) << "Relabelled " << instance_id << " to " << assigned_object_id;
+            // LOG(INFO) << "Relabelled " << instance_id << " to " << assigned_object_id;
 
-            const cv::Mat object_mask = relabelled_mask == instance_id;
+            // const cv::Mat object_mask = relabelled_mask == instance_id;
             // relabelled_mask.setTo(cv::Scalar(assigned_object_id), object_mask);
         }
+
+        vision_tools::relabelMasks(instance_mask, relabelled_mask, old_labels, new_labels);
 
     }
 

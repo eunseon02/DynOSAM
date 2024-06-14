@@ -23,17 +23,12 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
+#include <cstddef>
+#include <vector>
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
-
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
+namespace dyno {
+namespace byte_track {
+int lapjv_internal(const size_t n, const std::vector<float>& cost,
+                   std::vector<int>& x, std::vector<int>& y);
+}  // namespace byte_track
+}  // namespace dyno
