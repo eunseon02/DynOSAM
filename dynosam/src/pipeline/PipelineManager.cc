@@ -215,6 +215,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
             typename MapType::Ptr map = MapType::create();
 
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
+            CHECK_NOTNULL(camera);
 
 
             if(use_offline_frontend_) {
@@ -242,6 +243,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
             }
             else {
                 FrontendModule::Ptr frontend = std::make_shared<RGBDInstanceFrontendModule>(params_.frontend_params_, camera, &display_queue_);
+                LOG(INFO) << "Made RGBDInstanceFrontendModule";
                 //need to make the derived pipeline so we can set parallel run etc
                 //the manager takes a pointer to the base MIMO so we can have different types of pipelines
                 FrontendPipeline::UniquePtr frontend_pipeline_derived = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend);

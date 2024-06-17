@@ -24,7 +24,6 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
-#include "dynosam/frontend/vision/OccupancyGrid2D.hpp"
 
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -44,13 +43,16 @@ namespace dyno {
 
 FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : params_(params),
+      img_size_(camera->getParams().imageSize()),
       camera_(camera),
-      display_queue_(display_queue) {
+      display_queue_(display_queue),
+      static_grid_(params.cell_size_static,
+        std::ceil(static_cast<double>(camera->getParams().ImageWidth())/params.cell_size_static),
+        std::ceil(static_cast<double>(camera->getParams().ImageHeight())/params.cell_size_static)) {
     feature_detector_ = std::make_unique<ORBextractor>(
       params_.n_features, static_cast<float>(params_.scale_factor), params_.n_levels,
       params_.init_threshold_fast, params_.min_threshold_fast);
 
-    img_size_ = camera_->getParams().imageSize();
     CHECK(!img_size_.empty());
 }
 
@@ -110,6 +112,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
 
     LOG(INFO) << "Tracked on frame " << frame_id << " t= " << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
     previous_frame_ = new_frame;
+
+    static_grid_.reset();
+
     return new_frame;
 
 }
@@ -146,7 +151,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
+        cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 4, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
         cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), green, 1);
       } else {  // New feature tracks are blue.
@@ -243,12 +248,6 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 
   const int& min_tracks = params_.max_tracking_points_bg;
 
-  OccupandyGrid2D grid(params_.cell_size,
-          std::ceil(static_cast<double>(img_size_.width)/params_.cell_size),
-          std::ceil(static_cast<double>(img_size_.height)/params_.cell_size));
-
-  bool use_optical_tracking = true;
-
   // appy tracking (ie get correspondences)
   if (previous_frame_)
   {
@@ -256,11 +255,13 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
     {
       const size_t tracklet_id = previous_feature->tracklet_id_;
       const size_t age = previous_feature->age_;
-      Keypoint kp = previous_feature->predicted_keypoint_;
+      const Keypoint kp = previous_feature->predicted_keypoint_;
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
+      const size_t cell_idx = static_grid_.getCellIndex(kp);
+      const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
 
-      ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
+      if(static_grid_.occupancy_.at(cell_idx)) continue;
 
       if (camera_->isKeypointContained(kp) && previous_feature->usable() && instance_label == background_label)
       {
@@ -269,8 +270,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
         if (feature)
         {
           static_features.add(feature);
-          const size_t cell_idx = grid.getCellIndex(kp);
-          grid.occupancy_[cell_idx] = true;
+          static_grid_.occupancy_[cell_idx] = true;
         }
       }
     }
@@ -290,7 +290,6 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
         break;
       }
 
-      // TODO: if not object etc etc
       const KeypointCV& kp_cv = detected_keypoints[i];
       const int& x = kp_cv.pt.x;
       const int& y = kp_cv.pt.y;
@@ -302,12 +301,8 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
       }
 
       Keypoint kp(x, y);
-      const size_t cell_idx = grid.getCellIndex(kp);
-      // if (posInGrid(kp, grid_x, grid_y))
-      // {
-        // only add of we have less than n_reserve ammount
-        // if (grid[grid_x][grid_y].size() < n_reserve)
-        if (!grid.isOccupied(cell_idx))
+      const size_t cell_idx = static_grid_.getCellIndex(kp);
+        if (!static_grid_.isOccupied(cell_idx))
         {
           const size_t age = 0;
           size_t tracklet_id = tracklet_count;
@@ -315,7 +310,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
           if (feature)
           {
             tracklet_count++;
-            grid.occupancy_[cell_idx] = true;
+            static_grid_.occupancy_[cell_idx] = true;
             static_features.add(feature);
           }
         }

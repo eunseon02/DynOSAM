@@ -4,15 +4,16 @@
 max_nr_static_points: 1200
 max_nr_object_points: 800
 # cell_size: 15 #kitti
-cell_size: 5
+cell_size_static: 10
+cell_size_dynamic: 5
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
 max_depth_static: 40.0
 max_depth_object: 30.0
 
 #orb-extraction params
-# n_features: 1200
-n_features: 2000
+n_features: 1200
+# n_features: 2000
 scale_factor: 1.2
 n_levels: 8
 init_threshold_fast: 20
@@ -40,6 +41,7 @@ tracker:
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
   ransac_threshold_pnp: 0.5
+  # ransac_threshold_pnp: 0.1
   optimize_3d2d_pose_from_inliers: 0
 
   # 3d-3d PnP (stereo)

@@ -34,7 +34,8 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
     FrontendParams params;
     yaml_parser.getYamlParam("max_nr_static_points", &params.max_tracking_points_bg, params.max_tracking_points_bg);
     yaml_parser.getYamlParam("max_nr_object_points", &params.max_tracking_points_obj, params.max_tracking_points_obj);
-    yaml_parser.getYamlParam("cell_size", &params.cell_size, params.cell_size);
+    yaml_parser.getYamlParam("cell_size_static", &params.cell_size_static, params.cell_size_static);
+    yaml_parser.getYamlParam("cell_size_dynamic", &params.cell_size_dynamic, params.cell_size_dynamic);
 
     yaml_parser.getYamlParam("scene_flow_mag_threshold", &params.scene_flow_magnitude, params.scene_flow_magnitude);
     yaml_parser.getYamlParam("scene_flow_dist_threshold", &params.scene_flow_percentage, params.scene_flow_percentage);

@@ -29,6 +29,8 @@
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+#include "dynosam/frontend/vision/OccupancyGrid2D.hpp"
+
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -69,8 +71,7 @@ struct FeatureTrackerInfo {
 
         return dynamic_track.at(object_id);
     }
-    // num features tracked per dynamic object
-    // gtsam::FastMap<ObjectId, size_t> dynamic_track;
+
     gtsam::FastMap<ObjectId, PerObjectStatus> dynamic_track;
 };
 
@@ -84,13 +85,16 @@ inline std::string to_string(const FeatureTrackerInfo& info) {
 
     for(const auto& [object_id, object_status] : info.dynamic_track) {
         ss << "\t- Object: " << object_id << ": \n";
-        ss << "\t\t - num_previous_track " << object_status.num_previous_track << "\n";
         ss << "\t\t - num_track " << object_status.num_track << "\n";
         ss << "\t\t - num_sampled " << object_status.num_sampled << "\n";
-        ss << "\t\t - num_outside_shrunken_image " << object_status.num_outside_shrunken_image << "\n";
-        ss << "\t\t - num_zero_flow " << object_status.num_zero_flow << "\n";
-        ss << "\t\t - num_tracked_with_different_label " << object_status.num_tracked_with_different_label << "\n";
-        ss << "\t\t - num_tracked_with_background_label " << object_status.num_tracked_with_background_label << "\n";
+
+        if(VLOG_IS_ON(20)) {
+            ss << "\t\t - num_previous_track " << object_status.num_previous_track << "\n";
+            ss << "\t\t - num_outside_shrunken_image " << object_status.num_outside_shrunken_image << "\n";
+            ss << "\t\t - num_zero_flow " << object_status.num_zero_flow << "\n";
+            ss << "\t\t - num_tracked_with_different_label " << object_status.num_tracked_with_different_label << "\n";
+            ss << "\t\t - num_tracked_with_background_label " << object_status.num_tracked_with_background_label << "\n";
+        }
     };
     return ss.str();
 
@@ -165,6 +169,7 @@ private:
 
 protected:
     const FrontendParams params_;
+    const cv::Size img_size_;
     Camera::Ptr camera_;
     ImageDisplayQueue* display_queue_;
 
@@ -175,10 +180,10 @@ private:
 
     FeatureTrackerInfo info_;
 
+    OccupandyGrid2D static_grid_; //! Grid used to feature bin static features
+
     size_t tracklet_count = 0;
     bool initial_computation_{ true };
-
-    cv::Size img_size_;  // set on first computation
 
 };
 

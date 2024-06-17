@@ -45,7 +45,7 @@ public:
     DYNO_POINTER_TYPEDEFS(OMDAllLoader)
 
     OMDAllLoader(const std::string& file_path)
-    :   rgbd_folder_path_(file_path + "/rgbd"),
+    :   rgbd_folder_path_(file_path + "/rgbd_undistorted"),
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         vicon_file_path_(file_path + "/vicon.csv"),
@@ -551,7 +551,7 @@ private:
         gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
 
         std::vector<double> v_cam2_cam1;
-        yaml_parser.getNestedYamlParam("cam2", "T_cn_cnm1", &v_cam2_cam1);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
         //transform from cam2 into camera 1 frame
         gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
 
@@ -578,7 +578,7 @@ private:
         //NOTE: expect the rgbd camera to always be cam2
         CameraParams::IntrinsicsCoeffs intrinsics;
         std::vector<double> intrinsics_v;
-        yaml_parser.getNestedYamlParam("cam2", "intrinsics", &intrinsics_v);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "intrinsics", &intrinsics_v);
         CHECK_EQ(intrinsics_v.size(), 4u);
         intrinsics.resize(4u);
         // Move elements from one to the other.
@@ -587,16 +587,16 @@ private:
                     intrinsics.begin());
 
         CameraParams::DistortionCoeffs distortion;
-        yaml_parser.getNestedYamlParam("cam2", "distortion_coeffs", &distortion);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "distortion_coeffs", &distortion);
 
         std::vector<int> resolution;
-        yaml_parser.getNestedYamlParam("cam2", "resolution", &resolution);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "resolution", &resolution);
         CHECK_EQ(resolution.size(), 2);
         cv::Size image_size(resolution[0], resolution[1]);
 
         std::string distortion_model, camera_model;
-        yaml_parser.getNestedYamlParam("cam2", "distortion_model", &distortion_model);
-        yaml_parser.getNestedYamlParam("cam2", "camera_model", &camera_model);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "distortion_model", &distortion_model);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "camera_model", &camera_model);
         auto model = CameraParams::stringToDistortion(distortion_model, camera_model);
 
         rgbd_camera_params_ = CameraParams(
