@@ -37,12 +37,12 @@ public:
     DYNO_POINTER_TYPEDEFS(ProjectAriaAllLoader)
 
     ProjectAriaAllLoader(const std::string& file_path)
-        :   rgb_images_folder_path_(file_path + "/rgb"),
-            depth_images_folder_path_(file_path + "/depth"),
+        :   rgb_images_folder_path_(file_path + "/rgb_undist"),
+            depth_images_folder_path_(file_path + "/depth_sync"),
             optical_flow_folder_path_(file_path + "/optical_flow"),
             instance_masks_folder_(file_path + "/instance_masks"),
-            intrinsics_file_path_(file_path + "/calibration.json"),
-            rgb_timestamps_file_path_(file_path + "/timestamps.csv")
+            intrinsics_file_path_(file_path + "/calibration_undistort.json"),
+            rgb_timestamps_file_path_(file_path + "/sync_timestamp.csv")
         {
             // Initialize folders and file paths
             throwExceptionIfPathInvalid(rgb_images_folder_path_);
@@ -145,7 +145,8 @@ private:
         CHECK_EQ(depth_image_paths_.size(), instance_masks_image_paths_.size());
 
         //dataset size is number optical flow which should be one less!!
-        CHECK_EQ(instance_masks_image_paths_.size(), dataset_size_ - 1);
+        //or equal too!!
+        // CHECK_EQ(instance_masks_image_paths_.size() -1u, dataset_size_);
     }
 
     void loadTimestamps() {
@@ -199,7 +200,7 @@ private:
         CameraParams::DistortionCoeffs distortion({0, 0, 0, 0});
 
         //distortion_model not given
-        const auto distortion_model = "equidistant";
+        const auto distortion_model = "plumb_bob";
         const auto camera_model = "pinhole";
         auto model = CameraParams::stringToDistortion(distortion_model, camera_model);
 

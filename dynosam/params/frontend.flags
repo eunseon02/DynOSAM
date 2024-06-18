@@ -1,6 +1,6 @@
 #!/bin/bash
 
---use_byte_tracker=true
+--use_byte_tracker=false
 
 --init_object_pose_from_gt=false
 --use_frontend_logger=true

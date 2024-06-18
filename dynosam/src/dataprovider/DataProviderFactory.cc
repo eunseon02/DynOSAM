@@ -28,6 +28,7 @@
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
+#include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
 
 #include "dynosam/utils/YamlParser.hpp"
 
@@ -66,6 +67,13 @@ DataProvider::Ptr DataProviderFactory::Create(const std::string& dataset_folder_
     else if (dataset_type == DatasetType::OMD) {
         LOG(INFO) << "Using Oxford Multi-motion Dataset dataset at path: " << dataset_folder_path;
         auto loader = std::make_shared<OMDDataLoader>(dataset_folder_path);
+        loader->setStartingFrame(FLAGS_starting_frame);
+        loader->setEndingFrame(FLAGS_ending_frame);
+        return loader;
+    }
+    else if (dataset_type == DatasetType::ARIA) {
+        LOG(INFO) << "Using ARIA dataset at path: " << dataset_folder_path;
+        auto loader = std::make_shared<ProjectARIADataLoader>(dataset_folder_path);
         loader->setStartingFrame(FLAGS_starting_frame);
         loader->setEndingFrame(FLAGS_ending_frame);
         return loader;

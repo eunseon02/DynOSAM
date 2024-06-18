@@ -103,6 +103,7 @@ inline std::string to_string(const OptimizerType& t) {
 }
 
 
+
 //TODO: depricate!!
 /**
  * @brief Construct an object motion symbol with the current frame id (k).

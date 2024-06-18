@@ -60,7 +60,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //TODO: how can we do 1 point but with lots of overlap (even infinity overlap?)
     dyno_testing::RGBDScenario scenario(
         camera,
-        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(8, 3)
+        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(5, 4)
     );
 
     //add one obect
@@ -109,8 +109,8 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
         LOG(INFO) << "Spun backend";
 
-        //Is this the full graph?
-        gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
+        // //Is this the full graph?
+        // gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
         // gtsam::Values values = backend.smoother_->getLinearizationPoint();
 
         //get variables in this frame
@@ -201,7 +201,12 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
     }
 
-    backend.saveGraph();
+    gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
+    full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+
+    const auto[_, delayed_graph] = backend.constructGraph(3, 6, true);
+    delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+
     //graph depends on optimzier used
     //dummy one will += new factors so should be the full graph
     // gtsam::NonlinearFactorGraph full_graph = optimizer->getFactors();

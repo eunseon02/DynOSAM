@@ -101,7 +101,6 @@ protected:
     // Camera::Ptr camera_;
     // boost::shared_ptr<Camera::CalibrationType> gtsam_calibration_; //Ugh, this version of gtsam still uses some boost
 
-
     //params for factors
     SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
     gtsam::SharedNoiseModel static_pixel_noise_; //! 2d isotropic pixel noise on static points

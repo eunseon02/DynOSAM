@@ -50,6 +50,7 @@ public:
     virtual int getId() const = 0;
     virtual std::string toString() const = 0;
 
+    //TODO: not used
     template<typename ValueType>
     std::optional<ValueType> queryMap(gtsam::Key key) const;
 
@@ -218,6 +219,30 @@ public:
     static StateQuery WasInMap(gtsam::Key key) { return StateQuery(key, WAS_IN_MAP); }
 
 };
+
+/**
+ * @brief Safe getter to a StateQuery object.
+ * If the StateQuery is successful, result is set to the value of the query and true is returned.
+ * Else, result is set to to the default value and false is returned.
+ *
+ * @tparam ValueType
+ * @param result
+ * @param query
+ * @param default_value
+ * @return true
+ * @return false
+ */
+template<typename ValueType>
+bool getSafeQuery(ValueType& result, const StateQuery<ValueType>& query, const ValueType& default_value) {
+    if(query) {
+        result = query.get();
+        return true;
+    }
+    else {
+        result = default_value;
+        return false;
+    }
+}
 
 struct InvalidLandmarkException : public DynosamException {
     InvalidLandmarkException(TrackletId tracklet_id, const std::string& reason = std::string())

@@ -40,12 +40,11 @@
 namespace dyno {
 
 
+
 //Implemented as Best from https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
 //So that constructor is only usable by this class. Instead, use create
 //Want to use std::enable_shared_from_this<Map>, so that the nodes carry a weak_ptr
 //to the Map
-
-
 template<typename MEASUREMENT = Keypoint>
 class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     struct Private{};
@@ -63,8 +62,6 @@ public:
     using ObjectNodeM = ObjectNode<Measurement>;
     using FrameNodeM = FrameNode<Measurement>;
     using LandmarkNodeM = LandmarkNode<Measurement>;
-    // using StaticLandmarkNodeM = StaticLandmarkNode<Measurement>;
-    // using DynamicLandmarkNodeM = DynamicLandmarkNode<Measurement>;
 
 
     DYNO_POINTER_TYPEDEFS(This)
@@ -84,36 +81,84 @@ public:
     }
 
     template<typename DERIVEDSTATUS>
-    void updateObservations(const MeasurementStatusVector<DERIVEDSTATUS>& measurements);
+    void updateObservations(const MeasurementStatusVector<DERIVEDSTATUS>& measurements) {
+        for(const DERIVEDSTATUS& status_measurement : measurements) {
+            const TrackedValueStatus<MEASUREMENT>& status = static_cast<const TrackedValueStatus<MEASUREMENT>&>(status_measurement);
+            const MEASUREMENT& measurement = status_measurement.value();
+            const TrackletId tracklet_id = status.trackletId();
+            const FrameId frame_id = status.frameId();
+            const ObjectId object_id = status.objectId();
+            const bool is_static = status.isStatic();
+            addOrUpdateMapStructures(measurement, tracklet_id, frame_id, object_id, is_static);
+        }
+    }
 
 
-    void updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id);
+    void updateEstimates(const gtsam::Values& values, const gtsam::NonlinearFactorGraph& graph, FrameId frame_id) {
+        values_.insert_or_assign(values);
+        graph_ = graph;
+        last_estimate_update_ = frame_id;
 
-    bool frameExists(FrameId frame_id) const;
-    bool landmarkExists(TrackletId tracklet_id) const;
-    bool objectExists(ObjectId object_id) const;
+        //loop over values and add new ones to initial
+        for(const auto& [key, new_value] : values) {
+            if(!initial_.exists(key)) {
+                initial_.insert(key, new_value);
+            }
+        }
+        CHECK_EQ(values_.size(), initial_.size());
+    }
+
+    inline bool frameExists(FrameId frame_id) const { return frames_.exists(frame_id); }
+    inline bool landmarkExists(TrackletId tracklet_id) const {return landmarks_.exists(tracklet_id); }
+    inline bool objectExists(ObjectId object_id) const {return objects_.exists(object_id); }
 
     //should these not all be const?!!! dont want to modify the values
-    typename ObjectNodeM::Ptr getObject(ObjectId object_id);
-    typename FrameNodeM::Ptr getFrame(FrameId frame_id);
-    typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id);
+    typename ObjectNodeM::Ptr getObject(ObjectId object_id) const {
+        if(objectExists(object_id)) { return objects_.at(object_id);}
+        return nullptr;
+    }
 
-    const typename ObjectNodeM::Ptr getObject(ObjectId object_id) const;
-    const typename FrameNodeM::Ptr getFrame(FrameId frame_id) const;
-    const typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const;
+    typename FrameNodeM::Ptr getFrame(FrameId frame_id) const {
+        if(frameExists(frame_id)) { return frames_.at(frame_id);}
+        return nullptr;
+    }
+    typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const {
+        if(landmarkExists(tracklet_id)) { return landmarks_.at(tracklet_id);}
+        return nullptr;
+    }
+
+    // const typename ObjectNodeM::Ptr getObject(ObjectId object_id) const;
+    // const typename FrameNodeM::Ptr getFrame(FrameId frame_id) const;
+    // const typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const;
 
     const gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr>& getLandmarks() const {
         return landmarks_;
     }
 
-    TrackletIds getStaticTrackletsByFrame(FrameId frame_id) const;
+    TrackletIds getStaticTrackletsByFrame(FrameId frame_id) const {
+        //if frame does not exist?
+        TrackletIds tracklet_ids;
+        auto frame_node = frames_.at(frame_id);
+        for(const auto& landmark_node : frame_node->static_landmarks) {
+            tracklet_ids.push_back(landmark_node->tracklet_id);
+        }
+
+        return tracklet_ids;
+    }
 
     //object related queries
-    size_t numObjectsSeen() const;
+    inline size_t numObjectsSeen() const {
+        return objects_.size();
+    }
 
-    const typename FrameNodeM::Ptr lastFrame() const;
+    //newest frame
+    const typename FrameNodeM::Ptr lastFrame() const { return frames_.crbegin()->second; }
+    const typename FrameNodeM::Ptr firstFrame() const { return frames_.cbegin()->second; }
 
-    FrameId lastEstimateUpdate() const;
+    FrameId lastFrameId() const { return this->lastFrame()->frame_id; }
+    FrameId firstFrameId() const { return this->firstFrame()->frame_id; }
+
+    inline FrameId lastEstimateUpdate() const { return last_estimate_update_; }
 
     StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) {
         auto frame_node = getFrame(frame_id);
@@ -126,16 +171,59 @@ public:
     }
 
     //TODo: test
-    bool getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const;
+    bool getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const {
+        const auto lmk = getLandmark(tracklet_id);
+        if(!lmk) { return false; }
+
+        object_id = lmk->getObjectId();
+        return true;
+    }
 
     //landmark related queries
     //TODO: test
-    StatusLandmarkEstimates getFullStaticMap() const;
-    StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const;
-    StatusLandmarkEstimates getStaticMap(FrameId frame_id) const;
+    StatusLandmarkEstimates getFullStaticMap() const {
+         //dont go over the frames as this contains references to the landmarks multiple times
+        //e.g. the ones seen in that frame
+        StatusLandmarkEstimates estimates;
+        for(const auto&[tracklet_id, landmark_node] : landmarks_) {
+            (void)tracklet_id;
+            if(landmark_node->isStatic()) {
+                landmark_node->appendStaticLandmarkEstimate(estimates);
+            }
+        }
+        return estimates;
+    }
 
+    StatusLandmarkEstimates getDynamicMap(FrameId frame_id) const {
+        return this->getFrame(frame_id)->getAllDynamicLandmarkEstimates();
+    }
 
-    MotionEstimateMap getMotionEstimates(FrameId frame_id) const;
+    StatusLandmarkEstimates getStaticMap(FrameId frame_id) const {
+        return CHECK_NOTNULL(this->getFrame(frame_id))->getAllStaticLandmarkEstimates();
+    }
+
+    MotionEstimateMap getMotionEstimates(FrameId frame_id) const {
+        MotionEstimateMap motion_estimates;
+        const auto frame_k_node = this->getFrame(frame_id);
+
+        if(!frame_k_node) {
+            return motion_estimates;
+        }
+        for(const auto& object_node : frame_k_node->objects_seen) {
+            StateQuery<gtsam::Pose3> motion_query = object_node->getMotionEstimate(frame_id);
+
+            //hardcoded motion reference frame
+            if(motion_query) {
+                motion_estimates.insert2(
+                    object_node->getId(),
+                    ReferenceFrameValue<gtsam::Pose3>(
+                        motion_query.get(),
+                        ReferenceFrame::GLOBAL
+                    ));
+            }
+        }
+        return motion_estimates;
+    }
 
 
     template<typename ValueType>
@@ -192,7 +280,63 @@ public:
 
 
 private:
-    void addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static);
+    void addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {
+        typename LandmarkNodeM::Ptr  landmark_node = nullptr;
+        typename FrameNodeM::Ptr frame_node = nullptr;
+
+        CHECK((is_static && object_id == background_label) || (!is_static && object_id != background_label));
+
+        if(!landmarkExists(tracklet_id)) {
+            landmark_node = std::make_shared<LandmarkNodeM>(getptr());
+            CHECK_NOTNULL(landmark_node);
+            landmark_node->tracklet_id = tracklet_id;
+            landmark_node->object_id = object_id;
+            landmarks_.insert2(tracklet_id, landmark_node);
+        }
+
+        if(!frameExists(frame_id)) {
+            frame_node = std::make_shared<FrameNodeM>(getptr());
+            frame_node->frame_id = frame_id;
+            frames_.insert2(frame_id, frame_node);
+        }
+
+        landmark_node = getLandmark(tracklet_id);
+        frame_node = getFrame(frame_id);
+
+        CHECK(landmark_node);
+        CHECK(frame_node);
+
+        CHECK_EQ(landmark_node->tracklet_id, tracklet_id);
+        //this might fail of a tracklet get associated with a different object
+        CHECK_EQ(landmark_node->object_id, object_id);
+        CHECK_EQ(frame_node->frame_id, frame_id);
+
+        landmark_node->add(frame_node, measurement);
+
+        //add to frame
+        if(is_static) {
+            frame_node->static_landmarks.insert(landmark_node);
+        }
+        else {
+            CHECK(object_id != background_label);
+
+            typename ObjectNodeM::Ptr object_node = nullptr;
+            if(!objectExists(object_id)) {
+                object_node = std::make_shared<ObjectNodeM>(getptr());
+                object_node->object_id = object_id;
+                objects_.insert2(object_id, object_node);
+            }
+
+            object_node = getObject(object_id);
+            CHECK(object_node);
+
+            object_node->dynamic_landmarks.insert(landmark_node);
+
+            frame_node->dynamic_landmarks.insert(landmark_node);
+            frame_node->objects_seen.insert(object_node);
+
+        }
+    }
 
 private:
     //nodes
@@ -221,6 +365,3 @@ using LandmarkNode2d = Map2d::LandmarkNodeM;
 using FrameNode2d = Map2d::FrameNodeM;
 
 } //dyno
-
-
-#include "dynosam/common/Map-inl.hpp"

@@ -34,7 +34,8 @@ enum DatasetType {
     KITTI,
     VIRTUAL_KITTI,
     CLUSTER,
-    OMD //oxford multi-motion dataset
+    OMD, //oxford multi-motion dataset,
+    ARIA
 };
 
 

@@ -62,76 +62,104 @@ public:
     void saveGraph(const std::string& file = "rgbd_graph.dot");
     void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
 
+    std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
+    constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior);
+
 //TODO: for now
 public:
     SpinReturn boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
     SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
-    // //TODO: taken from MonoBackendModule
-    //  //adds pose to the new values and a prior on this pose to the new_factors
-    // void addInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    struct UpdateParams {
+        //! If true, vision related updated will backtrack to the start of a new tracklet and all the measurements to the graph
+        //! should make false in batch case where we want to be explicit about which frames are added!
+        bool do_backtrack = true;
+        mutable DebugInfo::Optional debug_info{};
+    };
 
-    // //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
-    // void addOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    struct Updater {
 
-    // void updateStaticObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
-    // void updateDynamicObservations(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_point_factors);
-
-
-
-    // void optimize(FrameId frame_id_k, const gtsam::Values& new_values,  const gtsam::NonlinearFactorGraph& new_factors);
-
-    // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
-
-    //helper factor graph functions
-    //call should happen on every frame
-    // const gtsam::FastMap<ObjectId, gtsam::Pose3>& updateInitialObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
-
-    // const ObjectPoseMap& updateObjectPoses(FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr input);
-
-    struct UpdateImpl {
-        DYNO_POINTER_TYPEDEFS(UpdateImpl)
-
+        DYNO_POINTER_TYPEDEFS(Updater)
         RGBDBackendModule* parent_;
-        UpdateImpl(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
+        Updater(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
 
-        virtual std::string name() const = 0;
+        //  //adds pose to the new values and a prior on this pose to the new_factors
+        void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values);
+        void setInitialPosePrior(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::NonlinearFactorGraph& new_factors);
 
-        //TODO: (jesse) shouldn't these all be const?
-        virtual void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
-        virtual void updateOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+        // //T_world_camera is the estimate from the frontend and should be associated with the curr_frame_id
+        void addOdometry(FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
 
-        virtual void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
-        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+        void addOdometry(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors);
 
-        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) = 0;
+        void updateStaticObservations(FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+        void updateStaticObservations(FrameId frame_id_k,  gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+        void updateDynamicObservations(
+            FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+
+        void updateDynamicObservations(
+            FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+
+        void logBackendFromMap(FrameId frame_k, BackendLogger& logger);
+
+        //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
+        //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
+        gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
+        gtsam::FastMap<TrackletId, bool> is_static_tracklet_in_map_;
+
+        auto getMap() { return parent_->getMap(); }
 
     };
 
-    struct UpdateImplInWorld : public UpdateImpl {
-        UpdateImplInWorld(RGBDBackendModule* parent) : UpdateImpl(parent) {}
+    // struct UpdateImpl {
+    //     DYNO_POINTER_TYPEDEFS(UpdateImpl)
 
-        void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
-        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
-        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+    //     RGBDBackendModule* parent_;
+    //     UpdateImpl(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
 
-        inline std::string name() const override { return "rgbd_motion_world"; }
-    };
+    //     virtual std::string name() const = 0;
+
+    //     //TODO: (jesse) shouldn't these all be const?
+    //     virtual void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+    //     virtual void updateOdometry(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, FrameId frame_id_k_1, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+    //     virtual void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+    //     virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info) = 0;
+
+    //     virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) = 0;
+
+    // };
+
+    // // struct DynamicPointUpdateImpl {
+    // //     FrameId frame_id;
+
+    // // };
+
+    // struct UpdateImplInWorld : public UpdateImpl {
+    //     UpdateImplInWorld(RGBDBackendModule* parent) : UpdateImpl(parent) {}
+
+    //     void updateStaticObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+    //     virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+    //     virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+
+    //     inline std::string name() const override { return "rgbd_motion_world"; }
+    // };
 
 
-    struct UpdateImplInWorldPrimitives : public UpdateImplInWorld {
-        UpdateImplInWorldPrimitives(RGBDBackendModule* parent) : UpdateImplInWorld(parent) {}
-
-        virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
-        virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
-
-        inline std::string name() const override { return "rgbd_motion_world_primitive"; }
-    };
-
-    // struct UpdateImplInWorldObjectPoses : public UpdateImplInWorldPrimitives {
-    //     UpdateImplInWorldObjectPoses(RGBDBackendModule* parent) : UpdateImplInWorldPrimitives(parent) {}
+    // struct UpdateImplInWorldPrimitives : public UpdateImplInWorld {
+    //     UpdateImplInWorldPrimitives(RGBDBackendModule* parent) : UpdateImplInWorld(parent) {}
 
     //     virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+    //     virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
+
+    //     inline std::string name() const override { return "rgbd_motion_world_primitive"; }
+    // };
+
+    // struct UpdateImplInWorldObjectPoses : public UpdateImplInWorld {
+    //     UpdateImplInWorldObjectPoses(RGBDBackendModule* parent) : UpdateImplInWorld(parent) {}
+
+    //     virtual void updateDynamicObservations(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, DebugInfo::Optional debug_info = {}) override;
+    //     virtual void logBackendFromMap(FrameId frame_k, RGBDMap::Ptr map, BackendLogger& logger) override;
 
     //     inline std::string name() const override { return "rgbd_motion_world_object_poses"; }
     // };
@@ -140,7 +168,8 @@ public:
     // std::unique_ptr<DynoISAM2> smoother_;
     // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
-    UpdateImpl::UniquePtr updater_;
+    // UpdateImpl::UniquePtr updater_;
+    Updater::UniquePtr new_updater_;
 
     //logger here!!
     BackendLogger::UniquePtr logger_{nullptr};
@@ -151,6 +180,7 @@ public:
     KeyTimestampMap timestamp_map_;
     // gtsam::Values new_values_;
     // gtsam::NonlinearFactorGraph new_factors_;
+    gtsam::FastMap<FrameId, gtsam::Pose3> initial_camera_poses_; //! Camera poses as estimated from the frontend per frame
 
     gtsam::FastMap<ObjectId, gtsam::Pose3> initial_object_poses_; //constructed from the input
 

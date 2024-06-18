@@ -270,6 +270,7 @@ public:
                 points_in_window.push_back(points_world_0_.at(i));
             }
 
+            CHECK_EQ(points_in_window.size(), num_points_per_frame_);
             return points_in_window;
         }
 
