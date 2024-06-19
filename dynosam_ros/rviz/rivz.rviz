@@ -12,16 +12,12 @@ Panels:
         - /Odometry1/Shape1
         - /Static Point Cloud1/Status1
         - /Static Point Cloud1/Topic1
-        - /Odometry (GT)1
         - /Odometry (GT)1/Shape1
         - /Composed object poses (opt)1/Topic1
         - /Object Poses (GT)1/Topic1
         - /Object Paths (GT)1
         - /Odometry (OPT)1/Shape1
         - /Dynamic Points Init1/Status1
-        - /Newly Scaled Dynamic Points1
-        - /Composed object paths (opt)1
-        - /TF1
         - /TF1/Frames1
       Splitter Ratio: 0.6119691133499146
     Tree Height: 635
@@ -42,7 +38,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Static Point Cloud
+    SyncSource: ""
 Visualization Manager:
   Class: ""
   Displays:
@@ -316,7 +312,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -337,7 +333,7 @@ Visualization Manager:
         Value: /dynosam/backend/static
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Alpha: 1
       Autocompute Intensity Bounds: true
       Autocompute Value Bounds:
@@ -350,7 +346,7 @@ Visualization Manager:
       Color: 255; 255; 255
       Color Transformer: RGB8
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 4096
@@ -371,7 +367,7 @@ Visualization Manager:
         Value: /dynosam/backend/dynamic
       Use Fixed Frame: true
       Use rainbow: true
-      Value: false
+      Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: false
       Name: Composed object poses (opt)
@@ -388,8 +384,7 @@ Visualization Manager:
       Enabled: true
       Name: Object Poses (GT)
       Namespaces:
-        ground_truth_object_labels: true
-        ground_truth_object_poses: true
+        {}
       Topic:
         Depth: 5
         Durability Policy: Volatile

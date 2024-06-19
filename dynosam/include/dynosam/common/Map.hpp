@@ -271,11 +271,18 @@ public:
 
     ObjectIds getObjectIds() const {
         ObjectIds object_ids;
-        for(const auto& [object_id, object_node] : objects_) {
-            (void)object_node;
+        for(const auto& [object_id, _] : objects_) {
             object_ids.push_back(object_id);
         }
         return object_ids;
+    }
+
+    FrameIds getFrameIds() const {
+        FrameIds frame_ids;
+        for(const auto& [frame_id, _] : frames_) {
+            frame_ids.push_back(frame_id);
+        }
+        return frame_ids;
     }
 
 

@@ -44,7 +44,7 @@ DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
     FrameId frame_id_;
     Timestamp timestamp_;
     ObjectPoseMap composed_object_poses;
-    // gtsam::Pose3Vector optimized_poses_;
+    gtsam::Pose3Vector optimized_poses_;
 
     // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
 

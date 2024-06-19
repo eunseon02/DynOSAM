@@ -70,11 +70,29 @@ public:
     SpinReturn boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
     SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
-    struct UpdateParams {
+    struct UpdateObservationParams {
         //! If true, vision related updated will backtrack to the start of a new tracklet and all the measurements to the graph
         //! should make false in batch case where we want to be explicit about which frames are added!
-        bool do_backtrack = true;
-        mutable DebugInfo::Optional debug_info{};
+        bool do_backtrack = false;
+        mutable DebugInfo::Optional debug_info{}; //TODO debug info should go into a map per frame? in UpdateObservationResult
+
+    };
+
+    struct ConstructGraphOptions : public UpdateObservationParams {
+        FrameId from_frame{0u};
+        FrameId to_frame{0u};
+        bool set_initial_camera_pose_prior = true;
+    };
+
+    struct UpdateObservationResult {
+        std::set<FrameId> frames_updated;
+        std::set<ObjectId> objects_affected;
+
+        inline UpdateObservationResult& operator+=(const UpdateObservationResult& oth) {
+            frames_updated.insert(oth.frames_updated.begin(), oth.frames_updated.end());
+            objects_affected.insert(oth.objects_affected.begin(), oth.objects_affected.end());
+            return *this;
+        }
     };
 
     struct Updater {
@@ -82,6 +100,8 @@ public:
         DYNO_POINTER_TYPEDEFS(Updater)
         RGBDBackendModule* parent_;
         Updater(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
+
+        // std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph> constructGraph(const ConstructGraphOptions& options);
 
         //  //adds pose to the new values and a prior on this pose to the new_factors
         void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values);
@@ -92,20 +112,40 @@ public:
 
         void addOdometry(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors);
 
-        void updateStaticObservations(FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
-        void updateStaticObservations(FrameId frame_id_k,  gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
-        void updateDynamicObservations(
-            FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+        UpdateObservationResult updateStaticObservations(
+            FrameId from_frame,
+            FrameId to_frame,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors,
+            const UpdateObservationParams& update_params);
 
-        void updateDynamicObservations(
-            FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors, const UpdateParams& update_params);
+        UpdateObservationResult updateDynamicObservations(
+            FrameId from_frame,
+            FrameId to_frame,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors,
+            const UpdateObservationParams& update_params);
+
+
+        UpdateObservationResult updateStaticObservations(
+            FrameId frame_id_k,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors,
+            const UpdateObservationParams& update_params);
+
+        UpdateObservationResult updateDynamicObservations(
+            FrameId frame_id_k,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors,
+            const UpdateObservationParams& update_params);
 
         void logBackendFromMap(FrameId frame_k, BackendLogger& logger);
 
-        //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
-        //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
-        gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
-        gtsam::FastMap<TrackletId, bool> is_static_tracklet_in_map_;
+        // //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
+        // //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
+        // gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
+        // gtsam::FastMap<TrackletId, bool> is_static_tracklet_in_map_;
+        gtsam::FastMap<std::uint64_t, bool> managed_values_; //! the set of values managed by this updater. Allows checking if values have already been added over successifve function calls
 
         auto getMap() { return parent_->getMap(); }
 

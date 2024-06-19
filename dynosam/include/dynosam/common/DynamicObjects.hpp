@@ -26,6 +26,9 @@
 #include "dynosam/common/Types.hpp"
 #include <opencv4/opencv2/core.hpp>
 
+#include "dynosam/common/GroundTruthPacket.hpp"
+
+
 
 namespace dyno {
 
@@ -49,6 +52,15 @@ struct DynamicObjectObservation {
 
 using DynamicObjectObservations = std::vector<DynamicObjectObservation>;
 
+
+void propogateObjectPoses(
+    ObjectPoseMap& object_poses,
+    const MotionEstimateMap& object_motions_k,
+    const gtsam::Point3Vector& object_centroids_k_1,
+    const gtsam::Point3Vector& object_centroids_k,
+    FrameId frame_id_k,
+    std::optional<GroundTruthPacketMap> gt_packet_map = {}
+);
 
 
 

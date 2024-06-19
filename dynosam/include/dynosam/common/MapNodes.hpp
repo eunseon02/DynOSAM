@@ -377,7 +377,7 @@ public:
 
     //this recomputed everything everytime
     //eventually should cache things but for now its okay
-    gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap& gt_packet_map, bool init_translation_from_gt = true) const;
+    gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map = {}) const;
 
     /// @brief Looks for values with L key - does not guarantee that poses are consequative, but will be in order
     /// @return

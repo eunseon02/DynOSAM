@@ -216,23 +216,23 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
         odometry_pub_->publish(odom_msg);
     }
 
-    // {
-    //     nav_msgs::msg::Path odom_path_msg;
+    {
+        nav_msgs::msg::Path odom_path_msg;
 
-    //     for(const gtsam::Pose3& T_world_camera : backend_output->optimized_poses_) {
-    //         //optimized camera traj
-    //         geometry_msgs::msg::PoseStamped pose_stamped;
-    //         utils::convertWithHeader(T_world_camera, pose_stamped, backend_output->timestamp_, "world");
+        for(const gtsam::Pose3& T_world_camera : backend_output->optimized_poses_) {
+            //optimized camera traj
+            geometry_msgs::msg::PoseStamped pose_stamped;
+            utils::convertWithHeader(T_world_camera, pose_stamped, backend_output->timestamp_, "world");
 
-    //         static std_msgs::msg::Header header;
-    //         header.stamp = utils::toRosTime(backend_output->timestamp_);
-    //         header.frame_id = "world";
-    //         odom_path_msg.header = header;
-    //         odom_path_msg.poses.push_back(pose_stamped);
-    //     }
+            static std_msgs::msg::Header header;
+            header.stamp = utils::toRosTime(backend_output->timestamp_);
+            header.frame_id = "world";
+            odom_path_msg.header = header;
+            odom_path_msg.poses.push_back(pose_stamped);
+        }
 
-    //     odometry_path_pub_->publish(odom_path_msg);
-    // }
+        odometry_path_pub_->publish(odom_path_msg);
+    }
 }
 
 } //dyno

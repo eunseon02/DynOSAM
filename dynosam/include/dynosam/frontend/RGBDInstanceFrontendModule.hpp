@@ -99,7 +99,7 @@ private:
     //object motion to propofate the object pose
     void propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id);
     //updates object poses
-    void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id);
+    // void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id);
 
 
     //used when we want to seralize the output to json via the FLAGS_save_frontend_json flag

@@ -35,6 +35,7 @@
 
 
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 
@@ -97,7 +98,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         dyno::RGBDBackendModule::UpdaterType::MotionInWorld
         );
 
-    for(size_t i = 0; i < 7; i++) {
+    for(size_t i = 0; i < 20; i++) {
         auto output = scenario.getOutput(i);
 
         std::stringstream ss;
@@ -204,8 +205,19 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
     full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
 
-    const auto[_, delayed_graph] = backend.constructGraph(3, 6, true);
+    const auto[delayed_values, delayed_graph] = backend.constructGraph(5, 15, true);
     delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+
+    gtsam::LevenbergMarquardtParams opt_params;
+    opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+    // opt_params.
+    try {
+        gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(delayed_graph, delayed_values, opt_params).optimize();
+    }
+    catch(const gtsam::ValuesKeyDoesNotExist& e) {
+        LOG(INFO) << "Key does not exist in the values " <<  dyno::DynoLikeKeyFormatter(e.key());
+    }
+
 
     //graph depends on optimzier used
     //dummy one will += new factors so should be the full graph
