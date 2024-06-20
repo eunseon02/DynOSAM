@@ -168,38 +168,6 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
 
-// int main(int argc, char* argv[]) {
-
-//     using namespace dyno;
-//     google::ParseCommandLineFlags(&argc, &argv, true);
-//     google::InitGoogleLogging(argv[0]);
-//     FLAGS_logtostderr = 1;
-//     FLAGS_colorlogtostderr = 1;
-//     FLAGS_log_prefix = 1;
-
-//     // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
-//     OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
-
-//     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
-
-//         LOG(INFO) << frame_id << " " << timestamp;
-
-//         cv::imshow("RGB", rgb);
-//         cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
-//         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
-//         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
-
-//         cv::waitKey(1);
-//         return true;
-//     });
-
-//     while(loader.spin()) {}
-
-
-// }
-
-#include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
-
 int main(int argc, char* argv[]) {
 
     using namespace dyno;
@@ -209,10 +177,10 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
-    ProjectARIADataLoader loader("/root/data/aria/Training_ARIA_Tr01_2024-03-08_19-14-54/");
+    ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+    // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
 
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
 
         LOG(INFO) << frame_id << " " << timestamp;
 
@@ -229,3 +197,35 @@ int main(int argc, char* argv[]) {
 
 
 }
+
+// #include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
+
+// int main(int argc, char* argv[]) {
+
+//     using namespace dyno;
+//     google::ParseCommandLineFlags(&argc, &argv, true);
+//     google::InitGoogleLogging(argv[0]);
+//     FLAGS_logtostderr = 1;
+//     FLAGS_colorlogtostderr = 1;
+//     FLAGS_log_prefix = 1;
+
+//     // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+//     ProjectARIADataLoader loader("/root/data/aria/Training_ARIA_Tr01_2024-03-08_19-14-54/");
+
+//     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+
+//         LOG(INFO) << frame_id << " " << timestamp;
+
+//         cv::imshow("RGB", rgb);
+//         cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
+//         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+//         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
+
+//         cv::waitKey(1);
+//         return true;
+//     });
+
+//     while(loader.spin()) {}
+
+
+// }

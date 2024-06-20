@@ -43,7 +43,8 @@
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-
+DEFINE_int32(opt_window_size,  10, "Sliding window size for optimisation");
+DEFINE_int32(opt_window_overlap,  4, "Overlap for window size optimisation");
 
 namespace dyno {
 
@@ -167,8 +168,8 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     full_graph += new_factors;
 
     //testing sliding window op!!
-    const auto overlap_size = 5;
-    const auto window_size = 10;
+    const auto overlap_size = FLAGS_opt_window_overlap;
+    const auto window_size = FLAGS_opt_window_size;
 
     gtsam::Values new_or_optimised_values = new_values;
 

@@ -162,8 +162,9 @@ void UndistorterRectifier::undistortRectifyImage(const cv::Mat& img,
 
   const auto original_image_type = img.type();
   //convert the input image into a CV type compatible with the rectify maps
-  cv::Mat converted_img = img;
-  img.copyTo(converted_img, kRectifyImageType);
+  cv::Mat converted_img;
+  img.copyTo(converted_img);
+  converted_img.convertTo(converted_img, kRectifyImageType);
 
   cv::remap(converted_img,
             undistorted_img,

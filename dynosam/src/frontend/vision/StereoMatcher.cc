@@ -56,8 +56,12 @@ void StereoMatcher::denseStereoReconstruction(
     CHECK_EQ(right_img.rows, left_img.rows);
     CHECK_EQ(right_img.type(), left_img.type());
 
+    LOG(INFO) << "undistort";
+
     cv::Mat left_rectified, right_rectified;
     stereo_camera_->undistortRectifyImages(left_rectified, right_rectified, left_img, right_img);
+
+    LOG(INFO) << "disparityRectifiedReconstruction";
 
     cv::Mat disparity_img;
     disparityRectifiedReconstruction(left_rectified, right_rectified, disparity_img);
@@ -75,6 +79,8 @@ void StereoMatcher::denseStereoReconstruction(
 
     const auto baseline = stereo_camera_->getBaseline();
     const auto fx = stereo_camera_->getStereoCameraCalibration().fx();
+
+    LOG(INFO) << "conversion";
 
     // Get depth from disparity
     for (int i = 0u; i < disparity_img.rows; i++) {

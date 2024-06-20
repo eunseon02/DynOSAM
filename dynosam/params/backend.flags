@@ -2,3 +2,7 @@
 
 # --constant_object_motion_rotation_sigma=0.1
 # --constant_object_motion_translation_sigma=0.4
+
+--opt_window_size=10
+--opt_window_overlap=4
+--motion_ternary_factor_noise_sigma=0.01

@@ -33,6 +33,9 @@ DECLARE_double(dynamic_point_sigma);
 DECLARE_double(constant_object_motion_rotation_sigma);
 DECLARE_double(constant_object_motion_translation_sigma);
 
+DECLARE_double(constant_object_motion_rotation_sigma);
+DECLARE_double(motion_ternary_factor_noise_sigma);
+
 namespace dyno {
 
 
@@ -54,7 +57,7 @@ struct BackendParams {
     double constant_object_motion_rotation_sigma_ = FLAGS_constant_object_motion_rotation_sigma;
     double constant_object_motion_translation_sigma_ = FLAGS_constant_object_motion_translation_sigma;
 
-    double motion_ternary_factor_noise_sigma_ = 0.01;
+    double motion_ternary_factor_noise_sigma_ = FLAGS_motion_ternary_factor_noise_sigma;
 
     bool use_logger_ = true; //TODO: make param!?
 

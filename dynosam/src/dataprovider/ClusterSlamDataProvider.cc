@@ -125,6 +125,7 @@ public:
     cv::Mat getRGB(size_t idx) const {
         CHECK_LT(idx, left_rgb_image_paths_.size());
 
+
         cv::Mat rgb;
         loadRGB(left_rgb_image_paths_.at(idx), rgb);
         CHECK(!rgb.empty());
@@ -311,7 +312,6 @@ private:
 
          //this set of images are loaded as 8UC4
         CHECK_EQ(rgb_right.type(), CV_8UC4) << "Somehow the image type has changed...";
-
         cv::Mat depth_image;
         CHECK_NOTNULL(stereo_matcher_)->denseStereoReconstruction(rgb_left, rgb_right, depth_image);
 
@@ -762,7 +762,7 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path) : Clu
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+                ImageWrapper<ImageType::MotionMask>(instance_mask));
         CHECK(image_container);
         CHECK(image_container_callback_);
         if(image_container_callback_) image_container_callback_(image_container);

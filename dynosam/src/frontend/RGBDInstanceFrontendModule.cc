@@ -60,6 +60,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& fro
     if(FLAGS_use_frontend_logger) {
         logger_ = std::make_unique<RGBDFrontendLogger>();
     }
+    LOG(INFO) << "Made RGBD frontend";
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -78,7 +79,7 @@ RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& im
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
-
+    LOG(INFO) << "Frontend boostrap";
     ImageContainer::Ptr image_container = input->image_container_;
     // ImageContainer::Ptr image_container = ImageContainer::RectifyImages(distorted_image_container, *undistorter_);
     // ImageContainer::Ptr image_container = std::make_shared<ImageContainer>();
