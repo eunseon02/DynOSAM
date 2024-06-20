@@ -25,6 +25,10 @@
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/common/PointCloudProcess.hpp"
+#include "dynosam/common/GroundTruthPacket.hpp"
+
+#include <pcl/common/centroid.h> //for compute centroid
 
 #include <gtsam/base/FastSet.h>
 #include <type_traits>
@@ -317,6 +321,69 @@ public:
     StatusLandmarkEstimates getAllDynamicLandmarkEstimates() const;
     StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const;
 
+    MotionEstimateMap getMotionEstimates() const {
+        MotionEstimateMap motion_estimates;
+        for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
+            StateQuery<gtsam::Pose3> motion = this->getObjectMotionEstimate(object_id);
+
+            if(motion) {
+                //TODO: hardcoded estimate!
+                motion_estimates.insert2(object_id,
+                    ReferenceFrameValue<Motion3>(motion.get(), ReferenceFrame::GLOBAL));
+            }
+        }
+        return motion_estimates;
+    }
+
+    /**
+     * @brief Computes a the centroid of each object at this frame using the estimated dynamic points.
+     *
+     * Internally, uses the overloaded std::tuple<gtsam::Point3, bool> computeObjectCentroid function
+     * and only includes centroids which are valid (ie returned with computeObjectCentroid()->second == true)
+     *
+     * @return gtsam::FastMap<ObjectId, gtsam::Point3>
+     */
+    gtsam::FastMap<ObjectId, gtsam::Point3> computeObjectCentroids() const {
+        gtsam::FastMap<ObjectId, gtsam::Point3> centroids;
+        for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
+            const auto[centroid, result] = computeObjectCentroid(object_id);
+
+            if(result) {
+                centroids.insert2(object_id, centroid);
+            }
+        }
+        return centroids;
+    }
+
+    /**
+     * @brief Computes the centroid of the requested object using the estimated dynamic points.
+     *
+     * Throws exception if object not found.
+     *
+     * @param object_id
+     * @return std::tuple<gtsam::Point3, bool>
+     */
+    std::tuple<gtsam::Point3, bool> computeObjectCentroid(ObjectId object_id) const {
+        const StatusLandmarkEstimates& dynamic_lmks = getDynamicLandmarkEstimates(object_id);
+
+        //convert to point cloud - should be a map with only one map in it
+        CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getPoseEstimate().get());
+        if(object_clouds.size() == 0) {
+            LOG(WARNING) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
+                << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size();
+            return {gtsam::Point3{}, false};
+        }
+        CHECK_EQ(object_clouds.size(), 1);
+        CHECK(object_clouds.exists(object_id));
+
+        const auto dynamic_point_cloud = object_clouds.at(object_id);
+        pcl::PointXYZ centroid;
+        pcl::computeCentroid(dynamic_point_cloud, centroid);
+        //TODO: outlier reject?
+        gtsam::Point3 translation = pclPointToGtsam(centroid);
+        return {translation, true};
+    }
+
     //O(logN)
     StateQuery<Landmark> getStaticLandmarkEstimate(TrackletId tracklet_id) const;
     StatusLandmarkEstimates getAllStaticLandmarkEstimates() const;
@@ -375,13 +442,13 @@ public:
     inline FrameId getFirstSeenFrame() const { return getSeenFrames().template getFirstIndex<FrameId>(); }
     inline FrameId getLastSeenFrame() const { return getSeenFrames().template getLastIndex<FrameId>(); }
 
-    //this recomputed everything everytime
-    //eventually should cache things but for now its okay
-    gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map = {}) const;
+    // //this recomputed everything everytime
+    // //eventually should cache things but for now its okay
+    // gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map = {}) const;
 
-    /// @brief Looks for values with L key - does not guarantee that poses are consequative, but will be in order
-    /// @return
-    gtsam::FastMap<FrameId, gtsam::Pose3> computeEstimatedPoseMap() const;
+    // /// @brief Looks for values with L key - does not guarantee that poses are consequative, but will be in order
+    // /// @return
+    // gtsam::FastMap<FrameId, gtsam::Pose3> computeEstimatedPoseMap() const;
 
 
     //this could take a while?

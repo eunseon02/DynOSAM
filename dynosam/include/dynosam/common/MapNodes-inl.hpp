@@ -26,8 +26,6 @@
 #include "dynosam/common/Map.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 
-#include "dynosam/common/PointCloudProcess.hpp"
-#include <pcl/common/centroid.h> //for compute centroid
 
 
 namespace dyno {
@@ -414,53 +412,45 @@ FrameNodePtrSet<MEASUREMENT> ObjectNode<MEASUREMENT>::getSeenFrames() const {
     return seen_frames;
 }
 
-template<typename MEASUREMENT>
-gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map) const {
-    //similar logic to how we compute the poses from the gt in the frontend
-    //if init_translation_from_gt -> take the translation part from gt else compute the centroid of the point cloud at the first seen frame
-    //always take rotation from gt currently
+// template<typename MEASUREMENT>
+// gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map) const {
+//     //similar logic to how we compute the poses from the gt in the frontend
+//     //if init_translation_from_gt -> take the translation part from gt else compute the centroid of the point cloud at the first seen frame
+//     //always take rotation from gt currently
 
-    //first seen frame (ie t = 0, for this object)
-    const FrameId frame_k_0 = this->getFirstSeenFrame();
-    const ObjectId obejct_id = this->getId();
+//     //first seen frame (ie t = 0, for this object)
+//     const FrameId frame_k_0 = this->getFirstSeenFrame();
+//     const ObjectId obejct_id = this->getId();
 
-    const auto& seen_frames = this->getSeenFrames();
+//     const auto& seen_frames = this->getSeenFrames();
 
-    auto frame_itr = seen_frames.begin();
-    //advance itr one so we're now at the second frame
-    std::advance(frame_itr, 1);
+//     auto frame_itr = seen_frames.begin();
+//     //advance itr one so we're now at the second frame
+//     std::advance(frame_itr, 1);
 
-    for(auto itr = frame_itr; itr != seen_frames.end(); itr++) {
-        auto frame_node_ptr_k = *itr;
-        const FrameId frame_id_k = frame_node_ptr->getId();
+//     for(auto itr = frame_itr; itr != seen_frames.end(); itr++) {
+//         auto frame_node_ptr_k = *itr;
+//         const FrameId frame_id_k = frame_node_ptr_k->getId();
 
-        auto prev_itr = itr;
-        std::advance(prev_itr, -1);
-        CHECK(prev_itr != seen_frames.end());
+//         auto prev_itr = itr;
+//         std::advance(prev_itr, -1);
+//         CHECK(prev_itr != seen_frames.end());
 
-        auto frame_node_ptr_k_1 = *prev_itr;
-        const FrameId frame_id_k_1 = frame_node_ptr_k_1->getID();
-        CHECK_EQ(frame_id_k_1 + 1, frame_id_k);
-
-
-        const StatusLandmarkEstimates& dynamic_lmks_k = frame_node_ptr_k->getDynamicLandmarkEstimates(obejct_id);
-        const StatusLandmarkEstimates& dynamic_lmks_k_1 = frame_node_ptr_k_1->getDynamicLandmarkEstimates(obejct_id);
-
-        //convert to point cloud -> should be a map with only one map in it
-        CloudPerObject object_clouds_k = groupObjectCloud(dynamic_lmks_k, frame_node_ptr_k->getPoseEstimate().get());
-        CloudPerObject object_clouds_k = groupObjectCloud(dynamic_lmks_k_1, frame_node_ptr_k_1->getPoseEstimate().get());
-        if(object_clouds.size() == 0) {
-            LOG(WARNING) << "Cannot object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
-                << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size();
-            return false;
-        }
-        CHECK_EQ(object_clouds.size(), 1);
-        CHECK(object_clouds.exists(obejct_id));
-
-    }
+//         auto frame_node_ptr_k_1 = *prev_itr;
+//         const FrameId frame_id_k_1 = frame_node_ptr_k_1->getID();
+//         CHECK_EQ(frame_id_k_1 + 1, frame_id_k);
 
 
-}
+//         const auto [centroid_k, result_k] = frame_node_ptr_k->computeObjectCentroid(object_id);
+//         const auto [centroid_k_1, result_k_1] = frame_node_ptr_k_1->computeObjectCentroid(object_id);
+
+//         CHECK(result_k);
+//         CHECK(result_k_1);
+
+//     }
+
+
+// }
 
 
 // template<typename MEASUREMENT>
@@ -570,24 +560,24 @@ gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeComposedPo
 //     return pose_map;
 // }
 
-template<typename MEASUREMENT>
-gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeEstimatedPoseMap() const {
-    gtsam::FastMap<FrameId, gtsam::Pose3> pose_map;
+// template<typename MEASUREMENT>
+// gtsam::FastMap<FrameId, gtsam::Pose3> ObjectNode<MEASUREMENT>::computeEstimatedPoseMap() const {
+//     gtsam::FastMap<FrameId, gtsam::Pose3> pose_map;
 
-    const auto& seen_frames = this->getSeenFrames();
-    for(auto itr = seen_frames.begin(); itr != seen_frames.end(); itr++) {
-        auto frame_node_ptr = *itr;
-        const FrameId frame_id_k = frame_node_ptr->getId();
+//     const auto& seen_frames = this->getSeenFrames();
+//     for(auto itr = seen_frames.begin(); itr != seen_frames.end(); itr++) {
+//         auto frame_node_ptr = *itr;
+//         const FrameId frame_id_k = frame_node_ptr->getId();
 
-        gtsam::Pose3 pose_estimate;
-        if(this->hasPoseEstimate(frame_id_k, pose_estimate)) {
-            pose_map.insert2(frame_id_k, pose_estimate);
-        }
-    }
+//         gtsam::Pose3 pose_estimate;
+//         if(this->hasPoseEstimate(frame_id_k, pose_estimate)) {
+//             pose_map.insert2(frame_id_k, pose_estimate);
+//         }
+//     }
 
-    return pose_map;
+//     return pose_map;
 
-}
+// }
 
 
 template<typename MEASUREMENT>

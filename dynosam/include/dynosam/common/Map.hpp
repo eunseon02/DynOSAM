@@ -26,6 +26,7 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/MapNodes.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp" //for all the chr's used in the keys
+#include "dynosam/common/DynamicObjects.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 
@@ -223,6 +224,65 @@ public:
             }
         }
         return motion_estimates;
+    }
+
+    //recomputes every time
+    ObjectPoseMap computeComposedObjectPoseMap(std::optional<GroundTruthPacketMap> gt_packet_map = {}) const {
+        ObjectPoseMap object_poses;
+        auto frame_itr = frames_.begin();
+        //advance itr one so we're now at the second frame
+        std::advance(frame_itr, 1);
+        for(auto itr = frame_itr; itr != frames_.end(); itr++) {
+            auto prev_itr = itr;
+            std::advance(prev_itr, -1);
+            CHECK(prev_itr != frames_.end());
+
+            const auto[frame_id_k, frame_k_ptr] = *itr;
+            const auto[frame_id_k_1, frame_k_1_ptr] = *prev_itr;
+            CHECK_EQ(frame_id_k_1 + 1, frame_id_k);
+
+            //collect all object centoids from the latest estimate
+            gtsam::FastMap<ObjectId, gtsam::Point3> centroids_k = frame_k_ptr->computeObjectCentroids();
+            gtsam::FastMap<ObjectId, gtsam::Point3> centroids_k_1 = frame_k_1_ptr->computeObjectCentroids();
+            //collect motions
+            MotionEstimateMap motion_estimates = frame_k_ptr->getMotionEstimates();
+
+            //construct centroid vectors in object id order
+            gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+            //we may not have a pose for every motion, e.g. if there is a new object at frame k,
+            //it wont have a motion yet!
+            //if we have a motion we MUST have a pose at the previous frame!
+            for(const auto& [object_id, _] : motion_estimates) {
+                CHECK(centroids_k.exists(object_id));
+                CHECK(centroids_k_1.exists(object_id));
+
+               object_centroids_k.push_back(centroids_k.at(object_id));
+               object_centroids_k_1.push_back(centroids_k_1.at(object_id));
+            }
+
+            if(FLAGS_init_object_pose_from_gt) {
+                if(!gt_packet_map) LOG(WARNING) << "FLAGS_init_object_pose_from_gt is true but gt_packet map not provided!";
+                dyno::propogateObjectPoses(
+                    object_poses,
+                    motion_estimates,
+                    object_centroids_k_1,
+                    object_centroids_k,
+                    frame_id_k,
+                    gt_packet_map);
+            }
+            else {
+                dyno::propogateObjectPoses(
+                    object_poses,
+                    motion_estimates,
+                    object_centroids_k_1,
+                    object_centroids_k,
+                    frame_id_k);
+            }
+
+        }
+
+        return object_poses;
+
     }
 
 

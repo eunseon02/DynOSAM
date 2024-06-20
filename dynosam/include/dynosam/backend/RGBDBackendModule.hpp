@@ -139,13 +139,15 @@ public:
             gtsam::NonlinearFactorGraph& new_factors,
             const UpdateObservationParams& update_params);
 
-        void logBackendFromMap(FrameId frame_k, BackendLogger& logger);
+        //log everything all frames!!
+        void logBackendFromMap(BackendLogger& logger);
 
         // //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
         // //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
         // gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_;
         // gtsam::FastMap<TrackletId, bool> is_static_tracklet_in_map_;
-        gtsam::FastMap<std::uint64_t, bool> managed_values_; //! the set of values managed by this updater. Allows checking if values have already been added over successifve function calls
+        gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map; //! the set of (static related) values managed by this updater. Allows checking if values have already been added over successifve function calls
+        gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_; //! thr set of dynamic points that have been added by this updater. We use a separate map containing the tracklets as the keys are non-unique
 
         auto getMap() { return parent_->getMap(); }
 

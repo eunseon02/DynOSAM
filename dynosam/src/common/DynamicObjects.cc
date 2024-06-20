@@ -39,7 +39,7 @@ void propogateObjectPoses(
     CHECK_EQ(object_centroids_k.size(), object_centroids_k_1.size());
     const FrameId frame_id_k_1 = frame_id_k - 1;
 
-    size_t i = 0;
+    size_t i = 0; //used to index the object centroid vectors
     for(const auto&[object_id, motion] : object_motions_k) {
         const auto centroid_k = object_centroids_k.at(i);
         const auto centroid_k_1 = object_centroids_k_1.at(i);
@@ -95,30 +95,29 @@ void propogateObjectPoses(
                 object_centroids_k.at(i)
             );
 
-            CHECK_LT(last_frame, frame_id_k_1);
-            if(frame_id_k - last_frame < min_diff_frames) {
-                //apply interpolation
-                //need to map [last_frame:frame_id_k] -> [0,1] for the interpolation function
-                //with N values such that frame_id_k - last_frame + 1= N (to be inclusive)
-                const size_t N = frame_id_k - last_frame + 1;
-                const double divisor = (double)(frame_id_k - last_frame);
-                for(size_t j = 0; j < N; j++) {
-                    double t = (double)j/divisor;
-                    gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
+            // CHECK_LT(last_frame, frame_id_k_1);
+            // if(frame_id_k - last_frame < min_diff_frames) {
+            //     //apply interpolation
+            //     //need to map [last_frame:frame_id_k] -> [0,1] for the interpolation function
+            //     //with N values such that frame_id_k - last_frame + 1= N (to be inclusive)
+            //     const size_t N = frame_id_k - last_frame + 1;
+            //     const double divisor = (double)(frame_id_k - last_frame);
+            //     for(size_t j = 0; j < N; j++) {
+            //         double t = (double)j/divisor;
+            //         gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
 
-                    FrameId frame = last_frame + j;
-                    per_frame_poses.insert2(frame, interpolated_pose);
-                }
+            //         FrameId frame = last_frame + j;
+            //         per_frame_poses.insert2(frame, interpolated_pose);
+            //     }
 
-            }
-            else {
-                //last frame too far away - reinitalise with centroid!
-                LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame;
-            }
+            // }
+            // else {
+            //     //last frame too far away - reinitalise with centroid!
+            //     LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame;
+            // }
 
 
         }
-
         i++;
     }
 
