@@ -112,6 +112,7 @@ RGBDBackendModule::SpinReturn
 RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     const FrameId frame_k = input->getFrameId();
+    first_frame_id_ = frame_k;
     CHECK_EQ(spin_state_.frame_id, frame_k);
     LOG(INFO) << "Running backend " << frame_k;
     //estimate of pose from the frontend
@@ -173,7 +174,8 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     gtsam::Values new_or_optimised_values = new_values;
 
-    if( (frame_k-window_size+1)%(window_size-overlap_size)==0 && frame_k>=window_size + 1) {
+    //minus first_frame_id_ in case the first frame is not zero!!
+    if( (frame_k-window_size+1)%(window_size-overlap_size)==0 && (frame_k - first_frame_id_)>=(window_size + 1)) {
         LOG(INFO) << "Running dynamic slam window size on frame " << frame_k;
         //update before constructing the graph!!
         map_->updateEstimates(new_or_optimised_values, full_graph, frame_k);

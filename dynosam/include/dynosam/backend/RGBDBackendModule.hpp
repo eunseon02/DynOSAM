@@ -212,6 +212,7 @@ public:
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
     // UpdateImpl::UniquePtr updater_;
     Updater::UniquePtr new_updater_;
+    FrameId first_frame_id_; //the first frame id that is received
 
     //logger here!!
     BackendLogger::UniquePtr logger_{nullptr};

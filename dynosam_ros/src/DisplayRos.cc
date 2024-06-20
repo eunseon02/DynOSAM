@@ -179,7 +179,7 @@ void DisplayRos::publishObjectPaths(
         line_list_marker.ns =  prefix_marker_namespace + "_object_path";
         line_list_marker.id = object_id;
         line_list_marker.header.stamp = ros_time;
-        line_list_marker.scale.x = 0.3;
+        line_list_marker.scale.x = 0.05;
 
         line_list_marker.pose.orientation.x = 0;
         line_list_marker.pose.orientation.y = 0;

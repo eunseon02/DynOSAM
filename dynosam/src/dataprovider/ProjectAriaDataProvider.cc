@@ -37,7 +37,7 @@ public:
     DYNO_POINTER_TYPEDEFS(ProjectAriaAllLoader)
 
     ProjectAriaAllLoader(const std::string& file_path)
-        :   rgb_images_folder_path_(file_path + "/rgb_undist"),
+        :   rgb_images_folder_path_(file_path + "/rgb_sync"),
             depth_images_folder_path_(file_path + "/depth_sync"),
             optical_flow_folder_path_(file_path + "/optical_flow"),
             instance_masks_folder_(file_path + "/instance_masks"),
@@ -49,8 +49,8 @@ public:
             throwExceptionIfPathInvalid(depth_images_folder_path_);
             throwExceptionIfPathInvalid(optical_flow_folder_path_);
             throwExceptionIfPathInvalid(instance_masks_folder_);
-            throwExceptionIfPathInvalid(intrinsics_file_path_);
-            throwExceptionIfPathInvalid(rgb_timestamps_file_path_);
+            // throwExceptionIfPathInvalid(intrinsics_file_path_);
+            // throwExceptionIfPathInvalid(rgb_timestamps_file_path_);
 
              //first load images and size
             //the size will be used as a refernce for all other loaders
@@ -62,13 +62,13 @@ public:
 
             //load rgb, depth and instance masks - they should all have the same length!!
             loadOtherImages();
-            loadTimestamps();
+            // loadTimestamps();
             loadCalibration();
         }
 
         size_t size() const {
-        return dataset_size_;
-    }
+            return dataset_size_;
+        }
 
     cv::Mat getOpticalFlow(size_t idx) const {
         CHECK_LT(idx,optical_flow_image_paths_.size());
@@ -126,9 +126,15 @@ private:
         dataset_size = files_in_directory.size();
         CHECK_GT(dataset_size, 0);
 
-        for (const std::string file_path : files_in_directory) {
+        for (const std::filesystem::path& path : files_in_directory) {
+            const std::string file_path = path;
             throwExceptionIfPathInvalid(file_path);
             images_paths.push_back(file_path);
+
+            std::string timestamp_str = path.stem();
+            double timestamp_nano = std::stod(timestamp_str);
+            double timestamp_seconds = timestamp_nano / 1.0e+9;
+            times_.push_back(timestamp_seconds);
         }
     }
 
@@ -149,51 +155,66 @@ private:
         // CHECK_EQ(instance_masks_image_paths_.size() -1u, dataset_size_);
     }
 
-    void loadTimestamps() {
-        std::ifstream file(rgb_timestamps_file_path_);
-        CsvReader csv_reader(file);
-        auto it = csv_reader.begin();
-        //skip header
-        ++it;
-        bool is_first_timestamp = true;
-        Timestamp time_offset = 0; //first timestamp
-        for(; it != csv_reader.end(); it++) {
-            const auto row = *it;
+    // void loadTimestamps() {
+    //     std::ifstream file(rgb_timestamps_file_path_);
+    //     CsvReader csv_reader(file);
+    //     auto it = csv_reader.begin();
+    //     //skip header
+    //     ++it;
+    //     bool is_first_timestamp = true;
+    //     Timestamp time_offset = 0; //first timestamp
+    //     for(; it != csv_reader.end(); it++) {
+    //         const auto row = *it;
 
-            double time_ms = row.at<double>(0);
-            Timestamp time_s = time_ms / 1000.0;
+    //         double time_ms = row.at<double>(0);
+    //         Timestamp time_s = time_ms / 1000.0;
 
-            if(is_first_timestamp) {
-                time_offset = time_s;
-                is_first_timestamp = false;
-            }
+    //         if(is_first_timestamp) {
+    //             time_offset = time_s;
+    //             is_first_timestamp = false;
+    //         }
 
-            //start time at zero with first timestamp offset
-            Timestamp offset_time_s = time_s - time_offset;
-            times_.push_back(offset_time_s);
+    //         //start time at zero with first timestamp offset
+    //         Timestamp offset_time_s = time_s - time_offset;
+    //         times_.push_back(offset_time_s);
 
 
-        }
-        LOG(INFO) << "Loaded " << times_.size() << " timestamps from RGBD csv file: " << rgb_timestamps_file_path_;
+    //     }
+    //     LOG(INFO) << "Loaded " << times_.size() << " timestamps from RGBD csv file: " << rgb_timestamps_file_path_;
 
-    }
+    // }
 
     void loadCalibration() {
-        using json = nlohmann::json;
+        // using json = nlohmann::json;
 
-        std::ifstream file(intrinsics_file_path_);
-        json calibration_json;
-        file >> calibration_json;
+        // std::ifstream file(intrinsics_file_path_);
+        // json calibration_json;
+        // file >> calibration_json;
 
-        int rgb_width = calibration_json["rgb_width"].template get<int>();
-        int rgb_height = calibration_json["rgb_height"].template get<int>();
+        // int rgb_width = calibration_json["rgb_width"].template get<int>();
+        // int rgb_height = calibration_json["rgb_height"].template get<int>();
 
-        std::vector<double> K = calibration_json["rgb_intrinsics"].template get<std::vector<double>>();
+        // std::vector<double> K = calibration_json["rgb_intrinsics"].template get<std::vector<double>>();
+        // CameraParams::IntrinsicsCoeffs intrinsics({
+        //     K.at(0), //fu
+        //     K.at(4), //fv
+        //     K.at(2), //cu
+        //     K.at(5)  // cv
+        //     });
+
+        // CameraParams::IntrinsicsCoeffs intrinsics({
+        //     535.288025, //fu
+        //     535.288025, //fv
+        //     623.312256, //cu
+        //     348.522400  // cv
+        //     });
+
+        //acfr_1_moving_small
         CameraParams::IntrinsicsCoeffs intrinsics({
-            K.at(0), //fu
-            K.at(4), //fv
-            K.at(2), //cu
-            K.at(5)  // cv
+            267.644012, //fu
+            311.656128, //fv
+            267.644012, //cu
+            174.261200  // cv
             });
 
         //TODO: Assume Image is undistorted!!!!!!
@@ -207,7 +228,8 @@ private:
         rgb_camera_params_ = CameraParams(
             intrinsics,
             distortion,
-            cv::Size(rgb_width, rgb_height),
+            // cv::Size(1280, 720),
+            cv::Size(640, 360),
             model
         );
 
@@ -322,7 +344,7 @@ ProjectARIADataLoader::ProjectARIADataLoader(const fs::path& dataset_path) : Pro
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::SemanticMask>(instance_mask));
+                ImageWrapper<ImageType::MotionMask>(instance_mask));
         CHECK(image_container);
         CHECK(image_container_callback_);
         if(image_container_callback_) image_container_callback_(image_container);

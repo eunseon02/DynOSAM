@@ -82,7 +82,7 @@ void propogateObjectPoses(
         else {
             //no motion at the previous frame - if close, interpolate between last pose and this pose
             //no motion used
-            const size_t min_diff_frames = 4;
+            const size_t min_diff_frames = 8;
 
             //last frame SHOULD be the largest frame (as we use a std::map with std::less)
             auto last_record_itr = per_frame_poses.rbegin();
@@ -95,26 +95,26 @@ void propogateObjectPoses(
                 object_centroids_k.at(i)
             );
 
-            // CHECK_LT(last_frame, frame_id_k_1);
-            // if(frame_id_k - last_frame < min_diff_frames) {
-            //     //apply interpolation
-            //     //need to map [last_frame:frame_id_k] -> [0,1] for the interpolation function
-            //     //with N values such that frame_id_k - last_frame + 1= N (to be inclusive)
-            //     const size_t N = frame_id_k - last_frame + 1;
-            //     const double divisor = (double)(frame_id_k - last_frame);
-            //     for(size_t j = 0; j < N; j++) {
-            //         double t = (double)j/divisor;
-            //         gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
+            CHECK_LT(last_frame, frame_id_k_1);
+            if(frame_id_k - last_frame < min_diff_frames) {
+                //apply interpolation
+                //need to map [last_frame:frame_id_k] -> [0,1] for the interpolation function
+                //with N values such that frame_id_k - last_frame + 1= N (to be inclusive)
+                const size_t N = frame_id_k - last_frame + 1;
+                const double divisor = (double)(frame_id_k - last_frame);
+                for(size_t j = 0; j < N; j++) {
+                    double t = (double)j/divisor;
+                    gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
 
-            //         FrameId frame = last_frame + j;
-            //         per_frame_poses.insert2(frame, interpolated_pose);
-            //     }
+                    FrameId frame = last_frame + j;
+                    per_frame_poses.insert2(frame, interpolated_pose);
+                }
 
-            // }
-            // else {
-            //     //last frame too far away - reinitalise with centroid!
-            //     LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame;
-            // }
+            }
+            else {
+                //last frame too far away - reinitalise with centroid!
+                LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame;
+            }
 
 
         }
