@@ -85,13 +85,20 @@ public:
     };
 
     struct UpdateObservationResult {
-        std::set<FrameId> frames_updated;
-        std::set<ObjectId> objects_affected;
+        gtsam::FastMap<FrameId, std::set<ObjectId>> objects_affected; //per frame
 
         inline UpdateObservationResult& operator+=(const UpdateObservationResult& oth) {
-            frames_updated.insert(oth.frames_updated.begin(), oth.frames_updated.end());
-            objects_affected.insert(oth.objects_affected.begin(), oth.objects_affected.end());
+            for(const auto& [key, value] : oth.objects_affected) {
+                objects_affected[key].insert(value.begin(), value.end());
+            }
             return *this;
+        }
+
+        void updateAffectedObject(FrameId frame_id, ObjectId object_id) {
+            if(!objects_affected.exists(frame_id)) {
+                objects_affected.insert2(frame_id,  std::set<ObjectId>{});
+            }
+            objects_affected[frame_id].insert(object_id);
         }
     };
 

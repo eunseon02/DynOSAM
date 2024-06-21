@@ -321,6 +321,22 @@ public:
     StatusLandmarkEstimates getAllDynamicLandmarkEstimates() const;
     StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const;
 
+    EstimateMap<ObjectId, gtsam::Pose3> getPoseEstimates() const {
+        EstimateMap<ObjectId, gtsam::Pose3> pose_estimates;
+
+        for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
+            StateQuery<gtsam::Pose3> pose = this->getObjectPoseEstimate(object_id);
+
+            if(pose) {
+                //TODO: hardcoded estimate!
+                pose_estimates.insert2(object_id,
+                    ReferenceFrameValue<Motion3>(pose.get(), ReferenceFrame::GLOBAL));
+            }
+        }
+        return pose_estimates;
+
+    }
+
     MotionEstimateMap getMotionEstimates() const {
         MotionEstimateMap motion_estimates;
         for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
@@ -370,7 +386,7 @@ public:
         CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getPoseEstimate().get());
         if(object_clouds.size() == 0) {
             //TODO: why does this happen so much!!!
-            VLOG(100) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
+            LOG(INFO) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
                 << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size();
             return {gtsam::Point3{}, false};
         }

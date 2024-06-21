@@ -226,6 +226,28 @@ public:
         return motion_estimates;
     }
 
+    ObjectPoseMap composeEstimatedObjectPoseMap() const {
+        ObjectPoseMap object_poses;
+        auto frame_itr = frames_.begin();
+
+        for(auto itr = frame_itr; itr != frames_.end(); itr++) {
+            const auto[frame_id_k, frame_k_ptr] = *itr;
+            const auto pose_estimates = frame_k_ptr->getPoseEstimates();
+
+            for(const auto& [object_id, pose] : pose_estimates) {
+
+                if(!object_poses.exists(object_id)) {
+                    object_poses.insert2(object_id, gtsam::FastMap<FrameId, gtsam::Pose3>{});
+                }
+                object_poses[object_id].insert2(frame_id_k, pose);
+
+            }
+        }
+        return object_poses;
+
+    }
+
+
     //recomputes every time
     ObjectPoseMap computeComposedObjectPoseMap(std::optional<GroundTruthPacketMap> gt_packet_map = {}) const {
         ObjectPoseMap object_poses;

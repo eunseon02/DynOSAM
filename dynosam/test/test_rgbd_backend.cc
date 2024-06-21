@@ -98,7 +98,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         dyno::RGBDBackendModule::UpdaterType::MotionInWorld
         );
 
-    for(size_t i = 0; i < 20; i++) {
+    for(size_t i = 0; i < 7; i++) {
         auto output = scenario.getOutput(i);
 
         std::stringstream ss;
@@ -203,20 +203,20 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     }
 
     gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
-    full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+    full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test_object_pose.dot"), dyno::DynoLikeKeyFormatter);
 
-    const auto[delayed_values, delayed_graph] = backend.constructGraph(5, 15, true);
-    delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+    // const auto[delayed_values, delayed_graph] = backend.constructGraph(5, 15, true);
+    // delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);
 
-    gtsam::LevenbergMarquardtParams opt_params;
-    opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-    // opt_params.
-    try {
-        gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(delayed_graph, delayed_values, opt_params).optimize();
-    }
-    catch(const gtsam::ValuesKeyDoesNotExist& e) {
-        LOG(INFO) << "Key does not exist in the values " <<  dyno::DynoLikeKeyFormatter(e.key());
-    }
+    // gtsam::LevenbergMarquardtParams opt_params;
+    // opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+    // // opt_params.
+    // try {
+    //     gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(delayed_graph, delayed_values, opt_params).optimize();
+    // }
+    // catch(const gtsam::ValuesKeyDoesNotExist& e) {
+    //     LOG(INFO) << "Key does not exist in the values " <<  dyno::DynoLikeKeyFormatter(e.key());
+    // }
 
 
     //graph depends on optimzier used
