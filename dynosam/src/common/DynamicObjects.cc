@@ -54,9 +54,9 @@ void propogateObjectPoses(
                 if(gt_packet_map->exists(frame_id_k_1)) {
                     const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map->at(frame_id_k_1);
 
-                    ObjectPoseGT object_pose_gt_k;
-                    if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
-                        pose_k_1 = object_pose_gt_k.L_world_;
+                    ObjectPoseGT object_pose_gt_k_1;
+                    if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
+                        pose_k_1 = object_pose_gt_k_1.L_world_;
                         initalised_with_gt = true;
                     }
                 }

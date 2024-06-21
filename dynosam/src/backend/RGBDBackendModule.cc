@@ -167,102 +167,16 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     gtsam::NonlinearFactorGraph full_graph = map_->getGraph();
     full_graph += new_factors;
+    map_->updateEstimates(new_values, full_graph, frame_k);
 
-    //testing sliding window op!!
-    const auto overlap_size = FLAGS_opt_window_overlap;
-    const auto window_size = FLAGS_opt_window_size;
-
-    gtsam::Values new_or_optimised_values = new_values;
-
-    //minus first_frame_id_ in case the first frame is not zero!!
-    if( (frame_k-window_size+1)%(window_size-overlap_size)==0 && (frame_k - first_frame_id_)>=(window_size + 1)) {
-        LOG(INFO) << "Running dynamic slam window size on frame " << frame_k;
-        //update before constructing the graph!!
-        map_->updateEstimates(new_or_optimised_values, full_graph, frame_k);
-        //frame_k can never be zero basically!!
-        auto[values, graph] = constructGraph(frame_k - window_size, frame_k, true);
-        LOG(INFO) << "Finished constructing graph " << frame_k;
-
-        gtsam::LevenbergMarquardtParams opt_params;
-        opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-        // opt_params.
-        gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-
-        //update optimised values
-        try {
-            //values to update and may not just be the new values (from this frame) as the graph might be (is) a sliding window!
-            new_or_optimised_values.insert_or_assign(opt_values);
-        }
-        catch(const gtsam::ValuesKeyDoesNotExist& e) {
-            LOG(FATAL) << "Key does not exist in the values " <<  dyno::DynoLikeKeyFormatter(e.key());
-        }
-
+    gtsam::Values optimised_values;
+    double error_before = 0;
+    double error_after = 0;
+    if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
+        //update map with best results
+        map_->updateEstimates(optimised_values, full_graph, frame_k);
+        LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
     }
-    map_->updateEstimates(new_or_optimised_values, full_graph, frame_k);
-
-
-    //update the map with the new values
-    //the map will insert or assign these new values which MAY then be updated from the state
-    //NOTE: do we want optimzied vs not optimized values in the graph?
-
-    // const bool optimized = optimizer_->update(spin_state_, new_values, new_factors, map_);
-
-    //NOTE: assumes frames start at 0
-    static FrameId last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
-
-    // if(optimized) {
-    //     const auto& esimtates = optimizer_->getValues();
-    //     // const auto& graph
-    //     map_->updateEstimates(esimtates, full_graph, frame_k);
-
-    //     if(logger_) {
-    //         //only logs this the frame specified - in batch case we want to update all!!
-    //         for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++) {
-    //             //the updater is the only thing that knows EXACTLY which values it put into the map!!
-    //             //hmmm is this problematic when we create the final output
-    //             //the map should also know which values it has (e.g. if we have object pose?)
-    //             // updater_->logBackendFromMap(frame_id, map_, *logger_);
-    //         }
-    //     }
-
-    //     last_optimized_frame = optimizer_->getLastOptimizedState().frame_id;
-    //     CHECK_EQ(last_optimized_frame, frame_k);
-
-    //     // optimizer_->getFactors().saveGraph(getOutputFilePath("batch_output.dot"), DynoLikeKeyFormatter);
-    // }
-    // else {
-    //     //must update the map with the new values anyway
-    //     map_->updateEstimates(new_values, full_graph, frame_k);
-    // }
-
-
-    // if(optimizer_->shouldOptimize(frame_k)) {
-    //     gtsam::Values estimate;
-    //     gtsam::NonlinearFactorGraph graph;
-    //     std::tie(estimate, graph) = optimizer_->optimize();
-    //     // TODO: depending on if (fixed-lag)incremental or batch, the graph returned from optimize may or MAY not be the full graph
-    //     //NOTE: this also doesnt allow us to query the map for when the last time we updated the (optimized) values
-    //     //as we need these values in the map for when we call updateStaticObservations/updateDynamicObservations
-    //     //maybe break into update initial values and update estimates?
-    //     map_->updateEstimates(estimate, full_graph, frame_k);
-    //     // must be called after the map update as it uses this to get all the info
-    //     //currently only propofate object pose when optimize?
-    //     //can only run with ground truth!!!???!!
-    //     // auto composed_poses = getObjectPoses(FLAGS_init_object_pose_from_gt);
-
-    //     // // //only logs this the frame specified - in batch case we want to update all!!
-    //     // for(FrameId frame_id = last_optimized_frame; frame_id <= frame_k; frame_id++)
-    //     //     logBackendFromMap(frame_id, composed_poses);
-
-    //     last_optimized_frame = frame_k;
-    // }
-    // else {
-    //     gtsam::Values values = map_->getValues();
-    //     values.insert_or_assign(new_values);
-
-    //     map_->updateEstimates(values, full_graph, frame_k);
-    // }
-
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
@@ -274,18 +188,11 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     for(FrameId frame_id : map_->getFrameIds()) {
         backend_output->optimized_poses_.push_back(map_->getPoseEstimate(frame_id).get());
     }
-    // for(ObjectId object_id : map_->getObjectIds()) {
-    //     auto object_node = map_->getObject(object_id);
-    //     backend_output->composed_object_poses.insert2(
-    //         object_id,
-    //         object_node->computeComposedPoseMap());
-    // }
 
     //TODO: what if we have a gt packet map but there is no data in it!! This is equivalent to a "no gt data flag" which is implicit!!
     backend_output->composed_object_poses = map_->computeComposedObjectPoseMap(gt_packet_map_);
 
     debug_info_ = DebugInfo();
-    new_object_measurements_per_frame_.clear();
 
     return {State::Nominal, backend_output};
 }
@@ -820,9 +727,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
         //add the motion
         const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(object_id);
 
-        // gtsam::Pose3 motion_k;
-        // getSafeQuery(motion_k, frame_node_k->getObjectMotionEstimate(object_id), gtsam::Pose3::Identity());
-
         //check that this motion does not exist yet!
         CHECK(!new_values.exists(object_motion_key_k));
         new_values.insert(object_motion_key_k, gtsam::Pose3::Identity());
@@ -925,6 +829,30 @@ void RGBDBackendModule::Updater::logBackendFromMap(BackendLogger& logger) {
     }
 
 
+}
+
+bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after) {
+    const auto overlap_size = FLAGS_opt_window_overlap;
+    const auto window_size = FLAGS_opt_window_size;
+
+    if( (frame_k-window_size+1)%(window_size-overlap_size)==0 && (frame_k - first_frame_id_)>=(window_size + 1)) {
+        const auto start_frame = frame_k - window_size;
+        const auto end_frame = frame_k;
+        LOG(INFO) << "Running dynamic slam window on between frames " << start_frame << " - " << end_frame;
+        auto[values, graph] = constructGraph(start_frame, end_frame, true);
+
+        error_before = graph.error(values);
+        gtsam::LevenbergMarquardtParams opt_params;
+        if(VLOG_IS_ON(20))
+            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+        optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+        error_after = graph.error(optimised_values);
+
+        return true;
+
+    }
+    return false;
 }
 
 // void RGBDBackendModule::addInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
