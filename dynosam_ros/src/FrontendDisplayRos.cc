@@ -46,20 +46,21 @@
 
 namespace dyno {
 
-FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params), node_(CHECK_NOTNULL(node)) {
+FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params, node) {
 
     const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
-    tracking_image_pub_ = image_transport::create_publisher(node.get(), "~/tracking_image");
-    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/static", 1);
-    dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/dynamic", 1);
-    odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/odom", 1);
-    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_poses", 1);
-    object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/composed_object_paths", 1);
-    odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/odom_path", 2);
-    object_motion_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/object_motions", 1);
-    object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bbx_viz", 1);
-    object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/object_bounding_boxes", 1);
+    tracking_image_pub_ = image_transport::create_publisher(node.get(), "tracking_image");
+    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("static_cloud", 1);
+    dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic_cloud", 1);
+    odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("composed_object_poses", 1);
+    object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("composed_object_paths", 1);
+    odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("odom_path", 2);
+    object_motion_pub_ = node->create_publisher<nav_msgs::msg::Path>("object_motions", 1);
+    object_bbx_line_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_bbx_viz", 1);
+    object_bbx_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_bounding_boxes", 1);
 
+    //TODO: fix up gt publisher namespacing -? currently dynosam/dynosam/ground_trut....
     gt_odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/ground_truth/odom", 1);
     gt_object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_poses", 1);
     gt_object_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/ground_truth/object_paths", 1);

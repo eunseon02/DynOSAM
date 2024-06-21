@@ -30,3 +30,6 @@ DEFINE_double(constant_object_motion_rotation_sigma, 0.01, "Noise used on rotati
 DEFINE_double(constant_object_motion_translation_sigma,  0.1, "Noise used on translation componenent of smoothing factor");
 
 DEFINE_double(motion_ternary_factor_noise_sigma,  0.01, "Noise used on motion ternary factor");
+
+DEFINE_double(odometry_rotation_sigma, 0.02, "Noise used on rotation component of odometry");
+DEFINE_double(odometry_translation_sigma, 0.01, "Noise used on translation component of odometry");

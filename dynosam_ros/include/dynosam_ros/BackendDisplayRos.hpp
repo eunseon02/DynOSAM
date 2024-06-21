@@ -58,6 +58,8 @@ private:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_path_pub_; //! Path of propogated object poses using the motion estimate
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_pose_pub_; //! Propogated object poses using the motion estimate
 
+    rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr object_aabb_pub_; //! Draw object bounding boxes as cubes
+
 };
 
 } //dyno

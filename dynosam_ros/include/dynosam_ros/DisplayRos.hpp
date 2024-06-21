@@ -44,18 +44,20 @@ namespace dyno {
 
 class DisplayRos {
 public:
-    DisplayRos(const DisplayParams& params) : params_(params) {}
+    DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node) : params_(params), node_(node) {}
     virtual ~DisplayRos() = default;
+
+    using PointCloud2 = sensor_msgs::msg::PointCloud2;
+    using MarkerArray = visualization_msgs::msg::MarkerArray; //! Typedef for MarkerArray msg
 
     using PointCloud2Pub = rclcpp::Publisher<sensor_msgs::msg::PointCloud2>;
     using OdometryPub = rclcpp::Publisher<nav_msgs::msg::Odometry>;
     using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
-    using MarkerArrayPub = rclcpp::Publisher<visualization_msgs::msg::MarkerArray>;
+    using MarkerArrayPub = rclcpp::Publisher<MarkerArray>;
 
     virtual CloudPerObject publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera);
     virtual void publishOdometry(OdometryPub::SharedPtr pub, const gtsam::Pose3& T_world_camera, Timestamp timestamp);
     virtual void publishOdometryPath(PathPub::SharedPtr pub, const gtsam::Pose3Vector& poses, Timestamp latest_timestamp);
-
 
     virtual void publishObjectPositions(
         MarkerArrayPub::SharedPtr pub,
@@ -76,8 +78,42 @@ public:
         const int min_poses = 60
     );
 
+    virtual void publishObjectBoundingBox(
+        MarkerArrayPub::SharedPtr aabb_pub,
+        MarkerArrayPub::SharedPtr obb_pub,
+        const CloudPerObject& cloud_per_object,
+        Timestamp timestamp,
+        const std::string& prefix_marker_namespace);
+
+    /**
+     * @brief Constructs axis-aligned BB (AABB) and oriented BB (OBB) marker arrays
+     * from a set of point clouds which are coloured per object.
+     *
+     * NOTE:(jesse) right now OBB are not gravity aligned
+     *
+     * @param cloud_per_object
+     * @param aabb_markers
+     * @param obb_markers
+     * @param latest_timestamp
+     * @param prefix_marker_namespace
+     */
+    static void constructBoundingBoxeMarkers(
+        const CloudPerObject& cloud_per_object,
+        MarkerArray& aabb_markers,
+        MarkerArray& obb_markers,
+        Timestamp timestamp,
+        const std::string& prefix_marker_namespace
+    );
+
+    inline visualization_msgs::msg::Marker getDeletionMarker() const {
+        static visualization_msgs::msg::Marker delete_marker;
+        delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
+        return delete_marker;
+    }
+
 protected:
     const DisplayParams params_;
+    rclcpp::Node::SharedPtr node_;
 };
 
 } //dyno

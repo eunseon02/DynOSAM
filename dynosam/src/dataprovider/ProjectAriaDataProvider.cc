@@ -344,7 +344,7 @@ ProjectARIADataLoader::ProjectARIADataLoader(const fs::path& dataset_path) : Pro
                 ImageWrapper<ImageType::RGBMono>(rgb),
                 ImageWrapper<ImageType::Depth>(depth),
                 ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                ImageWrapper<ImageType::MotionMask>(instance_mask));
+                ImageWrapper<ImageType::SemanticMask>(instance_mask));
         CHECK(image_container);
         CHECK(image_container_callback_);
         if(image_container_callback_) image_container_callback_(image_container);

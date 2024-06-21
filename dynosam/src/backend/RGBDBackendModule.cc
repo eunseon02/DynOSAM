@@ -642,7 +642,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 }
 
                 auto starting_motion_frame_itr = seen_frames.find(starting_motion_frame);
-                CHECK(starting_motion_frame_itr != seen_frames.end());
+                CHECK(starting_motion_frame_itr != seen_frames.end()) << "Starting motion frame is " << starting_motion_frame << " but first frame is " << seen_frames.getFirstIndex<FrameId>();
 
                 std::stringstream ss;
                 ss << "Going back to add point on object " << object_id << " at frames\n";
@@ -651,7 +651,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 for(auto seen_frames_itr = starting_motion_frame_itr; seen_frames_itr != seen_frames.end(); seen_frames_itr++) {
                     auto seen_frames_itr_prev = seen_frames_itr;
                     std::advance(seen_frames_itr_prev, -1);
-                    CHECK(seen_frames_itr_prev != seen_frames.end());
+                    CHECK(seen_frames_itr_prev != seen_frames.end()) << " For object  " << object_id;
 
                     FrameNode3d::Ptr query_frame_node_k = *seen_frames_itr;
                     FrameNode3d::Ptr query_frame_node_k_1 = *seen_frames_itr_prev;
@@ -858,6 +858,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                     gtsam::Pose3::Identity(),
                     object_smoothing_noise
                 );
+                // object_debug_info.smoothing_factor_added = true;
             }
 
             // if(smoothing_added) {

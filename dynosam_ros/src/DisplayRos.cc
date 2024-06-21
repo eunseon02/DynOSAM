@@ -25,6 +25,11 @@
 #include "dynosam_ros/RosUtils.hpp"
 
 #include <dynosam/visualizer/ColourMap.hpp>
+#include <dynosam/common/PointCloudProcess.hpp>
+
+#include <pcl/common/common.h>
+#include <pcl/common/centroid.h>
+#include <pcl/memory.h>
 
 namespace dyno {
 
@@ -237,6 +242,137 @@ void DisplayRos::publishObjectPaths(
     }
 
     pub->publish(object_path_marker_array);
+}
+
+void DisplayRos::publishObjectBoundingBox(
+        MarkerArrayPub::SharedPtr aabb_pub,
+        MarkerArrayPub::SharedPtr obb_pub,
+        const CloudPerObject& cloud_per_object,
+        Timestamp timestamp,
+        const std::string& prefix_marker_namespace)
+{
+
+    if(!aabb_pub && !obb_pub) {
+        return;
+    }
+
+    visualization_msgs::msg::MarkerArray aabb_markers; // using linelist
+    visualization_msgs::msg::MarkerArray obb_markers; // using cube
+    aabb_markers.markers.push_back(getDeletionMarker());
+    obb_markers.markers.push_back(getDeletionMarker());
+
+    constructBoundingBoxeMarkers(
+        cloud_per_object,
+        aabb_markers,
+        obb_markers,
+        timestamp,
+        prefix_marker_namespace
+    );
+
+    if(aabb_pub) aabb_pub->publish(aabb_markers);
+    if(obb_pub) aabb_pub->publish(obb_markers);
+
+
+}
+
+void DisplayRos::constructBoundingBoxeMarkers(
+        const CloudPerObject& cloud_per_object,
+        MarkerArray& aabb_markers,
+        MarkerArray& obb_markers,
+        Timestamp timestamp,
+        const std::string& prefix_marker_namespace)
+{
+    auto ros_time = utils::toRosTime(timestamp);
+
+    for (const auto& [object_id, obj_cloud] : cloud_per_object){
+        pcl::PointXYZ centroid;
+        pcl::computeCentroid(obj_cloud, centroid);
+
+        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+
+        visualization_msgs::msg::Marker txt_marker;
+        txt_marker.header.frame_id = "world";
+        txt_marker.ns = prefix_marker_namespace + "_object_id_txt";
+        txt_marker.id = object_id;
+        txt_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+        txt_marker.action = visualization_msgs::msg::Marker::ADD;
+        txt_marker.header.stamp = ros_time;
+
+        txt_marker.scale.z = 0.5;
+        // txt_marker.scale.z = 2.0;
+        txt_marker.color.r = colour(0)/255.0;
+        txt_marker.color.g = colour(1)/255.0;
+        txt_marker.color.b = colour(2)/255.0;
+        txt_marker.color.a = 1;
+        txt_marker.text = "Obj "+ std::to_string(object_id);
+        txt_marker.pose.position.x = centroid.x;
+        // txt_marker.pose.position.y = centroid.y - 2.0;
+        // txt_marker.pose.position.z = centroid.z - 1.0;
+        txt_marker.pose.position.y = centroid.y - 0.6;
+        txt_marker.pose.position.z = centroid.z - 0.5;
+        aabb_markers.markers.push_back(txt_marker);
+
+        pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB> >(obj_cloud);
+        ObjectBBX aabb = findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
+        ObjectBBX obb = findOBBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
+
+        visualization_msgs::msg::Marker aabb_marker;
+        aabb_marker.header.frame_id = "world";
+        aabb_marker.ns = prefix_marker_namespace + "object_aabb";
+        aabb_marker.id = object_id;
+        aabb_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+        aabb_marker.action = visualization_msgs::msg::Marker::ADD;
+        aabb_marker.header.stamp = ros_time;
+        aabb_marker.scale.x = 0.03;
+
+        aabb_marker.pose.orientation.x = 0;
+        aabb_marker.pose.orientation.y = 0;
+        aabb_marker.pose.orientation.z = 0;
+        aabb_marker.pose.orientation.w = 1;
+
+        aabb_marker.color.r = colour(0)/255.0;
+        aabb_marker.color.g = colour(1)/255.0;
+        aabb_marker.color.b = colour(2)/255.0;
+        aabb_marker.color.a = 1;
+
+        for (const pcl::PointXYZ& this_line_list_point : findLineListPointsFromAABBMinMax(aabb.min_bbx_point_, aabb.max_bbx_point_)){
+            geometry_msgs::msg::Point p;
+            p.x = this_line_list_point.x;
+            p.y = this_line_list_point.y;
+            p.z = this_line_list_point.z;
+            aabb_marker.points.push_back(p);
+        }
+        aabb_markers.markers.push_back(aabb_marker);
+
+        visualization_msgs::msg::Marker obbx_marker;
+        obbx_marker.header.frame_id = "world";
+        obbx_marker.ns = prefix_marker_namespace + "object_obb";
+        obbx_marker.id = object_id;
+        obbx_marker.type = visualization_msgs::msg::Marker::CUBE;
+        obbx_marker.action = visualization_msgs::msg::Marker::ADD;
+        obbx_marker.header.stamp = ros_time;
+        obbx_marker.scale.x = obb.max_bbx_point_.x() - obb.min_bbx_point_.x();
+        obbx_marker.scale.y = obb.max_bbx_point_.y() - obb.min_bbx_point_.y();
+        obbx_marker.scale.z = obb.max_bbx_point_.z() - obb.min_bbx_point_.z();
+
+        obbx_marker.pose.position.x = obb.bbx_position_.x();
+        obbx_marker.pose.position.y = obb.bbx_position_.y();
+        obbx_marker.pose.position.z = obb.bbx_position_.z();
+
+        const gtsam::Quaternion& q = obb.orientation_.toQuaternion();
+        obbx_marker.pose.orientation.x = q.x();
+        obbx_marker.pose.orientation.y = q.y();
+        obbx_marker.pose.orientation.z = q.z();
+        obbx_marker.pose.orientation.w = q.w();
+
+        obbx_marker.color.r = colour(0)/255.0;
+        obbx_marker.color.g = colour(1)/255.0;
+        obbx_marker.color.b = colour(2)/255.0;
+        obbx_marker.color.a = 0.2;
+
+        obb_markers.markers.push_back(obbx_marker);
+
+    }
 }
 
 }

@@ -41,7 +41,7 @@
 
 namespace dyno {
 
-DynoNode::DynoNode(const std::string& node_name, const rclcpp::NodeOptions& options) : Node(node_name, options)
+DynoNode::DynoNode(const std::string& node_name, const rclcpp::NodeOptions& options) : Node(node_name, "dynosam", options)
 {
     RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoNode");
     auto params_path = getParamsPath();
@@ -92,8 +92,8 @@ DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& option
     auto params = getDynoParams();
 
     DisplayParams display_params{};
-    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(display_params, this->create_sub_node("frontend_viz"));
-    auto backend_display = std::make_shared<dyno::BackendDisplayRos>(display_params, this->create_sub_node("backend_viz"));
+    auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(display_params, this->create_sub_node("frontend"));
+    auto backend_display = std::make_shared<dyno::BackendDisplayRos>(display_params, this->create_sub_node("backend"));
 
     auto data_loader = createDataProvider();
     pipeline_ = std::make_unique<DynoPipelineManager>(params, data_loader, frontend_display, backend_display);

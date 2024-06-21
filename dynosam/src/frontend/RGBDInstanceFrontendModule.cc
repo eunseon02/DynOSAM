@@ -409,7 +409,7 @@ void RGBDInstanceFrontendModule::determineDynamicObjects(const Frame& previous_f
 
         VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out of " << num_object_features << " for label  " << label;
 
-        if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
+        if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 10u)
         {
             // label this object as static background
             // LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;

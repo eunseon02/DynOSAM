@@ -33,6 +33,16 @@ using namespace dyno;
 #include "nav_msgs/msg/odometry.hpp"
 
 
+TEST(TestConcepts, SubNodeNamespacing) {
+    auto node = std::make_shared<rclcpp::Node>("my_node", "my_ns");
+    LOG(INFO) <<  node->get_effective_namespace();  // -> "/my_ns"
+    auto sub_node1 = node->create_sub_node("a");
+    LOG(INFO) << sub_node1->get_effective_namespace();  // -> "/my_ns/a"
+
+    auto pub = sub_node1->create_publisher<nav_msgs::msg::Odometry>("test", 1);
+    LOG(INFO) << pub->get_topic_name ();
+}
+
 TEST(RosUtils, HasMsgHeader) {
     EXPECT_FALSE(internal::HasMsgHeader<geometry_msgs::msg::Point>::value);
     EXPECT_TRUE(internal::HasMsgHeader<nav_msgs::msg::Odometry>::value);

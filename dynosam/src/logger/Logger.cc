@@ -195,7 +195,7 @@ EstimationModuleLogger::~EstimationModuleLogger() {
 
 void EstimationModuleLogger::logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates) {
   if(!gt_packets.exists(frame_id)) {
-        LOG(WARNING) << "No gt packet at frame id " << frame_id << ". Unable to log frontend object motions";
+        VLOG(100) << "No gt packet at frame id " << frame_id << ". Unable to log frontend object motions";
         return;
     }
 
@@ -229,7 +229,7 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
   const FrameId frame_id_k_1 = frame_id - 1u;
 
   if(!gt_packets.exists(frame_id) || !gt_packets.exists(frame_id_k_1)) {
-    LOG(WARNING) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
+    VLOG(100) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
     return;
   }
 
@@ -272,7 +272,7 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
 
 void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera) {
   if(!gt_packets.exists(frame_id)) {
-        LOG(WARNING) << "No gt packet at frame id " << frame_id << ". Unable to log object motions";
+        VLOG(100) << "No gt packet at frame id " << frame_id << ". Unable to log object motions";
         return;
     }
 

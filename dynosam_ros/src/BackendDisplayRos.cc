@@ -35,25 +35,35 @@
 
 namespace dyno {
 
-BackendDisplayRos::BackendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params){
+BackendDisplayRos::BackendDisplayRos(const DisplayParams params, rclcpp::Node::SharedPtr node) : DisplayRos(params, node){
     // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
-    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/static", 1);
-    dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic", 1);
-    dynamic_initial_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_initial", 1);
-    new_scaled_dynamic_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_newly_scaled", 1);
+    static_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("static_cloud", 1);
+    dynamic_tracked_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic_cloud", 1);
+    // dynamic_initial_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_initial", 1);
+    // new_scaled_dynamic_points_pub_ = node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_newly_scaled", 1);
 
 
-    odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("~/backend/odom", 1);
-    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_poses", 1);
-    object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("~/backend/composed_object_paths", 1);
+    odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
+    object_pose_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("composed_object_poses", 1);
+    object_pose_path_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("composed_object_paths", 1);
 
-    odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("~/backend/odom_path", 2);
+    object_aabb_pub_ = node->create_publisher<visualization_msgs::msg::MarkerArray>("object_aabb", 1);
+
+    odometry_path_pub_ = node->create_publisher<nav_msgs::msg::Path>("odom_path", 2);
 }
 
 
 void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_output) {
     publishPointCloud(static_tracked_points_pub_, backend_output->static_landmarks_, backend_output->T_world_camera_);
-    publishPointCloud(dynamic_tracked_points_pub_, backend_output->dynamic_landmarks_, backend_output->T_world_camera_);
+    CloudPerObject clouds_per_obj = publishPointCloud(dynamic_tracked_points_pub_, backend_output->dynamic_landmarks_, backend_output->T_world_camera_);
+
+    publishObjectBoundingBox(
+        object_aabb_pub_,
+        nullptr, /* no Obb publisher */
+        clouds_per_obj,
+        utils::fromRosTime(node_->now()),
+        "backend"
+    );
     // {
     //     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 

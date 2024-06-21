@@ -369,7 +369,8 @@ public:
         //convert to point cloud - should be a map with only one map in it
         CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getPoseEstimate().get());
         if(object_clouds.size() == 0) {
-            LOG(WARNING) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
+            //TODO: why does this happen so much!!!
+            VLOG(100) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
                 << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size();
             return {gtsam::Point3{}, false};
         }
