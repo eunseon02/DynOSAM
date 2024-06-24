@@ -130,6 +130,7 @@ add_library(${PROJECT_NAME} SHARED
   src/factors/LandmarkQuadricFactor.cc
   src/factors/ObjectKinematicFactor.cc
   src/factors/LandmarkMotionPoseFactor.cc
+  src/factors/LandmarkPoseSmoothingFactor.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineDefinitions.cc

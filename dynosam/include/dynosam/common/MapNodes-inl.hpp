@@ -389,13 +389,19 @@ StateQuery<gtsam::Pose3> ObjectNode<MEASUREMENT>::getPoseEstimate(FrameId frame_
 
 template<typename MEASUREMENT>
 bool ObjectNode<MEASUREMENT>::hasPoseEstimate(FrameId frame_id, gtsam::Pose3* pose) const {
-    StateQuery<gtsam::Pose3> query = this->getPoseEstimate(frame_id);
-    if(query) {
-        //only set pose if valid, return true anyway
-        if(pose) *pose = *query;
-        return true;
+    try {
+        //this throws exception if query pose does not exist for the requested frame_id
+        StateQuery<gtsam::Pose3> query = this->getPoseEstimate(frame_id);
+        if(query) {
+            //only set pose if valid, return true anyway
+            if(pose) *pose = *query;
+            return true;
+        }
+        return false;
     }
-    return false;
+    catch (DynosamException&) {
+        return false;
+    }
 }
 
 template<typename MEASUREMENT>

@@ -387,7 +387,7 @@ public:
         if(object_clouds.size() == 0) {
             //TODO: why does this happen so much!!!
             LOG(INFO) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
-                << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size();
+                << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size() << " but reocrded lmks was " << dynamic_landmarks.size();
             return {gtsam::Point3{}, false};
         }
         CHECK_EQ(object_clouds.size(), 1);

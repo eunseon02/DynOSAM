@@ -203,6 +203,33 @@ public:
         return CHECK_NOTNULL(this->getFrame(frame_id))->getAllStaticLandmarkEstimates();
     }
 
+    MotionEstimateMap computeMotions(FrameId frame_id) const {
+        MotionEstimateMap motion_estimates;
+        const auto frame_k_node = this->getFrame(frame_id);
+
+        if(!frame_k_node) {
+            return motion_estimates;
+        }
+        for(const auto& object_node : frame_k_node->objects_seen) {
+            StateQuery<gtsam::Pose3> pose_query_k = object_node->getPoseEstimate(frame_id);
+
+            gtsam::Pose3 pose_k_1;
+            if(pose_query_k && object_node->hasPoseEstimate(frame_id - 1u, pose_k_1)) {
+                //compute motion from poses
+                gtsam::Pose3 motion_world = pose_query_k.get() * pose_k_1.inverse();
+
+                motion_estimates.insert2(
+                    object_node->getId(),
+                    ReferenceFrameValue<gtsam::Pose3>(
+                        motion_world,
+                        ReferenceFrame::GLOBAL
+                    ));
+            }
+
+        }
+        return motion_estimates;
+    }
+
     MotionEstimateMap getMotionEstimates(FrameId frame_id) const {
         MotionEstimateMap motion_estimates;
         const auto frame_k_node = this->getFrame(frame_id);

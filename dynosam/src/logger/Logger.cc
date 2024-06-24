@@ -193,14 +193,15 @@ EstimationModuleLogger::~EstimationModuleLogger() {
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
 }
 
-void EstimationModuleLogger::logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates) {
+std::optional<size_t> EstimationModuleLogger::logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates) {
   if(!gt_packets.exists(frame_id)) {
         VLOG(100) << "No gt packet at frame id " << frame_id << ". Unable to log frontend object motions";
-        return;
+        return {};
     }
 
     const GroundTruthInputPacket& gt_packet = gt_packets.at(frame_id);
 
+    size_t number_logged = 0;
     for(const auto& [object_id, motions] : motion_estimates) {
 
         ObjectPoseGT object_pose_gt;
@@ -218,21 +219,24 @@ void EstimationModuleLogger::logObjectMotion(const GroundTruthPacketMap& gt_pack
               frame_id << object_id <<
               estimate.x() << estimate.y() << estimate.z() << rot.roll() << rot.pitch() << rot.yaw() <<
               gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
+            number_logged++;
 
         }
 
     }
+    return number_logged;
 }
 
 //assume poses are in world?
-void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses) {
+std::optional<size_t> EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses) {
   const FrameId frame_id_k_1 = frame_id - 1u;
 
   if(!gt_packets.exists(frame_id) || !gt_packets.exists(frame_id_k_1)) {
     VLOG(100) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
-    return;
+    return {};
   }
 
+  size_t number_logged = 0;
   //assume object poses get logged in frame order!!!
   for(const auto&[object_id, poses_map] : propogated_poses) {
       //do not draw if in current frame
@@ -266,14 +270,16 @@ void EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packet
           L_world_k.x() << L_world_k.y() << L_world_k.z() << rot.roll() << rot.pitch() << rot.yaw() <<
           gt_L_world_k.x() << gt_L_world_k.y() << gt_L_world_k.z() << gt_rot_k.roll() << gt_rot_k.pitch() << gt_rot_k.yaw();
       }
+      number_logged++;
 
   }
+  return number_logged;
 }
 
-void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera) {
+std::optional<size_t> EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera) {
   if(!gt_packets.exists(frame_id)) {
         VLOG(100) << "No gt packet at frame id " << frame_id << ". Unable to log object motions";
-        return;
+        return {};
     }
 
     const GroundTruthInputPacket& gt_packet_k = gt_packets.at(frame_id);
@@ -285,6 +291,7 @@ void EstimationModuleLogger::logCameraPose(const GroundTruthPacketMap& gt_packet
       frame_id <<
       T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.roll() << rot.pitch() << rot.yaw() <<
       gt_T_world_camera_k.x() << gt_T_world_camera_k.y() << gt_T_world_camera_k.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
+    return 1;
 }
 
 void EstimationModuleLogger::logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks) {
