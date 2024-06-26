@@ -83,9 +83,9 @@ gtsam::Vector LandmarkMotionPoseFactor::evaluateError(const gtsam::Point3& previ
 gtsam::Vector LandmarkMotionPoseFactor::residual(const gtsam::Point3& previousPoint, const gtsam::Point3& currentPoint,
                         const gtsam::Pose3& previousPose, const gtsam::Pose3& currentPose)
 {
-    return gtsam::Vector3(
-        currentPoint - (currentPose * previousPose.inverse() * previousPoint)
-    );
+    // return gtsam::Vector3(
+    //     currentPoint - (currentPose * previousPose.inverse() * previousPoint)
+    // );
 }
 
 
