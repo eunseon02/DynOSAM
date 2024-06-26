@@ -297,6 +297,7 @@ if(BUILD_TESTING)
     test/test_algorithms.cc
     test/test_viz.cc
     test/test_factors.cc
+    test/test_numerical.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

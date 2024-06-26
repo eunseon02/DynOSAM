@@ -243,6 +243,18 @@ public:
                             const gtsam::Pose3& T_world_k,
                             ObjectId object_id);
 
+protected:
+    //assumes we have updated frames with latest pose (camera) and the result is from the geometricOutlierReject function
+    //only works with stereo
+    void refineLocalObjectMotionEstimate(
+                            Pose3SolverResult& solver_result,
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            ObjectId object_id) const;
+
+
+
+
 
 
 };

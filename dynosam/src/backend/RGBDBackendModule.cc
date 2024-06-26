@@ -218,7 +218,7 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set
     CHECK_LE(to_frame, map_->lastFrameId());
 
     for(auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
-        LOG(INFO) << "Constructing dynamic graph at frame " << frame_id;
+        LOG(INFO) << "Constructing dynamic graph at frame " << frame_id << " in loop (" << from_frame << " -> " << to_frame << ")";
 
         // pose estimate from frontend
         CHECK(initial_camera_poses_.exists(frame_id));
@@ -243,8 +243,6 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set
     }
 
     return {new_values, new_factors};
-
-
 }
 
 // std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph> RGBDBackendModule::Updater::constructGraph(const ConstructGraphOptions& options) {
@@ -389,7 +387,7 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
     const gtsam::Pose3& T_world_camera_frontend = parent_->initial_camera_poses_.at(frame_id_k);
 
 
-    LOG(INFO) << "Looping over " <<  frame_node_k->static_landmarks.size() << " static lmks for frame " << frame_id_k;
+    VLOG(20) << "Looping over " <<  frame_node_k->static_landmarks.size() << " static lmks for frame " << frame_id_k;
     for(const LandmarkNode3d::Ptr& lmk_node : frame_node_k->static_landmarks) {
 
 
@@ -486,7 +484,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
     // pose estimate from frontend
     CHECK(parent_->initial_camera_poses_.exists(frame_id_k));
-    // const gtsam::Pose3& T_world_camera_frontend = parent_->initial_camera_poses_.at(frame_id_k);
     const gtsam::Pose3& T_world_camera_initial_k = new_values.at<gtsam::Pose3>(CameraPoseSymbol(frame_id_k));
 
     //for each object
@@ -628,17 +625,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                         new_values.insert(object_point_key_k_1, lmk_world_k_1);
                         object_debug_info.num_new_dynamic_points++;
 
-                        // //take centroid as initial object pose
-                        // const auto[centroid_k_1_initial, result] = query_frame_node_k_1->computeObjectCentroid(object_id);
-                        // CHECK(result);
-                        // gtsam::Pose3 initial_object_pose_k_1(gtsam::Rot3::Identity(), centroid_k_1_initial);
-                        // gtsam::Pose3 object_pose_k_1;
-                        // getSafeQuery(object_pose_k_1,
-                        //     query_frame_node_k_1->getObjectPoseEstimate(object_id),
-                        //     initial_object_pose_k_1);
-
-                        // new_values.insert(object_pose_k_1_key, object_pose_k_1);
-
                     }
 
                     //previous point must be added by the previous iteration
@@ -758,7 +744,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     }
 
     //this doesnt really work any more as debug info is meant to be per frame?
-    if(debug_info) {
+    if(debug_info && VLOG_IS_ON(20)) {
         for(const auto&[object_id, object_info] : debug_info->object_info) {
             std::stringstream ss;
             ss << "Object id debug info: " << object_id << "\n";
@@ -862,7 +848,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                         object_pose_key_k,
                         object_smoothing_noise
                     );
-                    LOG(INFO) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
+                    VLOG(20) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
                     // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
                     //     object_motion_key_k_1,
                     //     object_motion_key_k,
@@ -945,15 +931,19 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::V
         const auto start_frame = frame_k - window_size;
         const auto end_frame = frame_k;
         LOG(INFO) << "Running dynamic slam window on between frames " << start_frame << " - " << end_frame;
-        auto[values, graph] = constructGraph(start_frame, end_frame, true);
 
-        error_before = graph.error(values);
+        gtsam::Values values;
+        gtsam::NonlinearFactorGraph graph;
+        std::tie(values, graph) = constructGraph(start_frame, end_frame, true);
+        LOG(INFO) << " Finished graph construction";
+
+        // graph.error(values);
         gtsam::LevenbergMarquardtParams opt_params;
         if(VLOG_IS_ON(20))
             opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
         optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-        error_after = graph.error(optimised_values);
+        // error_after = graph.error(optimised_values);
 
         return true;
 

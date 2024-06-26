@@ -40,10 +40,10 @@ public:
 
   LandmarkMotionPoseFactor(gtsam::Key previousPointKey, gtsam::Key currentPointKey, gtsam::Key previousPoseKey, gtsam::Key currentPoseKey, gtsam::SharedNoiseModel model);
 
-  gtsam::NonlinearFactor::shared_ptr clone() const override
-  {
-    return boost::static_pointer_cast<gtsam::NonlinearFactor>(gtsam::NonlinearFactor::shared_ptr(new This(*this)));
-  }
+  // gtsam::NonlinearFactor::shared_ptr clone() const override
+  // {
+  //   return boost::static_pointer_cast<gtsam::NonlinearFactor>(gtsam::NonlinearFactor::shared_ptr(new This(*this)));
+  // }
 
    gtsam::Vector evaluateError(const gtsam::Point3& previousPoint, const gtsam::Point3& currentPoint,
                               const gtsam::Pose3& previousPose, const gtsam::Pose3& currentPose,

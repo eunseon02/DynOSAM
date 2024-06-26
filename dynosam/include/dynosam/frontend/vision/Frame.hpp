@@ -72,6 +72,17 @@ public:
     inline FrameId getFrameId() const { return frame_id_; }
 
     /**
+     * @brief Returns the pose of the sensor at this frame w.r.t the world frame
+     * i.e ^wT_c such that a point, p measured in the camera frame can be put in the world frame using
+     * this pose
+     * e.g.
+     * ^wp = ^wT_c * ^cp
+     *
+     * @return const gtsam::Pose3&
+     */
+    const gtsam::Pose3& getPose() const { return T_world_camera_; }
+
+    /**
      * @brief Gets the total number of static features observed at this frame. Includes usables (inliers) and outliers.
      *
      * @return size_t
