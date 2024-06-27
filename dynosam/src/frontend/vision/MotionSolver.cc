@@ -448,12 +448,14 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         const gtsam::Pose3 H_w = T_world_k * G_w;
         result.best_pose = H_w;
 
-        refineLocalObjectMotionEstimate(
-            result,
-            frame_k_1,
-            frame_k,
-            object_id
-        );
+        if(params_.refine_object_motion_esimate) {
+            refineLocalObjectMotionEstimate(
+                result,
+                frame_k_1,
+                frame_k,
+                object_id
+            );
+        }
     }
 
     //if not valid, return motion result as is
@@ -502,18 +504,18 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     gtsam::NonlinearFactorGraph graph;
     gtsam::Values values;
 
-    // auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
-    //     frame_k_1->getFrameCamera().calibration());
+    auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
+        frame_k_1->getFrameCamera().calibration());
 
     gtsam::SharedNoiseModel landmark_motion_noise =
-        gtsam::noiseModel::Isotropic::Sigma(3u, 0.01);
+        gtsam::noiseModel::Isotropic::Sigma(3u, 0.001);
 
-    // gtsam::SharedNoiseModel projection_noise =
-    //     gtsam::noiseModel::Isotropic::Sigma(2u, 2);
     gtsam::SharedNoiseModel projection_noise =
-        gtsam::noiseModel::Isotropic::Sigma(3u, 0.05);
+        gtsam::noiseModel::Isotropic::Sigma(2u, 2);
+    // gtsam::SharedNoiseModel projection_noise =
+    //     gtsam::noiseModel::Isotropic::Sigma(3u, 0.01);
 
-    static constexpr auto k_huber_value = 0.001;
+    static constexpr auto k_huber_value = 0.0001;
 
     //make robust
     landmark_motion_noise = gtsam::noiseModel::Robust::Create(
@@ -561,37 +563,37 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
         values.insert(lmk_k_1_key, lmk_k_1_world);
         values.insert(lmk_k_key, lmk_k_world);
 
-        graph.emplace_shared<PoseToPointFactor>(
-                pose_k_1_key, //pose key at previous frames
-                lmk_k_1_key,
-                lmk_k_1_local,
-                projection_noise
-            );
-
-        graph.emplace_shared<PoseToPointFactor>(
-                pose_k_key, //pose key at current frames
-                lmk_k_key,
-                lmk_k_local,
-                projection_noise
-            );
-
-        // graph.emplace_shared<GenericProjectionFactor>(
-        //         kp_k_1,
-        //         projection_noise,
-        //         pose_k_1_key,
+        // graph.emplace_shared<PoseToPointFactor>(
+        //         pose_k_1_key, //pose key at previous frames
         //         lmk_k_1_key,
-        //         gtsam_calibration,
-        //         false, false
-        // );
+        //         lmk_k_1_local,
+        //         projection_noise
+        //     );
 
-        // graph.emplace_shared<GenericProjectionFactor>(
-        //         kp_k,
-        //         projection_noise,
-        //         pose_k_key,
+        // graph.emplace_shared<PoseToPointFactor>(
+        //         pose_k_key, //pose key at current frames
         //         lmk_k_key,
-        //         gtsam_calibration,
-        //         false, false
-        // );
+        //         lmk_k_local,
+        //         projection_noise
+        //     );
+
+        graph.emplace_shared<GenericProjectionFactor>(
+                kp_k_1,
+                projection_noise,
+                pose_k_1_key,
+                lmk_k_1_key,
+                gtsam_calibration,
+                false, false
+        );
+
+        graph.emplace_shared<GenericProjectionFactor>(
+                kp_k,
+                projection_noise,
+                pose_k_key,
+                lmk_k_key,
+                gtsam_calibration,
+                false, false
+        );
 
         graph.emplace_shared<LandmarkMotionTernaryFactor>(
             lmk_k_1_key,

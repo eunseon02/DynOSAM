@@ -82,6 +82,9 @@ public:
      */
     const gtsam::Pose3& getPose() const { return T_world_camera_; }
 
+    inline const std::map<ObjectId, DynamicObjectObservation>& getObjectObservations() const { return object_observations_; }
+    inline std::map<ObjectId, DynamicObjectObservation>& getObjectObservations() { return object_observations_; }
+
     /**
      * @brief Gets the total number of static features observed at this frame. Includes usables (inliers) and outliers.
      *

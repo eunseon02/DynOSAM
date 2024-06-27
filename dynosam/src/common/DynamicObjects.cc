@@ -82,7 +82,7 @@ void propogateObjectPoses(
         else {
             //no motion at the previous frame - if close, interpolate between last pose and this pose
             //no motion used
-            const size_t min_diff_frames = 8;
+            const size_t min_diff_frames = 4;
 
             //last frame SHOULD be the largest frame (as we use a std::map with std::less)
             auto last_record_itr = per_frame_poses.rbegin();

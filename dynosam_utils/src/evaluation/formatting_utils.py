@@ -79,6 +79,7 @@ class LatexTableFormatter(object):
     def save_pdf(self, file_path:str):
         self._write_results_collection_to_doc()
         self._doc.generate_pdf(file_path, clean_tex=False)
+        self._doc.generate_tex(file_path)
 
     def add_results(self, name: str, results: Dict):
         self._results_collection[name] = results

@@ -83,6 +83,11 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
         params.use_object_motion_pnp);
 
     yaml_parser.getNestedYamlParam(
+        "tracker", "refine_object_motion_esimate",
+        &params.refine_object_motion_esimate,
+        params.refine_object_motion_esimate);
+
+    yaml_parser.getNestedYamlParam(
         "tracker", "ransac_threshold_pnp",
         &params.ransac_threshold_pnp,
         params.ransac_threshold_pnp);

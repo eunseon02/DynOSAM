@@ -38,6 +38,10 @@ tracker:
   # When using rgbd-pipeline, camera-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
   use_object_motion_pnp: 1
 
+  # When using RGBD pipeline, object motion will be refined ba NLO using motion factor
+  # e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
+  refine_object_motion_esimate: 1
+
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
   ransac_threshold_pnp: 0.5

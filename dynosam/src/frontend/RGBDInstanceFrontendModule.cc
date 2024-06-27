@@ -255,12 +255,12 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
     }
 
     VLOG(15) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
-          << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
-          << "- Tracking Status: "
-          << to_string(result.status) << '\n'
-          << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
-          << "\t- # inliers: " << result.inliers.size() << '\n'
-          << "\t- # outliers: " << result.outliers.size() << '\n';
+        << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
+        << "- Tracking Status: "
+        << to_string(result.status) << '\n'
+        << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
+        << "\t- # inliers: " << result.inliers.size() << '\n'
+        << "\t- # outliers: " << result.outliers.size() << '\n';
 
     if(result.status == TrackingStatus::VALID) {
         frame_k->T_world_camera_ = result.best_pose;
@@ -288,12 +288,12 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     }
 
     VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
-          << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
-          << "- Tracking Status: "
-          << to_string(result.status) << '\n'
-          << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
-          << "\t- # inliers: " << result.inliers.size() << '\n'
-          << "\t- # outliers: " << result.outliers.size() << '\n';
+        << (result.status == TrackingStatus::VALID ? " success " : " failure ") << ":\n"
+        << "- Tracking Status: "
+        << to_string(result.status) << '\n'
+        << "- Total Correspondences: " << result.inliers.size() + result.outliers.size() << '\n'
+        << "\t- # inliers: " << result.inliers.size() << '\n'
+        << "\t- # outliers: " << result.outliers.size() << '\n';
 
     //sanity check
     //if valid, remove outliers and add to motion estimation
@@ -301,6 +301,8 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
         frame_k->dynamic_features_.markOutliers(result.outliers);
 
         ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
+
+        const std::lock_guard<std::mutex> lock(object_motion_mutex_);
         motion_estimates.insert({object_id, estimate});
         return true;
     }
@@ -430,6 +432,44 @@ void RGBDInstanceFrontendModule::determineDynamicObjects(const Frame& previous_f
         // LOG(INFO) << "Done Removing label " << label;
     }
 }
+
+// MotionEstimateMap RGBDInstanceFrontendModule::solveObjectMotions(Frame::Ptr frame_k_1, Frame::Ptr frame_k) {
+//     MotionEstimateMap motion_estimates;
+//     ObjectIds failed_object_tracks;
+
+//     std::map<ObjectId, DynamicObjectObservation>& object_observations = frame_k->getObjectObservations();
+
+//     //the only part of the motion solve that takes a lot of time is the refinement
+//     //only multiple thread if the param is set to true
+//     const bool using_nlo_refinement = base_params_.refine_object_motion_esimate;
+
+//     std::stringstream debug_ss;
+//     std::stringstream* debug_ss_ptr = nullptr;
+
+//     if(VLOG_IS_ON(15)) {
+//         debug_ss_ptr = &debug_ss;
+//     }
+
+//     //TODO: for now!
+//     if(!using_nlo_refinement && true) {
+//         for(const auto& [object_id, observations] : frame->object_observations_) {
+
+//             debug_ss << "Solving motion for " << object_id << " with " << observations.numFeatures() << "\n";
+
+//             if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates, debug_ss_ptr)) {
+//                 VLOG(5) << "Could not solve motion for object " << object_id <<
+//                     " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
+//                 failed_object_tracks.push_back(object_id);
+//             }
+//         }
+//     }
+//     // else {
+//     //     auto sovle_object_motion = [=](ObjectId object_id)
+//     // }
+
+
+//     LOG(INFO) << debug_ss.str();
+// }
 
 
 
