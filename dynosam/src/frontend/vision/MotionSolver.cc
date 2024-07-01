@@ -497,23 +497,19 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     Pose3SolverResult& solver_result,
     Frame::Ptr frame_k_1,
     Frame::Ptr frame_k,
-    ObjectId object_id) const
+    ObjectId object_id,
+    const RefinementSolver& solver) const
 {
     CHECK(solver_result.status == TrackingStatus::VALID);
 
     gtsam::NonlinearFactorGraph graph;
     gtsam::Values values;
 
-    auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
-        frame_k_1->getFrameCamera().calibration());
-
     gtsam::SharedNoiseModel landmark_motion_noise =
         gtsam::noiseModel::Isotropic::Sigma(3u, 0.001);
 
     gtsam::SharedNoiseModel projection_noise =
         gtsam::noiseModel::Isotropic::Sigma(2u, 2);
-    // gtsam::SharedNoiseModel projection_noise =
-    //     gtsam::noiseModel::Isotropic::Sigma(3u, 0.01);
 
     static constexpr auto k_huber_value = 0.0001;
 
@@ -530,6 +526,9 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     values.insert(pose_k_1_key, frame_k_1->getPose());
     values.insert(pose_k_key, frame_k->getPose());
     values.insert(object_motion_key, solver_result.best_pose);
+
+    auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
+        frame_k_1->getFrameCamera().calibration());
 
 
     auto pose_prior = gtsam::noiseModel::Isotropic::Sigma(6u, 0.00001);
@@ -563,37 +562,40 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
         values.insert(lmk_k_1_key, lmk_k_1_world);
         values.insert(lmk_k_key, lmk_k_world);
 
-        // graph.emplace_shared<PoseToPointFactor>(
-        //         pose_k_1_key, //pose key at previous frames
-        //         lmk_k_1_key,
-        //         lmk_k_1_local,
-        //         projection_noise
-        //     );
-
-        // graph.emplace_shared<PoseToPointFactor>(
-        //         pose_k_key, //pose key at current frames
-        //         lmk_k_key,
-        //         lmk_k_local,
-        //         projection_noise
-        //     );
-
-        graph.emplace_shared<GenericProjectionFactor>(
-                kp_k_1,
-                projection_noise,
-                pose_k_1_key,
+        if(solver == RefinementSolver::PointError) {
+            graph.emplace_shared<PoseToPointFactor>(
+                pose_k_1_key, //pose key at previous frames
                 lmk_k_1_key,
-                gtsam_calibration,
-                false, false
-        );
+                lmk_k_1_local,
+                projection_noise
+            );
 
-        graph.emplace_shared<GenericProjectionFactor>(
-                kp_k,
-                projection_noise,
-                pose_k_key,
-                lmk_k_key,
-                gtsam_calibration,
-                false, false
-        );
+            graph.emplace_shared<PoseToPointFactor>(
+                    pose_k_key, //pose key at current frames
+                    lmk_k_key,
+                    lmk_k_local,
+                    projection_noise
+            );
+        }
+        else if(solver == RefinementSolver::ProjectionError) {
+            graph.emplace_shared<GenericProjectionFactor>(
+                    kp_k_1,
+                    projection_noise,
+                    pose_k_1_key,
+                    lmk_k_1_key,
+                    gtsam_calibration,
+                    false, false
+            );
+
+            graph.emplace_shared<GenericProjectionFactor>(
+                    kp_k,
+                    projection_noise,
+                    pose_k_key,
+                    lmk_k_key,
+                    gtsam_calibration,
+                    false, false
+            );
+        }
 
         graph.emplace_shared<LandmarkMotionTernaryFactor>(
             lmk_k_1_key,

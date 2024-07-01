@@ -19,10 +19,10 @@ n_levels: 8
 init_threshold_fast: 20
 min_threshold_fast: 7
 
-shrink_row: 25 # KITTI
-shrink_col: 200 # KITTI!!!
-# shrink_row: 1
-# shrink_col: 1
+# shrink_row: 25 # KITTI
+# shrink_col: 200 # KITTI!!!
+shrink_row: 1
+shrink_col: 1
 
 
 tracker:

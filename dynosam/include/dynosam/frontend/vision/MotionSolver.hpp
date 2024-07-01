@@ -244,13 +244,16 @@ public:
                             ObjectId object_id);
 
 protected:
+    enum RefinementSolver { ProjectionError, PointError };
+
     //assumes we have updated frames with latest pose (camera) and the result is from the geometricOutlierReject function
     //only works with stereo
     void refineLocalObjectMotionEstimate(
                             Pose3SolverResult& solver_result,
                             Frame::Ptr frame_k_1,
                             Frame::Ptr frame_k,
-                            ObjectId object_id) const;
+                            ObjectId object_id,
+                            const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
 
 
 

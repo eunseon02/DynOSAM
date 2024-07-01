@@ -592,7 +592,7 @@ private:
                 gtsam::Pose3 pose(gtsam::Rot3(rot), gtsam::Point3(t1, t2, t3));
 
 
-                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(M_PI_2, 0, M_PI_2), gtsam::traits<gtsam::Point3>::Identity());
                 //pose is in world coordinate convention so we put into camera convention (the camera_to_world.inverse())
                 //the pose provided is actually world -> camera but we want camera -> world eg T_world_camera, so we apply the inverse transform
                 pose = camera_to_world.inverse() * pose.inverse();
