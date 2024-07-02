@@ -169,9 +169,6 @@ class MotionErrorEvaluator(Evaluator):
             # object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
             object_trajectories_ref[f"Ground Truth Object {object_id}"] = object_traj_ref
 
-            # object_trajectories[object_id] = object_traj
-            # object_trajectories_ref[object_id] = object_traj_ref
-
             logger.debug(f"Logging pose metrics for object {object_id}")
 
             ape_trans = metrics.APE(metrics.PoseRelation.translation_part)

@@ -227,7 +227,7 @@ def plot_object_trajectories(
     draw(obj_trajectories, style='-')
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
-    draw(obj_trajectories_ref, style='-', alpha=0.8, shift_color=True)
+    draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
 
 
 
