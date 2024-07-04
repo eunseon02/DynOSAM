@@ -102,6 +102,26 @@ public:
         }
     };
 
+    struct PointUpdateContext {
+        LandmarkNode3d::Ptr lmk_node;
+        FrameNode3d::Ptr frame_node_k_1;
+        FrameNode3d::Ptr frame_node_k;
+
+
+        bool is_starting_motion_frame {false};
+
+        inline ObjectId getObjectId() const { return lmk_node->getObjectId(); }
+        inline TrackletId getTrackletId() const { return lmk_node->getId(); }
+
+    };
+
+    struct ObjectUpdateContext {
+        FrameNode3d::Ptr frame_node_k;
+        ObjectNode3d::Ptr object_node;
+
+        inline ObjectId getObjectId() const { return object_node->getId(); }
+    };
+
     class Updater {
 
     public:
@@ -110,6 +130,7 @@ public:
 
         RGBDBackendModule* parent_;
         Updater(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
+        virtual ~Updater() = default;
 
         //  //adds pose to the new values and a prior on this pose to the new_factors
         void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values);
@@ -151,12 +172,48 @@ public:
         //log everything all frames!!
         void logBackendFromMap(BackendLogger& logger);
 
-        // //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
-        // //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
+
+        virtual void dynamicPointUpdateCallback(
+            const PointUpdateContext& context,
+            UpdateObservationResult& result,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) = 0;
+
+        virtual void objectUpdateContext(
+            const ObjectUpdateContext& context,
+            UpdateObservationResult& result,
+            gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) = 0;
+
+        virtual bool isDynamicTrackletInMap(const LandmarkNode3d::Ptr& lmk_node) const = 0;
         gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map; //! the set of (static related) values managed by this updater. Allows checking if values have already been added over successifve function calls
-        gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_; //! thr set of dynamic points that have been added by this updater. We use a separate map containing the tracklets as the keys are non-unique
 
         auto getMap() { return parent_->getMap(); }
+
+    private:
+        gtsam::Values values_;
+        gtsam::NonlinearFactorGraph factors_;
+
+    };
+
+    class LLUpdater : public Updater {
+    public:
+        DYNO_POINTER_TYPEDEFS(LLUpdater)
+
+        LLUpdater(RGBDBackendModule* parent) : Updater(parent) {}
+
+        void dynamicPointUpdateCallback(const PointUpdateContext& context, UpdateObservationResult& result) override;
+        void objectUpdateContext(const ObjectUpdateContext& context, UpdateObservationResult& result) override;
+
+        inline bool isDynamicTrackletInMap(const LandmarkNode3d::Ptr& lmk_node) const override {
+            const TrackletId tracklet_id = lmk_node->getId();
+            return is_dynamic_tracklet_in_map_.exists(tracklet_id);
+        }
+
+    protected:
+        //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
+        //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
+        gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_; //! thr set of dynamic points that have been added by this updater. We use a separate map containing the tracklets as the keys are non-unique
 
     };
 
@@ -169,7 +226,7 @@ public:
     // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
     // UpdateImpl::UniquePtr updater_;
-    Updater::UniquePtr new_updater_;
+    LLUpdater::UniquePtr new_updater_;
     FrameId first_frame_id_; //the first frame id that is received
 
     //logger here!!
