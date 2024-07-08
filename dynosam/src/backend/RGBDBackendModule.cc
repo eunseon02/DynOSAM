@@ -120,6 +120,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
     initial_camera_poses_.insert2(frame_k, T_world_cam_k_frontend);
+    initial_object_motions_.insert2(frame_k, input->estimated_motions_);
 
     {
         utils::TimingStatsCollector("map.update_observations");
@@ -135,7 +136,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     //must optimzie to update the map
     optimizer_->update(spin_state_, new_values, new_factors, map_);
     // optimize(frame_k, new_values, new_factors);
-    map_->updateEstimates(new_values, new_factors, frame_k);
+    // map_->updateEstimates(new_values, new_factors, frame_k);
 
     return {State::Nominal, nullptr};
 }
@@ -150,6 +151,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     //estimate of pose from the frontend
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
     initial_camera_poses_.insert2(frame_k, T_world_cam_k_frontend);
+    initial_object_motions_.insert2(frame_k, input->estimated_motions_);
     {
         utils::TimingStatsCollector("map.update_observations");
         map_->updateObservations(input->static_landmarks_);
@@ -167,33 +169,37 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
     new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
 
-    gtsam::NonlinearFactorGraph full_graph = map_->getGraph();
-    full_graph += new_factors;
-    map_->updateEstimates(new_values, full_graph, frame_k);
+    gtsam::NonlinearFactorGraph full_graph;
+    // gtsam::NonlinearFactorGraph full_graph = map_->getGraph();
+    // full_graph += new_factors;
+    // map_->updateEstimates(new_values, full_graph, frame_k);
 
     gtsam::Values optimised_values;
     double error_before = 0;
     double error_after = 0;
     if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
         //update map with best results
-        map_->updateEstimates(optimised_values, full_graph, frame_k);
+        new_updater_->updateTheta(optimised_values);
+        // map_->updateEstimates(optimised_values, full_graph, frame_k);
         LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
     }
+
+    auto accessor = new_updater_->accessorFromTheta();
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
     backend_output->frame_id_ = input->getFrameId();
-    backend_output->T_world_camera_ = map_->getPoseEstimate(frame_k).get();
-    backend_output->static_landmarks_ = map_->getFullStaticMap();
-    backend_output->dynamic_landmarks_ = map_->getDynamicMap(frame_k);
+    backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
+    backend_output->static_landmarks_ = accessor->getFullStaticMap();
+    backend_output->dynamic_landmarks_ = accessor->getDynamicLandmarkEstimates(frame_k);
 
     for(FrameId frame_id : map_->getFrameIds()) {
-        backend_output->optimized_poses_.push_back(map_->getPoseEstimate(frame_id).get());
+        backend_output->optimized_poses_.push_back(accessor->getSensorPose(frame_id).get());
     }
 
-    //TODO: what if we have a gt packet map but there is no data in it!! This is equivalent to a "no gt data flag" which is implicit!!
-    // backend_output->composed_object_poses = map_->computeComposedObjectPoseMap(gt_packet_map_);
-    backend_output->composed_object_poses = map_->composeEstimatedObjectPoseMap();
+    // //TODO: what if we have a gt packet map but there is no data in it!! This is equivalent to a "no gt data flag" which is implicit!!
+    // // backend_output->composed_object_poses = map_->computeComposedObjectPoseMap(gt_packet_map_);
+    backend_output->composed_object_poses = accessor->getObjectPoses();
 
     debug_info_ = DebugInfo();
 
@@ -292,13 +298,296 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set
 //     return {new_values, new_factors};
 // }
 
+StateQuery<gtsam::Point3>  RGBDBackendModule::Accessor::getStaticLandmark(TrackletId tracklet_id) const {
+    const auto lmk = getMap()->getLandmark(tracklet_id);
+    CHECK(lmk);
+
+    return this->query<gtsam::Point3>(
+        lmk->makeStaticKey()
+    );
+}
+
+
+MotionEstimateMap RGBDBackendModule::Accessor::getObjectMotions(FrameId frame_id) const {
+    MotionEstimateMap motion_estimates;
+
+    const auto frame_node = getMap()->getFrame(frame_id);
+    if(!frame_node) {
+        return motion_estimates;
+    }
+
+    const auto object_seen = frame_node->objects_seen.template collectIds<ObjectId>();
+    for(ObjectId object_id : object_seen) {
+        StateQuery<Motion3> motion_query = this->getObjectMotion(frame_id, object_id);
+        if(motion_query) {
+            motion_estimates.insert2(
+                object_id,
+                ReferenceFrameValue<Motion3>(
+                    motion_query.get(),
+                    ReferenceFrame::GLOBAL
+                ));
+        }
+    }
+    return motion_estimates;
+}
+
+EstimateMap<ObjectId, gtsam::Pose3> RGBDBackendModule::Accessor::getObjectPoses(FrameId frame_id) const {
+    EstimateMap<ObjectId, gtsam::Pose3> pose_estimates;
+
+    const auto frame_node = getMap()->getFrame(frame_id);
+    if(!frame_node) {
+        return pose_estimates;
+    }
+
+    const auto object_seen = frame_node->objects_seen.template collectIds<ObjectId>();
+    for(ObjectId object_id : object_seen) {
+        StateQuery<gtsam::Pose3> object_pose = this->getObjectPose(frame_id, object_id);
+        if(object_pose) {
+            pose_estimates.insert2(
+                object_id,
+                ReferenceFrameValue<gtsam::Pose3>(
+                    object_pose.get(),
+                    ReferenceFrame::GLOBAL
+                ));
+        }
+    }
+    return pose_estimates;
+}
+
+ObjectPoseMap RGBDBackendModule::Accessor::getObjectPoses() const {
+
+    ObjectPoseMap object_poses;
+    for(FrameId frame_id : getMap()->getFrameIds()) {
+        EstimateMap<ObjectId, gtsam::Pose3> per_object_pose = this->getObjectPoses(frame_id);
+
+        for(const auto&[object_id, pose] : per_object_pose) {
+            if(!object_poses.exists(object_id)) {
+                object_poses.insert2(object_id, gtsam::FastMap<FrameId, gtsam::Pose3>{});
+            }
+
+            auto& per_frame_pose = object_poses.at(object_id);
+            per_frame_pose.insert2(frame_id, pose);
+
+        }
+    }
+    return object_poses;
+}
+
+StatusLandmarkEstimates RGBDBackendModule::Accessor::getDynamicLandmarkEstimates(FrameId frame_id) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    CHECK_NOTNULL(frame_node);
+
+    StatusLandmarkEstimates estimates;
+    const auto object_seen = frame_node->objects_seen.template collectIds<ObjectId>();
+    for(ObjectId object_id : object_seen) {
+        estimates += this->getDynamicLandmarkEstimates(frame_id, object_id);
+    }
+    return estimates;
+
+}
+StatusLandmarkEstimates RGBDBackendModule::Accessor::getDynamicLandmarkEstimates(FrameId frame_id, ObjectId object_id) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    CHECK_NOTNULL(frame_node);
+
+    if(!frame_node->objectObserved(object_id)) {
+        return StatusLandmarkEstimates{};
+    }
+
+    StatusLandmarkEstimates estimates;
+    const auto& dynamic_landmarks = frame_node->dynamic_landmarks;
+    for(auto lmk_node : dynamic_landmarks) {
+        const auto tracklet_id = lmk_node->tracklet_id;
+
+        if(object_id != lmk_node->object_id) {
+            continue;
+        }
+
+        //user defined function should put point in the world frame
+        StateQuery<gtsam::Point3> lmk_query = this->getDynamicLandmark(
+            frame_id,
+            tracklet_id
+        );
+        if(lmk_query) {
+            estimates.push_back(
+                LandmarkStatus::DynamicInGLobal(
+                    lmk_query.get(), //estimate
+                    frame_id,
+                    tracklet_id,
+                    object_id,
+                    LandmarkStatus::Method::OPTIMIZED //this may not be correct!!
+                ) //status
+            );
+        }
+    }
+    return estimates;
+}
+
+StatusLandmarkEstimates RGBDBackendModule::Accessor::getStaticLandmarkEstimates(FrameId frame_id) const {
+     //dont go over the frames as this contains references to the landmarks multiple times
+    //e.g. the ones seen in that frame
+    StatusLandmarkEstimates estimates;
+
+    const auto frame_node = getMap()->getFrame(frame_id);
+    CHECK_NOTNULL(frame_node);
+
+
+    for(const auto& landmark_node : frame_node->static_landmarks) {
+        if(landmark_node->isStatic()) {
+            // StateQuery<gtsam::Point3> lmk_query = this->query<gtsam::Point3>(
+            //     landmark_node->makeStaticKey()
+            // );
+            StateQuery<gtsam::Point3> lmk_query = getStaticLandmark(landmark_node->tracklet_id);
+            if(lmk_query) {
+                estimates.push_back(
+                    LandmarkStatus::StaticInGlobal(
+                        lmk_query.get(), //estimate
+                        LandmarkStatus::MeaninglessFrame,
+                        landmark_node->getId(), //tracklet id
+                        LandmarkStatus::Method::OPTIMIZED
+                    ) //status
+                );
+            }
+        }
+    }
+    return estimates;
+}
+
+StatusLandmarkEstimates RGBDBackendModule::Accessor::getFullStaticMap() const {
+     //dont go over the frames as this contains references to the landmarks multiple times
+    //e.g. the ones seen in that frame
+    StatusLandmarkEstimates estimates;
+
+    const auto landmarks = getMap()->getLandmarks();
+
+    for(const auto&[_, landmark_node] : landmarks) {
+        if(landmark_node->isStatic()) {
+            // StateQuery<gtsam::Point3> lmk_query = this->query<gtsam::Point3>(
+            //     landmark_node->makeStaticKey()
+            // );
+            StateQuery<gtsam::Point3> lmk_query = getStaticLandmark(landmark_node->tracklet_id);
+            if(lmk_query) {
+                estimates.push_back(
+                    LandmarkStatus::StaticInGlobal(
+                        lmk_query.get(), //estimate
+                        LandmarkStatus::MeaninglessFrame,
+                        landmark_node->getId(), //tracklet id
+                        LandmarkStatus::Method::OPTIMIZED
+                    ) //status
+                );
+            }
+        }
+    }
+    return estimates;
+}
+
+StatusLandmarkEstimates RGBDBackendModule::Accessor::getLandmarkEstimates(FrameId frame_id) const {
+    StatusLandmarkEstimates estimates;
+    estimates += getStaticLandmarkEstimates(frame_id);
+    estimates += getDynamicLandmarkEstimates(frame_id);
+    return estimates;
+}
+
+
+bool RGBDBackendModule::Accessor::hasObjectMotionEstimate(FrameId frame_id, ObjectId object_id, Motion3* motion) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    StateQuery<Motion3> motion_query = this->getObjectMotion(frame_id, object_id);
+
+    if(motion_query) {
+        if(motion) {
+            *motion = motion_query.get();
+        }
+        return true;
+    }
+    return false;
+
+}
+bool RGBDBackendModule::Accessor::hasObjectMotionEstimate(FrameId frame_id, ObjectId object_id, Motion3& motion) const {
+    return hasObjectMotionEstimate(frame_id, object_id, &motion);
+}
+
+bool RGBDBackendModule::Accessor::hasObjectPoseEstimate(FrameId frame_id, ObjectId object_id, gtsam::Pose3* pose) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    StateQuery<gtsam::Pose3> pose_query = this->getObjectPose(frame_id, object_id);
+
+    if(pose_query) {
+        if(pose) {
+            *pose = pose_query.get();
+        }
+        return true;
+    }
+    return false;
+
+}
+bool RGBDBackendModule::Accessor::hasObjectPoseEstimate(FrameId frame_id, ObjectId object_id, gtsam::Pose3& pose) const {
+    return hasObjectPoseEstimate(frame_id, object_id, &pose);
+}
+
+
+gtsam::FastMap<ObjectId, gtsam::Point3>  RGBDBackendModule::Accessor::computeObjectCentroids(FrameId frame_id) const {
+    gtsam::FastMap<ObjectId, gtsam::Point3> centroids;
+
+    const auto frame_node = getMap()->getFrame(frame_id);
+    if(!frame_node) {
+        return centroids;
+    }
+
+    const auto object_seen = frame_node->objects_seen.template collectIds<ObjectId>();
+    for(ObjectId object_id : object_seen) {
+        const auto[centroid, result] = computeObjectCentroid(frame_id, object_id);
+
+        if(result) {
+            centroids.insert2(object_id, centroid);
+        }
+    }
+    return centroids;
+}
+
+
+std::tuple<gtsam::Point3, bool> RGBDBackendModule::Accessor::computeObjectCentroid(FrameId frame_id, ObjectId object_id) const {
+    const StatusLandmarkEstimates& dynamic_lmks = this->getDynamicLandmarkEstimates(frame_id, object_id);
+
+    //convert to point cloud - should be a map with only one map in it
+    CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getSensorPose(frame_id).get());
+    if(object_clouds.size() == 0) {
+        //TODO: why does this happen so much!!!
+        LOG(INFO) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
+            << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size(); //<< " but reocrded lmks was " << dynamic_landmarks.size();
+        return {gtsam::Point3{}, false};
+    }
+    CHECK_EQ(object_clouds.size(), 1);
+    CHECK(object_clouds.exists(object_id));
+
+    const auto dynamic_point_cloud = object_clouds.at(object_id);
+    pcl::PointXYZ centroid;
+    pcl::computeCentroid(dynamic_point_cloud, centroid);
+    //TODO: outlier reject?
+    gtsam::Point3 translation = pclPointToGtsam(centroid);
+    return {translation, true};
+}
+
+gtsam::Pose3 RGBDBackendModule::Updater::getInitialOrLinearizedSensorPose(FrameId frame_id) const {
+    const auto accessor = this->accessorFromTheta();
+    // sensor pose from a previous/current linearisation point
+    StateQuery<gtsam::Pose3> X_k_theta = accessor->getSensorPose(frame_id);
+
+    CHECK(parent_->initial_camera_poses_.exists(frame_id));
+    gtsam::Pose3 X_k_initial = parent_->initial_camera_poses_.at(frame_id);
+    //take either the query value from the map (if we have a previous initalisation), or the estimate from the camera
+    gtsam::Pose3 X_k;
+    getSafeQuery(X_k, X_k_theta, X_k_initial);
+    return X_k;
+}
+
+
 void RGBDBackendModule::Updater::setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values) {
     new_values.insert(CameraPoseSymbol(frame_id_k), T_world_camera);
+    theta_.insert_or_assign(new_values);
 }
 
 void RGBDBackendModule::Updater::setInitialPosePrior(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::NonlinearFactorGraph& new_factors) {
     auto initial_pose_prior = parent_->initial_pose_prior_;
     new_factors.addPrior(CameraPoseSymbol(frame_id_k), T_world_camera, initial_pose_prior);
+    factors_ += new_factors;
 }
 
 void RGBDBackendModule::Updater::addOdometry(FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
@@ -322,6 +611,7 @@ void RGBDBackendModule::Updater::addOdometry(FrameId from_frame, FrameId to_fram
 
 void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors) {
     new_values.insert(CameraPoseSymbol(frame_id_k), T_world_camera);
+    theta_.insert_or_assign(new_values);
     auto odometry_noise = parent_->odometry_noise_;
 
     auto map = getMap();
@@ -341,6 +631,7 @@ void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Po
     const gtsam::Pose3 odom = T_world_camera_k_1_frontend.inverse() * T_world_camera;
 
     factor_graph_tools::addBetweenFactor(frame_id_k_1, frame_id_k, odom, odometry_noise, new_factors);
+    factors_ += new_factors;
 }
 
 RGBDBackendModule::UpdateObservationResult
@@ -350,7 +641,10 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId from_frame, FrameId
 
     UpdateObservationResult result;
     for(auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
-        result += updateStaticObservations(frame_id, new_values, new_factors, update_params);
+        gtsam::NonlinearFactorGraph factors;
+        result += updateStaticObservations(frame_id, new_values, factors, update_params);
+
+        new_factors += factors;
     }
 
     return result;
@@ -363,7 +657,9 @@ RGBDBackendModule::Updater::updateDynamicObservations(FrameId from_frame, FrameI
 
     UpdateObservationResult result;
     for(auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
-        result += updateDynamicObservations(frame_id, new_values, new_factors, update_params);
+        gtsam::NonlinearFactorGraph factors;
+        result += updateDynamicObservations(frame_id, new_values, factors, update_params);
+        new_factors += factors;
     }
     return result;
 }
@@ -376,6 +672,8 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
     const auto& params = parent_->base_params_;
     auto static_point_noise = parent_->static_point_noise_;
     auto& debug_info = update_params.debug_info;
+
+    Accessor::Ptr accessor = this->accessorFromTheta();
 
     UpdateObservationResult result;
 
@@ -441,7 +739,7 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
             const Landmark& measured = lmk_node->getMeasurement(frame_id_k);
             //add initial value, either from measurement or previous estimate
             gtsam::Point3 lmk_world;
-            getSafeQuery(lmk_world, lmk_node->getStaticLandmarkEstimate(), gtsam::Point3(T_world_camera_frontend * measured));
+            getSafeQuery(lmk_world, accessor->getStaticLandmark(lmk_node->tracklet_id), gtsam::Point3(T_world_camera_frontend * measured));
             new_values.insert(point_key, lmk_world);
             is_other_values_in_map.insert2(point_key, true);
 
@@ -450,6 +748,10 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
 
         }
     }
+
+    //update internal data structures
+    theta_.insert_or_assign(new_values);
+    factors_ += new_factors;
 
     if(debug_info) LOG(INFO) << "Num new static points: " << debug_info->num_new_static_points << " Num new static factors " << debug_info->num_static_factors;
     return result;
@@ -465,6 +767,8 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     auto map = getMap();
     const auto& params = parent_->base_params_;
     auto& debug_info = update_params.debug_info;
+
+    Accessor::Ptr accessor = this->accessorFromTheta();
 
     // collect noise models to be used
     auto landmark_motion_noise = parent_->landmark_motion_noise_;
@@ -581,34 +885,27 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
                     ss << query_frame_node_k_1->frame_id << " " << query_frame_node_k->frame_id << "\n";
 
-                    const Landmark& measured_k = obj_lmk_node->getMeasurement(query_frame_node_k);
-                    const Landmark& measured_k_1 = obj_lmk_node->getMeasurement(query_frame_node_k_1);
 
                     //this should DEFINITELY be in the map, as long as we update the values in the map everyy time
-                    StateQuery<gtsam::Pose3> T_world_camera_k_1_query = query_frame_node_k_1->getPoseEstimate();
+                    StateQuery<gtsam::Pose3> T_world_camera_k_1_query = accessor->getSensorPose(query_frame_node_k_1->frame_id);
                     CHECK(T_world_camera_k_1_query) << "Failed cam pose query at frame " << query_frame_node_k_1->frame_id
                         << ". This may happen if the map_ is not updated every iteration OR something is wrong with the tracking...";
                     const gtsam::Pose3 T_world_camera_k_1 = T_world_camera_k_1_query.get();
 
-                    StateQuery<gtsam::Pose3> T_world_camera_k_query = query_frame_node_k->getPoseEstimate();
-                    gtsam::Pose3 T_world_camera_k;
-
-                    CHECK(parent_->initial_camera_poses_.exists(query_frame_node_k_1->frame_id));
-                    gtsam::Pose3 T_world_camera_k_frontend = parent_->initial_camera_poses_.at(query_frame_node_k_1->frame_id);
-
-                    //take either the query value from the map (if we have a previous initalisation), or the estimate from the camera
-                    getSafeQuery(T_world_camera_k, T_world_camera_k_query, T_world_camera_k_frontend);
-
-                    // const gtsam::Key object_point_key_k_1 = obj_lmk_node->makeDynamicKey(query_frame_node_k_1->frame_id);
-                    // const gtsam::Key object_point_key_k = obj_lmk_node->makeDynamicKey(query_frame_node_k->frame_id);
-
-                    // const gtsam::Key object_pose_k_1_key = query_frame_node_k_1->makeObjectPoseKey(object_id);
-                    // const gtsam::Key object_pose_k_key = query_frame_node_k->makeObjectPoseKey(object_id);
+                    // StateQuery<gtsam::Pose3> T_world_camera_k_query = accessor->getSensorPose(query_frame_node_k->frame_id);
+                    // CHECK(parent_->initial_camera_poses_.exists(query_frame_node_k_1->frame_id));
+                    // gtsam::Pose3 T_world_camera_k_frontend = parent_->initial_camera_poses_.at(query_frame_node_k_1->frame_id);
+                    // //take either the query value from the map (if we have a previous initalisation), or the estimate from the camera
+                    // gtsam::Pose3 T_world_camera_k;
+                    // getSafeQuery(T_world_camera_k, T_world_camera_k_query, T_world_camera_k_frontend);
+                    gtsam::Pose3 T_world_camera_k = getInitialOrLinearizedSensorPose(query_frame_node_k_1->frame_id);
 
                     PointUpdateContext point_context;
                     point_context.lmk_node = obj_lmk_node;
                     point_context.frame_node_k_1 = query_frame_node_k_1;
                     point_context.frame_node_k = query_frame_node_k;
+                    point_context.X_k_measured = T_world_camera_k;
+                    point_context.X_k_1_measured = T_world_camera_k_1;
 
 
                     //this assumes we add all the points in order and have continuous frames (which we should have?)
@@ -634,7 +931,9 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
                     }
 
-                    dynamicPointUpdateCallback(point_context, result);
+                    dynamicPointUpdateCallback(point_context, result, new_values, new_factors);
+                    //update internal theta and factors
+                    theta_.insert_or_assign(new_values);
 
                     // //previous point must be added by the previous iteration
                     // CHECK(new_values.exists(object_point_key_k_1));
@@ -691,8 +990,13 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 point_context.lmk_node = obj_lmk_node;
                 point_context.frame_node_k_1 = frame_node_k_1;
                 point_context.frame_node_k = frame_node_k;
+                point_context.X_k_1_measured = getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
+                point_context.X_k_measured = getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
                 point_context.is_starting_motion_frame = false;
-                dynamicPointUpdateCallback(point_context, result);
+                dynamicPointUpdateCallback(point_context, result, new_values, new_factors);
+
+                //update internal theta and factors
+                theta_.insert_or_assign(new_values);
 
 
                 // const gtsam::Key object_point_key_k = obj_lmk_node->makeDynamicKey(frame_id_k);
@@ -775,9 +1079,11 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     }
 
     //HACK - need the new values in the map so we can do computeObjectCentroid
-    gtsam::NonlinearFactorGraph full_graph = getMap()->getGraph();
-    full_graph += new_factors;
-    getMap()->updateEstimates(new_values, full_graph, frame_id_k);
+    //TODO:
+     gtsam::NonlinearFactorGraph full_graph;
+    // gtsam::NonlinearFactorGraph full_graph = getMap()->getGraph();
+    // full_graph += new_factors;
+    // getMap()->updateEstimates(new_values, full_graph, frame_id_k);
 
     //iterate over objects for which a motion was added
     for(const auto&[object_id, frames_affected] : result.objects_affected_per_frame) {
@@ -794,116 +1100,340 @@ RGBDBackendModule::Updater::updateDynamicObservations(
         for(size_t frame_idx = 0; frame_idx < frames_affected_vector.size(); frame_idx++) {
             const FrameId frame_id = frames_affected_vector.at(frame_idx);
             auto frame_node_k_impl = getMap()->getFrame(frame_id);
-            //add the motion
-            // const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(object_id);
-            const gtsam::Key object_pose_key_k = frame_node_k_impl->makeObjectPoseKey(object_id);
 
-            if(frame_id == frame_id_k) {
-                //most recent frame is this frame!
-                //check that this pose does not exist yet!
-                CHECK(!new_values.exists(object_pose_key_k));
-                CHECK(!is_other_values_in_map.exists(object_pose_key_k));
+            ObjectUpdateContext object_update_context;
+            object_update_context.frame_node_k = frame_node_k_impl;
+            object_update_context.object_node = object_node;
+            objectUpdateContext(object_update_context, result, new_values, new_factors);
 
-            }
+            //update internal theta and factors
+            theta_.insert_or_assign(new_values);
 
-            if(!is_other_values_in_map.exists(object_pose_key_k)) {
-                const auto[centroid_initial, result] = frame_node_k_impl->computeObjectCentroid(object_id);
-                CHECK(result);
-                gtsam::Pose3 initial_object_pose(gtsam::Rot3::Identity(), centroid_initial);
-                gtsam::Pose3 object_pose_k;
-                getSafeQuery(object_pose_k,
-                    frame_node_k_impl->getObjectPoseEstimate(object_id),
-                    initial_object_pose);
+            // //add the motion
+            // // const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(object_id);
+            // const gtsam::Key object_pose_key_k = frame_node_k_impl->makeObjectPoseKey(object_id);
+
+            // if(frame_id == frame_id_k) {
+            //     //most recent frame is this frame!
+            //     //check that this pose does not exist yet!
+            //     CHECK(!new_values.exists(object_pose_key_k));
+            //     CHECK(!is_other_values_in_map.exists(object_pose_key_k));
+
+            // }
+
+            // if(!is_other_values_in_map.exists(object_pose_key_k)) {
+            //     //TODO:
+            //     // const auto[centroid_initial, result] = frame_node_k_impl->computeObjectCentroid(object_id);
+            //     // CHECK(result);
+            //     // gtsam::Pose3 initial_object_pose(gtsam::Rot3::Identity(), centroid_initial);
+            //     gtsam::Pose3 initial_object_pose;
+            //     gtsam::Pose3 object_pose_k;
+            //     //TODO:
+            //     // getSafeQuery(object_pose_k,
+            //     //     frame_node_k_impl->getObjectPoseEstimate(object_id),
+            //     //     initial_object_pose);
 
 
-                new_values.insert(object_pose_key_k, object_pose_k);
-                is_other_values_in_map.insert2(object_pose_key_k, true);
-                LOG(INFO) << "Adding object pose key " << DynoLikeKeyFormatter(object_pose_key_k);
-            }
+            //     new_values.insert(object_pose_key_k, object_pose_k);
+            //     is_other_values_in_map.insert2(object_pose_key_k, true);
+            //     LOG(INFO) << "Adding object pose key " << DynoLikeKeyFormatter(object_pose_key_k);
+            // }
 
 
-            //TODO: fix frame_node indexing here as we're inside another loop!!
-            if(FLAGS_use_smoothing_factor) {
-                if(frame_id < 2) continue;
+            // //TODO: fix frame_node indexing here as we're inside another loop!!
+            // if(FLAGS_use_smoothing_factor) {
+            //     if(frame_id < 2) continue;
 
-                auto frame_node_k_2_impl = map->getFrame(frame_id - 2u);
-                auto frame_node_k_1_impl = map->getFrame(frame_id - 1u);
+            //     auto frame_node_k_2_impl = map->getFrame(frame_id - 2u);
+            //     auto frame_node_k_1_impl = map->getFrame(frame_id - 1u);
 
-                if (!frame_node_k_2_impl || !frame_node_k_1_impl) { continue; }
+            //     if (!frame_node_k_2_impl || !frame_node_k_1_impl) { continue; }
 
-                //pose key at k-2
-                const gtsam::Symbol object_pose_key_k_2 = frame_node_k_2_impl->makeObjectPoseKey(object_id);
-                //pose key at previous frame (k-1)
-                const gtsam::Symbol object_pose_key_k_1 = frame_node_k_1_impl->makeObjectPoseKey(object_id);
+            //     //pose key at k-2
+            //     const gtsam::Symbol object_pose_key_k_2 = frame_node_k_2_impl->makeObjectPoseKey(object_id);
+            //     //pose key at previous frame (k-1)
+            //     const gtsam::Symbol object_pose_key_k_1 = frame_node_k_1_impl->makeObjectPoseKey(object_id);
 
-                auto object_smoothing_noise = parent_->object_smoothing_noise_;
-                CHECK(object_smoothing_noise);
-                CHECK_EQ(object_smoothing_noise->dim(), 6u);
+            //     auto object_smoothing_noise = parent_->object_smoothing_noise_;
+            //     CHECK(object_smoothing_noise);
+            //     CHECK_EQ(object_smoothing_noise->dim(), 6u);
 
-                {
-                    ObjectId object_label_k_2, object_label_k_1, object_label_k;
-                    FrameId frame_id_k_2, frame_id_k_1, frame_id_k;
-                    CHECK(reconstructPoseInfo(object_pose_key_k_2, object_label_k_2, frame_id_k_2));
-                    CHECK(reconstructPoseInfo(object_pose_key_k_1, object_label_k_1, frame_id_k_1));
-                    CHECK(reconstructPoseInfo(object_pose_key_k, object_label_k, frame_id_k));
-                    CHECK_EQ(object_label_k_2, object_label_k);
-                    CHECK_EQ(object_label_k_1, object_label_k);
-                    CHECK_EQ(frame_id_k_1 + 1, frame_id_k); //assumes consequative frames
-                    CHECK_EQ(frame_id_k_2 + 1, frame_id_k_1); //assumes consequative frames
+            //     {
+            //         ObjectId object_label_k_2, object_label_k_1, object_label_k;
+            //         FrameId frame_id_k_2, frame_id_k_1, frame_id_k;
+            //         CHECK(reconstructPoseInfo(object_pose_key_k_2, object_label_k_2, frame_id_k_2));
+            //         CHECK(reconstructPoseInfo(object_pose_key_k_1, object_label_k_1, frame_id_k_1));
+            //         CHECK(reconstructPoseInfo(object_pose_key_k, object_label_k, frame_id_k));
+            //         CHECK_EQ(object_label_k_2, object_label_k);
+            //         CHECK_EQ(object_label_k_1, object_label_k);
+            //         CHECK_EQ(frame_id_k_1 + 1, frame_id_k); //assumes consequative frames
+            //         CHECK_EQ(frame_id_k_2 + 1, frame_id_k_1); //assumes consequative frames
 
-                }
+            //     }
 
-                //if the motion key at k (motion from k-1 to k), and key at k-1 (motion from k-2 to k-1)
-                //exists in the map or is about to exist via new values, add the smoothing factor
-                if(is_other_values_in_map.exists(object_pose_key_k_1) &&
-                   is_other_values_in_map.exists(object_pose_key_k) &&
-                   is_other_values_in_map.exists(object_pose_key_k_2)) {
+            //     //if the motion key at k (motion from k-1 to k), and key at k-1 (motion from k-2 to k-1)
+            //     //exists in the map or is about to exist via new values, add the smoothing factor
+            //     if(is_other_values_in_map.exists(object_pose_key_k_1) &&
+            //        is_other_values_in_map.exists(object_pose_key_k) &&
+            //        is_other_values_in_map.exists(object_pose_key_k_2)) {
 
-                    new_factors.emplace_shared<LandmarkPoseSmoothingFactor>(
-                        object_pose_key_k_2,
-                        object_pose_key_k_1,
-                        object_pose_key_k,
-                        object_smoothing_noise
-                    );
-                    VLOG(20) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
-                    // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
-                    //     object_motion_key_k_1,
-                    //     object_motion_key_k,
-                    //     gtsam::Pose3::Identity(),
-                    //     object_smoothing_noise
-                    // );
-                    // object_debug_info.smoothing_factor_added = true;
-                }
+            //         new_factors.emplace_shared<LandmarkPoseSmoothingFactor>(
+            //             object_pose_key_k_2,
+            //             object_pose_key_k_1,
+            //             object_pose_key_k,
+            //             object_smoothing_noise
+            //         );
+            //         VLOG(20) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
+            //         // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+            //         //     object_motion_key_k_1,
+            //         //     object_motion_key_k,
+            //         //     gtsam::Pose3::Identity(),
+            //         //     object_smoothing_noise
+            //         // );
+            //         // object_debug_info.smoothing_factor_added = true;
+            //     }
 
-                // if(smoothing_added) {
-                //     //TODO: add back in
-                //     // object_debug_info.smoothing_factor_added = true;
-                // }
+            //     // if(smoothing_added) {
+            //     //     //TODO: add back in
+            //     //     // object_debug_info.smoothing_factor_added = true;
+            //     // }
 
-            }
+            // }
         }
     }
 
+    factors_ += new_factors;
     return result;
 }
 
+
+RGBDBackendModule::Accessor::Ptr
+RGBDBackendModule::Updater::accessorFromTheta() const {
+    if(!accessor_theta_) {
+        accessor_theta_ = createAccessor(&theta_);
+    }
+    return accessor_theta_;
+}
+
+StateQuery<gtsam::Pose3> RGBDBackendModule::LLAccessor::getSensorPose(FrameId frame_id) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    CHECK_NOTNULL(frame_node);
+    return this->query<gtsam::Pose3>(
+        frame_node->makePoseKey()
+    );
+}
+
+StateQuery<gtsam::Pose3> RGBDBackendModule::LLAccessor::getObjectMotion(FrameId frame_id, ObjectId object_id) const {
+    const auto frame_node_k = getMap()->getFrame(frame_id);
+    CHECK_NOTNULL(frame_node_k);
+    const auto object_motion_key = frame_node_k->makeObjectMotionKey(object_id);
+
+    if(frame_id < 2) {
+        //if the current frame is 1 then skip as we never get a frame that is 0
+        //this is because the first frame (frame_id=0) is never sent to the backend
+        //as at least two frames (0 and 1) are needed to track!
+        return StateQuery<gtsam::Pose3>::NotInMap(object_motion_key);
+    }
+
+    const auto object_pose_k = this->getObjectPose(frame_id, object_id);
+    const auto object_pose_k_1 = this->getObjectPose(frame_id - 1u, object_id);
+
+    if(object_pose_k && object_pose_k_1) {
+        // ^w_{k-1}H_k = ^wL_k \: ^wL_{k-1}^{-1}
+        const gtsam::Pose3 motion = object_pose_k.get() * object_pose_k_1->inverse();
+        return StateQuery<gtsam::Pose3>{object_motion_key, motion};
+    }
+    return StateQuery<gtsam::Pose3>::NotInMap(object_motion_key);
+}
+StateQuery<gtsam::Pose3> RGBDBackendModule::LLAccessor::getObjectPose(FrameId frame_id, ObjectId object_id) const {
+    const auto frame_node = getMap()->getFrame(frame_id);
+    CHECK(frame_node) << "Frame Id is null at frame " << frame_id;
+    return this->query<gtsam::Pose3>(
+        frame_node->makeObjectPoseKey(object_id)
+    );
+}
+
+StateQuery<gtsam::Point3> RGBDBackendModule::LLAccessor::getDynamicLandmark(FrameId frame_id, TrackletId tracklet_id) const {
+    const auto lmk = getMap()->getLandmark(tracklet_id);
+    CHECK_NOTNULL(lmk);
+
+    return this->query<gtsam::Point3>(
+        lmk->makeDynamicKey(frame_id)
+    );
+}
+
+
+
 void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
         const PointUpdateContext& context, UpdateObservationResult& result,
-        gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_factors) {
     const auto lmk_node = context.lmk_node;
     const auto frame_node_k_1 = context.frame_node_k_1;
     const auto frame_node_k = context.frame_node_k;
 
+    auto dynamic_point_noise = parent_->dynamic_point_noise_;
+
+    Accessor::Ptr theta_accessor = this->accessorFromTheta();
+
     const gtsam::Key object_point_key_k_1 = lmk_node->makeDynamicKey(frame_node_k_1->frame_id);
     const gtsam::Key object_point_key_k = lmk_node->makeDynamicKey(frame_node_k->frame_id);
 
-    //if first motion (i.e first time we have both k-1 and k), add both at k-1 and k
+    // if first motion (i.e first time we have both k-1 and k), add both at k-1 and k
+    if(context.is_starting_motion_frame) {
+        new_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
+            frame_node_k_1->makePoseKey(), //pose key at previous frames
+            object_point_key_k_1,
+            lmk_node->getMeasurement(frame_node_k_1),
+            dynamic_point_noise
+        );
+        // object_debug_info.num_dynamic_factors++;
+        result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
+
+        //add landmark at previous frame
+        const Landmark measured_k_1 = lmk_node->getMeasurement(frame_node_k_1->frame_id);
+        Landmark lmk_world_k_1;
+        getSafeQuery(
+            lmk_world_k_1,
+            theta_accessor->query<Landmark>(object_point_key_k_1),
+            gtsam::Point3(context.X_k_1_measured * measured_k_1)
+        );
+        new_values.insert(object_point_key_k_1, lmk_world_k_1);
+    }
+
+
+    // previous point must be added by the previous iteration
+    CHECK(new_values.exists(object_point_key_k_1) || theta_accessor->exists(object_point_key_k_1));
+
+    const Landmark measured_k = lmk_node->getMeasurement(frame_node_k);
+
+    new_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
+        frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
+        object_point_key_k,
+        measured_k,
+        dynamic_point_noise
+    );
+    // object_debug_info.num_dynamic_factors++;
+    result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+
+    Landmark lmk_world_k;
+    getSafeQuery(
+        lmk_world_k,
+        theta_accessor->query<Landmark>(object_point_key_k),
+        gtsam::Point3(context.X_k_measured * measured_k)
+    );
+    new_values.insert(object_point_key_k, lmk_world_k);
+
+    const gtsam::Key object_pose_k_1_key = frame_node_k_1->makeObjectPoseKey(context.getObjectId());
+    const gtsam::Key object_pose_k_key = frame_node_k->makeObjectPoseKey(context.getObjectId());
+
+    auto landmark_motion_noise = parent_->landmark_motion_noise_;
+    new_factors.emplace_shared<LandmarkMotionPoseFactor>(
+        object_point_key_k_1,
+        object_point_key_k,
+        object_pose_k_1_key,
+        object_pose_k_key,
+        landmark_motion_noise
+    );
+    result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
+    result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+
+    //mark as now in map
+    is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), true);
+
+
 
 
 }
 void RGBDBackendModule::LLUpdater::objectUpdateContext(
         const ObjectUpdateContext& context, UpdateObservationResult& result,
-        gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
+        gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors)
+{
+    auto frame_node_k = context.frame_node_k;
+    const gtsam::Key object_pose_key_k = frame_node_k->makeObjectPoseKey(context.getObjectId());
+
+    //use current accessor as this will contain all the most recent values and whatever was
+    //used as the initalisation points from the previous linearization
+    Accessor::Ptr theta_accessor = this->accessorFromTheta();
+
+    if(!is_other_values_in_map.exists(object_pose_key_k)) {
+        const auto[centroid_initial, result] = theta_accessor->computeObjectCentroid(context.getFrameId(), context.getObjectId());
+        CHECK(result);
+        gtsam::Pose3 initial_object_pose(gtsam::Rot3::Identity(), centroid_initial);
+        gtsam::Pose3 object_pose_k;
+        getSafeQuery(
+            object_pose_k,
+            theta_accessor->query<gtsam::Pose3>(object_pose_key_k),
+            initial_object_pose
+        );
+
+        new_values.insert(object_pose_key_k, object_pose_k);
+        is_other_values_in_map.insert2(object_pose_key_k, true);
+        LOG(INFO) << "Adding object pose key " << DynoLikeKeyFormatter(object_pose_key_k);
+    }
+
+    if(FLAGS_use_smoothing_factor) {
+        const auto frame_id = context.getFrameId();
+        const auto object_id = context.getObjectId();
+        if(frame_id < 2) return;
+
+        auto frame_node_k_2 = getMap()->getFrame(frame_id - 2u);
+        auto frame_node_k_1 = getMap()->getFrame(frame_id - 1u);
+
+        if (!frame_node_k_2 || !frame_node_k_1) { return; }
+
+        //pose key at k-2
+        const gtsam::Symbol object_pose_key_k_2 = frame_node_k_2->makeObjectPoseKey(object_id);
+        //pose key at previous frame (k-1)
+        const gtsam::Symbol object_pose_key_k_1 = frame_node_k_1->makeObjectPoseKey(object_id);
+
+        auto object_smoothing_noise = parent_->object_smoothing_noise_;
+        CHECK(object_smoothing_noise);
+        CHECK_EQ(object_smoothing_noise->dim(), 6u);
+
+        {
+            ObjectId object_label_k_2, object_label_k_1, object_label_k;
+            FrameId frame_id_k_2, frame_id_k_1, frame_id_k;
+            CHECK(reconstructPoseInfo(object_pose_key_k_2, object_label_k_2, frame_id_k_2));
+            CHECK(reconstructPoseInfo(object_pose_key_k_1, object_label_k_1, frame_id_k_1));
+            CHECK(reconstructPoseInfo(object_pose_key_k, object_label_k, frame_id_k));
+            CHECK_EQ(object_label_k_2, object_label_k);
+            CHECK_EQ(object_label_k_1, object_label_k);
+            CHECK_EQ(frame_id_k_1 + 1, frame_id_k); //assumes consequative frames
+            CHECK_EQ(frame_id_k_2 + 1, frame_id_k_1); //assumes consequative frames
+
+        }
+
+        //if the motion key at k (motion from k-1 to k), and key at k-1 (motion from k-2 to k-1)
+        //exists in the map or is about to exist via new values, add the smoothing factor
+        if(is_other_values_in_map.exists(object_pose_key_k_1) &&
+            is_other_values_in_map.exists(object_pose_key_k) &&
+            is_other_values_in_map.exists(object_pose_key_k_2)) {
+
+            new_factors.emplace_shared<LandmarkPoseSmoothingFactor>(
+                object_pose_key_k_2,
+                object_pose_key_k_1,
+                object_pose_key_k,
+                object_smoothing_noise
+            );
+            VLOG(20) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
+            // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+            //     object_motion_key_k_1,
+            //     object_motion_key_k,
+            //     gtsam::Pose3::Identity(),
+            //     object_smoothing_noise
+            // );
+            // object_debug_info.smoothing_factor_added = true;
+        }
+
+        // if(smoothing_added) {
+        //     //TODO: add back in
+        //     // object_debug_info.smoothing_factor_added = true;
+        // }
+
+    }
+
+
 
 }
 
@@ -911,10 +1441,12 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
 void RGBDBackendModule::Updater::logBackendFromMap(BackendLogger& logger) {
     const auto& gt_packet_map = parent_->gt_packet_map_;
     auto map = getMap();
+    auto accessor = this->accessorFromTheta();
 
-    const ObjectIds object_ids = map->getObjectIds();
     // const ObjectPoseMap composed_object_pose_map =  map->computeComposedObjectPoseMap(gt_packet_map);
-    const ObjectPoseMap composed_object_pose_map =  map->composeEstimatedObjectPoseMap();
+    //TODO:
+    // const ObjectPoseMap composed_object_pose_map;
+    const ObjectPoseMap composed_object_pose_map =  accessor->getObjectPoses();
 
    for(FrameId frame_k : map->getFrameIds()) {
 
@@ -924,13 +1456,13 @@ void RGBDBackendModule::Updater::logBackendFromMap(BackendLogger& logger) {
         //get MotionestimateMap
         // const MotionEstimateMap motions = map->getMotionEstimates(frame_k);
         {
-        const MotionEstimateMap motions = map->computeMotions(frame_k);
+        const MotionEstimateMap motions = accessor->getObjectMotions(frame_k);
         auto result = logger.logObjectMotion(gt_packet_map, frame_k, motions);
         if(result) ss << " Logged " << *result << " motions from " << motions.size() << " computed motions.";
         else ss << " Could not log object motions.";
         }
 
-        StateQuery<gtsam::Pose3> X_k_query = map->getPoseEstimate(frame_k);
+        StateQuery<gtsam::Pose3> X_k_query = accessor->getSensorPose(frame_k);
 
         if(X_k_query) {
             logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get());
@@ -944,9 +1476,10 @@ void RGBDBackendModule::Updater::logBackendFromMap(BackendLogger& logger) {
 
 
         if(map->frameExists(frame_k)) {
-            StatusLandmarkEstimates static_map = map->getStaticMap(frame_k);
-            // LOG(INFO) << "static map size " << static_map.size();
-            StatusLandmarkEstimates dynamic_map = map->getDynamicMap(frame_k);
+            //TODO:
+            StatusLandmarkEstimates static_map = accessor->getStaticLandmarkEstimates(frame_k);
+            // // LOG(INFO) << "static map size " << static_map.size();
+            StatusLandmarkEstimates dynamic_map = accessor->getDynamicLandmarkEstimates(frame_k);
             // LOG(INFO) << "dynamic map size " << dynamic_map.size();
 
             CHECK(X_k_query); //actually not needed for points in world!!
@@ -1791,9 +2324,10 @@ void RGBDBackendModule::saveGraph(const std::string& file) {
 
     //TODO: must be careful as there could be inconsistencies between the graph in the optimzier,
     //and the graph in the map
-    gtsam::NonlinearFactorGraph graph = map_->getGraph();
-    // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
-    graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+    //TODO:
+    // gtsam::NonlinearFactorGraph graph = map_->getGraph();
+    // // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+    // graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
 }
 void RGBDBackendModule::saveTree(const std::string& file) {
     auto incremental_optimizer = safeCast<Optimizer<Landmark>, IncrementalOptimizer<Landmark>>(optimizer_);

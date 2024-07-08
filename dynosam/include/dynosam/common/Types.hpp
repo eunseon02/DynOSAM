@@ -373,6 +373,7 @@ public:
   //check if the DERIVEDSTATUS meets requirements
   //and alias to the value type of the status
   using Value = typename IsStatus<DERIVEDSTATUS, VALUE>::value;
+  using This = GenericTrackedStatusVector<DERIVEDSTATUS, VALUE>;
 
   using Base = std::vector<DERIVEDSTATUS>;
   using Base::Base;
@@ -380,6 +381,11 @@ public:
   /** Conversion to a standard STL container */
   operator std::vector<DERIVEDSTATUS>() const {
     return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
+  }
+
+  This& operator+=(const GenericTrackedStatusVector& rhs) {
+    this->insert(this->end(), rhs.begin(), rhs.end());
+    return *this;
   }
 
 };

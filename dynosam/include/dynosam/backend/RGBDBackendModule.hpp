@@ -107,11 +107,14 @@ public:
         FrameNode3d::Ptr frame_node_k_1;
         FrameNode3d::Ptr frame_node_k;
 
+        gtsam::Pose3 X_k_measured; //! Camera pose from measurement (or initial)
+        gtsam::Pose3 X_k_1_measured; //! Camera pose from measurement (or initial)
+
 
         bool is_starting_motion_frame {false};
 
         inline ObjectId getObjectId() const { return lmk_node->getObjectId(); }
-        inline TrackletId getTrackletId() const { return lmk_node->getId(); }
+        inline TrackletId getTrackletId() const { return lmk_node->tracklet_id; }
 
     };
 
@@ -119,7 +122,94 @@ public:
         FrameNode3d::Ptr frame_node_k;
         ObjectNode3d::Ptr object_node;
 
+        inline FrameId getFrameId() const { return frame_node_k->getId(); }
         inline ObjectId getObjectId() const { return object_node->getId(); }
+    };
+
+    class Accessor {
+        public:
+            DYNO_POINTER_TYPEDEFS(Accessor)
+
+            Accessor(const gtsam::Values* theta, RGBDBackendModule* parent) : theta_(theta), parent_(parent) {}
+            virtual ~Accessor() {}
+
+            virtual StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const = 0;
+            virtual StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id, ObjectId object_id) const = 0;
+            virtual StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id, ObjectId object_id) const = 0;
+
+            virtual StateQuery<gtsam::Point3> getDynamicLandmark(FrameId frame_id, TrackletId tracklet_id) const = 0;
+            virtual StateQuery<gtsam::Point3> getStaticLandmark(TrackletId tracklet_id) const;
+
+
+            MotionEstimateMap getObjectMotions(FrameId frame_id) const;
+            EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(FrameId frame_id) const;
+
+            //full object poses with interpolation (if possible!!) (used for vis and not evaluation)
+            //TODO::
+            //relies on all the virtual fucntions doing their thing and getting the desired value in the right frame etc
+            //no interpolation etc...
+            virtual ObjectPoseMap getObjectPoses() const;
+
+            StatusLandmarkEstimates getDynamicLandmarkEstimates(FrameId frame_id) const;
+            StatusLandmarkEstimates getDynamicLandmarkEstimates(FrameId frame_id, ObjectId object_id) const;
+
+            StatusLandmarkEstimates getStaticLandmarkEstimates(FrameId frame_id) const;
+            StatusLandmarkEstimates getFullStaticMap() const;
+
+            StatusLandmarkEstimates getLandmarkEstimates(FrameId frame_id) const;
+
+
+            bool hasObjectMotionEstimate(FrameId frame_id, ObjectId object_id, Motion3* motion = nullptr) const;
+            bool hasObjectMotionEstimate(FrameId frame_id, ObjectId object_id, Motion3& motion) const;
+
+             //TODO: test
+            bool hasObjectPoseEstimate(FrameId frame_id, ObjectId object_id, gtsam::Pose3* pose = nullptr) const;
+            bool hasObjectPoseEstimate(FrameId frame_id, ObjectId object_id, gtsam::Pose3& pose) const;
+
+            /**
+             * @brief Computes a the centroid of each object at this frame using the estimated dynamic points.
+             *
+             * Internally, uses the overloaded std::tuple<gtsam::Point3, bool> computeObjectCentroid function
+             * and only includes centroids which are valid (ie returned with computeObjectCentroid()->second == true)
+             *
+             * @param frame_id FrameId
+             * @return gtsam::FastMap<ObjectId, gtsam::Point3>
+             */
+            gtsam::FastMap<ObjectId, gtsam::Point3> computeObjectCentroids(FrameId frame_id) const;
+
+            /**
+             * @brief Computes the centroid of the requested object using the estimated dynamic points.
+             *
+             * Throws exception if object not found.
+             *
+             * @param frame_id FrameId
+             * @param object_id ObjectId
+             * @return std::tuple<gtsam::Point3, bool>
+             */
+            std::tuple<gtsam::Point3, bool> computeObjectCentroid(FrameId frame_id, ObjectId object_id) const;
+
+            inline bool exists(gtsam::Key key) const { return theta_->exists(key); }
+
+            template<typename ValueType>
+            StateQuery<ValueType> query(gtsam::Key key) const {
+                CHECK_NOTNULL(theta_);
+                if(theta_->exists(key)) {
+                    return StateQuery<ValueType>(key, theta_->at<ValueType>(key));
+                }
+                else {
+                    return StateQuery<ValueType>::NotInMap(key);
+                }
+            }
+
+
+        protected:
+            auto getMap() const { return parent_->getMap(); }
+
+        private:
+            const gtsam::Values* theta_;
+            RGBDBackendModule* parent_;
+
+            //TODO: eventually map!! How can we not template this!!
     };
 
     class Updater {
@@ -131,6 +221,15 @@ public:
         RGBDBackendModule* parent_;
         Updater(RGBDBackendModule* parent) : parent_(CHECK_NOTNULL(parent)) {}
         virtual ~Updater() = default;
+
+        void setTheta(const gtsam::Values& linearization) {
+            theta_ = linearization;
+        }
+        void updateTheta(const gtsam::Values& linearization) {
+            theta_.insert_or_assign(linearization);
+        }
+
+        gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;
 
         //  //adds pose to the new values and a prior on this pose to the new_factors
         void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values);
@@ -172,6 +271,11 @@ public:
         //log everything all frames!!
         void logBackendFromMap(BackendLogger& logger);
 
+        //creates a NEW accessor
+        virtual Accessor::Ptr createAccessor(const gtsam::Values* values) const = 0;
+
+        Accessor::Ptr accessorFromTheta() const;
+
 
         virtual void dynamicPointUpdateCallback(
             const PointUpdateContext& context,
@@ -190,9 +294,33 @@ public:
 
         auto getMap() { return parent_->getMap(); }
 
+        const gtsam::Values& getTheta() const { return theta_; }
+        const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
+
+    protected:
+
     private:
-        gtsam::Values values_;
+        // gtsam::Values previous_linearization_; //! Previous linearization point we can initalise new values with (e.g from an optimisation)
+        gtsam::Values theta_; //! Current linearisation that will be associated with the current graph
         gtsam::NonlinearFactorGraph factors_;
+
+        mutable Accessor::Ptr accessor_theta_;
+        // Accessor::Ptr accessor_previous_linearization_;
+
+
+    };
+
+    class LLAccessor : public Accessor {
+        public:
+            LLAccessor(const gtsam::Values* theta, RGBDBackendModule* parent) : Accessor(theta, parent) {}
+
+            StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
+            StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id, ObjectId object_id) const override;
+            StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id, ObjectId object_id) const override;
+            StateQuery<gtsam::Point3> getDynamicLandmark(FrameId frame_id, TrackletId tracklet_id) const override;
+
+        protected:
+
 
     };
 
@@ -202,11 +330,17 @@ public:
 
         LLUpdater(RGBDBackendModule* parent) : Updater(parent) {}
 
-        void dynamicPointUpdateCallback(const PointUpdateContext& context, UpdateObservationResult& result) override;
-        void objectUpdateContext(const ObjectUpdateContext& context, UpdateObservationResult& result) override;
+        inline Accessor::Ptr createAccessor(const gtsam::Values* values) const override {
+            return std::make_shared<LLAccessor>(values, parent_);
+        }
+
+        void dynamicPointUpdateCallback(const PointUpdateContext& context, UpdateObservationResult& result, gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) override;
+        void objectUpdateContext(const ObjectUpdateContext& context, UpdateObservationResult& result, gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) override;
 
         inline bool isDynamicTrackletInMap(const LandmarkNode3d::Ptr& lmk_node) const override {
-            const TrackletId tracklet_id = lmk_node->getId();
+            const TrackletId tracklet_id = lmk_node->tracklet_id;
             return is_dynamic_tracklet_in_map_.exists(tracklet_id);
         }
 
@@ -232,6 +366,8 @@ public:
     //logger here!!
     BackendLogger::UniquePtr logger_{nullptr};
     gtsam::FastMap<FrameId, gtsam::Pose3> initial_camera_poses_; //! Camera poses as estimated from the frontend per frame
+    gtsam::FastMap<FrameId, MotionEstimateMap> initial_object_motions_; //! Object motions (in world) as estimated from the frontend per frame
+
 
 
     //base backend module does not correctly share properties between mono and rgbd (i.e static_pixel_noise_ is in backend module but is not used in this class)
