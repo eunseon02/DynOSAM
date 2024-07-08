@@ -384,6 +384,8 @@ public:
         return frame_ids;
     }
 
+    const auto getFrames() const { return frames_; }
+
 
 private:
     void addOrUpdateMapStructures(const Measurement& measurement, TrackletId tracklet_id, FrameId frame_id, ObjectId object_id, bool is_static) {

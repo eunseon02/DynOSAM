@@ -142,7 +142,7 @@ public:
 
 
             MotionEstimateMap getObjectMotions(FrameId frame_id) const;
-            EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(FrameId frame_id) const;
+            virtual EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(FrameId frame_id) const;
 
             //full object poses with interpolation (if possible!!) (used for vis and not evaluation)
             //TODO::
@@ -201,13 +201,15 @@ public:
                 }
             }
 
+            virtual void postUpdateCallback() {};
+
 
         protected:
             auto getMap() const { return parent_->getMap(); }
+            RGBDBackendModule* parent_;
 
         private:
             const gtsam::Values* theta_;
-            RGBDBackendModule* parent_;
 
             //TODO: eventually map!! How can we not template this!!
     };
@@ -224,9 +226,11 @@ public:
 
         void setTheta(const gtsam::Values& linearization) {
             theta_ = linearization;
+            accessorFromTheta()->postUpdateCallback();
         }
         void updateTheta(const gtsam::Values& linearization) {
             theta_.insert_or_assign(linearization);
+            accessorFromTheta()->postUpdateCallback();
         }
 
         gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;
@@ -269,7 +273,8 @@ public:
             const UpdateObservationParams& update_params);
 
         //log everything all frames!!
-        void logBackendFromMap(BackendLogger& logger);
+        void logBackendFromMap();
+        virtual std::string loggerPrefix() const = 0;
 
         //creates a NEW accessor
         virtual Accessor::Ptr createAccessor(const gtsam::Values* values) const = 0;
@@ -313,10 +318,11 @@ public:
     class LLAccessor : public Accessor {
         public:
             LLAccessor(const gtsam::Values* theta, RGBDBackendModule* parent) : Accessor(theta, parent) {}
+            virtual ~LLAccessor() {}
 
             StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
-            StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id, ObjectId object_id) const override;
-            StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id, ObjectId object_id) const override;
+            virtual StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id, ObjectId object_id) const override;
+            virtual StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id, ObjectId object_id) const override;
             StateQuery<gtsam::Point3> getDynamicLandmark(FrameId frame_id, TrackletId tracklet_id) const override;
 
         protected:
@@ -329,6 +335,7 @@ public:
         DYNO_POINTER_TYPEDEFS(LLUpdater)
 
         LLUpdater(RGBDBackendModule* parent) : Updater(parent) {}
+        virtual ~LLUpdater() {}
 
         inline Accessor::Ptr createAccessor(const gtsam::Values* values) const override {
             return std::make_shared<LLAccessor>(values, parent_);
@@ -344,11 +351,54 @@ public:
             return is_dynamic_tracklet_in_map_.exists(tracklet_id);
         }
 
+        std::string loggerPrefix() const override {
+            return "rgbd_LL_world";
+        }
+
     protected:
         //we need a separate way of tracking if a dynamic tracklet is in the map, since each point is modelled uniquely
         //simply used as an O(1) lookup, the value is not actually used. If the key exists, we assume that the tracklet is in the map
         gtsam::FastMap<TrackletId, bool> is_dynamic_tracklet_in_map_; //! thr set of dynamic points that have been added by this updater. We use a separate map containing the tracklets as the keys are non-unique
 
+    };
+
+
+    class MotionWorldAccessor : public LLAccessor {
+        public:
+            MotionWorldAccessor(const gtsam::Values* theta, RGBDBackendModule* parent) : LLAccessor(theta, parent) {}
+
+            StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id, ObjectId object_id) const override;
+            StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id, ObjectId object_id) const override;
+
+            inline ObjectPoseMap getObjectPoses() const override { return object_pose_cache_; }
+            EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(FrameId frame_id) const override;
+
+            //this will update the object_pose_cache_ so call it every frame?
+            void postUpdateCallback() override;
+
+        private:
+            ObjectPoseMap object_pose_cache_; //! Updated every time set/update theta is called via the postUpdateCallback
+    };
+
+    class MotionWorldUpdater : public LLUpdater {
+    public:
+        DYNO_POINTER_TYPEDEFS(MotionWorldUpdater)
+
+        MotionWorldUpdater(RGBDBackendModule* parent) : LLUpdater(parent) {}
+
+        inline Accessor::Ptr createAccessor(const gtsam::Values* values) const override {
+            return std::make_shared<MotionWorldAccessor>(values, parent_);
+        }
+
+        void dynamicPointUpdateCallback(const PointUpdateContext& context, UpdateObservationResult& result, gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) override;
+        void objectUpdateContext(const ObjectUpdateContext& context, UpdateObservationResult& result, gtsam::Values& new_values,
+            gtsam::NonlinearFactorGraph& new_factors) override;
+
+
+        std::string loggerPrefix() const override {
+            return "rgbd_motion_world";
+        }
     };
 
 public:
@@ -367,6 +417,19 @@ public:
     BackendLogger::UniquePtr logger_{nullptr};
     gtsam::FastMap<FrameId, gtsam::Pose3> initial_camera_poses_; //! Camera poses as estimated from the frontend per frame
     gtsam::FastMap<FrameId, MotionEstimateMap> initial_object_motions_; //! Object motions (in world) as estimated from the frontend per frame
+
+    inline bool hasFrontendMotionEstimate(FrameId frame_id, ObjectId object_id, Motion3* motion) const {
+        if(!initial_object_motions_.exists(frame_id)) { return false; }
+
+        const auto& motion_map = initial_object_motions_.at(frame_id);
+        if(!motion_map.exists(object_id)) { return false; }
+
+
+        if(motion) {
+            *motion = motion_map.at(object_id);
+        }
+        return true;
+    }
 
 
 

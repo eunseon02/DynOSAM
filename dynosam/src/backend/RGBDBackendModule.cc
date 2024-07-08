@@ -91,10 +91,6 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d:
     // updater_ = std::make_unique<UpdateImplInWorldPrimitives>(this);
     // CHECK_NOTNULL(updater_);
 
-    if(backend_params.use_logger_) {
-        logger_ = std::make_unique<BackendLogger>("rgbd_motion_world");
-        LOG(INFO) << "Creating backend logger with name " << logger_->moduleName();
-    }
 
 
 }
@@ -103,9 +99,9 @@ RGBDBackendModule::~RGBDBackendModule() {
     LOG(INFO) << "Destructing RGBDBackendModule";
 
     // //TODO: for now - this module does not know if we have poses in the graph
-    if(logger_) {
+    if(base_params_.use_logger_) {
         // for(FrameId frame_id = map_->firstFrameId(); frame_id <= map_->lastFrameId(); frame_id++)
-        new_updater_->logBackendFromMap(*logger_);
+        new_updater_->logBackendFromMap();
     }
 
 }
@@ -892,12 +888,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                         << ". This may happen if the map_ is not updated every iteration OR something is wrong with the tracking...";
                     const gtsam::Pose3 T_world_camera_k_1 = T_world_camera_k_1_query.get();
 
-                    // StateQuery<gtsam::Pose3> T_world_camera_k_query = accessor->getSensorPose(query_frame_node_k->frame_id);
-                    // CHECK(parent_->initial_camera_poses_.exists(query_frame_node_k_1->frame_id));
-                    // gtsam::Pose3 T_world_camera_k_frontend = parent_->initial_camera_poses_.at(query_frame_node_k_1->frame_id);
-                    // //take either the query value from the map (if we have a previous initalisation), or the estimate from the camera
-                    // gtsam::Pose3 T_world_camera_k;
-                    // getSafeQuery(T_world_camera_k, T_world_camera_k_query, T_world_camera_k_frontend);
                     gtsam::Pose3 T_world_camera_k = getInitialOrLinearizedSensorPose(query_frame_node_k_1->frame_id);
 
                     PointUpdateContext point_context;
@@ -910,23 +900,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
                     //this assumes we add all the points in order and have continuous frames (which we should have?)
                     if(seen_frames_itr == starting_motion_frame_itr) {
-                        // //on first iteration we should add both values at query_k and query_k_1
-                        // //otherwise we just need to add k, as k_1 will be added from the previous iteration
-                        // new_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
-                        //     query_frame_node_k_1->makePoseKey(), //pose key at previous frames
-                        //     object_point_key_k_1,
-                        //     measured_k_1,
-                        //     dynamic_point_noise
-                        // );
-                        // object_debug_info.num_dynamic_factors++;
-                        // result.updateAffectedObject(query_frame_node_k_1->frame_id, obj_lmk_node->object_id);
-
-                        // Landmark lmk_world_k_1;
-                        // getSafeQuery(lmk_world_k_1,
-                        //     obj_lmk_node->getDynamicLandmarkEstimate(query_frame_node_k_1->frame_id),
-                        //     gtsam::Point3(T_world_camera_k_1 * measured_k_1));
-                        // new_values.insert(object_point_key_k_1, lmk_world_k_1);
-                        // object_debug_info.num_new_dynamic_points++;
                         point_context.is_starting_motion_frame = true;
 
                     }
@@ -1247,7 +1220,11 @@ StateQuery<gtsam::Pose3> RGBDBackendModule::LLAccessor::getObjectMotion(FrameId 
 }
 StateQuery<gtsam::Pose3> RGBDBackendModule::LLAccessor::getObjectPose(FrameId frame_id, ObjectId object_id) const {
     const auto frame_node = getMap()->getFrame(frame_id);
-    CHECK(frame_node) << "Frame Id is null at frame " << frame_id;
+    if(!frame_node) {
+        return StateQuery<gtsam::Pose3>::InvalidMap();
+    }
+
+    // CHECK(frame_node) << "Frame Id is null at frame " << frame_id;
     return this->query<gtsam::Pose3>(
         frame_node->makeObjectPoseKey(object_id)
     );
@@ -1352,20 +1329,35 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
     auto frame_node_k = context.frame_node_k;
     const gtsam::Key object_pose_key_k = frame_node_k->makeObjectPoseKey(context.getObjectId());
 
-    //use current accessor as this will contain all the most recent values and whatever was
-    //used as the initalisation points from the previous linearization
     Accessor::Ptr theta_accessor = this->accessorFromTheta();
 
     if(!is_other_values_in_map.exists(object_pose_key_k)) {
-        const auto[centroid_initial, result] = theta_accessor->computeObjectCentroid(context.getFrameId(), context.getObjectId());
-        CHECK(result);
-        gtsam::Pose3 initial_object_pose(gtsam::Rot3::Identity(), centroid_initial);
-        gtsam::Pose3 object_pose_k;
-        getSafeQuery(
-            object_pose_k,
-            theta_accessor->query<gtsam::Pose3>(object_pose_key_k),
-            initial_object_pose
+        FrameId frame_id_k_1 = context.getFrameId() - 1u;
+        //try and propogate from previous initalisation
+        StateQuery<gtsam::Pose3> pose_k_1_query = theta_accessor->getObjectPose(
+            frame_id_k_1,
+            context.getObjectId()
         );
+
+        //takes me from k-1 to k
+        Motion3 motion;
+        gtsam::Pose3 object_pose_k;
+        //we have a motion from k-1 to k and a pose at k
+        if(parent_->hasFrontendMotionEstimate(context.getFrameId(), context.getObjectId(), &motion) && pose_k_1_query) {
+            object_pose_k = motion * pose_k_1_query.get();
+        }
+        else {
+            //no motion or previous pose, so initalise with centroid translation and identity rotation
+            const auto[centroid_initial, result] = theta_accessor->computeObjectCentroid(context.getFrameId(), context.getObjectId());
+            CHECK(result);
+            gtsam::Pose3 initial_object_pose(gtsam::Rot3::Identity(), centroid_initial);
+
+            getSafeQuery(
+                object_pose_k,
+                theta_accessor->query<gtsam::Pose3>(object_pose_key_k),
+                initial_object_pose
+            );
+        }
 
         new_values.insert(object_pose_key_k, object_pose_k);
         is_other_values_in_map.insert2(object_pose_key_k, true);
@@ -1437,8 +1429,113 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
 
 }
 
+StateQuery<gtsam::Pose3> RGBDBackendModule::MotionWorldAccessor::getObjectMotion(FrameId frame_id, ObjectId object_id) const {
+    const auto frame_node_k = getMap()->getFrame(frame_id);
+    CHECK(frame_node_k);
 
-void RGBDBackendModule::Updater::logBackendFromMap(BackendLogger& logger) {
+    //from k-1 to k
+    return this->query<gtsam::Pose3>(
+        frame_node_k->makeObjectMotionKey(object_id)
+    );
+
+
+}
+StateQuery<gtsam::Pose3> RGBDBackendModule::MotionWorldAccessor::getObjectPose(FrameId frame_id, ObjectId object_id) const {
+    const auto object_poses = getObjectPoses(frame_id);
+    if(object_poses.exists(object_id)) {
+        return StateQuery<gtsam::Pose3>(
+            ObjectPoseSymbol(object_id, frame_id),
+            object_poses.at(object_id)
+        );
+    }
+    return StateQuery<gtsam::Pose3>::InvalidMap();
+}
+
+EstimateMap<ObjectId, gtsam::Pose3> RGBDBackendModule::MotionWorldAccessor::getObjectPoses(FrameId frame_id) const {
+    EstimateMap<ObjectId, gtsam::Pose3> object_poses;
+    //for each object, go over the cached object poses and check if that object has a pose at the query frame
+    for(const auto&[object_id, frame_map] : object_pose_cache_) {
+        if(frame_map.exists(frame_id)) {
+            object_poses.insert2(object_id,
+                ReferenceFrameValue<gtsam::Pose3>(
+                    frame_map.at(frame_id),
+                    ReferenceFrame::GLOBAL
+                )
+            );
+        }
+    }
+    return object_poses;
+}
+
+void RGBDBackendModule::MotionWorldAccessor::postUpdateCallback() {
+    //update object_pose_cache_ with new values
+    //this means we have to start again at the first frame and update all the poses!!
+    ObjectPoseMap object_poses;
+    const auto frames = getMap()->getFrames();
+    auto frame_itr = frames.begin();
+
+    auto gt_packet_map = parent_->getGroundTruthPackets();
+
+    //advance itr one so we're now at the second frame
+    std::advance(frame_itr, 1);
+    for(auto itr = frame_itr; itr != frames.end(); itr++) {
+        auto prev_itr = itr;
+        std::advance(prev_itr, -1);
+        CHECK(prev_itr != frames.end());
+
+        const auto[frame_id_k, frame_k_ptr] = *itr;
+        const auto[frame_id_k_1, frame_k_1_ptr] = *prev_itr;
+        CHECK_EQ(frame_id_k_1 + 1, frame_id_k);
+
+        //collect all object centoids from the latest estimate
+        gtsam::FastMap<ObjectId, gtsam::Point3> centroids_k = this->computeObjectCentroids(frame_id_k);
+        gtsam::FastMap<ObjectId, gtsam::Point3> centroids_k_1 = this->computeObjectCentroids(frame_id_k_1);
+        //collect motions from k-1 to k
+        MotionEstimateMap motion_estimates = this->getObjectMotions(frame_id_k);
+
+        //construct centroid vectors in object id order
+        gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+        //we may not have a pose for every motion, e.g. if there is a new object at frame k,
+        //it wont have a motion yet!
+        //if we have a motion we MUST have a pose at the previous frame!
+        for(const auto& [object_id, _] : motion_estimates) {
+            CHECK(centroids_k.exists(object_id));
+            CHECK(centroids_k_1.exists(object_id));
+
+            object_centroids_k.push_back(centroids_k.at(object_id));
+            object_centroids_k_1.push_back(centroids_k_1.at(object_id));
+        }
+
+        if(FLAGS_init_object_pose_from_gt) {
+            if(!gt_packet_map) LOG(WARNING) << "FLAGS_init_object_pose_from_gt is true but gt_packet map not provided!";
+            dyno::propogateObjectPoses(
+                object_poses,
+                motion_estimates,
+                object_centroids_k_1,
+                object_centroids_k,
+                frame_id_k,
+                gt_packet_map);
+        }
+        else {
+            dyno::propogateObjectPoses(
+                object_poses,
+                motion_estimates,
+                object_centroids_k_1,
+                object_centroids_k,
+                frame_id_k);
+        }
+
+    }
+
+    VLOG(20) << "Updated object pose cache";
+    object_pose_cache_ = object_poses;
+}
+
+
+
+
+void RGBDBackendModule::Updater::logBackendFromMap() {
+    BackendLogger logger(loggerPrefix());
     const auto& gt_packet_map = parent_->gt_packet_map_;
     auto map = getMap();
     auto accessor = this->accessorFromTheta();

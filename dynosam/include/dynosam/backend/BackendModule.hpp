@@ -75,6 +75,13 @@ public:
     BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue);
     virtual ~BackendModule() = default;
 
+    //if empty, return none
+    std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
+        if(gt_packet_map_.empty()) {
+            return {};
+        }
+        return gt_packet_map_;
+    }
 
 protected:
 
