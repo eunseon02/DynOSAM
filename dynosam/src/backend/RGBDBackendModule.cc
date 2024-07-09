@@ -161,10 +161,23 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
     new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
 
-    gtsam::NonlinearFactorGraph full_graph;
-    // gtsam::NonlinearFactorGraph full_graph = map_->getGraph();
-    // full_graph += new_factors;
-    // map_->updateEstimates(new_values, full_graph, frame_k);
+    //do sliding window like batch from zero
+    if(frame_k % 20 ==0) {
+        gtsam::Values values;
+        gtsam::NonlinearFactorGraph graph;
+        std::tie(values, graph) = constructGraph(first_frame_id_, frame_k, true);
+        LOG(INFO) << " Finished graph construction";
+
+        graph.error(values);
+        gtsam::LevenbergMarquardtParams opt_params;
+        if(VLOG_IS_ON(20))
+            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+        gtsam::Values optimised_values_sliding = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+        new_updater_->updateTheta(optimised_values_sliding);
+
+    }
+
 
     gtsam::Values optimised_values;
     double error_before = 0;
@@ -1379,21 +1392,21 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
 
     // if first motion (i.e first time we have both k-1 and k), add both at k-1 and k
     if(context.is_starting_motion_frame) {
-        // new_factors.emplace_shared<GenericProjectionFactor>(
-        //     lmk_node->getMeasurement(frame_node_k_1).keypoint,
-        //     dynamic_projection_noise,
-        //     frame_node_k_1->makePoseKey(),
-        //     object_point_key_k_1,
-        //     gtsam_calibration,
-        //     false, false
-        // );
-
-        new_factors.emplace_shared<PoseToPointFactor>(
-            frame_node_k_1->makePoseKey(), //pose key at previous frames
+        new_factors.emplace_shared<GenericProjectionFactor>(
+            lmk_node->getMeasurement(frame_node_k_1).keypoint,
+            dynamic_projection_noise,
+            frame_node_k_1->makePoseKey(),
             object_point_key_k_1,
-            lmk_node->getMeasurement(frame_node_k_1).landmark,
-            dynamic_point_noise
+            gtsam_calibration,
+            false, false
         );
+
+        // new_factors.emplace_shared<PoseToPointFactor>(
+        //     frame_node_k_1->makePoseKey(), //pose key at previous frames
+        //     object_point_key_k_1,
+        //     lmk_node->getMeasurement(frame_node_k_1).landmark,
+        //     dynamic_point_noise
+        // );
         // object_debug_info.num_dynamic_factors++;
         result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
 
@@ -1414,20 +1427,20 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
 
     const Landmark measured_k = lmk_node->getMeasurement(frame_node_k).landmark;
 
-    new_factors.emplace_shared<PoseToPointFactor>(
-        frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
-        object_point_key_k,
-        measured_k,
-        dynamic_point_noise
-    );
-    // new_factors.emplace_shared<GenericProjectionFactor>(
-    //         lmk_node->getMeasurement(frame_node_k).keypoint,
-    //         dynamic_projection_noise,
-    //         frame_node_k->makePoseKey(),
-    //         object_point_key_k,
-    //         gtsam_calibration,
-    //         false, false
-    //     );
+    // new_factors.emplace_shared<PoseToPointFactor>(
+    //     frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
+    //     object_point_key_k,
+    //     measured_k,
+    //     dynamic_point_noise
+    // );
+    new_factors.emplace_shared<GenericProjectionFactor>(
+            lmk_node->getMeasurement(frame_node_k).keypoint,
+            dynamic_projection_noise,
+            frame_node_k->makePoseKey(),
+            object_point_key_k,
+            gtsam_calibration,
+            false, false
+        );
     // object_debug_info.num_dynamic_factors++;
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
@@ -1478,7 +1491,7 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
 
         //when we have an initial motion - it seems ways better to use 2D reprojection error?
         Motion3 initial_motion;
-        // parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
+        parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
         new_values.insert(object_motion_key_k, initial_motion);
         is_other_values_in_map.insert2(object_motion_key_k, true);
     }

@@ -1,6 +1,6 @@
 #!/bin/bash
 
---constant_object_motion_rotation_sigma=0.1
+--constant_object_motion_rotation_sigma=0.01
 --constant_object_motion_translation_sigma=0.01
 
 
@@ -11,8 +11,8 @@
 # --odometry_rotation_sigma=0.05
 # --odometry_translation_sigma=0.1
 
---opt_window_size=30
---opt_window_overlap=5
+--opt_window_size=50
+--opt_window_overlap=40
 
 
 --use_smoothing_factor=true
