@@ -91,7 +91,7 @@ void propogateObjectPoses(
         else {
             //no motion at the previous frame - if close, interpolate between last pose and this pose
             //no motion used
-            const size_t min_diff_frames = 4;
+            const size_t min_diff_frames = 5;
 
             //last frame SHOULD be the largest frame (as we use a std::map with std::less)
             auto last_record_itr = per_frame_poses.rbegin();
@@ -125,7 +125,7 @@ void propogateObjectPoses(
             }
             else {
                 //last frame too far away - reinitalise with centroid!
-                LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame;
+                LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame << " for object " << object_id;
             }
 
 
