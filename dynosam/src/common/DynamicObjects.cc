@@ -57,7 +57,8 @@ void propogateObjectPoses(
 
                     ObjectPoseGT object_pose_gt_k_1;
                     if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
-                        pose_k_1 = object_pose_gt_k_1.L_world_;
+                        // pose_k_1 = object_pose_gt_k_1.L_world_;
+                        pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), object_pose_gt_k_1.L_world_.translation());
                         initalised_with_gt = true;
                     }
                 }
