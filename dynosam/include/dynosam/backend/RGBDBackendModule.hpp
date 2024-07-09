@@ -219,9 +219,6 @@ public:
 
         protected:
             RGBDBackendModule* parent_;
-
-
-            //TODO: eventually map!! How can we not template this!!
     };
 
     class Updater {
@@ -239,7 +236,9 @@ public:
             accessorFromTheta()->postUpdateCallback();
         }
         void updateTheta(const gtsam::Values& linearization) {
-            theta_.insert_or_assign(linearization);
+            //this should actually just be update
+            // theta_.insert_or_assign(linearization);
+            theta_.update(linearization);
             accessorFromTheta()->postUpdateCallback();
         }
 
@@ -315,14 +314,10 @@ public:
     protected:
 
     private:
-        // gtsam::Values previous_linearization_; //! Previous linearization point we can initalise new values with (e.g from an optimisation)
         gtsam::Values theta_; //! Current linearisation that will be associated with the current graph
         gtsam::NonlinearFactorGraph factors_;
 
         mutable Accessor::Ptr accessor_theta_;
-        // Accessor::Ptr accessor_previous_linearization_;
-
-
     };
 
     class LLAccessor : public Accessor {
