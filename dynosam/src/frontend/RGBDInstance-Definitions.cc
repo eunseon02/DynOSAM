@@ -22,10 +22,46 @@
  */
 
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
-#include "dynosam/utils/Metrics.hpp"
+#include "dynosam/common/Types.hpp"
 
 #include <glog/logging.h>
 
 namespace dyno {
+
+GenericTrackedStatusVector<LandmarkKeypointStatus> collectMeasurementsHelper(const StatusLandmarkEstimates& landmarks, const StatusKeypointMeasurements& keypoints) {
+    CHECK_EQ(landmarks.size(), keypoints.size());
+
+    GenericTrackedStatusVector<LandmarkKeypointStatus> collection;
+
+    for(size_t i = 0; i < landmarks.size(); i++) {
+        const auto& lmk_status = landmarks.at(i);
+        const auto& kp_status = keypoints.at(i);
+
+        CHECK_EQ(lmk_status.trackletId(), kp_status.trackletId());
+        CHECK_EQ(lmk_status.objectId(), kp_status.objectId());
+        CHECK_EQ(lmk_status.frameId(), kp_status.frameId());
+
+        LandmarkKeypoint(lmk_status.value(), kp_status.value());
+        collection.push_back(
+            LandmarkKeypointStatus(
+                LandmarkKeypoint(lmk_status.value(), kp_status.value()),
+                lmk_status.frameId(),
+                lmk_status.trackletId(),
+                lmk_status.objectId(),
+                lmk_status.referenceFrame() // use reference frame of lmk as the reference frame of keypoint has to be 'local'
+            )
+        );
+    }
+
+    return collection;
+}
+
+
+GenericTrackedStatusVector<LandmarkKeypointStatus> RGBDInstanceOutputPacket::collectStaticMeasurements() const {
+    return collectMeasurementsHelper(static_landmarks_, static_keypoint_measurements_);
+}
+GenericTrackedStatusVector<LandmarkKeypointStatus> RGBDInstanceOutputPacket::collectDynamicMeasurements() const {
+    return collectMeasurementsHelper(dynamic_landmarks_, dynamic_keypoint_measurements_);
+}
 
 }

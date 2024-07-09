@@ -61,7 +61,6 @@ public:
 
         using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
         using MapType = RGBDBackendModule::MapType;
-        using OptimizerType = RGBDBackendModule::OptimizerType;
         using MeasurementType = RGBDBackendModule::MeasurementType;
 
         typename MapType::Ptr map = MapType::create();
@@ -88,14 +87,14 @@ public:
         CHECK(get_dataset_size) << "dataset size function must be set - right now only works with RBG!!";
         batch_params.get_last_frame = get_dataset_size;
 
-        auto optimizer = std::make_shared<BatchOptimizer<MeasurementType>>(batch_params);
+        // auto optimizer = std::make_shared<BatchOptimizer<MeasurementType>>(batch_params);
 
         //TODO: make better params!!
         auto updater_type = static_cast<RGBDBackendModule::UpdaterType>(
             FLAGS_backend_updater_enum
         );
 
-        auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, optimizer, updater_type);
+        auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, camera, updater_type);
 
         backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
         backend_pipeline_->parallelRun(params.parallel_run_);

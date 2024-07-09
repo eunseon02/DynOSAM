@@ -209,7 +209,6 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
 
             using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
             using MapType = RGBDBackendModule::MapType;
-            using OptimizerType = RGBDBackendModule::OptimizerType;
             using MeasurementType = RGBDBackendModule::MeasurementType;
 
             typename MapType::Ptr map = MapType::create();
@@ -260,7 +259,6 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
             }
 
             //right now depends on the get_dataset_size_ function being det before the optimzier is created!!!
-            typename OptimizerType::Ptr optimzier = createOptimizer<MeasurementType>(params_.optimizer_type_);
 
 
             if(FLAGS_use_backend) {
@@ -271,7 +269,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
                     FLAGS_backend_updater_enum
                 );
 
-                backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, optimzier, updater_type, &display_queue_);
+                backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, camera, updater_type, &display_queue_);
             }
             else if(use_offline_frontend_) {
                 LOG(WARNING) << "FLAGS_use_backend is false but use_offline_frontend (FLAGS_frontend_from_file) us true. "

@@ -73,6 +73,7 @@ using Landmark = gtsam::Point3;
 using Landmarks = gtsam::Point3Vector; //! Vector of Landmarks using gtsam's definition for allocation
 using LandmarkMap = gtsam::FastMap<TrackletId, Landmark>;
 
+
 using OpticalFlow = gtsam::Point2; //! Observed optical flow vector (ordered x, y)
 
 using Keypoint = gtsam::Point2;
@@ -84,6 +85,14 @@ using KeypointsCV = std::vector<KeypointCV>;
 using Motion3 = gtsam::Pose3;
 using MotionMap = gtsam::FastMap<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
+
+struct LandmarkKeypoint {
+  LandmarkKeypoint() = default;
+  LandmarkKeypoint(const Landmark& l, const Keypoint& kp) : landmark(l), keypoint(kp) {}
+
+  Landmark landmark;
+  Keypoint keypoint;
+};
 
 /**
  * @brief Get demangled class name
@@ -345,7 +354,7 @@ struct KeypointStatus : public TrackedValueStatus<Keypoint> {
   : Base(kp, frame_id, tracklet_id, label, ReferenceFrame::LOCAL), kp_type_(kp_type) {}
 
   inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id) {
-    return KeypointStatus(kp, frame_id, background_label, tracklet_id, KeyPointType::STATIC);
+    return KeypointStatus(kp, frame_id, tracklet_id, background_label, KeyPointType::STATIC);
   }
 
   inline static KeypointStatus Dynamic(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,  ObjectId label) {
@@ -389,6 +398,8 @@ public:
   }
 
 };
+
+using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
 
 
 //TODO: really should be values or something, not estimate as these can be measurements OR values

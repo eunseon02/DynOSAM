@@ -460,6 +460,10 @@ private:
     FrameId last_estimate_update_{0};
 };
 
+using Map3d2d = Map<LandmarkKeypoint>;
+using ObjectNode3d2d = Map3d2d::ObjectNodeM;
+using LandmarkNode3d2d = Map3d2d::LandmarkNodeM;
+using FrameNode3d2d = Map3d2d::FrameNodeM;
 
 
 using Map3d = Map<Landmark>;

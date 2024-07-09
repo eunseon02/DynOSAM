@@ -87,14 +87,14 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     scenario.addObjectBody(1, object1);
     // scenario.addObjectBody(2, object2);
 
-    dyno::Map3d::Ptr map = dyno::Map3d::create();
+    dyno::Map3d2d::Ptr map = dyno::Map3d2d::create();
     // std::shared_ptr<dyno::IncrementalOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::IncrementalOptimizer<dyno::Landmark>>();
-    std::shared_ptr<dyno_testing::DummyOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno_testing::DummyOptimizer<dyno::Landmark>>();
+    // std::shared_ptr<dyno_testing::DummyOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno_testing::DummyOptimizer<dyno::Landmark>>();
     // std::shared_ptr<dyno::ISAMOptimizer<dyno::Landmark>> optimizer = std::make_shared<dyno::ISAMOptimizer<dyno::Landmark>>();
     dyno::RGBDBackendModule backend(
         dyno::BackendParams().useLogger(false),
         map,
-        optimizer,
+        dyno_testing::makeDefaultCameraPtr(),
         dyno::RGBDBackendModule::UpdaterType::MotionInWorld
         );
 

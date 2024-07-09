@@ -40,21 +40,20 @@
 namespace dyno {
 
 
-using RGBDBackendModuleTraits = BackendModuleTraits<RGBDInstanceOutputPacket, Landmark>;
+using RGBDBackendModuleTraits = BackendModuleTraits<RGBDInstanceOutputPacket, LandmarkKeypoint>;
 
 class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
 public:
     using Base = BackendModuleType<RGBDBackendModuleTraits>;
     using RGBDMap = Base::MapType;
-    using RGBDOptimizer = Base::OptimizerType;
 
     enum UpdaterType {
         MotionInWorld = 0,
         LLWorld = 1
     };
 
-    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, const UpdaterType& updater_type, ImageDisplayQueue* display_queue = nullptr);
+    RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, Camera::Ptr camera, const UpdaterType& updater_type, ImageDisplayQueue* display_queue = nullptr);
     ~RGBDBackendModule();
 
     using SpinReturn = Base::SpinReturn;
@@ -104,9 +103,9 @@ public:
     };
 
     struct PointUpdateContext {
-        LandmarkNode3d::Ptr lmk_node;
-        FrameNode3d::Ptr frame_node_k_1;
-        FrameNode3d::Ptr frame_node_k;
+        LandmarkNode3d2d::Ptr lmk_node;
+        FrameNode3d2d::Ptr frame_node_k_1;
+        FrameNode3d2d::Ptr frame_node_k;
 
         gtsam::Pose3 X_k_measured; //! Camera pose from measurement (or initial)
         gtsam::Pose3 X_k_1_measured; //! Camera pose from measurement (or initial)
@@ -121,8 +120,8 @@ public:
     };
 
     struct ObjectUpdateContext {
-        FrameNode3d::Ptr frame_node_k;
-        ObjectNode3d::Ptr object_node;
+        FrameNode3d2d::Ptr frame_node_k;
+        ObjectNode3d2d::Ptr object_node;
 
         //! Indicates that we have a valid motion pair from k-1 to k (this frame)
         //! and therefore k is at least the second frame for which this object has been consequatively tracked
@@ -303,7 +302,7 @@ public:
             gtsam::Values& new_values,
             gtsam::NonlinearFactorGraph& new_factors) = 0;
 
-        virtual bool isDynamicTrackletInMap(const LandmarkNode3d::Ptr& lmk_node) const = 0;
+        virtual bool isDynamicTrackletInMap(const LandmarkNode3d2d::Ptr& lmk_node) const = 0;
         gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map; //! the set of (static related) values managed by this updater. Allows checking if values have already been added over successifve function calls
 
         auto getMap() { return parent_->getMap(); }
@@ -351,7 +350,7 @@ public:
         void objectUpdateContext(const ObjectUpdateContext& context, UpdateObservationResult& result, gtsam::Values& new_values,
             gtsam::NonlinearFactorGraph& new_factors) override;
 
-        inline bool isDynamicTrackletInMap(const LandmarkNode3d::Ptr& lmk_node) const override {
+        inline bool isDynamicTrackletInMap(const LandmarkNode3d2d::Ptr& lmk_node) const override {
             const TrackletId tracklet_id = lmk_node->tracklet_id;
             return is_dynamic_tracklet_in_map_.exists(tracklet_id);
         }
@@ -426,6 +425,7 @@ public:
     }
 
 public:
+    Camera::Ptr camera_;
     const UpdaterType updater_type_;
     // std::unique_ptr<DynoISAM2> smoother_;
     // DynoISAM2Result smoother_result_;

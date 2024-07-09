@@ -97,6 +97,10 @@ public:
         }
     }
 
+    GenericTrackedStatusVector<LandmarkKeypointStatus> collectStaticMeasurements() const;
+    GenericTrackedStatusVector<LandmarkKeypointStatus> collectDynamicMeasurements() const;
+
+
     /**
      * @brief Checks if an object id exists within the frontend output
      *

@@ -135,7 +135,6 @@ public:
     using Base = BackendModule;
 
     using MapType = Map<MeasurementType>;
-    using OptimizerType = Optimizer<MeasurementType>;
 
     DYNO_POINTER_TYPEDEFS(This)
 
@@ -146,8 +145,8 @@ public:
     using InputConstPtr = DerivedPacketTypeConstPtr;
     using OutputConstPtr = Base::OutputConstPtr;
 
-    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, typename OptimizerType::Ptr optimizer, ImageDisplayQueue* display_queue)
-    : Base(params, display_queue), map_(CHECK_NOTNULL(map)), optimizer_(CHECK_NOTNULL(optimizer)) {}
+    BackendModuleType(const BackendParams& params, typename MapType::Ptr map, ImageDisplayQueue* display_queue)
+    : Base(params, display_queue), map_(CHECK_NOTNULL(map)) {}
 
     virtual ~BackendModuleType() {
         // if(logger_) {
@@ -165,7 +164,6 @@ public:
     }
 
     inline const typename MapType::Ptr getMap() {  return map_; }
-    inline const typename OptimizerType::Ptr getOptimzier() {  return optimizer_; }
 
     //factor graph helper functions
     bool safeAddObjectSmoothingFactor(
@@ -211,7 +209,6 @@ protected:
     virtual SpinReturn nominalSpinImpl(InputConstPtr input) = 0;
 
     typename MapType::Ptr map_;
-    typename OptimizerType::Ptr optimizer_;
 
 private:
     SpinReturn boostrapSpin(Base::BaseInputConstPtr base_input) override {
