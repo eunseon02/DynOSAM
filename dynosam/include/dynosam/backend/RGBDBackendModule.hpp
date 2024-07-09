@@ -434,6 +434,14 @@ public:
     Updater::UniquePtr new_updater_;
     FrameId first_frame_id_; //the first frame id that is received
 
+    //new calibration every time
+    inline auto getGtsamCalibration() const {
+        const CameraParams& camera_params = camera_->getParams();
+        return boost::make_shared<Camera::CalibrationType>(
+            camera_params.constructGtsamCalibration<Camera::CalibrationType>()
+        );
+    }
+
     //logger here!!
     BackendLogger::UniquePtr logger_{nullptr};
     gtsam::FastMap<FrameId, gtsam::Pose3> initial_camera_poses_; //! Camera poses as estimated from the frontend per frame

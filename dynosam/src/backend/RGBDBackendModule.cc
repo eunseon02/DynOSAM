@@ -73,6 +73,10 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
         landmark_motion_noise_ = gtsam::noiseModel::Robust::Create(
             gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), landmark_motion_noise_);
 
+        CHECK_NOTNULL(dynamic_pixel_noise_);
+        dynamic_pixel_noise_ = gtsam::noiseModel::Robust::Create(
+            gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), dynamic_pixel_noise_);
+
     }
 
     CHECK_NOTNULL(static_point_noise_);
@@ -1363,6 +1367,10 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
     const auto frame_node_k = context.frame_node_k;
 
     auto dynamic_point_noise = parent_->dynamic_point_noise_;
+    auto dynamic_projection_noise = parent_->dynamic_pixel_noise_;
+    CHECK_NOTNULL(dynamic_projection_noise);
+
+    auto gtsam_calibration = parent_->getGtsamCalibration();
 
     Accessor::Ptr theta_accessor = this->accessorFromTheta();
 
@@ -1371,6 +1379,15 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
 
     // if first motion (i.e first time we have both k-1 and k), add both at k-1 and k
     if(context.is_starting_motion_frame) {
+        // new_factors.emplace_shared<GenericProjectionFactor>(
+        //     lmk_node->getMeasurement(frame_node_k_1).keypoint,
+        //     dynamic_projection_noise,
+        //     frame_node_k_1->makePoseKey(),
+        //     object_point_key_k_1,
+        //     gtsam_calibration,
+        //     false, false
+        // );
+
         new_factors.emplace_shared<PoseToPointFactor>(
             frame_node_k_1->makePoseKey(), //pose key at previous frames
             object_point_key_k_1,
@@ -1403,6 +1420,14 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
         measured_k,
         dynamic_point_noise
     );
+    // new_factors.emplace_shared<GenericProjectionFactor>(
+    //         lmk_node->getMeasurement(frame_node_k).keypoint,
+    //         dynamic_projection_noise,
+    //         frame_node_k->makePoseKey(),
+    //         object_point_key_k,
+    //         gtsam_calibration,
+    //         false, false
+    //     );
     // object_debug_info.num_dynamic_factors++;
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
@@ -1446,13 +1471,18 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
         return;
     }
 
+    const auto frame_id = context.getFrameId();
+    const auto object_id = context.getObjectId();
+
     if(!is_other_values_in_map.exists(object_motion_key_k)) {
-        new_values.insert(object_motion_key_k, gtsam::Pose3::Identity());
+
+        //when we have an initial motion - it seems ways better to use 2D reprojection error?
+        Motion3 initial_motion;
+        // parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
+        new_values.insert(object_motion_key_k, initial_motion);
         is_other_values_in_map.insert2(object_motion_key_k, true);
     }
 
-    const auto frame_id = context.getFrameId();
-    const auto object_id = context.getObjectId();
     if(frame_id < 2) return;
 
     auto frame_node_k_1 = getMap()->getFrame(frame_id - 1u);

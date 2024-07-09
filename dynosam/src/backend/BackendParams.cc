@@ -24,7 +24,7 @@
 #include "dynosam/backend/BackendParams.hpp"
 
 DEFINE_double(static_point_sigma, 2.0, "Isotropic pixel noise used on static points");
-DEFINE_double(dynamic_point_sigma, 8,"Isotropic pixel noise used on dynamic points");
+DEFINE_double(dynamic_point_sigma, 2,"Isotropic pixel noise used on dynamic points");
 
 DEFINE_double(constant_object_motion_rotation_sigma, 0.01, "Noise used on rotation componenent of smoothing factor");
 DEFINE_double(constant_object_motion_translation_sigma,  0.1, "Noise used on translation componenent of smoothing factor");
