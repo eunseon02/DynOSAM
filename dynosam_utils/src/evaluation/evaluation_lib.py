@@ -43,18 +43,20 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
     csvfile = open(csv_file_path)
     reader = csv.DictReader(csvfile)
 
-    header = next(reader)
-    keys = list(header.keys())
-    if keys != expected_header:
-        raise Exception(
-            "Csv file headers were not valid when loading file at path: {}. "
-            "Expected header was {} but actual keys were {}".format(
-                csv_file_path, expected_header, keys
+    try:
+        header = next(reader)
+        keys = list(header.keys())
+        if keys != expected_header:
+            raise Exception(
+                "Csv file headers were not valid when loading file at path: {}. "
+                "Expected header was {} but actual keys were {}".format(
+                    csv_file_path, expected_header, keys
+                )
             )
-        )
 
-    return reader
-
+        return reader
+    except Exception as e:
+        raise Exception(f"Failed to read csv file {csv_file_path}. Exception raised was {str(e)}")
 
 class Evaluator(ABC):
 
@@ -166,9 +168,6 @@ class MotionErrorEvaluator(Evaluator):
             object_trajectories[f"Object {object_id}"] = object_traj
             # object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
             object_trajectories_ref[f"Ground Truth Object {object_id}"] = object_traj_ref
-
-            # object_trajectories[object_id] = object_traj
-            # object_trajectories_ref[object_id] = object_traj_ref
 
             logger.debug(f"Logging pose metrics for object {object_id}")
 

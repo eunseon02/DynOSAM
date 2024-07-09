@@ -130,6 +130,7 @@ add_library(${PROJECT_NAME} SHARED
   src/factors/LandmarkQuadricFactor.cc
   src/factors/ObjectKinematicFactor.cc
   src/factors/LandmarkMotionPoseFactor.cc
+  src/factors/LandmarkPoseSmoothingFactor.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineDefinitions.cc
@@ -295,6 +296,8 @@ if(BUILD_TESTING)
     test/test_rgbd_backend.cc
     test/test_algorithms.cc
     test/test_viz.cc
+    test/test_factors.cc
+    test/test_numerical.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

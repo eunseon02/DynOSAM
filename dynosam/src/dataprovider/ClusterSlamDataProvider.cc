@@ -550,7 +550,7 @@ private:
                 // gtsam::Pose3 pose = camera_to_world.inverse() * poses.at(i);
                 gtsam::Pose3 pose = poses.at(i);
 
-                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
+                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(M_PI_2, 0, M_PI_2), gtsam::traits<gtsam::Point3>::Identity());
 
                 // LOG(INFO) << pose;
 

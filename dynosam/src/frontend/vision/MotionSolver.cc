@@ -24,6 +24,7 @@
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/utils/Numerical.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
 #include <eigen3/Eigen/Dense>
@@ -34,7 +35,16 @@
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
+
+#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
+
 #include <opengv/types.hpp>
+
+#include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h> //for now?
+#include <gtsam/nonlinear/Values.h>
+
 
 #include <glog/logging.h>
 
@@ -312,8 +322,14 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
             tracklets
         );
 
-        result.status = TrackingStatus::VALID;
-        result.best_pose = best_pose;
+        if(result.inliers.size() < 5u) {
+            result.status = TrackingStatus::FEW_MATCHES;
+        }
+        else {
+            result.status = TrackingStatus::VALID;
+            result.best_pose = best_pose;
+        }
+
     }
     else {
         result.status = TrackingStatus::INVALID;
@@ -431,6 +447,15 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         const gtsam::Pose3 G_w = result.best_pose.inverse();
         const gtsam::Pose3 H_w = T_world_k * G_w;
         result.best_pose = H_w;
+
+        if(params_.refine_object_motion_esimate) {
+            refineLocalObjectMotionEstimate(
+                result,
+                frame_k_1,
+                frame_k,
+                object_id
+            );
+        }
     }
 
     //if not valid, return motion result as is
@@ -466,6 +491,160 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d3d(
 
     //if not valid, return motion result as is
     return result;
+}
+
+void ObjectMotionSovler::refineLocalObjectMotionEstimate(
+    Pose3SolverResult& solver_result,
+    Frame::Ptr frame_k_1,
+    Frame::Ptr frame_k,
+    ObjectId object_id,
+    const RefinementSolver& solver) const
+{
+    CHECK(solver_result.status == TrackingStatus::VALID);
+
+    gtsam::NonlinearFactorGraph graph;
+    gtsam::Values values;
+
+    gtsam::SharedNoiseModel landmark_motion_noise =
+        gtsam::noiseModel::Isotropic::Sigma(3u, 0.001);
+
+    gtsam::SharedNoiseModel projection_noise =
+        gtsam::noiseModel::Isotropic::Sigma(2u, 2);
+
+    static constexpr auto k_huber_value = 0.0001;
+
+    //make robust
+    landmark_motion_noise = gtsam::noiseModel::Robust::Create(
+            gtsam::noiseModel::mEstimator::Huber::Create(k_huber_value), landmark_motion_noise);
+    projection_noise = gtsam::noiseModel::Robust::Create(
+            gtsam::noiseModel::mEstimator::Huber::Create(k_huber_value), projection_noise);
+
+    const gtsam::Key pose_k_1_key = CameraPoseSymbol(frame_k_1->getFrameId());
+    const gtsam::Key pose_k_key = CameraPoseSymbol(frame_k->getFrameId());
+    const gtsam::Key object_motion_key = ObjectMotionSymbol(object_id, frame_k->getFrameId());
+
+    values.insert(pose_k_1_key, frame_k_1->getPose());
+    values.insert(pose_k_key, frame_k->getPose());
+    values.insert(object_motion_key, solver_result.best_pose);
+
+    auto gtsam_calibration = boost::make_shared<Camera::CalibrationType>(
+        frame_k_1->getFrameCamera().calibration());
+
+
+    auto pose_prior = gtsam::noiseModel::Isotropic::Sigma(6u, 0.00001);
+    graph.addPrior(pose_k_1_key, frame_k_1->getPose(), pose_prior);
+    graph.addPrior(pose_k_key, frame_k->getPose(), pose_prior);
+
+
+    for(TrackletId tracklet_id : solver_result.inliers) {
+        Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
+        Feature::Ptr feature_k = frame_k->at(tracklet_id);
+
+        CHECK_NOTNULL(feature_k_1);
+        CHECK_NOTNULL(feature_k);
+
+        CHECK(feature_k_1->hasDepth());
+        CHECK(feature_k->hasDepth());
+
+        const Keypoint kp_k_1 = feature_k_1->keypoint_;
+        const Keypoint kp_k = feature_k->keypoint_;
+
+        const gtsam::Point3 lmk_k_1_world = frame_k_1->backProjectToWorld(tracklet_id);
+        const gtsam::Point3 lmk_k_world = frame_k->backProjectToWorld(tracklet_id);
+
+        const gtsam::Point3 lmk_k_1_local = frame_k_1->backProjectToCamera(tracklet_id);
+        const gtsam::Point3 lmk_k_local = frame_k->backProjectToCamera(tracklet_id);
+
+        const gtsam::Key lmk_k_1_key = DynamicLandmarkSymbol(frame_k_1->getFrameId(), tracklet_id);
+        const gtsam::Key lmk_k_key = DynamicLandmarkSymbol(frame_k->getFrameId(), tracklet_id);
+
+        //add initial for points
+        values.insert(lmk_k_1_key, lmk_k_1_world);
+        values.insert(lmk_k_key, lmk_k_world);
+
+        if(solver == RefinementSolver::PointError) {
+            graph.emplace_shared<PoseToPointFactor>(
+                pose_k_1_key, //pose key at previous frames
+                lmk_k_1_key,
+                lmk_k_1_local,
+                projection_noise
+            );
+
+            graph.emplace_shared<PoseToPointFactor>(
+                    pose_k_key, //pose key at current frames
+                    lmk_k_key,
+                    lmk_k_local,
+                    projection_noise
+            );
+        }
+        else if(solver == RefinementSolver::ProjectionError) {
+            graph.emplace_shared<GenericProjectionFactor>(
+                    kp_k_1,
+                    projection_noise,
+                    pose_k_1_key,
+                    lmk_k_1_key,
+                    gtsam_calibration,
+                    false, false
+            );
+
+            graph.emplace_shared<GenericProjectionFactor>(
+                    kp_k,
+                    projection_noise,
+                    pose_k_key,
+                    lmk_k_key,
+                    gtsam_calibration,
+                    false, false
+            );
+        }
+
+        graph.emplace_shared<LandmarkMotionTernaryFactor>(
+            lmk_k_1_key,
+            lmk_k_key,
+            object_motion_key,
+            landmark_motion_noise
+        );
+
+    }
+
+    VLOG(20) << "Constructing local object motion refinement optimisation for object " << object_id;
+    gtsam::LevenbergMarquardtParams opt_params;
+    if(VLOG_IS_ON(200))
+        opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+    double error_before = graph.error(values);
+    const gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+    double error_after = graph.error(optimised_values);
+
+    static constexpr auto kConfidence = 0.99;
+    gtsam::FactorIndices outlier_indicies;
+    for (size_t k = 0; k < graph.size(); k++) {
+      if (graph[k]) {
+        double weighted_threshold = 0.5 * chi_squared_quantile(graph[k]->dim(), kConfidence); // 0.5 derives from the error definition in gtsam
+
+        //mark as outlier
+        if(weighted_threshold < graph[k]->error(optimised_values)) {
+            outlier_indicies.push_back(k);
+        }
+      }
+    }
+
+   VLOG(20)
+        << "Marked " << outlier_indicies.size() << " factors are outliers out of " << graph.size()
+        << " error before=" << error_before << ", error after=" << error_after;
+
+    //TODO: right now ignoring outliers
+    solver_result.best_pose = optimised_values.at<gtsam::Pose3>(object_motion_key);
+
+    //recover values
+    // for(TrackletId tracklet_id : solver_result.inliers) {
+    //     const gtsam::Key lmk_k_1_key = DynamicLandmarkSymbol(frame_k_1->getFrameId(), tracklet_id);
+    //     const gtsam::Key lmk_k_key = DynamicLandmarkSymbol(frame_k->getFrameId(), tracklet_id);
+
+    //     // const gtsam::Point3 lmk_k_1_world_recovered = frame_k_1->backProjectToWorld(tracklet_id);
+    //     // const gtsam::Point3 lmk_k_world = frame_k->backProjectToWorld(tracklet_id);
+    //     //
+    // }
+
 }
 
 } //dyno

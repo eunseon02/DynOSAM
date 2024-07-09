@@ -102,6 +102,9 @@ size_t getAssociatedFactors(std::vector<typename GRAPH::sharedFactor>& associate
     return result;
 }
 
+
+
+
 //wrapper on the gtsam tree traversal functions to make life easier
 struct travsersal {
 

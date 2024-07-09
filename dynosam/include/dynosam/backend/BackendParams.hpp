@@ -51,7 +51,7 @@ struct BackendParams {
     bool use_robust_kernals_ = true;
     double k_huber_3d_points_ = 0.0001; //! Huber constant used for robust kernal on dynamic points
     double static_point_noise_sigma_ = 0.06; //! Isotropic noise used on PoseToPointFactor for static points
-    double dynamic_point_noise_sigma_ = 0.1; //! Isotropic noise used on PoseToPointFactor for dynamic points //0.0125
+    double dynamic_point_noise_sigma_ = 0.01; //! Isotropic noise used on PoseToPointFactor for dynamic points //0.0125
 
     double odometry_rotation_sigma_ = FLAGS_odometry_rotation_sigma; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = FLAGS_odometry_translation_sigma; //! sigma used to construct the noise model on the translation component of the odomety (between factor)

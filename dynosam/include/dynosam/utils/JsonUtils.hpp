@@ -218,7 +218,7 @@ namespace nlohmann {
     //end POSE3
 
 
-    // //begin gtsam::FastMap
+    //begin gtsam::FastMap
     template<typename KEY, typename VALUE>
     struct adl_serializer<gtsam::FastMap<KEY, VALUE>> {
         using Map = gtsam::FastMap<KEY, VALUE>;
@@ -231,7 +231,22 @@ namespace nlohmann {
             map = Map(j.template get<typename Map::Base>());
         }
     };
-    // //end gtsam::FastMap
+    //end gtsam::FastMap
+
+    //begin dyno::GenericObjectCentricMap
+    template<typename VALUE>
+    struct adl_serializer<dyno::GenericObjectCentricMap<VALUE>> {
+        using Map = dyno::GenericObjectCentricMap<VALUE>;
+
+        static void to_json(json& j, const dyno::GenericObjectCentricMap<VALUE>& map) {
+            j = static_cast<typename Map::Base>(map);
+        }
+
+        static void from_json(const json& j, dyno::GenericObjectCentricMap<VALUE>& map) {
+            map = Map(j.template get<typename Map::Base>());
+        }
+    };
+    //end dyno::GenericObjectCentricMap
 
 
     template <typename T>

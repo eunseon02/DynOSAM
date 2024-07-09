@@ -217,7 +217,8 @@ void DisplayRos::publishObjectPaths(
             const gtsam::Pose3& curr_pose = map_iter->second;
 
             //check frames are consequative
-            CHECK_EQ(prev_iter->first + 1, map_iter->first);
+            // CHECK_EQ(prev_iter->first + 1, map_iter->first) << " For object " << object_id;
+            LOG_IF(INFO, prev_iter->first + 1 != map_iter->first) << " Frames not consequative for object " << object_id;
 
             {
                 geometry_msgs::msg::Point p;

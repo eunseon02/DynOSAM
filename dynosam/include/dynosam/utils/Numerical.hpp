@@ -27,6 +27,9 @@
 #include <gtsam/base/Vector.h> //for fpequal
 #include <gtsam/base/Matrix.h>
 
+#include <boost/math/distributions/chi_squared.hpp>
+#include <boost/math/distributions/inverse_gamma.hpp>
+
 #include <iostream>
 #include <fstream>
 
@@ -103,6 +106,32 @@ inline double rads2Deg(double rads) {
  */
 inline double deg2Rads(double degrees) {
     return degrees * M_PI/180.0;
+}
+
+
+// /**
+//  * @brief Compute the quantile function of the Chi-Squared distribution.
+//  *
+//  * The quantile function of the Chi-squared distribution is the quantile of
+//  * the specific (inverse) incomplete Gamma distribution.
+//  *
+//  * @param dofs Degrees of freedom
+//  * @param alpha Quantile value
+//  * @return double
+//  */
+
+/**
+ * @brief Compute the quantile function of the Chi-Squared distribution.
+ *
+ * Implemented Percent point function (inverse of cdf — percentiles) or scipy.ppf function
+ *
+ * @param dofs Degrees of freedom
+ * @param alpha Quantile value (confidence)
+ * @return double
+ */
+inline double chi_squared_quantile(const double dofs, const double alpha) {
+  boost::math::chi_squared chiSquaredDist(dofs);
+  return boost::math::quantile(chiSquaredDist, alpha);
 }
 
 

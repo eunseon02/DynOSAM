@@ -26,6 +26,8 @@
 #include "dynosam/utils/Macros.hpp"
 #include "dynosam/common/Flags.hpp" //for common glags DECLARATIONS
 
+#include <boost/optional.hpp>
+
 #include <gtsam/base/Matrix.h>
 #include <gtsam/geometry/Pose3.h>
 
@@ -371,6 +373,7 @@ public:
   //check if the DERIVEDSTATUS meets requirements
   //and alias to the value type of the status
   using Value = typename IsStatus<DERIVEDSTATUS, VALUE>::value;
+  using This = GenericTrackedStatusVector<DERIVEDSTATUS, VALUE>;
 
   using Base = std::vector<DERIVEDSTATUS>;
   using Base::Base;
@@ -378,6 +381,11 @@ public:
   /** Conversion to a standard STL container */
   operator std::vector<DERIVEDSTATUS>() const {
     return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
+  }
+
+  This& operator+=(const GenericTrackedStatusVector& rhs) {
+    this->insert(this->end(), rhs.begin(), rhs.end());
+    return *this;
   }
 
 };
@@ -406,8 +414,143 @@ using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 /// @brief Map of object ids to ReferenceFrameValue's of motions
 using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
 
+
+/**
+ * @brief Generic mapping of Object Id -> FrameId -> Value within a nested gtsam::FastMap structure.
+ * This is a common datastrcture used for object's to store temporal information about each object.
+ *
+ * We call it ObjectCentric map as we order by ObjectId first.
+ *
+ * @tparam VALUE Value type to be stored
+ */
+template<typename VALUE>
+class GenericObjectCentricMap : public gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, VALUE>> {
+  public:
+    using Base = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, VALUE>>;
+    using NestedBase = gtsam::FastMap<FrameId, VALUE>;
+
+    using This = GenericObjectCentricMap<VALUE>;
+    using Value = VALUE;
+
+    using Base::Base; // all the stl map stuff
+    using Base::at;
+    using Base::exists;
+    using Base::insert2;
+
+    /** Conversion to a gtsam::FastMap container */
+    operator Base() const {
+      return Base(this->begin(), this->end());
+    }
+
+
+    operator typename Base::Base() const {
+      return typename Base::Base(this->begin(), this->end());
+    }
+
+    /**
+     * @brief Handy insert function allowing direct insertion to the nested map structure.
+     *
+     * @param object_id
+     * @param frame_id
+     * @param value
+     * @return true
+     * @return false
+     */
+    bool insert22(ObjectId object_id, FrameId frame_id, const Value& value) {
+      if(!this->exists(object_id)) {
+        this->insert2(object_id, NestedBase{});
+      }
+
+      NestedBase& frame_map = this->at(object_id);
+      return frame_map.insert2(frame_id, value);
+    }
+
+    bool exists(ObjectId object_id, FrameId frame_id) const {
+      static size_t out_of_range_flag;
+      return existsImpl(object_id, frame_id, out_of_range_flag);
+
+    }
+
+    const Value& at(ObjectId object_id, FrameId frame_id) const {
+      return atImpl(this, object_id, frame_id);
+    }
+
+    Value& at(ObjectId object_id, FrameId frame_id) {
+      return atImpl(const_cast<const This*>(this), object_id, frame_id);
+    }
+
+    /**
+     * @brief Collect all objects that appear in the query frame, as well as their value.
+     *
+     * @param frame_id FrameId
+     * @return gtsam::FastMap<ObjectId, Value>
+     */
+    gtsam::FastMap<ObjectId, Value> collectByFrame(FrameId frame_id) const {
+      gtsam::FastMap<ObjectId, Value> object_map;
+      for(const auto& [object_id, frame_map] : *this) {
+        if(frame_map.exists(frame_id)) {
+          object_map.insert2(object_id, frame_map.at(frame_id));
+        }
+      }
+      return object_map;
+    }
+
+  private:
+      template<typename Container>
+      static auto& atImpl(Container* container, ObjectId object_id, FrameId frame_id) {
+        size_t out_of_range_flag;
+        const bool result = existsImpl(object_id, frame_id, out_of_range_flag);
+        if(result) {
+          CHECK_EQ(out_of_range_flag, 2u);
+          return container->at(object_id)[frame_id];
+        }
+        else {
+          std::stringstream ss;
+          ss << "Index out of range: "
+             << ((out_of_range_flag == 0) ? " object id " : " frame id")
+             << " missing. Full query - (object id " << object_id << ", frame id " << frame_id << ").";
+          throw std::out_of_range(ss.str());
+        }
+      }
+
+      /**
+       * @brief Helper function to determine if the query exists.
+       * Operates like a regular exists function but also sets out_of_range_flag
+       * to indicate which query (object_id or frame_id) is out of range:
+       * out_of_range_flag = 0, object_id out of range
+       * out_of_range_flag = 1, frame_id out of range
+       * out_of_range_flag = 2 both queries exist and the function should return true
+       *
+       * @param object_id
+       * @param frame_id
+       * @param out_of_range_flag
+       * @return true
+       * @return false
+       */
+      bool existsImpl(ObjectId object_id, FrameId frame_id, size_t& out_of_range_flag) const {
+        if(!this->exists(object_id)) {
+          out_of_range_flag = 0;
+          return false;
+        }
+
+        const auto& frame_map = this->at(object_id);
+        if(!frame_map.exists(frame_id)) {
+          out_of_range_flag = 1;
+          return false;
+        }
+        else {
+          out_of_range_flag = 2;
+          return true;
+        }
+      }
+
+
+
+
+};
+
 /// @brief Map of object poses per frame per object
-using ObjectPoseMap = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, gtsam::Pose3>>;
+using ObjectPoseMap = GenericObjectCentricMap<gtsam::Pose3>;
 
 
 
@@ -435,6 +578,7 @@ inline std::string container_to_string(const Container& container, const std::st
   }
   return ss.str();
 }
+
 
 
 

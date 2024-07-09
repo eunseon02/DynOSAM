@@ -370,18 +370,32 @@ private:
 
             //transformation from object to world frame where world is the vicon frame
             //given as T_AO in dataset paper
-            gtsam::Pose3 T_object_world(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
-            //world is the vicon frame
-            // gtsam::Pose3 T_world_object = T_object_world.inverse();
-            gtsam::Pose3 T_world_object = T_object_world;
+            gtsam::Pose3 T_object_world_robotic(gtsam::Rot3(qw, qx, qy, qz), gtsam::Point3(tx, ty, tz));
+            //world is the vicon frame but is defined in the ROBOTIC convention (but with y forward, becuase reasons...?)
+            //see figure.2. in paper where x is to the right and z is up
+            gtsam::Pose3 T_world_object_robotic = T_object_world_robotic;
+            //rotate the reference 90\deg around z to put into real robotic convention; z up , x forward, y left
+            //so apply a -90 transformation
+            T_world_object_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(-M_PI/2.0, 0, 0), gtsam::traits<gtsam::Point3>::Identity()) * T_world_object_robotic;
+
+            // //rotation that takes a transform from the robotic convention
+            //this is from actually the omd robotic convention
+            // const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(
+            //     gtsam::Rot3(
+            //         1, 0, 0,
+            //         0, 0, -1,
+            //         0, 1, 0
+            //     ),
+            //     gtsam::traits<gtsam::Point3>::Identity());
+            const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(M_PI/2.0, 0, M_PI/2.0), gtsam::traits<gtsam::Point3>::Identity());
+            gtsam::Pose3 T_world_object_camera = T_cv_robotic * T_world_object_robotic * T_cv_robotic.inverse();
 
 
             ViconPoseData vicon_data;
             vicon_data.timestamp = vicon_time;
             vicon_data.object_id = object_id;
-            vicon_data.T_world_object = T_world_object;
+            vicon_data.T_world_object = T_world_object_camera;
             vicon_pose_data.push_back(vicon_data);
-            // vicon_timestamp_buffer.addValue(vicon_time, std::make_pair(object_id, pose));
 
         }
 
@@ -401,8 +415,6 @@ private:
             const ObjectId object_id = vicon_data.object_id;
             const gtsam::Pose3& T_world_object = vicon_data.T_world_object;
             const Timestamp& vicon_timestamp = vicon_data.timestamp;
-
-            // LOG(INFO) << "Found object id " << object_id;
 
             //dont include if less than first or greater than last camera time
             if (vicon_timestamp < earliest_camera_timestamp || vicon_timestamp > latest_camera_timestamp) {
@@ -443,15 +455,25 @@ private:
 
                 std::vector<ObjectPoseGT>& tmp_object_vector = temp_object_poses.at(frame_id);
 
-                const static gtsam::Pose3 camera_to_world(gtsam::Rot3::RzRyRx(1, 0, 1), gtsam::traits<gtsam::Point3>::Identity());
-
                 if(object_id == 0) {
                     //if object is sensor payload we need to apply extra transforms to get T_world_depthcam from T_world_object
                     //in this case T_world_object = T_world_apparatus (T_OA) as the object is the apparatus frame measured from the vicon
                     //T_world_depthcam =  T_world_apparatus * T_apparatus_leftstereo * T_leftstereo_depthcam
                     //where T_apparatus_leftstereo is given from the vicon.yaml config
                     //and T_leftstereo_depthcam is constructed from the kalibr config
-                    gt_packet.X_world_ = T_world_object * T_apparatus_depthcam_;
+                    //this is actually the omd robotic convention
+                    const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(
+                        gtsam::Rot3(
+                            1, 0, 0,
+                            0, 0, -1,
+                            0, 1, 0
+                        ),
+                        gtsam::traits<gtsam::Point3>::Identity());
+                    // LOG(INFO) << T_cv_robotic;
+                    //apply frame convention change to cancel out the frame convention change that is inbuilt into T_apparatus_rgbd_
+                    //specifically this happens in the T_apparatus_left
+                    // gt_packet.X_world_ = T_world_object * T_cv_robotic * T_apparatus_rgbd_;
+                     gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;
                      //now in camera convention!!!
                     // gt_packet.X_world_ = camera_to_world.inverse() * gt_packet.X_world_;
                 }
@@ -517,16 +539,35 @@ private:
         }
 
         //assumes we get one for every frame!!!!?
+        gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
+        bool set_initial_pose = false;
         FrameId previous_frame = 0;
         for(auto& [frame_id, gt_packet] : ground_truth_packets) {
+
+            if(!set_initial_pose) {
+                initial_pose = gt_packet.X_world_;
+                set_initial_pose = true;
+            }
+
+            // offset initial pose so we start at "0, 0, 0"
+            gtsam::Pose3 X_world_aligned = initial_pose.inverse() * gt_packet.X_world_;
+
             //get object vector for the tmp list
             auto& unprocessed_objects = temp_object_poses.at(gt_packet.frame_id_);
             for(auto& object_pose_gt : unprocessed_objects) {
-                //TODO: I think this is wrong!!
-                object_pose_gt.L_camera_ = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
+
+                //pose of the object in the camera frame usign the vicon world frame and not our aligned one
+                gtsam::Pose3 object_pose_camera = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
+                gtsam::Pose3 object_pose_world_aligned = X_world_aligned * object_pose_camera;
+                gtsam::Pose3 object_pose_camera_aligned = X_world_aligned.inverse() * object_pose_world_aligned;
+
+                object_pose_gt.L_camera_ = object_pose_camera_aligned;
+                object_pose_gt.L_world_ = object_pose_world_aligned;
                 CHECK_EQ(frame_id, object_pose_gt.frame_id_);
             }
 
+            //update camera pose gt with the aligned one
+            gt_packet.X_world_ = X_world_aligned;
             gt_packet.object_poses_ = unprocessed_objects;
 
             if(frame_id > 0) {
@@ -543,22 +584,28 @@ private:
 
     void setIntrisicsAndTransforms() {
         //kalirb file gives the rigid body transforms from the sensors to the apparatus frame
+        //cam0 -> left
+        //cam1 -> right
+        //cam2 -> rgbd
+        //using the camera (opencv) convention, ie. with z forward
         YamlParser yaml_parser(kalibr_file_path_);
+
 
         std::vector<double> v_cam1_cam0;
         yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
-        //transform from cam1 into camera 0 frame
         gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
+        const gtsam::Pose3 T_left_right = T_cam0_cam1;
 
         std::vector<double> v_cam2_cam1;
         yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
         //transform from cam2 into camera 1 frame
         gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
+        const gtsam::Pose3 T_right_rgbd = T_cam1_cam2;
 
-        //transformation from cam2 INTO cam0
-        //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
-        gtsam::Pose3 T_cam0_cam2 = T_cam0_cam1 * T_cam1_cam2;
-        T_leftstereo_depthcam_ = T_cam0_cam2;
+        // //transformation from cam2 INTO cam0
+        // //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
+        // gtsam::Pose3 T_cam0_cam2 = T_cam0_cam1 * T_cam1_cam2;
+        // T_leftstereo_depthcam_ = T_cam0_cam2;
 
         //now load apparaturs to left camera (cam0) transform to put cam0 into the sensor frame (or A)
         YamlParser vicon_yaml_parser(vicon_calibration_file_path_);
@@ -566,12 +613,9 @@ private:
         vicon_yaml_parser.getYamlParam("T_apparatus_left", &v_apparatus_left);
         //transformation from cam0 (left) into the apparatus (A) frame
         gtsam::Pose3 T_apparatus_cam0 = utils::poseVectorToGtsamPose3(v_apparatus_left);
-        T_apparatus_leftstereo_ = T_apparatus_cam0;
-        //transform of cam2 (depth camera) into the apparatus (A) frame
-        //we can use the premultiply this with the measurement (inverse) from vicon.csv
-        //to put the vicon sensor pyload measurement into the depth frame which will match with our visual odometry
-        gtsam::Pose3 T_apparatus_cam2 = T_apparatus_cam0 * T_cam0_cam2;
-        T_apparatus_depthcam_ = T_apparatus_cam2;
+        //this contains a (partial?) frame change convention from opencv to omd's robotic convention
+        T_apparatus_left_ = T_apparatus_cam0;
+        T_apparatus_rgbd_ = T_apparatus_left_ * T_left_right * T_right_rgbd;
 
 
 
@@ -744,9 +788,9 @@ private:
 
     //below are set in the setIntrisicsAndTransforms
     CameraParams rgbd_camera_params_;
-    gtsam::Pose3 T_apparatus_leftstereo_; //T_AL or the transform from the left stereo to the apparaturs frame, as given in vicon.yaml
+    gtsam::Pose3 T_apparatus_left_; //T_AL or the transform from the left stereo to the apparaturs frame, as given in vicon.yaml
     gtsam::Pose3 T_leftstereo_depthcam_; //T_LD or the transfrom from the depthcam to the left stereo. Given in the kalibr.yaml
-    gtsam::Pose3 T_apparatus_depthcam_; //T_AL * T_LD
+    gtsam::Pose3 T_apparatus_rgbd_; //T_AL * T_LD
 
 };
 

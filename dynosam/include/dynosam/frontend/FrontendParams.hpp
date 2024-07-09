@@ -76,6 +76,11 @@ struct FrontendParams {
   //! When using RGBD pipeline, object motion will be sovled using pnp (3d2d correspondences). Else, stereo
   bool use_object_motion_pnp = true;
 
+  //! When using RGBD pipeline, object motion will be refined ba NLO using motion factor
+  //! e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
+  bool refine_object_motion_esimate = true;
+
+
   //!PnP (3d2d) related params
   //https://github.com/laurentkneip/opengv/issues/121
   // double ransac_threshold = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));

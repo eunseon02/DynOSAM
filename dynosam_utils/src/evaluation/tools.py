@@ -227,7 +227,7 @@ def plot_object_trajectories(
     draw(obj_trajectories, style='-')
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
-    draw(obj_trajectories_ref, style='-', alpha=0.8, shift_color=True)
+    draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
 
 
 
@@ -251,12 +251,17 @@ def align_trajectory(traj, traj_ref, correct_scale=False, correct_only_scale=Fal
 
     traj_aligned = copy.deepcopy(traj)  # otherwise np arrays will be references and mess up stuff
     with_scale = correct_scale or correct_only_scale
-    if n == -1:
-        r_a, t_a, s = evo_geometry.umeyama_alignment(traj_aligned.positions_xyz.T,
-                                                 traj_ref.positions_xyz.T, with_scale)
-    else:
-        r_a, t_a, s = evo_geometry.umeyama_alignment(traj_aligned.positions_xyz[:n, :].T,
-                                                 traj_ref.positions_xyz[:n, :].T, with_scale)
+    try:
+        if n == -1:
+            r_a, t_a, s = evo_geometry.umeyama_alignment(traj_aligned.positions_xyz.T,
+                                                    traj_ref.positions_xyz.T, with_scale)
+        else:
+            r_a, t_a, s = evo_geometry.umeyama_alignment(traj_aligned.positions_xyz[:n, :].T,
+                                                    traj_ref.positions_xyz[:n, :].T, with_scale)
+    except evo_geometry.GeometryException as e:
+        logger.warning(f"Could not align trajectories {str(e)}")
+        return traj_aligned
+
     if not correct_only_scale:
         logger.debug("Rotation of alignment:\n{}"
                      "\nTranslation of alignment:\n{}".format(r_a, t_a))

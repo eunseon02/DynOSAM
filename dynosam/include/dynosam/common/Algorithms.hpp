@@ -23,8 +23,11 @@
 
 #pragma once
 
+#include "dynosam/common/Types.hpp"
+
 #include <gtsam/base/Matrix.h>
 #include <glog/logging.h>
+
 
 namespace dyno {
 
@@ -125,6 +128,9 @@ private:
 //         cost_assignment(cost_matrix);
 //     }
 // };
+
+
+
 
 
 

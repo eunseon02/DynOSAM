@@ -31,6 +31,8 @@
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/frontend/vision/ObjectTracker.hpp"
 
+#include <mutex>
+
 
 // #include "dynosam/common/byte_tracker/ByteTracker.hpp"
 
@@ -94,6 +96,8 @@ private:
     //TODO: maybe better to keep them but to check if theyre dynamic later on!!!
     void determineDynamicObjects(const Frame& previous_frame, Frame::Ptr current_frame, bool used_semantic_mask);
 
+    // MotionEstimateMap solveObjectMotions(Frame::Ptr frame_k_1, Frame::Ptr frame_k);
+
     //updates the object_poses_ map which is then sent to the viz via the output
     //this updates the estimated trajectory of the object from a starting pont using the
     //object motion to propofate the object pose
@@ -109,6 +113,7 @@ private:
     UndistorterRectifier::Ptr undistorter_; //TODO: lots of places this is used!! Streamline so we do undistortion once!!
 
     ObjectTracker object_tracker_;
+    std::mutex object_motion_mutex_; //! Mutex used when solving for object motions
 
 
 

@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 ## {object_id: { frame_id: homogenous_matrix }}
 ObjectPoseDict: TypeAlias = Dict[int, Dict[int, np.ndarray]]
 ## {object_id: trajectory.PosePath3D}
-ObjectTrajDict: TypeAlias = Dict[int, trajectory.PosePath3D]
+ObjectTrajDict: TypeAlias = Dict[int, trajectory.PoseTrajectory3D]
 
 
 

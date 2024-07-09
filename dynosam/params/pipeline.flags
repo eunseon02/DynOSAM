@@ -22,7 +22,3 @@
 # and the bson file is searched for on output_path / <output_file>.json
 # where the output file name is determined by the frontend mode (RGB, mono)
 --frontend_from_file=false
-
-# currently only for rgbd, indicates which updater the rgbd backend should use
-# i.e which formulation is used for solving
---backend_updater_enum=0

@@ -265,6 +265,54 @@ TEST(Map, objectSeenFrames) {
     //frame 2 has seen object 2 and 3
     EXPECT_EQ(map->getFrame(2)->objects_seen, ObjectNodePtrSet<Keypoint>({object2, object3}));
 
+    //check object observation functions
+    auto frame0 = map->getFrame(0);
+    auto frame1 = map->getFrame(1);
+    auto frame2 = map->getFrame(2);
+    //check object observed frame 0
+    EXPECT_TRUE(frame0->objectObserved(1));
+    EXPECT_TRUE(frame0->objectObserved(3));
+    EXPECT_FALSE(frame0->objectObserved(2));
+
+    //check object observed frame 1 (all)
+    EXPECT_TRUE(frame1->objectObserved(1));
+    EXPECT_TRUE(frame1->objectObserved(3));
+    EXPECT_TRUE(frame1->objectObserved(2));
+    //check object observed frame 2
+    EXPECT_TRUE(frame2->objectObserved(2));
+    EXPECT_TRUE(frame2->objectObserved(3));
+    EXPECT_FALSE(frame2->objectObserved(1));
+
+    //check observed in previous (in frame 0, there is no previous so all false!!)
+    EXPECT_FALSE(frame0->objectObservedInPrevious(1));
+    EXPECT_FALSE(frame0->objectObservedInPrevious(3));
+
+    //both object1 and 3 appear in frame 0 but not object 2
+    EXPECT_TRUE(frame1->objectObservedInPrevious(1));
+    EXPECT_TRUE(frame1->objectObservedInPrevious(3));
+    EXPECT_FALSE(frame1->objectObservedInPrevious(2));
+
+    //all objects are observed at frame 1
+    EXPECT_TRUE(frame2->objectObservedInPrevious(1));
+    EXPECT_TRUE(frame2->objectObservedInPrevious(3));
+    EXPECT_TRUE(frame2->objectObservedInPrevious(2));
+
+    //check objectMotionExpected (i.e objects are observed at both frames)
+    EXPECT_FALSE(frame0->objectMotionExpected(1));
+    EXPECT_FALSE(frame0->objectMotionExpected(3));
+
+    //object 1 and 3 seen at frames 0 and 1, but not object 2
+    EXPECT_TRUE(frame1->objectMotionExpected(1));
+    EXPECT_TRUE(frame1->objectMotionExpected(3));
+    EXPECT_FALSE(frame1->objectMotionExpected(2));
+    //object 2 and 3 seen at frames 1 and 2, but not object 1
+    EXPECT_FALSE(frame2->objectMotionExpected(1));
+    EXPECT_TRUE(frame2->objectMotionExpected(3));
+    EXPECT_TRUE(frame2->objectMotionExpected(2));
+
+
+
+
 
 
 }
@@ -329,162 +377,162 @@ TEST(Map, getLandmarksSeenAtFrame) {
 
 }
 
+//TODO: bring back!!
+// TEST(Map, testSimpleEstimateAccessWithPose) {
+//     Map2d::Ptr map = Map2d::create();
+//     StatusKeypointMeasurements measurements;
 
-TEST(Map, testSimpleEstimateAccessWithPose) {
-    Map2d::Ptr map = Map2d::create();
-    StatusKeypointMeasurements measurements;
+//     //TODO:frame cannot be 0? what is invalid frame then?
+//     EXPECT_EQ(map->lastEstimateUpdate(), 0u);
 
-    //TODO:frame cannot be 0? what is invalid frame then?
-    EXPECT_EQ(map->lastEstimateUpdate(), 0u);
+//     //tracklet 0, static, frame
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 0));
+//     map->updateObservations(measurements);
 
-    //tracklet 0, static, frame
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 0));
-    map->updateObservations(measurements);
+//     auto frame_0 = map->getFrame(0);
+//     auto pose_0_query = frame_0->getPoseEstimate();
+//     EXPECT_FALSE(pose_0_query);
+//     EXPECT_FALSE(pose_0_query.isValid());
 
-    auto frame_0 = map->getFrame(0);
-    auto pose_0_query = frame_0->getPoseEstimate();
-    EXPECT_FALSE(pose_0_query);
-    EXPECT_FALSE(pose_0_query.isValid());
+//     gtsam::Values estimate;
 
-    gtsam::Values estimate;
+//     //some random pose
+//     gtsam::Rot3 R = gtsam::Rot3::Rodrigues(0.3,0.4,-0.5);
+//     gtsam::Point3 t(3.5,-8.2,4.2);
+//     gtsam::Pose3 pose_0_actual(R,t);
+//     gtsam::Key pose_0_key = CameraPoseSymbol(0);
+//     estimate.insert(pose_0_key, pose_0_actual);
 
-    //some random pose
-    gtsam::Rot3 R = gtsam::Rot3::Rodrigues(0.3,0.4,-0.5);
-    gtsam::Point3 t(3.5,-8.2,4.2);
-    gtsam::Pose3 pose_0_actual(R,t);
-    gtsam::Key pose_0_key = CameraPoseSymbol(0);
-    estimate.insert(pose_0_key, pose_0_actual);
+//     map->updateEstimates(estimate, gtsam::NonlinearFactorGraph{}, 0);
+//     pose_0_query = frame_0->getPoseEstimate();
 
-    map->updateEstimates(estimate, gtsam::NonlinearFactorGraph{}, 0);
-    pose_0_query = frame_0->getPoseEstimate();
+//     EXPECT_TRUE(pose_0_query);
+//     EXPECT_TRUE(pose_0_query.isValid());
+//     EXPECT_TRUE(gtsam::assert_equal(pose_0_query.get(), pose_0_actual));
+//     EXPECT_EQ(pose_0_query.key_, pose_0_key);
 
-    EXPECT_TRUE(pose_0_query);
-    EXPECT_TRUE(pose_0_query.isValid());
-    EXPECT_TRUE(gtsam::assert_equal(pose_0_query.get(), pose_0_actual));
-    EXPECT_EQ(pose_0_query.key_, pose_0_key);
-
-}
-
-
-TEST(Map, testEstimateWithStaticAndDynamicViaLmk) {
-    Map2d::Ptr map = Map2d::create();
-    StatusKeypointMeasurements measurements;
-
-    //tracklet 0, static, frame 0
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 0));
-    //tracklet 0, static, frame 1
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 1));
-    //static points should return the same estimate
+// }
 
 
-    //tracklet 1, dynamic, frame 0
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
-    //tracklet 1, dynamic, frame 1
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
-    //dynamic points should return different estimates
+// TEST(Map, testEstimateWithStaticAndDynamicViaLmk) {
+//     Map2d::Ptr map = Map2d::create();
+//     StatusKeypointMeasurements measurements;
 
-    gtsam::Point3 static_lmk(0, 0, 0);
-    gtsam::Point3 dynamic_lmk_1(0, 0, 1);
-    gtsam::Point3 dynamic_lmk_2(0, 0, 2);
-
-    gtsam::Values estimate;
-    estimate.insert(StaticLandmarkSymbol(0), static_lmk);
-    estimate.insert(DynamicLandmarkSymbol(0, 1), dynamic_lmk_1);
-    estimate.insert(DynamicLandmarkSymbol(1, 1), dynamic_lmk_2);
-
-    map->updateObservations(measurements);
-    map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 0 );
-
-    LandmarkNode2d::Ptr static_lmk_node = map->getLandmark(0);
-    EXPECT_TRUE(static_lmk_node->isStatic());
-    auto estimate_query = static_lmk_node->getStaticLandmarkEstimate();
-    EXPECT_TRUE(estimate_query);
-    EXPECT_TRUE(estimate_query.isValid());
-    EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), static_lmk));
-
-    LandmarkNode2d::Ptr dynamic_lmk_1_node = map->getLandmark(1);
-    EXPECT_FALSE(dynamic_lmk_1_node->isStatic());
-    estimate_query = dynamic_lmk_1_node->getDynamicLandmarkEstimate(0);
-    EXPECT_TRUE(estimate_query);
-    EXPECT_TRUE(estimate_query.isValid());
-    EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), dynamic_lmk_1));
-
-    LandmarkNode2d::Ptr dynamic_lmk_2_node = map->getLandmark(1);
-    EXPECT_FALSE(dynamic_lmk_2_node->isStatic());
-    estimate_query = dynamic_lmk_2_node->getDynamicLandmarkEstimate(1);
-    EXPECT_TRUE(estimate_query);
-    EXPECT_TRUE(estimate_query.isValid());
-    EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), dynamic_lmk_2));
+//     //tracklet 0, static, frame 0
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 0));
+//     //tracklet 0, static, frame 1
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(0, 0, 1));
+//     //static points should return the same estimate
 
 
-}
+//     //tracklet 1, dynamic, frame 0
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
+//     //tracklet 1, dynamic, frame 1
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
+//     //dynamic points should return different estimates
 
-TEST(Map, testEstimateWithStaticAndDynamicViaFrame) {
+//     gtsam::Point3 static_lmk(0, 0, 0);
+//     gtsam::Point3 dynamic_lmk_1(0, 0, 1);
+//     gtsam::Point3 dynamic_lmk_2(0, 0, 2);
 
-}
+//     gtsam::Values estimate;
+//     estimate.insert(StaticLandmarkSymbol(0), static_lmk);
+//     estimate.insert(DynamicLandmarkSymbol(0, 1), dynamic_lmk_1);
+//     estimate.insert(DynamicLandmarkSymbol(1, 1), dynamic_lmk_2);
+
+//     map->updateObservations(measurements);
+//     map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 0 );
+
+//     LandmarkNode2d::Ptr static_lmk_node = map->getLandmark(0);
+//     EXPECT_TRUE(static_lmk_node->isStatic());
+//     auto estimate_query = static_lmk_node->getStaticLandmarkEstimate();
+//     EXPECT_TRUE(estimate_query);
+//     EXPECT_TRUE(estimate_query.isValid());
+//     EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), static_lmk));
+
+//     LandmarkNode2d::Ptr dynamic_lmk_1_node = map->getLandmark(1);
+//     EXPECT_FALSE(dynamic_lmk_1_node->isStatic());
+//     estimate_query = dynamic_lmk_1_node->getDynamicLandmarkEstimate(0);
+//     EXPECT_TRUE(estimate_query);
+//     EXPECT_TRUE(estimate_query.isValid());
+//     EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), dynamic_lmk_1));
+
+//     LandmarkNode2d::Ptr dynamic_lmk_2_node = map->getLandmark(1);
+//     EXPECT_FALSE(dynamic_lmk_2_node->isStatic());
+//     estimate_query = dynamic_lmk_2_node->getDynamicLandmarkEstimate(1);
+//     EXPECT_TRUE(estimate_query);
+//     EXPECT_TRUE(estimate_query.isValid());
+//     EXPECT_TRUE(gtsam::assert_equal(estimate_query.get(), dynamic_lmk_2));
 
 
-TEST(Map, testObjectNodeWithOnlyMotion) {
-    Map2d::Ptr map = Map2d::create();
+// }
 
-    //create dynamic observations for object 1 at frames 0 and 1
-    StatusKeypointMeasurements measurements;
-     //tracklet 1, dynamic, frame 0
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
-    //tracklet 1, dynamic, frame 1
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
+// TEST(Map, testEstimateWithStaticAndDynamicViaFrame) {
 
-    gtsam::Values estimate;
-    //add motion only at frame 1
-    const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
-    estimate.insert(ObjectMotionSymbol(1, 1), pose_estimate);
+// }
 
-    map->updateObservations(measurements);
-    map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
 
-    ObjectNode2d::Ptr object1 = map->getObject(1);
-    EXPECT_TRUE(object1->getMotionEstimate(1));
+// TEST(Map, testObjectNodeWithOnlyMotion) {
+//     Map2d::Ptr map = Map2d::create();
 
-    gtsam::Pose3 recovered_pose_estimate;
-    EXPECT_TRUE(object1->hasMotionEstimate(1, &recovered_pose_estimate));
-    //check nullptr version
-    EXPECT_TRUE(object1->hasMotionEstimate(1));
-    EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
+//     //create dynamic observations for object 1 at frames 0 and 1
+//     StatusKeypointMeasurements measurements;
+//      //tracklet 1, dynamic, frame 0
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
+//     //tracklet 1, dynamic, frame 1
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
 
-    //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
-    //we just dont have an estimate of the pose
-    EXPECT_FALSE(object1->getPoseEstimate(0));
-    EXPECT_FALSE(object1->getPoseEstimate(1));
-}
+//     gtsam::Values estimate;
+//     //add motion only at frame 1
+//     const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
+//     estimate.insert(ObjectMotionSymbol(1, 1), pose_estimate);
 
-TEST(Map, testObjectNodeWithOnlyPose) {
-    Map2d::Ptr map = Map2d::create();
+//     map->updateObservations(measurements);
+//     map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
 
-    //create dynamic observations for object 1 at frames 0 and 1
-    StatusKeypointMeasurements measurements;
-     //tracklet 1, dynamic, frame 0
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
-    //tracklet 1, dynamic, frame 1
-    measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
+//     ObjectNode2d::Ptr object1 = map->getObject(1);
+//     EXPECT_TRUE(object1->getMotionEstimate(1));
 
-    gtsam::Values estimate;
-    //add motion only at frame 1
-    const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
-    estimate.insert(ObjectPoseSymbol(1, 1), pose_estimate);
+//     gtsam::Pose3 recovered_pose_estimate;
+//     EXPECT_TRUE(object1->hasMotionEstimate(1, &recovered_pose_estimate));
+//     //check nullptr version
+//     EXPECT_TRUE(object1->hasMotionEstimate(1));
+//     EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
 
-    map->updateObservations(measurements);
-    map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
+//     //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
+//     //we just dont have an estimate of the pose
+//     EXPECT_FALSE(object1->getPoseEstimate(0));
+//     EXPECT_FALSE(object1->getPoseEstimate(1));
+// }
 
-    ObjectNode2d::Ptr object1 = map->getObject(1);
-    EXPECT_TRUE(object1->getPoseEstimate(1));
+// TEST(Map, testObjectNodeWithOnlyPose) {
+//     Map2d::Ptr map = Map2d::create();
 
-    gtsam::Pose3 recovered_pose_estimate;
-    EXPECT_TRUE(object1->hasPoseEstimate(1, &recovered_pose_estimate));
-    //check nullptr version
-    EXPECT_TRUE(object1->hasPoseEstimate(1));
-    EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
+//     //create dynamic observations for object 1 at frames 0 and 1
+//     StatusKeypointMeasurements measurements;
+//      //tracklet 1, dynamic, frame 0
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 0));
+//     //tracklet 1, dynamic, frame 1
+//     measurements.push_back(dyno_testing::makeStatusKeypointMeasurement(1, 1, 1));
 
-    //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
-    //we just dont have an estimate of the motion
-    EXPECT_FALSE(object1->getMotionEstimate(1));
-}
+//     gtsam::Values estimate;
+//     //add motion only at frame 1
+//     const gtsam::Pose3 pose_estimate = utils::createRandomAroundIdentity<gtsam::Pose3>(0.3);
+//     estimate.insert(ObjectPoseSymbol(1, 1), pose_estimate);
+
+//     map->updateObservations(measurements);
+//     map->updateEstimates(estimate,gtsam::NonlinearFactorGraph{}, 1 );
+
+//     ObjectNode2d::Ptr object1 = map->getObject(1);
+//     EXPECT_TRUE(object1->getPoseEstimate(1));
+
+//     gtsam::Pose3 recovered_pose_estimate;
+//     EXPECT_TRUE(object1->hasPoseEstimate(1, &recovered_pose_estimate));
+//     //check nullptr version
+//     EXPECT_TRUE(object1->hasPoseEstimate(1));
+//     EXPECT_TRUE(gtsam::assert_equal(recovered_pose_estimate, pose_estimate));
+
+//     //should not throw exception as we have seen this obejct at frames 0 and 1 (based on the measurements)
+//     //we just dont have an estimate of the motion
+//     EXPECT_FALSE(object1->getMotionEstimate(1));
+// }

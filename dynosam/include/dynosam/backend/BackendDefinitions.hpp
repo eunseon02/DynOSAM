@@ -32,6 +32,8 @@
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
+#include <gtsam_unstable/slam/PoseToPointFactor.h>
+
 
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/inference/LabeledSymbol.h>
@@ -40,6 +42,9 @@
 #include <unordered_map>
 
 namespace dyno {
+
+/// @brief Alias to a gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>
+using PoseToPointFactor = gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>;
 
 using SymbolChar = unsigned char;
 static constexpr SymbolChar kPoseSymbolChar = 'X';

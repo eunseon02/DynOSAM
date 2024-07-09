@@ -205,7 +205,7 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
             constexpr static int kFontFace = cv::FONT_HERSHEY_DUPLEX;
             constexpr static int kThickness = 1;
             //draw text mid way in box
-            cv::putText(text_box, options.label_formatter(key), cv::Point(text_box.cols/2, text_box.rows/2), kFontFace, kFontScale, cv::viz::Color::black(), kThickness);
+            cv::putText(text_box, options.label_formatter(key), cv::Point(2, text_box.rows/2), kFontFace, kFontScale, cv::viz::Color::black(), kThickness);
             //add text box ontop of jacobian block
             cv::vconcat(text_box, current_block, current_block);
         }
@@ -232,9 +232,11 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
             cv::Mat first_block = column_blocks.at(0).second;
             gtsam::Key key_0 = column_blocks.at(0).first;
             scale_and_draw_label(first_block, key_0);
+            const cv::Mat vert_line(cv::Size(2, first_block.rows), CV_8UC3, cv::viz::Color::black());
+            //concat first block with vertical loine
+            cv::hconcat(first_block, vert_line, first_block);
             //concat current jacobian block with other blocks
             cv::hconcat(first_block, current_block, concat_column_blocks);
-
         }
         else {
             //concat current jacobian block with other blocks
@@ -243,8 +245,8 @@ cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg, c
 
         //if not last, add vertical line
         if(i < column_blocks.size() - 1) {
-            cv::Mat vert_line(cv::Size(2, concat_column_blocks.rows), CV_8UC3, cv::viz::Color::black());
             //concat blocks with vertial line
+            const cv::Mat vert_line(cv::Size(2, concat_column_blocks.rows), CV_8UC3, cv::viz::Color::black());
             cv::hconcat(concat_column_blocks, vert_line, concat_column_blocks);
         }
     }
