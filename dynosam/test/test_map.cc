@@ -265,6 +265,54 @@ TEST(Map, objectSeenFrames) {
     //frame 2 has seen object 2 and 3
     EXPECT_EQ(map->getFrame(2)->objects_seen, ObjectNodePtrSet<Keypoint>({object2, object3}));
 
+    //check object observation functions
+    auto frame0 = map->getFrame(0);
+    auto frame1 = map->getFrame(1);
+    auto frame2 = map->getFrame(2);
+    //check object observed frame 0
+    EXPECT_TRUE(frame0->objectObserved(1));
+    EXPECT_TRUE(frame0->objectObserved(3));
+    EXPECT_FALSE(frame0->objectObserved(2));
+
+    //check object observed frame 1 (all)
+    EXPECT_TRUE(frame1->objectObserved(1));
+    EXPECT_TRUE(frame1->objectObserved(3));
+    EXPECT_TRUE(frame1->objectObserved(2));
+    //check object observed frame 2
+    EXPECT_TRUE(frame2->objectObserved(2));
+    EXPECT_TRUE(frame2->objectObserved(3));
+    EXPECT_FALSE(frame2->objectObserved(1));
+
+    //check observed in previous (in frame 0, there is no previous so all false!!)
+    EXPECT_FALSE(frame0->objectObservedInPrevious(1));
+    EXPECT_FALSE(frame0->objectObservedInPrevious(3));
+
+    //both object1 and 3 appear in frame 0 but not object 2
+    EXPECT_TRUE(frame1->objectObservedInPrevious(1));
+    EXPECT_TRUE(frame1->objectObservedInPrevious(3));
+    EXPECT_FALSE(frame1->objectObservedInPrevious(2));
+
+    //all objects are observed at frame 1
+    EXPECT_TRUE(frame2->objectObservedInPrevious(1));
+    EXPECT_TRUE(frame2->objectObservedInPrevious(3));
+    EXPECT_TRUE(frame2->objectObservedInPrevious(2));
+
+    //check objectMotionExpected (i.e objects are observed at both frames)
+    EXPECT_FALSE(frame0->objectMotionExpected(1));
+    EXPECT_FALSE(frame0->objectMotionExpected(3));
+
+    //object 1 and 3 seen at frames 0 and 1, but not object 2
+    EXPECT_TRUE(frame1->objectMotionExpected(1));
+    EXPECT_TRUE(frame1->objectMotionExpected(3));
+    EXPECT_FALSE(frame1->objectMotionExpected(2));
+    //object 2 and 3 seen at frames 1 and 2, but not object 1
+    EXPECT_FALSE(frame2->objectMotionExpected(1));
+    EXPECT_TRUE(frame2->objectMotionExpected(3));
+    EXPECT_TRUE(frame2->objectMotionExpected(2));
+
+
+
+
 
 
 }

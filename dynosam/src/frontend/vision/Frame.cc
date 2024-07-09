@@ -339,7 +339,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
         // }
     }
 
-    LOG(INFO) << count << " features marked invalud due to depth out of " << container.size() << " with max depth " << max_depth;
+    // LOG(INFO) << count << " features marked invalud due to depth out of " << container.size() << " with max depth " << max_depth;
 
 }
 

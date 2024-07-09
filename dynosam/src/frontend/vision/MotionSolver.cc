@@ -606,7 +606,7 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
 
     }
 
-    LOG(INFO) << "Constructing local object motion refinement optimisation for object " << object_id;
+    VLOG(20) << "Constructing local object motion refinement optimisation for object " << object_id;
     gtsam::LevenbergMarquardtParams opt_params;
     if(VLOG_IS_ON(200))
         opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
@@ -628,7 +628,7 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
       }
     }
 
-    LOG(INFO)
+   VLOG(20)
         << "Marked " << outlier_indicies.size() << " factors are outliers out of " << graph.size()
         << " error before=" << error_before << ", error after=" << error_after;
 

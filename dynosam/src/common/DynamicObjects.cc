@@ -32,7 +32,8 @@ void propogateObjectPoses(
     const gtsam::Point3Vector& object_centroids_k_1,
     const gtsam::Point3Vector& object_centroids_k,
     FrameId frame_id_k,
-    std::optional<GroundTruthPacketMap> gt_packet_map
+    std::optional<GroundTruthPacketMap> gt_packet_map,
+    PropogatePoseResult* result
 ) {
 
     CHECK_EQ(object_motions_k.size(), object_centroids_k_1.size());
@@ -65,6 +66,11 @@ void propogateObjectPoses(
             if(!initalised_with_gt) {
                 //could not init with gt, use identity rotation and centroid
                 pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), centroid_k_1);
+
+                if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitCentroid);
+            }
+            else {
+                if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitGT);
             }
 
             object_poses.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
@@ -78,6 +84,9 @@ void propogateObjectPoses(
             //assuming in world
             gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
             per_frame_poses.insert2(frame_id_k, object_pose_k);
+
+            //update result map
+            if(result) result->insert22(object_id, frame_id_k, PropogateType::Propogate);
         }
         else {
             //no motion at the previous frame - if close, interpolate between last pose and this pose
@@ -108,6 +117,9 @@ void propogateObjectPoses(
 
                     FrameId frame = last_frame + j;
                     per_frame_poses.insert2(frame, interpolated_pose);
+
+                    //update result map
+                    if(result) result->insert22(object_id, frame, PropogateType::Interpolate);
                 }
 
             }

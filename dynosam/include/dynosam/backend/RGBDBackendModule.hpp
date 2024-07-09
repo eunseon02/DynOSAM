@@ -50,7 +50,8 @@ public:
     using RGBDOptimizer = Base::OptimizerType;
 
     enum UpdaterType {
-        MotionInWorld,
+        MotionInWorld = 0,
+        LLWorld = 1
     };
 
     RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map, RGBDOptimizer::Ptr optimizer, const UpdaterType& updater_type, ImageDisplayQueue* display_queue = nullptr);
@@ -110,7 +111,8 @@ public:
         gtsam::Pose3 X_k_measured; //! Camera pose from measurement (or initial)
         gtsam::Pose3 X_k_1_measured; //! Camera pose from measurement (or initial)
 
-
+        //! If true then this frame is the first frame where a motion is available (i.e we have a pair of valid frames)
+        //! e.g k-1 is the FIRST frame for this object and now, since we are at k, we can create a motion from k-1 to k
         bool is_starting_motion_frame {false};
 
         inline ObjectId getObjectId() const { return lmk_node->getObjectId(); }
@@ -121,6 +123,12 @@ public:
     struct ObjectUpdateContext {
         FrameNode3d::Ptr frame_node_k;
         ObjectNode3d::Ptr object_node;
+
+        //! Indicates that we have a valid motion pair from k-1 to k (this frame)
+        //! and therefore k is at least the second frame for which this object has been consequatively tracked
+        //! When this is false, it means that the frame k-1 (getFrameId() - 1u) did not track/observe this object
+        //! and therfore no motion can be created between them. This happens on the first observation of this object.
+        bool has_motion_pair{false};
 
         inline FrameId getFrameId() const { return frame_node_k->getId(); }
         inline ObjectId getObjectId() const { return object_node->getId(); }
@@ -203,13 +211,15 @@ public:
 
             virtual void postUpdateCallback() {};
 
-
-        protected:
+         protected:
             auto getMap() const { return parent_->getMap(); }
-            RGBDBackendModule* parent_;
 
         private:
             const gtsam::Values* theta_;
+
+        protected:
+            RGBDBackendModule* parent_;
+
 
             //TODO: eventually map!! How can we not template this!!
     };
@@ -405,12 +415,28 @@ public:
     bool buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after);
 
 
+    Updater::UniquePtr makeUpdater() {
+        if(updater_type_ == UpdaterType::MotionInWorld) {
+            LOG(INFO) << "Using MotionInWorld";
+            return  std::make_unique<MotionWorldUpdater>(this);
+
+        }
+        else if(updater_type_ == UpdaterType::LLWorld) {
+            LOG(INFO) << "Using LLWorld";
+            return std::make_unique<LLUpdater>(this);
+        }
+        else {
+            CHECK(false) << "Not implemented";
+        }
+    }
+
 public:
+    const UpdaterType updater_type_;
     // std::unique_ptr<DynoISAM2> smoother_;
     // DynoISAM2Result smoother_result_;
     // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
     // UpdateImpl::UniquePtr updater_;
-    LLUpdater::UniquePtr new_updater_;
+    Updater::UniquePtr new_updater_;
     FrameId first_frame_id_; //the first frame id that is received
 
     //logger here!!
