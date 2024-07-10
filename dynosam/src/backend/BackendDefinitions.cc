@@ -151,6 +151,29 @@ std::string DynoLikeKeyFormatterVerbose(gtsam::Key key) {
   }
 }
 
+DebugInfo::ObjectInfo::operator std::string() const {
+  std::stringstream ss;
+    ss << "Num point factors: " << num_dynamic_factors << "\n";
+    ss << "Num point variables: " << num_new_dynamic_points << "\n";
+    ss << "Num motion factors: " << num_motion_factors << "\n";
+    ss << "Smoothing factor added: " << std::boolalpha <<  smoothing_factor_added;
+    return ss.str();
+}
+
+std::ostream& operator<<(std::ostream &os, const DebugInfo::ObjectInfo& object_info) {
+    os << (std::string)object_info;
+    return os;
+}
+
+
+DebugInfo::ObjectInfo& DebugInfo::getObjectInfo(ObjectId object_id) {
+  return getObjectInfoImpl(object_id);
+}
+
+const DebugInfo::ObjectInfo& DebugInfo::getObjectInfo(ObjectId object_id) const {
+  return getObjectInfoImpl(object_id);
+}
+
 
 BackendLogger::BackendLogger(const std::string& name_prefix)
   : EstimationModuleLogger(name_prefix + "_backend"),

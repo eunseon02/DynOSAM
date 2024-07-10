@@ -74,8 +74,7 @@ public:
         //! If true, vision related updated will backtrack to the start of a new tracklet and all the measurements to the graph
         //! should make false in batch case where we want to be explicit about which frames are added!
         bool do_backtrack = false;
-        mutable DebugInfo::Optional debug_info{}; //TODO debug info should go into a map per frame? in UpdateObservationResult
-
+        bool enable_debug_info = true;
     };
 
     struct ConstructGraphOptions : public UpdateObservationParams {
@@ -86,6 +85,7 @@ public:
 
     struct UpdateObservationResult {
         gtsam::FastMap<ObjectId, std::set<FrameId>> objects_affected_per_frame; //per frame
+        DebugInfo::Optional debug_info{};
 
         inline UpdateObservationResult& operator+=(const UpdateObservationResult& oth) {
             for(const auto& [key, value] : oth.objects_affected_per_frame) {
@@ -235,8 +235,6 @@ public:
             accessorFromTheta()->postUpdateCallback();
         }
         void updateTheta(const gtsam::Values& linearization) {
-            //this should actually just be update
-            // theta_.insert_or_assign(linearization);
             theta_.update(linearization);
             accessorFromTheta()->postUpdateCallback();
         }

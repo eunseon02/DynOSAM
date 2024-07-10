@@ -85,21 +85,14 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
 
     new_updater_ = std::move(makeUpdater());
 
-    // updater_ = std::make_unique<UpdateImplInWorldPrimitives>(this);
-    // CHECK_NOTNULL(updater_);
-
-
-
 }
 
 RGBDBackendModule::~RGBDBackendModule() {
     LOG(INFO) << "Destructing RGBDBackendModule";
 
-    // //TODO: for now - this module does not know if we have poses in the graph
     if(base_params_.use_logger_) {
         //hack to make sure things are updated!!
         new_updater_->accessorFromTheta()->postUpdateCallback();
-        // for(FrameId frame_id = map_->firstFrameId(); frame_id <= map_->lastFrameId(); frame_id++)
         new_updater_->logBackendFromMap();
     }
 
@@ -156,7 +149,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values, new_factors);
 
     UpdateObservationParams update_params;
-    update_params.debug_info = debug_info_;
+    update_params.enable_debug_info = true;
     update_params.do_backtrack = true;
     new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
     new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
@@ -185,7 +178,6 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
         //update map with best results
         new_updater_->updateTheta(optimised_values);
-        // map_->updateEstimates(optimised_values, full_graph, frame_k);
         LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
     }
 
@@ -203,7 +195,6 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         backend_output->optimized_poses_.push_back(accessor->getSensorPose(frame_id).get());
     }
 
-    // //TODO: what if we have a gt packet map but there is no data in it!! This is equivalent to a "no gt data flag" which is implicit!!
     backend_output->composed_object_poses = accessor->getObjectPoses();
 
     debug_info_ = DebugInfo();
@@ -221,7 +212,7 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set
 
     UpdateObservationParams update_params;
     update_params.do_backtrack = false;
-    update_params.debug_info = debug_info_;
+    update_params.enable_debug_info = true;
 
     UpdateObservationResult results;
 
@@ -579,10 +570,6 @@ void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Po
     CHECK(parent_->initial_camera_poses_.exists(frame_id_k));
     const gtsam::Pose3& T_world_camera_k_1_frontend = parent_->initial_camera_poses_.at(frame_id_k_1);
 
-    // gtsam::Pose3 T_world_camera_k_1;
-    // getSafeQuery(T_world_camera_k_1, map->getPoseEstimate(frame_id_k_1), T_world_camera_k_1_frontend);
-
-    // if(pose_query) {
     LOG(INFO) << "Adding odom between " << frame_id_k_1 << " and " << frame_id_k;
     const gtsam::Pose3 odom = T_world_camera_k_1_frontend.inverse() * T_world_camera;
 
@@ -627,11 +614,13 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
     auto map = getMap();
     const auto& params = parent_->base_params_;
     auto static_point_noise = parent_->static_point_noise_;
-    auto& debug_info = update_params.debug_info;
-
-    Accessor::Ptr accessor = this->accessorFromTheta();
 
     UpdateObservationResult result;
+    if(update_params.enable_debug_info) {
+        result.debug_info = DebugInfo();
+    }
+
+    Accessor::Ptr accessor = this->accessorFromTheta();
 
     const auto frame_node_k = map->getFrame(frame_id_k);
     CHECK_NOTNULL(frame_node_k);
@@ -648,8 +637,6 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
         const gtsam::Key point_key = lmk_node->makeStaticKey();
         //check if lmk node is already in map (which should mean it is equivalently in isam)
         if(is_other_values_in_map.exists(point_key)) {
-        // if(map->exists(point_key)) {
-            //3d point in camera frame
             const Landmark measured = lmk_node->getMeasurement(frame_id_k).landmark;
             new_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
                 frame_node_k->makePoseKey(), //pose key for this frame
@@ -658,7 +645,7 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
                 static_point_noise
             );
 
-            if(debug_info) debug_info->num_static_factors++;
+            if(result.debug_info) result.debug_info->num_static_factors++;
             result.updateAffectedObject(frame_id_k, 0);
 
         }
@@ -699,7 +686,7 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
             new_values.insert(point_key, lmk_world);
             is_other_values_in_map.insert2(point_key, true);
 
-            if(debug_info) debug_info->num_new_static_points++;
+            if(result.debug_info) result.debug_info->num_new_static_points++;
             result.updateAffectedObject(frame_id_k, 0);
 
         }
@@ -709,7 +696,7 @@ RGBDBackendModule::Updater::updateStaticObservations(FrameId frame_id_k, gtsam::
     theta_.insert_or_assign(new_values);
     factors_ += new_factors;
 
-    if(debug_info) LOG(INFO) << "Num new static points: " << debug_info->num_new_static_points << " Num new static factors " << debug_info->num_static_factors;
+    if(result.debug_info) LOG(INFO) << "Num new static points: " << result.debug_info->num_new_static_points << " Num new static factors " << result.debug_info->num_static_factors;
     return result;
 }
 
@@ -722,15 +709,18 @@ RGBDBackendModule::Updater::updateDynamicObservations(
         const UpdateObservationParams& update_params) {
     auto map = getMap();
     const auto& params = parent_->base_params_;
-    auto& debug_info = update_params.debug_info;
 
     Accessor::Ptr accessor = this->accessorFromTheta();
 
     // collect noise models to be used
     auto landmark_motion_noise = parent_->landmark_motion_noise_;
     auto dynamic_point_noise = parent_->dynamic_point_noise_;
-    UpdateObservationResult result;
 
+
+    UpdateObservationResult result;
+    if(update_params.enable_debug_info) {
+        result.debug_info = DebugInfo();
+    }
 
     //! At least three points on the object are required to solve
     //! otherise the system is indeterminate
@@ -765,10 +755,6 @@ RGBDBackendModule::Updater::updateDynamicObservations(
             continue;
         }
 
-        //TODO: debug
-        int num_lmks = 0;
-
-
         //iterate over each lmk we have on this object
         for(const auto& obj_lmk_node : seen_lmks_k) {
             CHECK_EQ(obj_lmk_node->getObjectId(), object_id);
@@ -779,9 +765,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
             TrackletId tracklet_id = obj_lmk_node->getId();
 
             //if does not exist, we need to go back and all the previous measurements & factors & motions
-            // if(!is_dynamic_tracklet_in_map_.exists(tracklet_id)) {
             if(!isDynamicTrackletInMap(obj_lmk_node)) {
-                //could sanity check that no object motion exists for the previous frame?
 
                 //add the points/motions from the past
                 auto seen_frames = obj_lmk_node->getSeenFrames();
@@ -886,32 +870,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 theta_.insert_or_assign(new_values);
             }
         }
-
-        if(debug_info) debug_info->object_info.insert2(object_id, object_debug_info);
-
-
-        // if(frames_added.size() > 0) {
-        //     //update internal datastructure indicating for which frames new factors/values were added
-        //     //TODO: should update?
-        //     // new_object_measurements_per_frame_.insert2(object_id, frames_added);
-        // }
-
     }
-
-    //this doesnt really work any more as debug info is meant to be per frame?
-    if(debug_info && VLOG_IS_ON(20)) {
-        for(const auto&[object_id, object_info] : debug_info->object_info) {
-            std::stringstream ss;
-            ss << "Object id debug info: " << object_id << "\n";
-            ss << "Num point factors: " << object_info.num_dynamic_factors << "\n";
-            ss << "Num point variables: " << object_info.num_new_dynamic_points << "\n";
-            ss << "Num motion factors: " << object_info.num_motion_factors << "\n";
-            ss << "Smoothing factor added: " << std::boolalpha <<  object_info.smoothing_factor_added << "\n";
-
-            LOG(INFO) << ss.str();
-        }
-    }
-
 
     //iterate over objects for which a motion was added
     //becuase we add lots of new points every frame, we may go over the same object many times
@@ -948,6 +907,16 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
             //update internal theta and factors
             theta_.insert_or_assign(new_values);
+        }
+    }
+
+     //this doesnt really work any more as debug info is meant to be per frame?
+    if(result.debug_info && VLOG_IS_ON(20)) {
+        for(const auto&[object_id, object_info] : result.debug_info->getObjectInfos()) {
+            std::stringstream ss;
+            ss << "Object id debug info: " << object_id << "\n";
+            ss << object_info;
+            LOG(INFO) << ss.str();
         }
     }
 
@@ -1095,6 +1064,7 @@ void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
         );
         // object_debug_info.num_dynamic_factors++;
         result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
+        if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_dynamic_factors++;
 
         //add landmark at previous frame
         const Landmark measured_k_1 = lmk_node->getMeasurement(frame_node_k_1->frame_id).landmark;
@@ -1105,6 +1075,7 @@ void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
             gtsam::Point3(context.X_k_1_measured * measured_k_1)
         );
         new_values.insert(object_point_key_k_1, lmk_world_k_1);
+        if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_new_dynamic_points++;
     }
 
 
@@ -1119,7 +1090,7 @@ void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
         measured_k,
         dynamic_point_noise
     );
-    // object_debug_info.num_dynamic_factors++;
+    if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_dynamic_factors++;
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
     Landmark lmk_world_k;
@@ -1129,6 +1100,8 @@ void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
         gtsam::Point3(context.X_k_measured * measured_k)
     );
     new_values.insert(object_point_key_k, lmk_world_k);
+    if(result.debug_info) result.debug_info->getObjectInfo( context.getObjectId()).num_new_dynamic_points++;
+
 
     const gtsam::Key object_pose_k_1_key = frame_node_k_1->makeObjectPoseKey(context.getObjectId());
     const gtsam::Key object_pose_k_key = frame_node_k->makeObjectPoseKey(context.getObjectId());
@@ -1143,6 +1116,7 @@ void RGBDBackendModule::LLUpdater::dynamicPointUpdateCallback(
     );
     result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+    if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_motion_factors++;
 
     //mark as now in map
     is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), true);
@@ -1236,13 +1210,10 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
                 object_pose_key_k,
                 object_smoothing_noise
             );
-            VLOG(20) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
+            if(result.debug_info) result.debug_info->getObjectInfo(object_id).smoothing_factor_added=true;
+            VLOG(50) << "Adding smoothing " << DynoLikeKeyFormatter(object_pose_key_k_2) << " -> " <<  DynoLikeKeyFormatter(object_pose_key_k);
         }
 
-        // if(smoothing_added) {
-        //     //TODO: add back in
-        //     // object_debug_info.smoothing_factor_added = true;
-        // }
 
     }
 
@@ -1361,12 +1332,12 @@ void RGBDBackendModule::MotionWorldAccessor::postUpdateCallback() {
                 }
             }
             ss << " of which " << n_used_motion << " were motion propogated";
-            VLOG(20) << ss.str();
+            VLOG(50) << ss.str();
         }
 
     }
 
-    VLOG(20) << "Updated object pose cache";
+    VLOG(50) << "Updated object pose cache";
     object_pose_cache_ = object_poses;
 }
 
@@ -1392,22 +1363,22 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
 
     // if first motion (i.e first time we have both k-1 and k), add both at k-1 and k
     if(context.is_starting_motion_frame) {
-        new_factors.emplace_shared<GenericProjectionFactor>(
-            lmk_node->getMeasurement(frame_node_k_1).keypoint,
-            dynamic_projection_noise,
-            frame_node_k_1->makePoseKey(),
-            object_point_key_k_1,
-            gtsam_calibration,
-            false, false
-        );
-
-        // new_factors.emplace_shared<PoseToPointFactor>(
-        //     frame_node_k_1->makePoseKey(), //pose key at previous frames
+        // new_factors.emplace_shared<GenericProjectionFactor>(
+        //     lmk_node->getMeasurement(frame_node_k_1).keypoint,
+        //     dynamic_projection_noise,
+        //     frame_node_k_1->makePoseKey(),
         //     object_point_key_k_1,
-        //     lmk_node->getMeasurement(frame_node_k_1).landmark,
-        //     dynamic_point_noise
+        //     gtsam_calibration,
+        //     false, false
         // );
-        // object_debug_info.num_dynamic_factors++;
+
+        new_factors.emplace_shared<PoseToPointFactor>(
+            frame_node_k_1->makePoseKey(), //pose key at previous frames
+            object_point_key_k_1,
+            lmk_node->getMeasurement(frame_node_k_1).landmark,
+            dynamic_point_noise
+        );
+        if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_dynamic_factors++;
         result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
 
         //add landmark at previous frame
@@ -1419,6 +1390,7 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
             gtsam::Point3(context.X_k_1_measured * measured_k_1)
         );
         new_values.insert(object_point_key_k_1, lmk_world_k_1);
+        if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_new_dynamic_points++;
     }
 
 
@@ -1427,20 +1399,22 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
 
     const Landmark measured_k = lmk_node->getMeasurement(frame_node_k).landmark;
 
-    // new_factors.emplace_shared<PoseToPointFactor>(
-    //     frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
-    //     object_point_key_k,
-    //     measured_k,
-    //     dynamic_point_noise
-    // );
-    new_factors.emplace_shared<GenericProjectionFactor>(
-            lmk_node->getMeasurement(frame_node_k).keypoint,
-            dynamic_projection_noise,
-            frame_node_k->makePoseKey(),
-            object_point_key_k,
-            gtsam_calibration,
-            false, false
-        );
+    new_factors.emplace_shared<PoseToPointFactor>(
+        frame_node_k->makePoseKey(), //pose key at this (in the iteration) frames
+        object_point_key_k,
+        measured_k,
+        dynamic_point_noise
+    );
+    if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_dynamic_factors++;
+
+    // new_factors.emplace_shared<GenericProjectionFactor>(
+    //         lmk_node->getMeasurement(frame_node_k).keypoint,
+    //         dynamic_projection_noise,
+    //         frame_node_k->makePoseKey(),
+    //         object_point_key_k,
+    //         gtsam_calibration,
+    //         false, false
+    //     );
     // object_debug_info.num_dynamic_factors++;
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
@@ -1451,6 +1425,8 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
         gtsam::Point3(context.X_k_measured * measured_k)
     );
     new_values.insert(object_point_key_k, lmk_world_k);
+    if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_new_dynamic_points++;
+
 
     const gtsam::Key object_motion_key_k = frame_node_k->makeObjectMotionKey(context.getObjectId());
 
@@ -1464,6 +1440,8 @@ void RGBDBackendModule::MotionWorldUpdater::dynamicPointUpdateCallback(
     );
     result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
     result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+    if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).num_motion_factors++;
+
 
     //mark as now in map
     is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), true);
@@ -1490,8 +1468,8 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
     if(!is_other_values_in_map.exists(object_motion_key_k)) {
 
         //when we have an initial motion - it seems ways better to use 2D reprojection error?
-        Motion3 initial_motion;
-        parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
+        Motion3 initial_motion = Motion3::Identity();
+        // parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
         new_values.insert(object_motion_key_k, initial_motion);
         is_other_values_in_map.insert2(object_motion_key_k, true);
     }
@@ -1527,6 +1505,8 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
                 gtsam::Pose3::Identity(),
                 object_smoothing_noise
             );
+            if(result.debug_info) result.debug_info->getObjectInfo(context.getObjectId()).smoothing_factor_added = true;
+
             // object_debug_info.smoothing_factor_added = true;
         }
 
