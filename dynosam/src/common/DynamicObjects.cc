@@ -57,7 +57,8 @@ void propogateObjectPoses(
 
                     ObjectPoseGT object_pose_gt_k_1;
                     if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
-                        pose_k_1 = object_pose_gt_k_1.L_world_;
+                        // pose_k_1 = object_pose_gt_k_1.L_world_;
+                        pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), object_pose_gt_k_1.L_world_.translation());
                         initalised_with_gt = true;
                     }
                 }
@@ -113,6 +114,23 @@ void propogateObjectPoses(
                 const double divisor = (double)(frame_id_k - last_frame);
                 for(size_t j = 0; j < N; j++) {
                     double t = (double)j/divisor;
+
+                    //interpolate with PCG(3)
+                    //X = last_recorded_pose
+                    //Y = current pose
+                    //SE(3) -> return traits<T>::Compose(X, traits<T>::Expmap(t * traits<T>::Logmap(traits<T>::Between(X, Y))));
+                    // gtsam::Pose3 between_local = traits<gtsam::Pose3>::Between(last_recorded_pose, current_pose); // X -> Y as seen in X
+                    // gtsam::Pose3 between_world = last_recorded_pose * between_local * last_recorded_pose.inverse(); // X -> Y as seen in W
+
+                    // gtsam::Rot3 R_bewtween_world = between_world.rotation();
+                    // gtsam::Point3 t_bewtween_world = between_world.translation();
+
+                    // gtsam::Vector3 t_interp_pcg = t * t_bewtween_world;
+                    // gtsam::Vector3 r_interp_pcg = t * gtsam::traits<gtsam::Rot3>::Logmap(R_bewtween_world);
+                    // gtsam::Vector6 tangent_interp_pcg;
+                    // tangent_interp_pcg.head<3>() = r_interp_pcg; //rotation first
+                    // tangent_interp_pcg.tail<3>() = t_interp_pcg; //translation second
+                    // gtsam::Pose3 interp_pcg = gtsam::Pose3::Expmap(tangent_interp_pcg);
                     gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
 
                     FrameId frame = last_frame + j;

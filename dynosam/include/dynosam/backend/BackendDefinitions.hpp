@@ -201,9 +201,15 @@ public:
         int num_new_dynamic_points = 0;
         int num_motion_factors = 0;
         bool smoothing_factor_added{false};
+
+        operator std::string() const;
+        friend std::ostream &operator<<(std::ostream &os, const ObjectInfo& object_info);
     };
 
-    gtsam::FastMap<ObjectId, ObjectInfo> object_info{};
+    ObjectInfo& getObjectInfo(ObjectId object_id);
+    const ObjectInfo& getObjectInfo(ObjectId object_id) const;
+
+    const gtsam::FastMap<ObjectId, ObjectInfo>& getObjectInfos() const { return object_info_;  }
 
     bool odometry_factor_added {false};
 
@@ -219,6 +225,16 @@ public:
 
     int num_elements_in_matrix = 0;
     int num_zeros_in_matrix = 0;
+
+private:
+    mutable gtsam::FastMap<ObjectId, ObjectInfo> object_info_{};
+
+    inline auto& getObjectInfoImpl(ObjectId object_id) const {
+        if(!object_info_.exists(object_id)) {
+            object_info_.insert2(object_id, ObjectInfo{});
+        }
+        return object_info_.at(object_id);
+    }
 
 };
 
