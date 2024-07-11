@@ -33,6 +33,7 @@
 
 namespace dyno {
 
+//loads camera poses - aligns camera poses to Identity for the first frame to match VO which shouls start at I!!
 class KittiCameraPoseFolder : public dyno::DataFolder<gtsam::Pose3> {
 
 public:
@@ -47,6 +48,7 @@ private:
     void onPathInit() override {
         std::ifstream object_pose_stream((std::string)getAbsolutePath(), std::ios::in);
 
+        bool set_initial_pose = false;
         while (!object_pose_stream.eof())
         {
             std::string s;
@@ -67,6 +69,14 @@ private:
                     cv_pose.at<double>(3, 3);
 
                 gtsam::Pose3 pose = utils::cvMatToGtsamPose3(cv_pose);
+
+                if(!set_initial_pose) {
+                    initial_pose_ = pose;
+                    set_initial_pose = true;
+                }
+                //aign with first pose
+                pose = initial_pose_.inverse() * pose;
+
                 gt_camera_poses_.push_back(pose);
             }
         }
@@ -74,6 +84,7 @@ private:
     }
 
     std::vector<gtsam::Pose3> gt_camera_poses_;
+    gtsam::Pose3 initial_pose_; //initial camera pose used to align gt to identiy!
 
 };
 
@@ -159,6 +170,7 @@ private:
 
         const gtsam::Pose3 camera_pose = camera_pose_loader_->getItem(idx);
         const Timestamp timestamp = timestamp_loader_->getItem(idx);
+
 
         //use cahce to avoid calculating every time
         if(gt_packets_.exists(idx)) {
@@ -274,6 +286,8 @@ private:
     std::vector<ObjectIds> object_ids_vector_;
     std::vector<ObjectPoseGT> object_poses_;
     gtsam::FastMap<FrameId, GroundTruthInputPacket> gt_packets_;
+
+    gtsam::Pose3 initial_pose_; //initial camera pose used to align gt to identiy!
 };
 
 class KittiClassSegmentationDataFolder : public dyno::DataFolder<cv::Mat> {

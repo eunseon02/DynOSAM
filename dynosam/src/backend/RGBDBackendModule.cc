@@ -111,7 +111,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     initial_object_motions_.insert2(frame_k, input->estimated_motions_);
 
     {
-        // TIMING_STATS("map.update_observations");
+        utils::TimingStatsCollector timer("map.update_observations");
         map_->updateObservations(input->collectStaticMeasurements());
         map_->updateObservations(input->collectDynamicMeasurements());
     }
@@ -138,7 +138,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     initial_camera_poses_.insert2(frame_k, T_world_cam_k_frontend);
     initial_object_motions_.insert2(frame_k, input->estimated_motions_);
     {
-        // TIMING_STATS("map.update_observations");
+        utils::TimingStatsCollector timer("map.update_observations");
         map_->updateObservations(input->collectStaticMeasurements());
         map_->updateObservations(input->collectDynamicMeasurements());
     }
@@ -151,14 +151,41 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     UpdateObservationParams update_params;
     update_params.enable_debug_info = true;
     update_params.do_backtrack = true;
-    new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
-    new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
+
+    {
+        utils::TimingStatsCollector timer("backend.update_static_obs");
+        new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
+
+    }
+
+    {
+        utils::TimingStatsCollector timer("backend.update_dynamic_obs");
+        new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
+    }
 
     //do sliding window like batch from zero
-    if(frame_k % 20 ==0) {
+    // if(frame_k % 20 ==0) {
+    //     gtsam::Values values;
+    //     gtsam::NonlinearFactorGraph graph;
+    //     std::tie(values, graph) = constructGraph(first_frame_id_, frame_k, true);
+    //     LOG(INFO) << " Finished graph construction";
+
+    //     graph.error(values);
+    //     gtsam::LevenbergMarquardtParams opt_params;
+    //     if(VLOG_IS_ON(20))
+    //         opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+    //     gtsam::Values optimised_values_sliding = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+    //     new_updater_->updateTheta(optimised_values_sliding);
+
+    // }
+    LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
+    if(base_params_.full_batch_frame-1== (int)frame_k) {
+        LOG(INFO) << " Doing full batch at frame " << frame_k;
+        // gtsam::Values optimised_values;
         gtsam::Values values;
         gtsam::NonlinearFactorGraph graph;
-        std::tie(values, graph) = constructGraph(first_frame_id_, frame_k, true);
+        std::tie(values, graph) = constructGraph(1, frame_k, true);
         LOG(INFO) << " Finished graph construction";
 
         graph.error(values);
@@ -166,20 +193,19 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         if(VLOG_IS_ON(20))
             opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        gtsam::Values optimised_values_sliding = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-        new_updater_->updateTheta(optimised_values_sliding);
-
-    }
-
-
-    gtsam::Values optimised_values;
-    double error_before = 0;
-    double error_after = 0;
-    if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
-        //update map with best results
+        gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
         new_updater_->updateTheta(optimised_values);
-        LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
+
     }
+
+    // gtsam::Values optimised_values;
+    // double error_before = 0;
+    // double error_after = 0;
+    // if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
+    //     //update map with best results
+    //     new_updater_->updateTheta(optimised_values);
+    //     LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
+    // }
 
     new_updater_->accessorFromTheta()->postUpdateCallback(); //force update every time (slow! and just for testing)
     auto accessor = new_updater_->accessorFromTheta();
@@ -497,7 +523,7 @@ std::tuple<gtsam::Point3, bool> RGBDBackendModule::Accessor::computeObjectCentro
     CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getSensorPose(frame_id).get());
     if(object_clouds.size() == 0) {
         //TODO: why does this happen so much!!!
-        LOG(INFO) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
+        VLOG(20) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
             << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size(); //<< " but reocrded lmks was " << dynamic_landmarks.size();
         return {gtsam::Point3{}, false};
     }
@@ -737,6 +763,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     const gtsam::Pose3& T_world_camera_initial_k = new_values.at<gtsam::Pose3>(CameraPoseSymbol(frame_id_k));
 
     //for each object
+    utils::TimingStatsCollector dyn_obj_itr_timer("dynamic_object_itr");
     for(const auto& object_node : frame_node_k->objects_seen) {
 
         DebugInfo::ObjectInfo object_debug_info;
@@ -755,6 +782,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
             continue;
         }
 
+        utils::TimingStatsCollector dyn_point_itr_timer("dynamic_point_itr");
         //iterate over each lmk we have on this object
         for(const auto& obj_lmk_node : seen_lmks_k) {
             CHECK_EQ(obj_lmk_node->getObjectId(), object_id);
@@ -800,6 +828,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 ss << "Going back to add point on object " << object_id << " at frames\n";
 
                 //iterate over k-N to k (inclusive) and all all
+                utils::TimingStatsCollector dyn_point_backtrack_timer("dynamic_point_backtrack");
                 for(auto seen_frames_itr = starting_motion_frame_itr; seen_frames_itr != seen_frames.end(); seen_frames_itr++) {
                     auto seen_frames_itr_prev = seen_frames_itr;
                     std::advance(seen_frames_itr_prev, -1);
@@ -847,7 +876,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                         point_context.is_starting_motion_frame = true;
 
                     }
-
+                    utils::TimingStatsCollector dyn_point_update_timer("dyn_point_update");
                     dynamicPointUpdateCallback(point_context, result, new_values, new_factors);
                     //update internal theta and factors
                     theta_.insert_or_assign(new_values);
@@ -864,6 +893,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 point_context.X_k_1_measured = getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
                 point_context.X_k_measured = getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
                 point_context.is_starting_motion_frame = false;
+                utils::TimingStatsCollector dyn_point_update_timer("dyn_point_update");
                 dynamicPointUpdateCallback(point_context, result, new_values, new_factors);
 
                 //update internal theta and factors
@@ -877,6 +907,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     //to account for backtracking over new points over this object
     //this is a bit inefficient as we do this iteration even if no new object values are added
     //becuuse we dont know if the affected frames are becuase of old points as well as new points
+    utils::TimingStatsCollector dyn_obj_affected_timer("dyn_object_affected");
     for(const auto&[object_id, frames_affected] : result.objects_affected_per_frame) {
         LOG(INFO) << "Iterating over frames for which a motion was added " << container_to_string(frames_affected) << " for object " << object_id;
 

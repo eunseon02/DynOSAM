@@ -247,6 +247,7 @@ def align_trajectory(traj, traj_ref, correct_scale=False, correct_only_scale=Fal
     import copy
     import evo.core.geometry as evo_geometry
     import evo.core.lie_algebra as lie
+    import evo.core.transformations as evo_transform
     from evo.tools.user import logger
 
     traj_aligned = copy.deepcopy(traj)  # otherwise np arrays will be references and mess up stuff
@@ -260,6 +261,9 @@ def align_trajectory(traj, traj_ref, correct_scale=False, correct_only_scale=Fal
                                                     traj_ref.positions_xyz[:n, :].T, with_scale)
     except evo_geometry.GeometryException as e:
         logger.warning(f"Could not align trajectories {str(e)}")
+        # just align with zero
+        traj_aligned.align_origin(traj_ref)
+
         return traj_aligned
 
     if not correct_only_scale:

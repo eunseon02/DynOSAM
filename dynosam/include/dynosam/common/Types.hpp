@@ -560,7 +560,7 @@ class GenericObjectCentricMap : public gtsam::FastMap<ObjectId, gtsam::FastMap<F
 
 };
 
-/// @brief Map of object poses per frame per object
+/// @brief Map of object poses per object per frame
 using ObjectPoseMap = GenericObjectCentricMap<gtsam::Pose3>;
 
 

@@ -143,7 +143,7 @@ void propogateObjectPoses(
             }
             else {
                 //last frame too far away - reinitalise with centroid!
-                LOG(ERROR) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame << " for object " << object_id;
+                VLOG(20) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame << " for object " << object_id;
             }
 
 

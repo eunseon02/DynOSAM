@@ -125,7 +125,7 @@ public:
     virtual ~DynoDataset() {}
 
     //timestamp used to determine the size of the dataset
-    void setLoaders(TimestampBaseLoader::Ptr timestamp_loader,
+    virtual void setLoaders(TimestampBaseLoader::Ptr timestamp_loader,
           dyno::DataFolder<cv::Mat>::Ptr rgb_loader,
           dyno::DataFolder<cv::Mat>::Ptr optical_flow_loader,
           typename DataFolder<DataTypes>::Ptr... data_folders) {
@@ -253,28 +253,6 @@ private:
 };
 
 
-// class PlaybackGui {
-
-// public:
-//     PlaybackGui();
-
-//     void draw();
-
-// private:
-//     static void onMouseCallback(const cv::viz::MouseEvent & event, void* gui);
-
-//     void drawButtons();
-
-// private:
-//     //! 2D visualization
-//     cv::viz::Viz3d window_;
-//     bool paused = false;
-//     cv::Rect pause_button_rect_;
-//     cv::Rect resume_button_rect_;
-//     cv::Mat frame_;
-
-// };
-
 
 template<typename... DataTypes>
 class DynoDatasetProvider :  public DynoDataset<DataTypes...>, public DataProvider  {
@@ -298,6 +276,7 @@ public:
     void setStartingFrame(int starting_frame) {
         if(starting_frame != -1)
             requested_starting_frame_id_ = starting_frame;
+        setEndingFrameFromRequested();
     }
     //ignore if -1
     void setEndingFrame(int ending_frame) {
@@ -305,6 +284,7 @@ public:
             requested_ending_frame_id_ = ending_frame;
 
         LOG(WARNING) << "Updating ending frame" << requested_ending_frame_id_;
+        setEndingFrameFromRequested();
     }
 
     /**
@@ -322,14 +302,9 @@ public:
         active_frame_id_ = 0;
     }
 
-
+    //returns the effetive size of the dataset (after the ending frame has been set)
+    //only valid after setLoaders is called, but this should happen at the constructor level anyway!
     virtual int datasetSize() const override {
-        //this is very gross - the ending_frame_id_ will only get set after the first call to spin, but this is what we want to return
-        //so the value may change depending on if setEndingFrame has been called and/or when datasetSize is called!!!!!
-        //TODO: (jesse).... not sure why i did it like this... could just set starting ending frame in the setStart/End function?
-        if(is_first_spin_) {
-            return (int)BaseDynoDataset::getDatasetSize();
-        }
         return (int)ending_frame_id_;
     }
 
@@ -339,39 +314,6 @@ public:
             return false;
         }
 
-        const size_t dataset_size = BaseDynoDataset::getDatasetSize();
-
-        //initalise and check
-        if(is_first_spin_) {
-            // by default start dataset at 0
-            size_t starting_frame = 0u;
-            // by default end dataset at the last frame
-            size_t ending_frame = dataset_size;
-
-            if(requested_starting_frame_id_ >= 0) {
-                starting_frame = requested_starting_frame_id_;
-            }
-
-            if(requested_ending_frame_id_ >= 0) {
-                ending_frame = requested_ending_frame_id_;
-            }
-
-            //check ending frame first
-            if(ending_frame > dataset_size) {
-                throw DynoDatasetException("Requested ending frame is greater than the size of the dataset (" + std::to_string(ending_frame) + " > " + std::to_string(dataset_size));
-            }
-
-            if(starting_frame > ending_frame) {
-                throw DynoDatasetException("Requested starting frame is invalid - either less than 0 or greater than the ending frame (starting frame= " + std::to_string(starting_frame) + ", ending frame= " + std::to_string(ending_frame));
-            }
-
-            //update varibles actually used in the spin
-            active_frame_id_ = starting_frame;
-            ending_frame_id_ = ending_frame;
-            is_first_spin_ = false;
-        }
-
-
         if(active_frame_id_ >= ending_frame_id_) {
             LOG_FIRST_N(INFO, 1) << "Finished dataset";
             emitOnFinishCallbacks();
@@ -379,7 +321,7 @@ public:
         }
 
 
-        utils::TimingStatsCollector("dataset_spin");
+        utils::TimingStatsCollector dataset_spin_timer("dataset_spin");
         if(!BaseDynoDataset::processSingle(active_frame_id_)) {
             LOG(ERROR) << "Processing single frame failed at frame id " << active_frame_id_;
             return false;
@@ -391,6 +333,53 @@ public:
 
     size_t getActiveFrameId() const { return active_frame_id_; }
     size_t getEndingFrameId() const { return ending_frame_id_; }
+
+protected:
+    //overrride loaders so we can add our own post set laoders behaviour
+    //in this case, dataset size is now going to be valid so we can set the starting/end frame!
+    void setLoaders(TimestampBaseLoader::Ptr timestamp_loader,
+          dyno::DataFolder<cv::Mat>::Ptr rgb_loader,
+          dyno::DataFolder<cv::Mat>::Ptr optical_flow_loader,
+          typename DataFolder<DataTypes>::Ptr... data_folders) override
+    {
+        BaseDynoDataset::setLoaders(timestamp_loader, rgb_loader, optical_flow_loader, data_folders...);
+        //now we have a valid timestamp loader set the active/ending frame ids
+        //using the requested starting/ending frames and the actual dataset size, which we get from
+        //the base
+        setEndingFrameFromRequested();
+    }
+
+private:
+    void setEndingFrameFromRequested() {
+        //call base version - this will also check that the timestamp laoder is valid!
+        const size_t dataset_size = BaseDynoDataset::getDatasetSize();
+
+        // by default start dataset at 0
+        size_t starting_frame = 0u;
+        // by default end dataset at the last frame
+        size_t ending_frame = dataset_size;
+
+        if(requested_starting_frame_id_ >= 0) {
+            starting_frame = requested_starting_frame_id_;
+        }
+
+        if(requested_ending_frame_id_ >= 0) {
+            ending_frame = requested_ending_frame_id_;
+        }
+
+        //check ending frame first
+        if(ending_frame > dataset_size) {
+            throw DynoDatasetException("Requested ending frame is greater than the size of the dataset (" + std::to_string(ending_frame) + " > " + std::to_string(dataset_size));
+        }
+
+        if(starting_frame > ending_frame) {
+            throw DynoDatasetException("Requested starting frame is invalid - either less than 0 or greater than the ending frame (starting frame= " + std::to_string(starting_frame) + ", ending frame= " + std::to_string(ending_frame));
+        }
+
+        //update varibles actually used in the spin
+        active_frame_id_ = starting_frame;
+        ending_frame_id_ = ending_frame;
+    }
 
 private:
     size_t active_frame_id_ = 0u;

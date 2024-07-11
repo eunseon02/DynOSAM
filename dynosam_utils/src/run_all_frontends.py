@@ -1,9 +1,9 @@
 from eval_launch import run
 
-def run_frontend_sequnce(path, name, data_loader_num):
+def run_frontend_sequnce(path, name, data_loader_num, backend_type):
     parsed_args = {
         "dataset_path": path,
-        "output_path": "/root/results/DynoSAM/",
+        "output_path": "/root/results/Dynosam_tro2024/",
         "name": name,
         "run_pipeline": True,
         "run_analysis": False,
@@ -11,7 +11,7 @@ def run_frontend_sequnce(path, name, data_loader_num):
     }
 
     additional_args = [
-        "--backend_updater_enum=0",
+        "f--backend_updater_enum={backend_type}",
         f"--data_provider_type={data_loader_num}",
         "--use_backend=0",
         "--save_frontend_json=true"

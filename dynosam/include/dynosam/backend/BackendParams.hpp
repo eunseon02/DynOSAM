@@ -73,6 +73,9 @@ struct BackendParams {
         return *this;
     }
 
+    //for testing only
+    mutable int full_batch_frame = -1;
+
 };
 
 

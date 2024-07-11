@@ -269,6 +269,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
                     FLAGS_backend_updater_enum
                 );
 
+                params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
+
                 backend = std::make_shared<RGBDBackendModule>(params_.backend_params_, map, camera, updater_type, &display_queue_);
             }
             else if(use_offline_frontend_) {

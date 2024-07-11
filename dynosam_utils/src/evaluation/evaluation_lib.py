@@ -275,7 +275,7 @@ class MotionErrorEvaluator(Evaluator):
                 float(row["pitch"]),
                 float(row["yaw"])
             ]),
-            order = "xyz",
+            order = "ZYX",
             degrees=False)
 
             translation_ref = np.array([
@@ -289,7 +289,7 @@ class MotionErrorEvaluator(Evaluator):
                 float(row["gt_pitch"]),
                 float(row["gt_yaw"])
             ]),
-            order = "xyz",
+            order = "ZYX",
             degrees=False)
 
             # frome evo
@@ -356,7 +356,7 @@ class CameraPoseEvaluator(Evaluator):
                 float(row["pitch"]),
                 float(row["yaw"])
             ]),
-            order = "xyz",
+            order = "ZYX",
             degrees=False)
 
             translation_ref = np.array([
@@ -370,7 +370,7 @@ class CameraPoseEvaluator(Evaluator):
                 float(row["gt_pitch"]),
                 float(row["gt_yaw"])
             ]),
-            order = "xyz",
+            order = "ZYX",
             degrees=False)
 
 
@@ -442,7 +442,7 @@ class CameraPoseEvaluator(Evaluator):
 
         plot_collection.add_figure(
                     "VO_APE_rotation",
-                    plot_metric(ape_trans, f"VO APE Rotation")
+                    plot_metric(ape_rot, f"VO APE Rotation")
                 )
 
         plot_collection.add_figure(

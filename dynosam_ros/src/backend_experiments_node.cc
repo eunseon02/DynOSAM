@@ -94,6 +94,8 @@ public:
             FLAGS_backend_updater_enum
         );
 
+        params.backend_params_.full_batch_frame = get_dataset_size();
+
         auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, camera, updater_type);
 
         backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
@@ -108,6 +110,7 @@ public:
     }
 
      bool spinOnce() override {
+       RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());
        if(frontend_pipeline_->isWorking()) {
                     frontend_pipeline_->spinOnce();
                     backend_pipeline_->spinOnce();
