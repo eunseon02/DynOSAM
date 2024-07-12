@@ -134,26 +134,26 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
 
   camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
-            "x", "y", "z",
-            "roll", "pitch" , "yaw",
-            "gt_x", "gt_y", "gt_z",
-            "gt_roll", "gt_pitch", "gt_yaw"));
+            "tx", "ty", "tz",
+            "qx", "qy" , "qz", "qw",
+            "gt_tx", "gt_ty", "gt_tz",
+            "gt_qx", "gt_qy", "gt_qz", "gt_qw"));
 
   object_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
-            "x", "y", "z",
-            "roll", "pitch" , "yaw",
-            "gt_x", "gt_y", "gt_z",
-            "gt_roll", "gt_pitch", "gt_yaw"));
+            "tx", "ty", "tz",
+            "qx", "qy" , "qz", "qw",
+            "gt_tx", "gt_ty", "gt_tz",
+            "gt_qx", "gt_qy", "gt_qz", "gt_qw"));
 
   object_motion_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
             "object_id",
-            "x", "y", "z",
-            "roll", "pitch" , "yaw",
-            "gt_x", "gt_y", "gt_z",
-            "gt_roll", "gt_pitch", "gt_yaw"));
+            "tx", "ty", "tz",
+            "qx", "qy" , "qz", "qw",
+            "gt_tx", "gt_ty", "gt_tz",
+            "gt_qx", "gt_qy", "gt_qz", "gt_qw"));
 
   map_points_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
@@ -179,15 +179,11 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
 
 EstimationModuleLogger::~EstimationModuleLogger() {
   LOG(INFO) << "Writing out " << module_name_ << " logger...";
-
-  // OfstreamWrapper::WriteOutCsvWriter(*object_motion_errors_csv_, object_motion_errors_file_name_);
-  // OfstreamWrapper::WriteOutCsvWriter(*object_pose_errors_csv_, object_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_pose_csv_, object_pose_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_bbx_csv_, object_bbx_file_name_);
 
   OfstreamWrapper::WriteOutCsvWriter(*object_motion_csv_, object_motion_file_name_);
 
-  // OfstreamWrapper::WriteOutCsvWriter(*camera_pose_errors_csv_, camera_pose_errors_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
 
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
@@ -212,13 +208,13 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(const GroundTruthP
             const gtsam::Pose3& estimate = motions;
             const gtsam::Pose3& gt_motion = *object_pose_gt.prev_H_current_world_;
 
-            const auto& rot = estimate.rotation();
-            const auto& gt_rot = gt_motion.rotation();
+            const auto& quat = estimate.rotation().toQuaternion();
+            const auto& gt_quat = gt_motion.rotation().toQuaternion();
 
             *object_motion_csv_ <<
               frame_id << object_id <<
-              estimate.x() << estimate.y() << estimate.z() << rot.roll() << rot.pitch() << rot.yaw() <<
-              gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
+              estimate.x() << estimate.y() << estimate.z() << quat.x() << quat.y() << quat.z() << quat.w() <<
+              gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_quat.x() << gt_quat.y() << gt_quat.z() << gt_quat.w();
             number_logged++;
 
         }
@@ -259,16 +255,16 @@ std::optional<size_t> EstimationModuleLogger::logObjectPose(const GroundTruthPac
         CHECK_NOTNULL(object_gt_k_1);
         //get gt poses
         const auto& gt_L_world_k = object_gt_k->L_world_;
-        const auto& gt_rot_k = gt_L_world_k.rotation();
+        const auto& gt_R_k = gt_L_world_k.rotation().toQuaternion();
         const auto& gt_L_world_k_1 = object_gt_k_1->L_world_;
-
+        //estimate
         const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
-        const auto rot = L_world_k.rotation();
+        const auto R_world_k = L_world_k.rotation().toQuaternion();
         //write out object pose with gt
         *object_pose_csv_ <<
           frame_id << object_id <<
-          L_world_k.x() << L_world_k.y() << L_world_k.z() << rot.roll() << rot.pitch() << rot.yaw() <<
-          gt_L_world_k.x() << gt_L_world_k.y() << gt_L_world_k.z() << gt_rot_k.roll() << gt_rot_k.pitch() << gt_rot_k.yaw();
+          L_world_k.x() << L_world_k.y() << L_world_k.z() << R_world_k.x() << R_world_k.y() << R_world_k.z() << R_world_k.w() <<
+          gt_L_world_k.x() << gt_L_world_k.y() << gt_L_world_k.z() << gt_R_k.x() << gt_R_k.y() << gt_R_k.z() << gt_R_k.w();
       }
       number_logged++;
 
@@ -285,12 +281,12 @@ std::optional<size_t> EstimationModuleLogger::logCameraPose(const GroundTruthPac
     const GroundTruthInputPacket& gt_packet_k = gt_packets.at(frame_id);
     const gtsam::Pose3 gt_T_world_camera_k = gt_packet_k.X_world_;
 
-    const auto& rot = T_world_camera.rotation();
-    const auto& gt_rot = gt_T_world_camera_k.rotation();
+    const auto& rot = T_world_camera.rotation().toQuaternion();
+    const auto& gt_rot = gt_T_world_camera_k.rotation().toQuaternion();
     *camera_pose_csv_ <<
       frame_id <<
-      T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.roll() << rot.pitch() << rot.yaw() <<
-      gt_T_world_camera_k.x() << gt_T_world_camera_k.y() << gt_T_world_camera_k.z() << gt_rot.roll() << gt_rot.pitch() << gt_rot.yaw();
+      T_world_camera.x() << T_world_camera.y() << T_world_camera.z() << rot.x() << rot.y() << rot.z() << rot.w() <<
+      gt_T_world_camera_k.x() << gt_T_world_camera_k.y() << gt_T_world_camera_k.z() << gt_rot.x() << gt_rot.y() << gt_rot.z() << gt_rot.w();
     return 1;
 }
 

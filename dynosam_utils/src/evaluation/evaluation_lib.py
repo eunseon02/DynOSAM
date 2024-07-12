@@ -5,8 +5,7 @@ from typing import Optional, List, Tuple, Dict, TypeAlias
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
-from evo.core import lie_algebra
-from evo.core import trajectory, metrics
+from evo.core import lie_algebra, trajectory, metrics, transformations
 import evo.tools.plot as evo_plot
 
 from .tools import (
@@ -14,6 +13,7 @@ from .tools import (
     common_entries,
     transform_camera_trajectory_to_world,
     TrajectoryHelper,
+    load_pose_from_row
 )
 
 import evaluation.tools as tools
@@ -75,13 +75,13 @@ class MotionErrorEvaluator(Evaluator):
 
         self._object_pose_log_file = read_csv(self._object_pose_log,
                                               ["frame_id", "object_id",
-                                               "x", "y", "z", "roll", "pitch", "yaw",
-                                               "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
+                                               "tx", "ty", "tz", "qx", "qy", "qz", "qw",
+                                               "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
         self._object_motion_log_file = read_csv(self._object_motion_log,
                                             ["frame_id", "object_id",
-                                            "x", "y", "z", "roll", "pitch", "yaw",
-                                            "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
+                                            "tx", "ty", "tz", "qx", "qy", "qz", "qw",
+                                            "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
 
         # TODO: dont need dynosam to do the error metrics for us - let evo do it all, just record all the se3 things
@@ -115,9 +115,11 @@ class MotionErrorEvaluator(Evaluator):
 
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
-            data = (object_traj_ref, object_traj)
 
-            object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
+            # no need to sync and align motions since they are all relative anyway
+            # if anything we should put them into the gt object frame via a PCG(3) object change
+            # to ensure the estimation is in the gt frame from which the original error was calculated!!
+            data = (object_traj_ref, object_traj)
 
             # only interested in APE as this matches our error metrics
             ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
@@ -154,9 +156,9 @@ class MotionErrorEvaluator(Evaluator):
         trajectory_helper = TrajectoryHelper()
 
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
-            data = (object_traj_ref, object_traj)
 
             object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
+            data = (object_traj_ref, object_traj)
 
             # add reference edges
             # TODO: doesnt seem to work?
@@ -178,6 +180,36 @@ class MotionErrorEvaluator(Evaluator):
                             1.0, metrics.Unit.frames, 0.0, False)
             rpe_rot = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
                           1.0, metrics.Unit.frames, 1.0, False)
+
+            t_error = 0
+            r_x_error =0
+            r_y_error =0
+
+            import math
+            count = 0
+            for traj, ref_traj in zip(object_traj.poses_se3, object_traj_ref.poses_se3):
+                print(f"object={object_id},count={count}\nest =\n{traj}\nref=\n{ref_traj}")
+                # e = lie_algebra.relative_se3(traj, ref_traj)
+                # angle, _, _ = transformations.rotation_from_matrix(e)
+                # r_e = (angle * 180.0 * 3.1415926)
+                # r_y_error += math.cos(r_e)
+                # r_x_error += math.sin(r_e)
+
+                # t_e = np.linalg.norm(e[:3, 3])
+                # t_error += t_e
+
+                count += 1
+
+            # t_error /= count
+            # r_y_error /= count
+            # r_x_error /= count
+
+            # def wrap_angle(angle):
+            #     return angle % (2 * math.pi)
+
+            # r_error = wrap_angle(math.atan2(r_y_error, r_x_error))
+            # print(f"Calculated pose error for object {object_id}, t_e={t_error}, r_e={r_error}")
+
 
             ape_trans.process_data(data)
             ape_rot.process_data(data)
@@ -264,37 +296,7 @@ class MotionErrorEvaluator(Evaluator):
             if object_id not in object_poses_ref_tmp_dict:
                 object_poses_ref_tmp_dict[object_id] = {"traj": [], "timestamps": []}
 
-            translation = np.array([
-                float(row["x"]),
-                float(row["y"]),
-                float(row["z"])
-            ])
-
-            rotation = so3_from_euler(np.array([
-                float(row["roll"]),
-                float(row["pitch"]),
-                float(row["yaw"])
-            ]),
-            order = "ZYX",
-            degrees=False)
-
-            translation_ref = np.array([
-                float(row["gt_x"]),
-                float(row["gt_y"]),
-                float(row["gt_z"])
-            ])
-
-            rotation_ref = so3_from_euler(np.array([
-                float(row["gt_roll"]),
-                float(row["gt_pitch"]),
-                float(row["gt_yaw"])
-            ]),
-            order = "ZYX",
-            degrees=False)
-
-            # frome evo
-            T = lie_algebra.se3(rotation, translation)
-            T_ref = lie_algebra.se3(rotation_ref, translation_ref)
+            T, T_ref = load_pose_from_row(row)
 
             object_poses_tmp_dict[object_id]["traj"].append(T)
             object_poses_tmp_dict[object_id]["timestamps"].append(frame_id)
@@ -333,8 +335,8 @@ class CameraPoseEvaluator(Evaluator):
 
         self._camera_pose_file = read_csv(self._camera_pose_log,
                                           ["frame_id",
-                                           "x", "y", "z", "roll", "pitch", "yaw",
-                                           "gt_x", "gt_y", "gt_z", "gt_roll", "gt_pitch", "gt_yaw"])
+                                           "tx", "ty", "tz", "qx", "qy", "qz", "qw",
+                                            "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
         poses = []
         poses_ref = []
@@ -345,38 +347,7 @@ class CameraPoseEvaluator(Evaluator):
             frame_id = float(row["frame_id"])
             timestamps.append(frame_id)
 
-            translation = np.array([
-                float(row["x"]),
-                float(row["y"]),
-                float(row["z"])
-            ])
-
-            rotation = so3_from_euler(np.array([
-                float(row["roll"]),
-                float(row["pitch"]),
-                float(row["yaw"])
-            ]),
-            order = "ZYX",
-            degrees=False)
-
-            translation_ref = np.array([
-                float(row["gt_x"]),
-                float(row["gt_y"]),
-                float(row["gt_z"])
-            ])
-
-            rotation_ref = so3_from_euler(np.array([
-                float(row["gt_roll"]),
-                float(row["gt_pitch"]),
-                float(row["gt_yaw"])
-            ]),
-            order = "ZYX",
-            degrees=False)
-
-
-            # frome evo
-            T = lie_algebra.se3(rotation, translation)
-            T_ref = lie_algebra.se3(rotation_ref, translation_ref)
+            T, T_ref = load_pose_from_row(row)
 
             poses.append(T)
             poses_ref.append(T_ref)
@@ -402,6 +373,11 @@ class CameraPoseEvaluator(Evaluator):
         traj_ref_vo = self.camera_pose_traj_ref
 
         traj_est_vo, traj_ref_vo = sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
+
+        count = 0
+        for traj, ref_traj in zip(traj_est_vo.poses_se3, traj_ref_vo.poses_se3):
+                print(f"vo,count={count}\nest =\n{traj}\nref=\n{ref_traj}")
+                count +=1
 
         # used to draw trajectories for plot collection
         trajectories = {}

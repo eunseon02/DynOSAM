@@ -59,6 +59,13 @@ private:
     SpinReturn boostrapSpin(FrontendInputPacketBase::ConstPtr input) override;
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 
+    //track on new frame and update depths
+    Frame::Ptr trackNewFrame(FrontendInputPacketBase::ConstPtr input, bool& is_semantic_mask);
+
+    RGBDInstanceOutputPacket::Ptr processFrame(Frame::Ptr frame, const bool& is_semantic_mask, GroundTruthInputPacket::Optional ground_truth = {});
+
+    void logOutputPacket(const RGBDInstanceOutputPacket::Ptr& output);
+
     /**
      * @brief Solves PnP between frame_k-1 and frame_k using the tracked correspondances
      * to estimate the frame of the current camera

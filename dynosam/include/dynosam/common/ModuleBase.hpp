@@ -239,6 +239,7 @@ protected:
 private:
     const std::string name_;
     std::atomic<State> module_state_;
+    std::atomic<State> previous_module_state_;
 
     InputCallback input_callback_;
     OutputCallback output_callback_;

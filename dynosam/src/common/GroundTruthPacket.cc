@@ -68,7 +68,8 @@ void ObjectPoseGT::setMotions(const ObjectPoseGT& previous_object_gt, const gtsa
     prev_H_current_X_ = H_X_gt;
 
     // H between t-1 and t in the world frame
-    gtsam::Pose3 H_W_gt = L_world_prev * H_L_gt * L_world_prev.inverse();
+    // equ.5 (morris2023importance)
+    gtsam::Pose3 H_W_gt = L_world_curr * L_world_prev.inverse();
     prev_H_current_world_ = H_W_gt;
 
     MotionInfo motion_info;

@@ -6,6 +6,9 @@ from evo.core.trajectory import PosePath3D
 
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
+import evo.core.lie_algebra as evo_lie_algebra
+
+from typing import Tuple
 
 
 from typing import List
@@ -15,10 +18,56 @@ def so3_from_euler(euler_angles: np.ndarray, order:str = "xyz", degrees: bool = 
     from scipy.spatial.transform import Rotation as R
     return R.from_euler(order, euler_angles, degrees=degrees).as_matrix()
 
+def so3_from_xyzw(quaternion: np.ndarray) -> np.ndarray:
+    from scipy.spatial.transform import Rotation as R
+    return R.from_quat(quaternion, scalar_first=False).as_matrix()
+
+def load_pose_from_row(row) -> Tuple[np.ndarray, np.ndarray]:
+
+    """
+    Loads a estimated and reference (ground truth() pose from a given row (from a logged csv file).
+    Expects row to contain tx, ty, tz, qx, qy, qz, qw information for the  estimated pose, and prefixed
+    with gt_* for the reference trajectory.
+
+    Args:
+        row (_type_): _description_
+
+    Returns:
+        Tuple[np.ndarray, np.ndarray]: Estimated pose, reference (gt) pose
+    """
+    translation = np.array([
+        float(row["tx"]),
+        float(row["ty"]),
+        float(row["tz"])
+    ])
+    rotation = so3_from_xyzw(np.array([
+        float(row["qx"]),
+        float(row["qy"]),
+        float(row["qz"]),
+        float(row["qw"])
+    ]))
+
+    ref_translation = np.array([
+        float(row["gt_tx"]),
+        float(row["gt_ty"]),
+        float(row["gt_tz"])
+    ])
+    ref_rotation = so3_from_xyzw(np.array([
+        float(row["gt_qx"]),
+        float(row["gt_qy"]),
+        float(row["gt_qz"]),
+        float(row["gt_qw"])
+    ]))
+
+    T_est = evo_lie_algebra.se3(rotation, translation)
+    T_ref = evo_lie_algebra.se3(ref_rotation, ref_translation)
+
+    return T_est, T_ref
+
 def camera_coordinate_to_world() -> np.ndarray:
     from scipy.spatial.transform import Rotation as R
     return se3(
-        R.from_euler("zyx", np.array([0, 0, -90]), degrees=True).as_matrix(),
+        R.from_euler("ZYX", np.array([0, 0, 0]), degrees=True).as_matrix(),
         np.array([0.0, 0.0, 0.0]))
 
 
@@ -47,21 +96,6 @@ def common_entries(*dcts):
 def hsv_to_rgb(h:float, s:float, v:float, a:float = 1) -> tuple:
     import colorsys
     return colorsys.hsv_to_rgb(h, s, v)
-    # if s:
-    #     if h == 1.0: h = 0.0
-    #     i = int(h*6.0); f = h*6.0 - i
-
-    #     w = v * (1.0 - s)
-    #     q = v * (1.0 - s * f)
-    #     t = v * (1.0 - s * (1.0 - f))
-
-    #     if i==0: return (v, t, w, a)
-    #     if i==1: return (q, v, w, a)
-    #     if i==2: return (w, v, t, a)
-    #     if i==3: return (w, q, v, a)
-    #     if i==4: return (t, w, v, a)
-    #     if i==5: return (v, w, q, a)
-    # else: return (v, v, v, a)
 
 def generate_unique_colour(id: int, saturation: float = 0.5, value: float = 0.95):
     import math
@@ -261,9 +295,6 @@ def align_trajectory(traj, traj_ref, correct_scale=False, correct_only_scale=Fal
                                                     traj_ref.positions_xyz[:n, :].T, with_scale)
     except evo_geometry.GeometryException as e:
         logger.warning(f"Could not align trajectories {str(e)}")
-        # just align with zero
-        traj_aligned.align_origin(traj_ref)
-
         return traj_aligned
 
     if not correct_only_scale:

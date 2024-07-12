@@ -36,10 +36,11 @@ int main(int argc, char** argv)
   // rclcpp::init(argc, argv);
   ::testing::InitGoogleTest(&argc, argv);
   google::InitGoogleLogging(argv[0]);
-  google::ParseCommandLineFlags(&argc, &argv, true);
+
   FLAGS_logtostderr = 1;
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
   FLAGS_v = 1;
+  google::ParseCommandLineFlags(&argc, &argv, true);
   return RUN_ALL_TESTS();
 }

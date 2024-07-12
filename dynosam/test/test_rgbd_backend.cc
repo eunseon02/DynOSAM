@@ -61,7 +61,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //TODO: how can we do 1 point but with lots of overlap (even infinity overlap?)
     dyno_testing::RGBDScenario scenario(
         camera,
-        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(6, 1)
+        std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(6, 3)
     );
 
     //add one obect
@@ -203,7 +203,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     }
 
     gtsam::NonlinearFactorGraph full_graph = backend.new_updater_->getGraph();
-    full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test_object_pose.dot"), dyno::DynoLikeKeyFormatter);
+    full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
 
     const auto[delayed_values, delayed_graph] = backend.constructGraph(2, 6, true);
     delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);

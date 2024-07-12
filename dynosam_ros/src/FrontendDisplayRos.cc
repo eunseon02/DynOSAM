@@ -279,112 +279,92 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         object_motion_pub_->publish(object_motions_msg);
     }
 
-    // 2D image visualisation using opencv
-    {
-        // 2D bounding box
-        // cv::Mat rgb_with_bbx = rgbd_frontend_output->debug_imagery_->detected_bounding_boxes;
-        cv::Mat rgb_with_bbx;
-        rgbd_frontend_output->debug_imagery_->tracking_image.copyTo(rgb_with_bbx);
-        const cv::Size rgb_size = rgb_with_bbx.size();
 
-        // LOG(INFO) << to_string(rgb_size);
-
-        // if(!rgb_size.empty() && !video_writer_) {
-        //     LOG(INFO) << to_string(cv::Size(rgb_with_bbx.cols, rgb_with_bbx.rows));
-        //     video_writer_ = std::make_unique<cv::VideoWriter>(getOutputFilePath("tracking_video.avi"),
-        //         cv::VideoWriter::fourcc('M','P','4', '2'), 10, rgb_size);
-        //     //cv::VideoWriter::fourcc('m','p','4', '2')
-
-        //     LOG(ERROR) << "here";
-
-        //     // video_writer_->set(cv::CAP_PROP_FRAME_WIDTH, rgb_with_bbx.cols);
-        //     // video_writer_->set(cv::CAP_PROP_FRAME_HEIGHT, rgb_with_bbx.rows);
-        // }
-
-        // if(video_writer_) {
-        //     // LOG(FATAL) << video_writer_->get(cv::CAP_PROP_FRAME_WIDTH);
-        //     // cv::Size s = cv::Size((int) video_writer_->get(cv::CAP_PROP_FRAME_WIDTH), (int) video_writer_->get(cv::CAP_PROP_FRAME_HEIGHT));
-        //     // CHECK_EQ(s, cv::Size(rgb_with_bbx.cols, rgb_with_bbx.rows));
-        // }
+        // 2D image visualisation using opencv (TODO: and check that camera is given!!)
+        if(rgbd_frontend_output->debug_imagery_) {
+            cv::Mat rgb_with_bbx;
+            rgbd_frontend_output->debug_imagery_->tracking_image.copyTo(rgb_with_bbx);
+            const cv::Size rgb_size = rgb_with_bbx.size();
 
 
-        const StatusKeypointMeasurements& obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
-        for(const StatusKeypointMeasurement& this_px : obj_px) {
-            ObjectId object_id = this_px.objectId();
-            const gtsam::Point2& px_coordinate = this_px.value();
+            const StatusKeypointMeasurements& obj_px = rgbd_frontend_output->dynamic_keypoint_measurements_;
+            for(const StatusKeypointMeasurement& this_px : obj_px) {
+                ObjectId object_id = this_px.objectId();
+                const gtsam::Point2& px_coordinate = this_px.value();
 
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
-            // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
-            cv::Point centre(functional_keypoint::u(px_coordinate), functional_keypoint::v(px_coordinate));
-            int radius = 1;
-            int thickness = 1;
-            cv::circle(rgb_with_bbx, centre, radius, colour, thickness);
-        }
+                const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+                // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
+                cv::Point centre(functional_keypoint::u(px_coordinate), functional_keypoint::v(px_coordinate));
+                int radius = 1;
+                int thickness = 1;
+                cv::circle(rgb_with_bbx, centre, radius, colour, thickness);
+            }
 
-        // object history and prediction
-        const ObjectPoseMap& obj_poses = rgbd_frontend_output->propogated_object_poses_;
-        const gtsam::Pose3& cam_pose = rgbd_frontend_output->T_world_camera_;
-        int line_thinkness = 3;
-        for (const auto& [object_id, this_obj_traj] : obj_poses){
-            cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
-            // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
-            std::vector<cv::Point> cv_line;
-            for (const auto& [frame_id, this_obj_pose] : this_obj_traj){
-                gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
-                Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
-                Keypoint this_obj_px_in_cam;
-                bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
-                if (is_lmk_contained){
-                    cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+            // object history and prediction
+            const ObjectPoseMap& obj_poses = rgbd_frontend_output->propogated_object_poses_;
+            const gtsam::Pose3& cam_pose = rgbd_frontend_output->T_world_camera_;
+            int line_thinkness = 3;
+            for (const auto& [object_id, this_obj_traj] : obj_poses){
+                cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+                // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
+                std::vector<cv::Point> cv_line;
+                for (const auto& [frame_id, this_obj_pose] : this_obj_traj){
+                    gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
+                    Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
+                    Keypoint this_obj_px_in_cam;
+                    bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                    if (is_lmk_contained){
+                        cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+                    }
                 }
-            }
-            int line_length = cv_line.size();
-            for (int i_line = 0; i_line < line_length-1; i_line++){
-                cv::line(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], colour, line_thinkness, cv::LINE_AA);
-            }
-
-            if(!obj_predicted_poses.exists(object_id)) {continue;}
-
-            cv_line.clear();
-            std::vector<gtsam::Pose3> this_obj_predicted_poses = obj_predicted_poses.at(object_id);
-            for (const auto& this_obj_pose : this_obj_predicted_poses){
-                gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
-                Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
-                Keypoint this_obj_px_in_cam;
-                bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
-                if (is_lmk_contained){
-                    cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+                int line_length = cv_line.size();
+                for (int i_line = 0; i_line < line_length-1; i_line++){
+                    cv::line(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], colour, line_thinkness, cv::LINE_AA);
                 }
+
+                if(!obj_predicted_poses.exists(object_id)) {continue;}
+
+                cv_line.clear();
+                std::vector<gtsam::Pose3> this_obj_predicted_poses = obj_predicted_poses.at(object_id);
+                for (const auto& this_obj_pose : this_obj_predicted_poses){
+                    gtsam::Pose3 this_obj_pose_in_cam = cam_pose.inverse() * this_obj_pose;
+                    Landmark this_obj_position_in_cam = this_obj_pose_in_cam.translation();
+                    Keypoint this_obj_px_in_cam;
+                    bool is_lmk_contained = rgbd_frontend_output->camera_->isLandmarkContained(this_obj_position_in_cam, &this_obj_px_in_cam);
+                    if (is_lmk_contained){
+                        cv_line.push_back(cv::Point(functional_keypoint::u(this_obj_px_in_cam), functional_keypoint::v(this_obj_px_in_cam)));
+                    }
+                }
+                line_length = cv_line.size();
+                //TODO: removed prediction arrow for now!!
+                // for (int i_line = 0; i_line < line_length-1; i_line++){
+                //     double alpha = (double) i_line / ((double) line_length);
+                //     cv::Scalar grad_colour = colour;
+                //     grad_colour[0] = (255.0 - colour[0]) * alpha + colour[0];
+                //     grad_colour[1] = (255.0 - colour[0]) * alpha + colour[1];
+                //     grad_colour[2] = (255.0 - colour[0]) * alpha + colour[2];
+                //     cv::arrowedLine(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], grad_colour, line_thinkness-1, cv::LINE_AA, 0, 0.3);
+                // }
+
             }
-            line_length = cv_line.size();
-            //TODO: removed prediction arrow for now!!
-            // for (int i_line = 0; i_line < line_length-1; i_line++){
-            //     double alpha = (double) i_line / ((double) line_length);
-            //     cv::Scalar grad_colour = colour;
-            //     grad_colour[0] = (255.0 - colour[0]) * alpha + colour[0];
-            //     grad_colour[1] = (255.0 - colour[0]) * alpha + colour[1];
-            //     grad_colour[2] = (255.0 - colour[0]) * alpha + colour[2];
-            //     cv::arrowedLine(rgb_with_bbx, cv_line[i_line], cv_line[i_line+1], grad_colour, line_thinkness-1, cv::LINE_AA, 0, 0.3);
+
+            // cv::resize(rgb_with_bbx, rgb_with_bbx, cv::Size(1280, 720) , 0, 0, CV_INTER_LINEAR);
+            // if(video_writer_)  {
+            //     CHECK(video_writer_->isOpened());
+            //     video_writer_->write(rgb_with_bbx);
             // }
 
+
+            cv::imshow("RGB with object bounding boxes", rgb_with_bbx);
+
+            int frame_id = rgbd_frontend_output->getFrameId();
+            // cv::Mat rgb_objects;
+            // rgbd_frontend_output->frame_.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+
+            // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+".png", rgb_objects);
         }
 
-        // cv::resize(rgb_with_bbx, rgb_with_bbx, cv::Size(1280, 720) , 0, 0, CV_INTER_LINEAR);
-        // if(video_writer_)  {
-        //     CHECK(video_writer_->isOpened());
-        //     video_writer_->write(rgb_with_bbx);
-        // }
 
-
-        cv::imshow("RGB with object bounding boxes", rgb_with_bbx);
-
-        int frame_id = rgbd_frontend_output->getFrameId();
-        // cv::Mat rgb_objects;
-        // rgbd_frontend_output->frame_.tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
-
-        // cv::imwrite("/root/results/RSS/"+std::to_string(frame_id)+".png", rgb_objects);
-        cv::imwrite(getOutputFilePath("images/" + std::to_string(frame_id)+".jpg"), rgb_with_bbx);
-    }
 
     {
         visualization_msgs::msg::MarkerArray object_pred_marker_array;

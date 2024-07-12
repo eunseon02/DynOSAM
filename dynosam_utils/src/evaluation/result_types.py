@@ -20,6 +20,7 @@ def sync_and_align_trajectories(traj_est: Union[trajectory.PosePath3D, trajector
     import copy
     # We copy to distinguish another version that may be created
     traj_ref = copy.deepcopy(traj_ref)
+    traj_est = copy.deepcopy(traj_est)
 
     # assume synched and in order!
     if isinstance(traj_est, trajectory.PoseTrajectory3D) and isinstance(traj_ref, trajectory.PoseTrajectory3D):

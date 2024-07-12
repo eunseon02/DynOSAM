@@ -70,6 +70,7 @@ public:
         const FeatureContainer& dynamic_features);
 
     inline FrameId getFrameId() const { return frame_id_; }
+    inline Timestamp getTimestamp() const { return timestamp_; }
 
     /**
      * @brief Returns the pose of the sensor at this frame w.r.t the world frame
