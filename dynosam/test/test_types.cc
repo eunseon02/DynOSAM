@@ -25,6 +25,7 @@
 #include "dynosam/frontend/vision/Feature.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/Statistics.hpp"
 
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/utils/Variant.hpp"
@@ -790,4 +791,20 @@ TEST(TrackedValueStatus, testIsTimeInvariant) {
         0,
         ReferenceFrame::GLOBAL);
     EXPECT_FALSE(status_time_variant.isTimeInvariant());
+}
+
+
+TEST(Statistics, testGetModules) {
+    utils::StatsCollector("global_stats").IncrementOne();
+    utils::StatsCollector("ns.spin").IncrementOne();
+    utils::StatsCollector("ns.spin1").IncrementOne();
+
+    EXPECT_EQ(
+        utils::Statistics::getTagByModule(),
+        std::vector<std::string>({"global_stats"})
+    );
+    EXPECT_EQ(
+        utils::Statistics::getTagByModule("ns"),
+        std::vector<std::string>({"ns.spin", "ns.spin1"})
+    );
 }

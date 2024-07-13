@@ -48,6 +48,8 @@
 DEFINE_int32(opt_window_size,  10, "Sliding window size for optimisation");
 DEFINE_int32(opt_window_overlap,  4, "Overlap for window size optimisation");
 
+DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if true, else sliding window");
+
 namespace dyno {
 
 RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2d::Ptr map, Camera::Ptr camera, const UpdaterType& updater_type, ImageDisplayQueue* display_queue)
@@ -121,8 +123,6 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
     new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k, new_factors);
-    //must optimzie to update the map
-    // optimizer_->update(spin_state_, new_values, new_factors, map_);
     return {State::Nominal, nullptr};
 }
 
@@ -162,49 +162,38 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
     }
 
-    //do sliding window like batch from zero
-    // if(frame_k % 20 ==0) {
-    //     gtsam::Values values;
-    //     gtsam::NonlinearFactorGraph graph;
-    //     std::tie(values, graph) = constructGraph(first_frame_id_, frame_k, true);
-    //     LOG(INFO) << " Finished graph construction";
 
-    //     graph.error(values);
-    //     gtsam::LevenbergMarquardtParams opt_params;
-    //     if(VLOG_IS_ON(20))
-    //         opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-    //     gtsam::Values optimised_values_sliding = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-    //     new_updater_->updateTheta(optimised_values_sliding);
+    if(FLAGS_use_full_batch_opt) {
+        LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
+        if(base_params_.full_batch_frame-1== (int)frame_k) {
+            LOG(INFO) << " Doing full batch at frame " << frame_k;
 
-    // }
-    LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
-    if(base_params_.full_batch_frame-1== (int)frame_k) {
-        LOG(INFO) << " Doing full batch at frame " << frame_k;
-        // gtsam::Values optimised_values;
-        // gtsam::Values values;
-        // gtsam::NonlinearFactorGraph graph;
-        // std::tie(values, graph) = constructGraph(1, frame_k, true);
-        LOG(INFO) << " Finished graph construction";
+            // graph.error(values);
+            gtsam::LevenbergMarquardtParams opt_params;
+            if(VLOG_IS_ON(20))
+                opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        // graph.error(values);
-        gtsam::LevenbergMarquardtParams opt_params;
-        if(VLOG_IS_ON(20))
-            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+            const auto theta =  new_updater_->getTheta();
+            const auto graph = new_updater_->getGraph();
 
-        gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(new_updater_->getGraph(), new_updater_->getTheta(), opt_params).optimize();
-        new_updater_->updateTheta(optimised_values);
+            double error_before = graph.error(theta);
+            gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph,theta, opt_params).optimize();
+            double error_after = graph.error(optimised_values);
+            new_updater_->updateTheta(optimised_values);
+            LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
 
+
+        }
     }
-
-    // gtsam::Values optimised_values;
-    // double error_before = 0;
-    // double error_after = 0;
-    // if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
-    //     //update map with best results
-    //     new_updater_->updateTheta(optimised_values);
-    //     LOG(INFO) << "Sliding window error before: " << error_before << " error after: " << error_after;
-    // }
+    else {
+        double error_before, error_after;
+        gtsam::Values optimised_values;
+        if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
+            new_updater_->updateTheta(optimised_values);
+            LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
+        }
+    }
 
     new_updater_->accessorFromTheta()->postUpdateCallback(); //force update every time (slow! and just for testing)
     auto accessor = new_updater_->accessorFromTheta();
@@ -1385,7 +1374,7 @@ void RGBDBackendModule::MotionWorldAccessor::postUpdateCallback() {
                 }
             }
             ss << " of which " << n_used_motion << " were motion propogated";
-            VLOG(50) << ss.str();
+            VLOG(100) << ss.str();
         }
 
     }
@@ -1581,7 +1570,7 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::V
     const auto overlap_size = FLAGS_opt_window_overlap;
     const auto window_size = FLAGS_opt_window_size;
 
-    if( (frame_k-window_size+1)%(window_size-overlap_size)==0 && (frame_k - first_frame_id_)>=(window_size + 1)) {
+    if(checkSlidingWindowConditions(frame_k, window_size, overlap_size)) {
         const auto start_frame = frame_k - window_size;
         const auto end_frame = frame_k;
         LOG(INFO) << "Running dynamic slam window on between frames " << start_frame << " - " << end_frame;
@@ -1591,7 +1580,7 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::V
         std::tie(values, graph) = constructGraph(start_frame, end_frame, true);
         LOG(INFO) << " Finished graph construction";
 
-        graph.error(values);
+        error_before = graph.error(values);
         gtsam::LevenbergMarquardtParams opt_params;
         if(VLOG_IS_ON(20))
             opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;

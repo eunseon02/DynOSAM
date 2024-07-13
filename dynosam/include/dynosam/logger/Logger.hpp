@@ -86,6 +86,13 @@ void writeStatisticsSamplesToFile(const std::string& file_name = "statistics_sam
  */
 void writeStatisticsSummaryToFile(const std::string& file_name = "statistics.csv");
 
+/**
+ * @brief Writes statistics per module to csv files on path defined by getOutputFilePath().
+ * Interrnally uses WritePerModuleSummariesToCsvFile
+ *
+ */
+void writeStatisticsModuleSummariesToFile();
+
 // Open files with name output_filename, and checks that it is valid
 static inline void OpenFile(const std::string& output_filename,
                             std::ofstream* output_file,

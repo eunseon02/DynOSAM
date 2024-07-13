@@ -16,6 +16,7 @@
 
 
 --use_smoothing_factor=true
+--use_full_batch_opt=true
 
 
 # currently only for rgbd, indicates which updater the rgbd backend should use

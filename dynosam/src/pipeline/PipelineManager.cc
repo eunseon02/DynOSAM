@@ -52,9 +52,6 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     CHECK(data_loader_);
     CHECK(frontend_display);
 
-    //TODO: we should not set starting from here as this should not be a property of the DataProvider (e.g this doesnt make sense for an online system)
-    //see comment in DataProvider header
-
     //TODO: factories for different loaders etc later
     data_interface_ = std::make_unique<DataInterfacePipeline>(params.parallel_run_);
     data_loader_->registerImageContainerCallback(
@@ -71,10 +68,8 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
         std::bind(&dyno::DataProvider::imageContainerPreprocessor, data_loader_.get(), std::placeholders::_1)
     );
 
+    //push data from the data interface to the frontend module
     data_interface_->registerOutputQueue(&frontend_input_queue_);
-
-    // FrontendModule::Ptr frontend = nullptr;
-    // BackendModule::Ptr backend = nullptr;
 
     CameraParams camera_params;
     if(params_.prefer_data_provider_camera_params_ && data_loader_->getCameraParams().has_value()) {
@@ -97,7 +92,8 @@ DynoPipelineManager::~DynoPipelineManager() {
 
     //TODO: make shutdown hook!
     writeStatisticsSamplesToFile("statistics_samples.csv");
-    writeStatisticsSummaryToFile("statistics.csv");
+    // writeStatisticsSummaryToFile("statistics.csv");
+    writeStatisticsModuleSummariesToFile();
 
 }
 

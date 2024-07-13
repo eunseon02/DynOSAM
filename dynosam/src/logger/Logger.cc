@@ -51,6 +51,10 @@ void writeStatisticsSummaryToFile(const std::string& file_name) {
   utils::Statistics::WriteSummaryToCsvFile(getOutputFilePath(file_name));
 }
 
+void writeStatisticsModuleSummariesToFile() {
+  utils::Statistics::WritePerModuleSummariesToCsvFile(getOutputFilePath(""));
+}
+
 
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,
@@ -115,22 +119,6 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
     camera_pose_file_name_(module_name_ + "_camera_pose_log.csv"),
     map_points_file_name_(module_name_ + "_map_points_log.csv")
 {
-  // object_motion_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-  //           "frame_id",
-  //           "object_id",
-  //           "t_err", "r_err"));
-
-  // object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-  //           "frame_id",
-  //           "object_id",
-  //           "t_abs_err", "r_abs_err",
-  //           "t_rel_err", "r_rel_err"));
-
-
-  // camera_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-  //           "frame_id",
-  //           "t_abs_err", "r_abs_err",
-  //           "t_rel_err", "r_rel_err"));
 
   camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",
@@ -160,12 +148,6 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
             "object_id",
             "tracklet_id",
             "x_world", "y_world", "z_world"));
-
-  // object_pose_errors_csv_ = std::make_unique<CsvWriter>(CsvHeader(
-  //           "frame_id",
-  //           "object_id",
-  //           "t_abs_err", "r_abs_err",
-  //           "t_rel_err", "r_rel_err"));
 
   object_bbx_csv_ = std::make_unique<CsvWriter>(CsvHeader(
             "frame_id",

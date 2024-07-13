@@ -945,6 +945,14 @@ VirtualKittiDataLoader::VirtualKittiDataLoader(const fs::path& dataset_path,  co
 }
 
 
+void VirtualKittiDataLoader::setCameraParams() {
+    CameraParams::IntrinsicsCoeffs intrinsics({ 725.0087, 725.0087, 620.5, 187});
+    CameraParams::DistortionCoeffs distortion({ 0, 0, 0, 0 });
+
+    cv::Size image_size(1242, 375);
+    camera_params_= CameraParams(intrinsics, distortion, image_size, "radial-tangential");
+}
+
 
 
 VirtualKittiDataLoader::Params VirtualKittiDataLoader::Params::fromYaml(const std::string& params_folder) {

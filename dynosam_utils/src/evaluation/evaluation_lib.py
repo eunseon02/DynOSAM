@@ -181,36 +181,6 @@ class MotionErrorEvaluator(Evaluator):
             rpe_rot = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
                           1.0, metrics.Unit.frames, 1.0, False)
 
-            t_error = 0
-            r_x_error =0
-            r_y_error =0
-
-            import math
-            count = 0
-            for traj, ref_traj in zip(object_traj.poses_se3, object_traj_ref.poses_se3):
-                print(f"object={object_id},count={count}\nest =\n{traj}\nref=\n{ref_traj}")
-                # e = lie_algebra.relative_se3(traj, ref_traj)
-                # angle, _, _ = transformations.rotation_from_matrix(e)
-                # r_e = (angle * 180.0 * 3.1415926)
-                # r_y_error += math.cos(r_e)
-                # r_x_error += math.sin(r_e)
-
-                # t_e = np.linalg.norm(e[:3, 3])
-                # t_error += t_e
-
-                count += 1
-
-            # t_error /= count
-            # r_y_error /= count
-            # r_x_error /= count
-
-            # def wrap_angle(angle):
-            #     return angle % (2 * math.pi)
-
-            # r_error = wrap_angle(math.atan2(r_y_error, r_x_error))
-            # print(f"Calculated pose error for object {object_id}, t_e={t_error}, r_e={r_error}")
-
-
             ape_trans.process_data(data)
             ape_rot.process_data(data)
 
@@ -373,11 +343,6 @@ class CameraPoseEvaluator(Evaluator):
         traj_ref_vo = self.camera_pose_traj_ref
 
         traj_est_vo, traj_ref_vo = sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
-
-        count = 0
-        for traj, ref_traj in zip(traj_est_vo.poses_se3, traj_ref_vo.poses_se3):
-                print(f"vo,count={count}\nest =\n{traj}\nref=\n{ref_traj}")
-                count +=1
 
         # used to draw trajectories for plot collection
         trajectories = {}

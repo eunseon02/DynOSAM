@@ -57,8 +57,10 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "dynosam/utils/Accumulator.hpp"
+#include "dynosam/utils/CsvParser.hpp"
 
 ///
 // Example usage:
@@ -175,6 +177,24 @@ class Statistics {
  public:
   typedef std::map<std::string, size_t> map_t;
   friend class StatsCollectorImpl;
+
+  /**
+   * @brief Gets a vector of tags by module.
+   * A module is the parent name of a tag separated by ".".
+   * Each tag is considered a namespace (like in ROS) so we can specify/log
+   * statistics into modules.
+   * e.g. backend.spin is a full tag, and the module would be backend.
+   * We can then write out all stats within this module.
+   * Modules are dynamically added as new timers are added and Statistics
+   * will sort out the namespacing under the the hood!
+   *
+   * If query module s empty, return only those tags in the global namespace.
+   *
+   * @param module
+   * @return std::vector<std::string>
+   */
+  static std::vector<std::string> getTagByModule(std::string const& module = "");
+
   // Definition of static functions to query the stats.
   static size_t GetHandle(std::string const& tag);
   static bool HasHandle(std::string const& tag);
@@ -219,6 +239,7 @@ class Statistics {
   // columns headers, and the subsequent values are the data.
   static void WriteAllSamplesToCsvFile(const std::string &path);
   static void WriteSummaryToCsvFile(const std::string &path);
+  static void WritePerModuleSummariesToCsvFile(const std::string& folder_path);
   static void WriteToYamlFile(const std::string& path);
   static void Print(std::ostream& out);  // NOLINT
   static std::string Print();
@@ -228,6 +249,32 @@ class Statistics {
 
  private:
   void AddSample(size_t handle, double sample);
+
+  //TODO: no checks that the header in the parsed CSV matches
+  //header should be "label", "num samples", "log Hz", "mean", "stddev", "min", "max"
+  static void SummaryWriterHelper(CsvWriter& writer, const map_t::value_type& tag) {
+    const size_t& index = tag.second;
+    const std::string& label = tag.first;
+    if (GetNumSamples(index) > 0) {
+      writer << label
+             << GetNumSamples(index)
+             << GetHz(index)
+             << GetMean(index)
+             << sqrt(GetVariance(index))
+             << GetMin(index)
+             << GetMax(index);
+    }
+  }
+
+  /**
+   * @brief Gets the module name from the tag.
+   * If the tag does not have a module (e.g. backend-pipeline has no "." seperator)
+   * and is then considered to be in the "global" namespace and an empty string is returned
+   *
+   * @param tag
+   * @return std::string
+   */
+  static std::optional<std::string> getModuleNameFromTag(const std::string& module);
 
   static Statistics& Instance();
 

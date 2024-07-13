@@ -94,6 +94,7 @@ struct BackendSpinState {
     BackendSpinState(FrameId frame, Timestamp t, size_t itr) : frame_id(frame), timestamp(t), iteration(itr) {}
 };
 
+//TODO: depricate!
 template<>
 inline std::string to_string(const OptimizerType& t) {
     if(t == OptimizerType::kBatch) {

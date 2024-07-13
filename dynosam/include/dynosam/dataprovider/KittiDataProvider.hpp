@@ -28,6 +28,8 @@
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 
+#include "dynosam/common/Camera.hpp"
+
 #include "dynosam/frontend/FrontendInputPacket.hpp"
 #include <png++/png.hpp>
 
@@ -410,7 +412,7 @@ public:
         CHECK(camera_pose_folder);
         CHECK(object_pose_gt_folder);
 
-
+        setCameraParams(dataset_path);
 
         this->setLoaders(
             timestamp_file,
@@ -469,6 +471,10 @@ public:
         this->setCallback(callback);
     }
 
+    CameraParams::Optional getCameraParams()  const override {
+        return camera_params_;
+    }
+
     ImageContainer::Ptr imageContainerPreprocessor(ImageContainer::Ptr image_container) override {
         if(!image_container->hasDepth()) {
             throw std::runtime_error("Cannot preprocess ImageContainer in Kitti dataset as no depth!");
@@ -501,7 +507,50 @@ public:
     }
 
 private:
+    //hardcoded camera params
+    //we use the dataset path to determine which camera params to load (0000-0013 is different from 0018-0020)
+    //and we expect the dataset path to be in the form <path/to/kitti/XXXX>
+    //we use XXXX to determine which dataset us being used and which params to use
+    void setCameraParams(const fs::path& dataset_path) {
+        std::string end_folder = dataset_path.parent_path().filename();
+        LOG(INFO) << end_folder;
+        int dataset_id;
+        std::istringstream(end_folder) >> dataset_id;
+
+        LOG(INFO) << "Loading KITTI camera params from dataset: " << dataset_id;
+
+        if(dataset_id <=13) {
+            CameraParams::IntrinsicsCoeffs intrinsics({ 721.5377, 721.5377, 609.5593, 172.8540 });
+            CameraParams::DistortionCoeffs distortion({ 0, 0, 0, 0 });
+
+            cv::Size image_size(1242, 375);
+            camera_params_= CameraParams(intrinsics, distortion, image_size, "radial-tangential");
+        }
+        else if(dataset_id >= 18 && dataset_id <=20) {
+            CameraParams::IntrinsicsCoeffs intrinsics({ 718.8560, 718.8560, 607.1928, 185.2157 });
+            CameraParams::DistortionCoeffs distortion({ 0, 0, 0, 0 });
+
+            if(dataset_id == 18) {
+                cv::Size image_size(1238, 374);
+                camera_params_= CameraParams(intrinsics, distortion, image_size, "radial-tangential");
+
+            }
+            else if(dataset_id == 20) {
+                cv::Size image_size(1241, 376);
+                camera_params_= CameraParams(intrinsics, distortion, image_size, "radial-tangential");
+            }
+            else {
+                LOG(WARNING) << "Unknown KITTI dataset when loading camera params. Returning no camera params!";
+            }
+
+        }
+        else {
+            LOG(WARNING) << "Unknown KITTI dataset when loading camera params. Returning no camera params!";
+        }
+    }
+
     const Params params_;
+    CameraParams::Optional camera_params_;
 
 
 };

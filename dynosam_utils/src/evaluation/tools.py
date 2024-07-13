@@ -67,7 +67,7 @@ def load_pose_from_row(row) -> Tuple[np.ndarray, np.ndarray]:
 def camera_coordinate_to_world() -> np.ndarray:
     from scipy.spatial.transform import Rotation as R
     return se3(
-        R.from_euler("ZYX", np.array([0, 0, 0]), degrees=True).as_matrix(),
+        R.from_euler("ZYX", np.array([90, 0, 90]), degrees=True).as_matrix(),
         np.array([0.0, 0.0, 0.0]))
 
 

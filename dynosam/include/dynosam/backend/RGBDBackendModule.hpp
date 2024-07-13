@@ -404,6 +404,9 @@ public:
     };
 
 public:
+    inline bool checkSlidingWindowConditions(FrameId frame_k, int window_size, int overlap_size) const {
+        return  (((int)frame_k-window_size+1)%(window_size-overlap_size)==0 && ((int)frame_k - (int)first_frame_id_)>=(window_size + 1));
+    }
     bool buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after);
 
 
@@ -425,10 +428,6 @@ public:
 public:
     Camera::Ptr camera_;
     const UpdaterType updater_type_;
-    // std::unique_ptr<DynoISAM2> smoother_;
-    // DynoISAM2Result smoother_result_;
-    // std::unique_ptr<gtsam::IncrementalFixedLagSmoother> smoother_;
-    // UpdateImpl::UniquePtr updater_;
     Updater::UniquePtr new_updater_;
     FrameId first_frame_id_; //the first frame id that is received
 

@@ -376,4 +376,60 @@ void DisplayRos::constructBoundingBoxeMarkers(
     }
 }
 
+
+MarkerArray DisplayRos::createCameraMarker(
+            Timestamp timestamp,
+            const std::string& namespace,
+            const cv::Scalar& colour,
+            const gtsam::Pose3& T_world_x,
+            double marker_scale)
+{
+    // auto ros_time = utils::toRosTime(timestamp);
+
+    // // make rectangles as frame
+    // double r_w = 1.0;
+    // double z_plane = (r_w / 2.0)*marker_scale;
+
+    // static constexpr double sqrt2_2 = sqrt(2) / 2;
+
+    // MarkerArray marker_array;
+    // visualization_msgs::msg::Marker marker;
+
+    // // the marker will be displayed in frame_id
+    // marker.header.frame_id = params_.world_frame_id_;
+    // marker.header.stamp = ros_time;
+    // marker.ns = namespace;
+    // marker.action = 0;
+
+    // marker.type = visualization_msgs::Marker::CUBE;
+    // marker.scale.x = r_w*marker_scale;
+    // marker.scale.y = 0.04*marker_scale;
+    // marker.scale.z = 0.04*marker_scale;
+    // marker.color.r = colour(0)/255.0;
+    // marker.color.g = colour(1)/255.0;
+    // marker.color.b = colour(2)/255.0;
+    // marker.color.a = 1.0;
+
+    // //now make changes for each part of the frustrum
+    // {
+    //     gtsam::Point3 local_translation(
+    //         0.0,
+    //         (r_w / 4.0) *marker_scale,
+    //         z_plane
+    //     );
+    //     gtsam::Pose3 local_frame(gtsam::Rot3::Identity(), local_translation);
+    //     gtsam::Pose3 world_frame = T_world_x * local_frame;
+    //     convert(world_frame, marker.pose);
+    //     marker_array.markers.push_back(marker);
+    // }
+
+    // {
+    //     visualization_msgs::msg::Marker new_marker = marker;
+
+    // }
+
+
+
+}
+
 }

@@ -85,41 +85,6 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
     RGBDInstanceOutputPacket::Ptr output = processFrame(frame, is_semantic_mask, input->optional_gt_);
     logOutputPacket(output);
     return {State::Nominal, output};
-    // ImageContainer::Ptr image_container = input->image_container_;
-    // // ImageContainer::Ptr image_container = ImageContainer::RectifyImages(distorted_image_container, *undistorter_);
-    // // ImageContainer::Ptr image_container = std::make_shared<ImageContainer>();
-    // // vision_tools::rectifyImages(*distorted_image_container, *image_container, *undistorter_);
-
-
-    // //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
-    // //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
-    // //and then subsequently elimate non-moving objects later on
-    // TrackingInputImages tracking_images;
-    // if(image_container->hasSemanticMask()) {
-    //     CHECK(!image_container->hasMotionMask());
-
-    //     auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
-    //     tracking_images = TrackingInputImages(
-    //         intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-    //         intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-    //         ImageWrapper<ImageType::MotionMask>(
-    //             intermediate_tracking_images.get<ImageType::SemanticMask>()
-    //         )
-    //     );
-    // }
-    // else {
-    //     tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
-    // }
-
-    // objectTrack(tracking_images, input->getFrameId());
-
-    // Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
-
-    // auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    // frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-
-
-    // return {State::Nominal, nullptr};
 }
 
 
@@ -130,127 +95,6 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     RGBDInstanceOutputPacket::Ptr output = processFrame(frame, is_semantic_mask, input->optional_gt_);
     logOutputPacket(output);
     return {State::Nominal, output};
-    // // ImageContainer::Ptr image_container = input->image_container_;
-    // ImageContainer::Ptr image_container = input->image_container_;
-    // // ImageContainer::Ptr image_container = ImageContainer::RectifyImages(distorted_image_container, *undistorter_);
-
-    // // ImageContainer::Ptr image_container = std::make_shared<ImageContainer>();
-    // // vision_tools::rectifyImages(*distorted_image_container, *image_container, *undistorter_);
-
-    // //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
-    // //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
-    // //and then subsequently elimate non-moving objects later on
-    // TrackingInputImages tracking_images;
-
-    // const bool is_semantic_mask = image_container->hasSemanticMask();
-    // if(is_semantic_mask) {
-    //     CHECK(!image_container->hasMotionMask());
-
-    //     auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
-    //     tracking_images = TrackingInputImages(
-    //         intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-    //         intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-    //         ImageWrapper<ImageType::MotionMask>(
-    //             intermediate_tracking_images.get<ImageType::SemanticMask>()
-    //         )
-    //     );
-    // }
-    // else {
-    //     tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
-    // }
-
-    // objectTrack(tracking_images, input->getFrameId());
-
-    // Frame::Ptr frame = nullptr;
-    // {
-    //     utils::TimingStatsCollector tracking_timer("tracking_timer");
-    //     frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
-
-    // }
-    // CHECK(frame);
-
-    // Frame::Ptr previous_frame = tracker_->getPreviousFrame();
-    // CHECK(previous_frame);
-    // CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
-
-    // VLOG(20) << to_string(tracker_->getTrackerInfo());
-
-    // auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-
-    // {
-    //     utils::TimingStatsCollector update_depths_timer("depth_updater");
-    //     frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-
-    // }
-    // //updates frame->T_world_camera_
-    // if(!solveCameraMotion(frame, previous_frame)) {
-    //     LOG(ERROR) << "Could not solve for camera";
-    // }
-
-    // //mark observations as moving or not
-    // //if semantic mask is used, then use scene flow to try and determine if an object is moving or not!!
-    // determineDynamicObjects(*previous_frame, frame, is_semantic_mask);
-
-
-
-    // MotionEstimateMap motion_estimates;
-    // ObjectIds failed_object_tracks;
-
-    // for(const auto& [object_id, observations] : frame->object_observations_) {
-
-    //     LOG(INFO) << "Solving motion for " << object_id << " with " << observations.numFeatures();
-
-    //     if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
-    //         VLOG(5) << "Could not solve motion for object " << object_id <<
-    //             " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
-    //         failed_object_tracks.push_back(object_id);
-    //     }
-
-    // }
-
-    // ///remove objects from the object observations list
-    // //does not remove the features etc but stops the object being propogated to the backend
-    // //as we loop over the object observations in the constructOutput function
-    // for(auto object_id : failed_object_tracks) {
-    //     frame->object_observations_.erase(object_id);
-    // }
-
-    // //update the object_poses trajectory map which will be send to the viz
-    // propogateObjectPoses(motion_estimates, frame->frame_id_);
-
-    // if(logger_) {
-    //     logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_);
-    //     logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
-    // }
-
-    // DebugImagery debug_imagery;
-    // debug_imagery.tracking_image = tracker_->computeImageTracks(*previous_frame, *frame);
-    // if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
-
-    // debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
-    // // cv::imshow("Detected bb",  debug_imagery.detected_bounding_boxes);
-    // // cv::imshow("Tracking",  debug_imagery.tracking_image);
-    // // cv::imshow("Original bb",  ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>()));
-    // // cv::imshow("Propogated bb",  ImageType::MotionMask::toRGB(frame->tracking_images_.get<ImageType::MotionMask>()));
-    // // cv::waitKey(1);
-    // // if(display_queue_) display_queue_->push(ImageToDisplay("Detected Bounding Box", ImageType::MotionMask::toRGB(image_container->get<ImageType::MotionMask>())));
-    // //use the tracking images from the frame NOT the input tracking images since the feature tracking
-    // //will do some modifications on the images (particularily the mask during mask propogation)
-    // debug_imagery.input_images = frame->tracking_images_;
-
-
-
-    // RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, input->optional_gt_, debug_imagery);
-
-    // if(FLAGS_save_frontend_json) output_packet_record_.insert({output->getFrameId(), output});
-
-    // if(logger_) {
-    //     logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
-    //     //object_poses_ are in frontend module
-    //     logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
-    //     logger_->logObjectBbxes(output->getFrameId(), output->getObjectBbxes());
-    // }
-    // return {State::Nominal, output};
 }
 
 Frame::Ptr RGBDInstanceFrontendModule::trackNewFrame(FrontendInputPacketBase::ConstPtr input, bool& is_semantic_mask){
@@ -335,11 +179,6 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
     //update the object_poses trajectory map which will be send to the viz
     propogateObjectPoses(motion_estimates, frame->frame_id_);
 
-    if(logger_) {
-        logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_);
-        logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
-    }
-
     DebugImagery debug_imagery;
     debug_imagery.tracking_image = tracker_->computeImageTracks(*previous_frame, *frame);
     if(display_queue_) display_queue_->push(ImageToDisplay("tracks", debug_imagery.tracking_image));
@@ -351,7 +190,6 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
 
     RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, ground_truth, debug_imagery);
 
-    // if(FLAGS_save_frontend_json) output_packet_record_.insert({output->getFrameId(), output});
     return output;
 }
 
@@ -563,43 +401,6 @@ void RGBDInstanceFrontendModule::determineDynamicObjects(const Frame& previous_f
     }
 }
 
-// MotionEstimateMap RGBDInstanceFrontendModule::solveObjectMotions(Frame::Ptr frame_k_1, Frame::Ptr frame_k) {
-//     MotionEstimateMap motion_estimates;
-//     ObjectIds failed_object_tracks;
-
-//     std::map<ObjectId, DynamicObjectObservation>& object_observations = frame_k->getObjectObservations();
-
-//     //the only part of the motion solve that takes a lot of time is the refinement
-//     //only multiple thread if the param is set to true
-//     const bool using_nlo_refinement = base_params_.refine_object_motion_esimate;
-
-//     std::stringstream debug_ss;
-//     std::stringstream* debug_ss_ptr = nullptr;
-
-//     if(VLOG_IS_ON(15)) {
-//         debug_ss_ptr = &debug_ss;
-//     }
-
-//     //TODO: for now!
-//     if(!using_nlo_refinement && true) {
-//         for(const auto& [object_id, observations] : frame->object_observations_) {
-
-//             debug_ss << "Solving motion for " << object_id << " with " << observations.numFeatures() << "\n";
-
-//             if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates, debug_ss_ptr)) {
-//                 VLOG(5) << "Could not solve motion for object " << object_id <<
-//                     " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
-//                 failed_object_tracks.push_back(object_id);
-//             }
-//         }
-//     }
-//     // else {
-//     //     auto sovle_object_motion = [=](ObjectId object_id)
-//     // }
-
-
-//     LOG(INFO) << debug_ss.str();
-// }
 
 
 

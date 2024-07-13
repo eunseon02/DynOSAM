@@ -62,9 +62,16 @@ public:
 
     };
 
+    CameraParams::Optional getCameraParams()  const override {
+        return camera_params_;
+    }
+
 
     //expect to be the top level where the folders undearneath are in the form vkitti_2.0.3_depth... (or as in the download...)
     VirtualKittiDataLoader(const fs::path& dataset_path, const Params& params);
+
+private:
+    void setCameraParams();
 
 private:
     const Params params_;
@@ -77,6 +84,8 @@ private:
     const std::string v_instance_segmentation_folder = "vkitti_2.0.3_instanceSegmentation";
     const std::string v_rgb_folder = "vkitti_2.0.3_rgb";
     const std::string v_text_gt_folder = "vkitti_2.0.3_textgt";
+
+    CameraParams camera_params_;
 };
 
 } //dyno

@@ -105,6 +105,14 @@ public:
         const std::string& prefix_marker_namespace
     );
 
+    //T_world_x should put something in the local frame to the world frame
+    MarkerArray createCameraMarker(
+            Timestamp timestamp,
+            const std::string& namespace,
+            const cv::Scalar& colour,
+            const gtsam::Pose3& T_world_x,
+            double marker_scale = 1.0);
+
     inline visualization_msgs::msg::Marker getDeletionMarker() const {
         static visualization_msgs::msg::Marker delete_marker;
         delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;

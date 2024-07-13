@@ -60,7 +60,12 @@
 #include <ostream>
 #include <sstream>
 
+#include <filesystem>
+
 namespace dyno {
+
+
+namespace fs = std::filesystem;
 
 namespace utils {
 
@@ -125,6 +130,26 @@ void StatsCollectorImpl::AddSample(double sample) const {
 void StatsCollectorImpl::IncrementOne() const {
   Statistics::Instance().AddSample(handle_, 1.0);
 }
+
+std::vector<std::string> Statistics::getTagByModule(std::string const& query_module) {
+  std::vector<std::string> modules;
+  std::lock_guard<std::mutex> lock(Instance().mutex_);
+  for(const auto&[tag, _] : GetStatsCollectors()) {
+
+    std::optional<std::string> module = getModuleNameFromTag(tag);
+
+    //if query module is empty match with those tags in the global namespace
+    if(query_module.empty() && !module) {
+      modules.push_back(tag);
+    }
+    else if(module && *module == query_module) {
+      modules.push_back(tag);
+    }
+  }
+  return modules;
+}
+
+
 void Statistics::AddSample(size_t handle, double seconds) {
   std::lock_guard<std::mutex> lock(Instance().mutex_);
   stats_collectors_[handle].AddValue(seconds);
@@ -370,19 +395,7 @@ void Statistics::WriteSummaryToCsvFile(const std::string &path) {
 
 
   for (const map_t::value_type& tag : tag_map) {
-    const size_t& index = tag.second;
-    if (GetNumSamples(index) > 0) {
-      const std::string& label = tag.first;
-      size_t i = tag.second;
-
-      writer << label
-             << GetNumSamples(i)
-             << GetHz(i)
-             << GetMean(i)
-             << sqrt(GetVariance(i))
-             << GetMin(i)
-             << GetMax(i);
-    }
+    SummaryWriterHelper(writer, tag);
   }
 
   writer.write(path);
@@ -428,6 +441,56 @@ void Statistics::WriteToYamlFile(const std::string& path) {
   }
 }
 
+void Statistics::WritePerModuleSummariesToCsvFile(const std::string& folder_path) {
+  const map_t& tag_map = Instance().tag_map_;
+  if (tag_map.empty()) {
+    return;
+  }
+
+  static const CsvHeader header("label", "num samples", "log Hz", "mean", "stddev", "min", "max");
+  std::map<std::string, CsvWriter::Ptr> module_to_writer;
+
+  CsvWriter global_writer(header);
+
+  for (const map_t::value_type& tag : tag_map) {
+    std::optional<std::string> module_name = getModuleNameFromTag(tag.first);
+
+    // writer to use
+    CsvWriter* writer;
+    if(module_name) {
+      //tag is not in global namespace so use the specificied namespace
+      //if we dont have a writer for this module, make one
+      if(module_to_writer.find(*module_name) == module_to_writer.end()) {
+        module_to_writer[*module_name] = std::make_shared<CsvWriter>(header);
+      }
+
+      //set writer to use
+      writer = module_to_writer.at(*module_name).get();
+    }
+    else {
+      //no module name so use the global namespace
+      writer = &global_writer;
+    }
+    CHECK_NOTNULL(writer);
+    SummaryWriterHelper(*writer, tag);
+
+  }
+
+  //write out all summaries
+  for(auto& [module_name, writer] : module_to_writer) {
+    std::string full_path = fs::path(folder_path) / std::string("stats_" + module_name + ".csv");
+    LOG(INFO) << "Writing out csv stats module: " << full_path;
+    writer->write(full_path);
+  }
+
+  {
+    std::string full_path = fs::path(folder_path) / "stats_global.csv";
+    LOG(INFO) << "Writing out csv stats module: " << full_path;
+    global_writer.write(full_path);
+  }
+
+}
+
 std::string Statistics::Print() {
   std::stringstream ss;
   Print(ss);
@@ -437,6 +500,15 @@ std::string Statistics::Print() {
 void Statistics::Reset() {
   std::lock_guard<std::mutex> lock(Instance().mutex_);
   Instance().tag_map_.clear();
+}
+
+
+std::optional<std::string> Statistics::getModuleNameFromTag(const std::string& tag) {
+  size_t pos = tag.find('.');
+  if (pos != std::string::npos) {
+      return tag.substr(0, pos);
+  }
+  return {};
 }
 
 }  // namespace utils

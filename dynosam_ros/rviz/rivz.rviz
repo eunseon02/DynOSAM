@@ -33,7 +33,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: Static Point Cloud
+    SyncSource: Static Point Cloud (Optimized)
 Visualization Manager:
   Class: ""
   Displays:
@@ -258,7 +258,7 @@ Visualization Manager:
           Enabled: true
           Name: Composed object paths (opt)
           Namespaces:
-            {}
+            backend_object_path: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -270,7 +270,7 @@ Visualization Manager:
           Enabled: true
           Name: Composed object poses (opt)
           Namespaces:
-            {}
+            backend_object_positions: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -290,7 +290,7 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /dynosam/backend/object_aabb
           Value: false
-      Enabled: false
+      Enabled: true
       Name: Backend
     - Class: rviz_common/Group
       Displays:
@@ -540,7 +540,7 @@ Visualization Manager:
           Enabled: true
           Name: Object Paths (GT)
           Namespaces:
-            {}
+            gt_frontend_composed_object_path: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -610,7 +610,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 42.227081298828125
+      Distance: 66.44512939453125
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -625,10 +625,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.11479762941598892
+      Pitch: 0.22479762136936188
       Target Frame: camera
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.0885393619537354
+      Yaw: 3.0535387992858887
     Saved: ~
 Window Geometry:
   Displays:
