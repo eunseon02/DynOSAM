@@ -29,7 +29,7 @@ def sync_and_align_trajectories(traj_est: Union[trajectory.PosePath3D, trajector
                                                    n=discard_n_end_poses)
     return traj_est, traj_ref
 
-def plot_metric(metric, plot_title="", figsize=(8,8), fig = None):
+def plot_metric(metric, plot_title="", figsize=(8,8), fig = None, x_axis=None):
     """ Adds a metric plot to a plot collection.
 
         Args:
@@ -51,7 +51,9 @@ def plot_metric(metric, plot_title="", figsize=(8,8), fig = None):
     del stats["rmse"]
     del stats["sse"]
 
-    plot.error_array(ax, metric.error, statistics=stats,
+    plot.error_array(ax, metric.error,
+                        x_array=x_axis,
+                        statistics=stats,
                         title=plot_title,
                         xlabel="Frame Index [-]",
                         ylabel=plot_title + " " + metric.unit.value)

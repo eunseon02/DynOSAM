@@ -137,12 +137,12 @@ class MotionErrorEvaluator(Evaluator):
 
             plot_collection.add_figure(
                     f"Object_Motion_translation_{object_id}",
-                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}")
+                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}", x_axis=object_traj.timestamps)
                 )
 
             plot_collection.add_figure(
                 f"Object_Motion_rotation_{object_id}",
-                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}")
+                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}", x_axis=object_traj.timestamps)
             )
 
     def _process_pose_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -199,12 +199,12 @@ class MotionErrorEvaluator(Evaluator):
 
             plot_collection.add_figure(
                     f"Object_Pose_RPE_translation_{object_id}",
-                    plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}")
+                    plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}", x_axis=object_traj.timestamps[1:])
                 )
 
             plot_collection.add_figure(
                 f"Object_Pose_APE_rotation_{object_id}",
-                plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}")
+                plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}", x_axis=object_traj.timestamps[1:])
             )
 
         # add collected trajectories to fig
@@ -378,22 +378,22 @@ class CameraPoseEvaluator(Evaluator):
 
         plot_collection.add_figure(
                     "VO_APE_translation",
-                    plot_metric(ape_trans, f"VO APE Translation")
+                    plot_metric(ape_trans, f"VO APE Translation", x_axis=traj_est_vo.timestamps)
                 )
 
         plot_collection.add_figure(
                     "VO_APE_rotation",
-                    plot_metric(ape_rot, f"VO APE Rotation")
+                    plot_metric(ape_rot, f"VO APE Rotation", x_axis=traj_est_vo.timestamps)
                 )
 
         plot_collection.add_figure(
                     "VO_RPE_translation",
-                    plot_metric(rpe_trans, f"VO RPE Translation")
+                    plot_metric(rpe_trans, f"VO RPE Translation", x_axis=traj_est_vo.timestamps[1:])
                 )
 
         plot_collection.add_figure(
                     "VO_RPE_rotation",
-                    plot_metric(rpe_rot, f"VO RPE Rotation")
+                    plot_metric(rpe_rot, f"VO RPE Rotation", x_axis=traj_est_vo.timestamps[1:])
                 )
 
         # update results dict that will be saved to file

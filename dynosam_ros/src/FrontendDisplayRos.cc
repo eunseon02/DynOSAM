@@ -92,6 +92,12 @@ void FrontendDisplayRos::spinOnce(const FrontendOutputPacketBase::ConstPtr& fron
         //TODO:currently only with RGBDInstanceOutputPacket becuase camera poses is in RGBDInstanceOutputPacket but should be in base (FrontendOutputPacketBase)
         publishOdometryPath(odometry_path_pub_,rgbd_output->camera_poses_, frontend_output->getTimestamp());
         publishOdometry(frontend_output->T_world_camera_, frontend_output->getTimestamp());
+        // publishCameraMarker(
+        //     frontend_output->T_world_camera_,
+        //     frontend_output->getTimestamp(),
+        //     "frontend_camera_pose",
+        //     cv::viz::Color::yellow()
+        // );
     }
 
 }

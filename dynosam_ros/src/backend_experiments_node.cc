@@ -35,7 +35,12 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/executor.hpp"
 
+//already defined in DataProviderFactory.cc
+DECLARE_int32(ending_frame);
+
+
 namespace dyno {
+
 
 class BackendExperimentsNode : public DynoNode {
 
@@ -71,21 +76,12 @@ public:
 
         using OfflineFrontend = FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
 
-        OfflineFrontend::UniquePtr offline_frontend = std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path);
+        OfflineFrontend::UniquePtr offline_frontend = std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path, FLAGS_ending_frame);
 
         //raw ptr type becuase we cannot copy the unique ptr!! This is only becuase
                 //we need it in the lambda function which is a temporary solution
         OfflineFrontend* offline_frontend_ptr = offline_frontend.get();
 
-        std::function<FrameId()> get_dataset_size = [offline_frontend_ptr]() -> FrameId {
-                //get frame id of the final frame saved
-                return CHECK_NOTNULL(offline_frontend_ptr)->getFrontendOutputPackets().rbegin()->first;
-            };
-
-        //right now only batch
-        BatchOptimizerParams batch_params;
-        CHECK(get_dataset_size) << "dataset size function must be set - right now only works with RBG!!";
-        batch_params.get_last_frame = get_dataset_size;
 
         // auto optimizer = std::make_shared<BatchOptimizer<MeasurementType>>(batch_params);
 
@@ -94,7 +90,7 @@ public:
             FLAGS_backend_updater_enum
         );
 
-        params.backend_params_.full_batch_frame = get_dataset_size();
+        params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
 
         auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, camera, updater_type);
 

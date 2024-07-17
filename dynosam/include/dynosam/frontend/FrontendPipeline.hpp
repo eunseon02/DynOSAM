@@ -57,13 +57,18 @@ public:
     using typename Base::InputConstSharedPtr;
     using typename Base::OutputConstSharedPtr;
 
-    explicit FrontendOfflinePipeline(const std::string& module_name, const std::string& bsjon_file_path)
+    explicit FrontendOfflinePipeline(const std::string& module_name, const std::string& bsjon_file_path, int ending_frame = -1)
         : Base(module_name) {
 
             if(!JsonConverter::ReadInJson(frontend_output_packets_, bsjon_file_path, JsonConverter::BSON)) {
                 LOG(FATAL) << "Failed to load frontend bson from: " << bsjon_file_path;
             }
             current_packet_ = frontend_output_packets_.cbegin();
+            ending_frame_ =  getFrontendOutputPackets().rbegin()->first;
+            if(ending_frame != -1) {
+                ending_frame_ = (FrameId)std::min(ending_frame, (int)ending_frame_);
+            }
+            LOG(INFO) << "Setting frontend offline ending frame = " << ending_frame_;
         }
 
     InputConstSharedPtr getInputPacket() override {
@@ -82,10 +87,11 @@ public:
     }
 
     inline const FrontendPacketMap& getFrontendOutputPackets() const { return frontend_output_packets_; }
+    inline FrameId endingFrame() const { return (FrameId)ending_frame_; }
 
 protected:
     void shutdownQueues() override { current_packet_ = frontend_output_packets_.end();  }
-    bool hasWork() const override { return current_packet_ != frontend_output_packets_.cend(); }
+    bool hasWork() const override { return current_packet_ != frontend_output_packets_.cend() && current_packet_->first <= (FrameId)ending_frame_; }
 
 
 private:
@@ -94,6 +100,8 @@ private:
     //! load and send directly to the frontend
     FrontendPacketMap frontend_output_packets_;
     typename FrontendPacketMap::const_iterator current_packet_;
+
+    int ending_frame_;
 
 
 

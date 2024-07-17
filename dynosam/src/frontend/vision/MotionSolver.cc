@@ -248,7 +248,6 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
     //bearing vectors are also not undistorted atm!!
     //TODO: change to use landmarkWorldProjectedBearingCorrespondance and then change motion solver to take already projected bearing vectors
     {
-        utils::TimingStatsCollector("frame_correspondences");
         frame_k->getCorrespondences(correspondences, *frame_k_1, KeyPointType::STATIC, frame_k->landmarkWorldKeypointCorrespondance());
     }
 
@@ -259,6 +258,8 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
                             const AbsolutePoseCorrespondences& correspondences,
                             std::optional<gtsam::Rot3> R_curr_ref)
 {
+
+    utils::TimingStatsCollector timer("motion_sovler.solve_3d2d");
     Pose3SolverResult result;
     const size_t& n_matches = correspondences.size();
 
@@ -428,6 +429,7 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                             const gtsam::Pose3& T_world_k,
                             ObjectId object_id)
 {
+    utils::TimingStatsCollector timer("motion_solver.object_solve3d2d");
     AbsolutePoseCorrespondences dynamic_correspondences;
     // get the corresponding feature pairs
     bool corr_result = frame_k->getDynamicCorrespondences(
@@ -535,7 +537,7 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     graph.addPrior(pose_k_1_key, frame_k_1->getPose(), pose_prior);
     graph.addPrior(pose_k_key, frame_k->getPose(), pose_prior);
 
-
+    utils::TimingStatsCollector timer("motion_solver.object_nlo_refinement");
     for(TrackletId tracklet_id : solver_result.inliers) {
         Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
         Feature::Ptr feature_k = frame_k->at(tracklet_id);

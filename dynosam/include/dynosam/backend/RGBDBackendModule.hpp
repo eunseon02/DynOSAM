@@ -63,7 +63,7 @@ public:
     void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
 
     std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
-    constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior);
+    constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior, std::optional<gtsam::Values> initial_theta = {});
 
 //TODO: for now
 public:
@@ -235,7 +235,9 @@ public:
             accessorFromTheta()->postUpdateCallback();
         }
         void updateTheta(const gtsam::Values& linearization) {
-            theta_.update(linearization);
+            // theta_.update(linearization);
+            //why would we need to assign new values?
+            theta_.insert_or_assign(linearization);
             accessorFromTheta()->postUpdateCallback();
         }
 
@@ -404,9 +406,70 @@ public:
     };
 
 public:
-    inline bool checkSlidingWindowConditions(FrameId frame_k, int window_size, int overlap_size) const {
-        return  (((int)frame_k-window_size+1)%(window_size-overlap_size)==0 && ((int)frame_k - (int)first_frame_id_)>=(window_size + 1));
-    }
+    /**
+     * @brief Helper struct to determine the conditions for the sliding window optimisation.
+     * Only works when called in consequative frame order as we use the last trigger frame
+     * (the last frame when the sliding window conditions were true) to determine the next one
+     */
+    struct SlidingWindow {
+        DYNO_POINTER_TYPEDEFS(SlidingWindow)
+
+        /**
+         * @brief Result of the condition check.
+         * If the sliding window conditions have been met, and the window range (start/ending frame) that should be
+         * covered. Calculated from the sliding_window value.
+         *
+         */
+        struct Result {
+            bool condition;
+            FrameId starting_frame;
+            FrameId ending_frame;
+
+            explicit operator bool() const {
+                return condition;
+            }
+        };
+
+        const int sliding_window;
+        const int overlap_size;
+        int previous_trigger_frame{-1}; //! The last frame where the sliding window conditions were true. Used to determine the next frame
+        int first_frame{-1}; //! The first frame that is checked. Used to offset the condition checking if the first frame is not zero!
+
+        //previous_trigger_frame starts at overlap
+        SlidingWindow(const int window, const int overlap)
+        : sliding_window(window), overlap_size(overlap), previous_trigger_frame(overlap) {}
+
+        Result check(FrameId frame_k) {
+            if(first_frame == -1) {
+                first_frame = static_cast<int>(frame_k);
+                CHECK_GE(first_frame, 0);
+            }
+
+            auto frame = static_cast<int>(frame_k) - first_frame;
+            const bool condition = (previous_trigger_frame  - (frame - sliding_window)) == overlap_size;
+            if(condition) {
+                previous_trigger_frame = frame;
+            }
+
+            Result result;
+            result.condition = condition;
+            result.ending_frame = frame_k;
+            int starting_frame = frame_k - sliding_window;
+
+            //some logic checks
+            if(condition) {
+                CHECK_GE(starting_frame, first_frame);
+            }
+            result.starting_frame = static_cast<FrameId>(starting_frame);
+            return result;
+        }
+
+
+    };
+
+    // inline bool checkSlidingWindowConditions(FrameId frame_k, int window_size, int overlap_size) const {
+    //     return  (((int)frame_k-window_size+1)%(window_size-overlap_size)==0 && ((int)frame_k - (int)first_frame_id_)>=(window_size + 1));
+    // }
     bool buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after);
 
 
@@ -429,6 +492,7 @@ public:
     Camera::Ptr camera_;
     const UpdaterType updater_type_;
     Updater::UniquePtr new_updater_;
+    SlidingWindow::UniquePtr sliding_window_condition_;
     FrameId first_frame_id_; //the first frame id that is received
 
     //new calibration every time

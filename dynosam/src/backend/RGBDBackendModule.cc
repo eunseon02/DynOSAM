@@ -86,6 +86,10 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
     CHECK_NOTNULL(landmark_motion_noise_);
 
     new_updater_ = std::move(makeUpdater());
+    sliding_window_condition_ = std::make_unique<SlidingWindow>(
+        FLAGS_opt_window_size,
+        FLAGS_opt_window_overlap
+    );
 
 }
 
@@ -111,6 +115,7 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
     initial_camera_poses_.insert2(frame_k, T_world_cam_k_frontend);
     initial_object_motions_.insert2(frame_k, input->estimated_motions_);
+    CHECK(!(bool)sliding_window_condition_->check(frame_k)); //trigger the check to update the first frame call. Bit gross!
 
     {
         utils::TimingStatsCollector timer("map.update_observations");
@@ -178,6 +183,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
             const auto graph = new_updater_->getGraph();
 
             double error_before = graph.error(theta);
+            utils::TimingStatsCollector timer("backend.full_batch_opt");
             gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph,theta, opt_params).optimize();
             double error_after = graph.error(optimised_values);
             new_updater_->updateTheta(optimised_values);
@@ -190,13 +196,18 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
         double error_before, error_after;
         gtsam::Values optimised_values;
         if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
+            LOG(INFO) << "Updating values with opt!";
             new_updater_->updateTheta(optimised_values);
             LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
         }
     }
 
-    new_updater_->accessorFromTheta()->postUpdateCallback(); //force update every time (slow! and just for testing)
+
     auto accessor = new_updater_->accessorFromTheta();
+
+
+    utils::TimingStatsCollector timer(new_updater_->loggerPrefix() + ".post_update");
+    new_updater_->accessorFromTheta()->postUpdateCallback(); //force update every time (slow! and just for testing)
 
     auto backend_output = std::make_shared<BackendOutputPacket>();
     backend_output->timestamp_ = input->getTimestamp();
@@ -217,12 +228,22 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 }
 
 std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
-RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior) {
+RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior, std::optional<gtsam::Values> initial_theta) {
     CHECK_LT(from_frame, to_frame);
     gtsam::Values new_values;
     gtsam::NonlinearFactorGraph new_factors;
 
     auto updater = std::move(makeUpdater());
+
+    if(initial_theta) {
+        //update initial linearisation points (could be from a previous optimisation)
+        //TODO: currently cannot set theta becuase this will be ALL the previous values
+        //and not just the ones in
+        //TODO: for now dont do this as we have to handle covariance/santiy checks
+        //differently as some modules expect values to be new and will check that
+        //a value does not exist yet (becuase it shouldn't in that iteration, but overall it may!)
+        // updater->setTheta(*initial_theta);
+    }
 
     UpdateObservationParams update_params;
     update_params.do_backtrack = false;
@@ -590,7 +611,14 @@ void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Po
     const gtsam::Pose3& T_world_camera_k_1_frontend = parent_->initial_camera_poses_.at(frame_id_k_1);
 
     LOG(INFO) << "Adding odom between " << frame_id_k_1 << " and " << frame_id_k;
-    const gtsam::Pose3 odom = T_world_camera_k_1_frontend.inverse() * T_world_camera;
+    gtsam::Pose3 odom = T_world_camera_k_1_frontend.inverse() * T_world_camera;
+
+    // auto gt_packet_map = parent_->getGroundTruthPackets();
+    // if(gt_packet_map) {
+    //     auto gt_packet_k = gt_packet_map->at(frame_id_k);
+    //     auto gt_packet_k_1 = gt_packet_map->at(frame_id_k_1);
+    //     odom = gt_packet_k_1.X_world_.inverse() * gt_packet_k.X_world_;
+    // }
 
     // keep track of the new factors added in this function
     // these are then appended to the internal factors_ and new_factors
@@ -771,8 +799,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     CHECK(parent_->initial_camera_poses_.exists(frame_id_k));
     const gtsam::Pose3& T_world_camera_initial_k = new_values.at<gtsam::Pose3>(CameraPoseSymbol(frame_id_k));
 
-    //for each object
-    utils::TimingStatsCollector dyn_obj_itr_timer("dynamic_object_itr");
+    utils::TimingStatsCollector dyn_obj_itr_timer(this->loggerPrefix() + ".dynamic_object_itr");
     for(const auto& object_node : frame_node_k->objects_seen) {
 
         DebugInfo::ObjectInfo object_debug_info;
@@ -791,8 +818,8 @@ RGBDBackendModule::Updater::updateDynamicObservations(
             continue;
         }
 
-        utils::TimingStatsCollector dyn_point_itr_timer("dynamic_point_itr");
-        LOG(INFO) << "Seen lmks at frame " << frame_id_k << " obj " << object_id << ": " << seen_lmks_k.size();
+        utils::TimingStatsCollector dyn_point_itr_timer(this->loggerPrefix() + ".dynamic_point_itr");
+       VLOG(20) << "Seen lmks at frame " << frame_id_k << " obj " << object_id << ": " << seen_lmks_k.size();
         //iterate over each lmk we have on this object
         for(const auto& obj_lmk_node : seen_lmks_k) {
             CHECK_EQ(obj_lmk_node->getObjectId(), object_id);
@@ -838,7 +865,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 ss << "Going back to add point on object " << object_id << " at frames\n";
 
                 //iterate over k-N to k (inclusive) and all all
-                utils::TimingStatsCollector dyn_point_backtrack_timer("dynamic_point_backtrack");
+                utils::TimingStatsCollector dyn_point_backtrack_timer(this->loggerPrefix() + ".dynamic_point_backtrack");
                 for(auto seen_frames_itr = starting_motion_frame_itr; seen_frames_itr != seen_frames.end(); seen_frames_itr++) {
                     auto seen_frames_itr_prev = seen_frames_itr;
                     std::advance(seen_frames_itr_prev, -1);
@@ -886,7 +913,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                         point_context.is_starting_motion_frame = true;
 
                     }
-                    utils::TimingStatsCollector dyn_point_update_timer("dyn_point_update_1");
+                    utils::TimingStatsCollector dyn_point_update_timer(this->loggerPrefix()  + ".dyn_point_update_1");
                     dynamicPointUpdateCallback(point_context, result, new_values, internal_new_factors);
                     //update internal theta and factors
                     theta_.insert_or_assign(new_values);
@@ -903,7 +930,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
                 point_context.X_k_1_measured = getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
                 point_context.X_k_measured = getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
                 point_context.is_starting_motion_frame = false;
-                utils::TimingStatsCollector dyn_point_update_timer("dyn_point_update_2");
+                utils::TimingStatsCollector dyn_point_update_timer(this->loggerPrefix() + ".dyn_point_update_2");
                 dynamicPointUpdateCallback(point_context, result, new_values, internal_new_factors);
 
                 //update internal theta and factors
@@ -917,9 +944,9 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     //to account for backtracking over new points over this object
     //this is a bit inefficient as we do this iteration even if no new object values are added
     //becuuse we dont know if the affected frames are becuase of old points as well as new points
-    utils::TimingStatsCollector dyn_obj_affected_timer("dyn_object_affected");
+    utils::TimingStatsCollector dyn_obj_affected_timer(this->loggerPrefix() + ".dyn_object_affected");
     for(const auto&[object_id, frames_affected] : result.objects_affected_per_frame) {
-        LOG(INFO) << "Iterating over frames for which a motion was added " << container_to_string(frames_affected) << " for object " << object_id;
+       VLOG(20) << "Iterating over frames for which a motion was added " << container_to_string(frames_affected) << " for object " << object_id;
 
         auto object_node = map->getObject(object_id);
         const auto first_seen_frame = object_node->getFirstSeenFrame();
@@ -1567,25 +1594,33 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
 
 
 bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after) {
-    const auto overlap_size = FLAGS_opt_window_overlap;
-    const auto window_size = FLAGS_opt_window_size;
-
-    if(checkSlidingWindowConditions(frame_k, window_size, overlap_size)) {
-        const auto start_frame = frame_k - window_size;
-        const auto end_frame = frame_k;
+    auto condition_result = sliding_window_condition_->check(frame_k);
+    if(condition_result) {
+        const auto start_frame = condition_result.starting_frame;
+        const auto end_frame = condition_result.ending_frame;
         LOG(INFO) << "Running dynamic slam window on between frames " << start_frame << " - " << end_frame;
 
         gtsam::Values values;
         gtsam::NonlinearFactorGraph graph;
-        std::tie(values, graph) = constructGraph(start_frame, end_frame, true);
+        {
+        utils::TimingStatsCollector timer("backend.sliding_window_construction");
+        std::tie(values, graph) = constructGraph(start_frame, end_frame, true, new_updater_->getTheta());
         LOG(INFO) << " Finished graph construction";
+        }
 
         error_before = graph.error(values);
         gtsam::LevenbergMarquardtParams opt_params;
         if(VLOG_IS_ON(20))
             opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+        utils::TimingStatsCollector timer("backend.sliding_window_optimise");
+        try {
+            optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
+            LOG(INFO) << "Finished op!";
+        }
+        catch(const gtsam::ValuesKeyDoesNotExist& e) {
+            LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist: key does not exist in the values" <<  DynoLikeKeyFormatter(e.key());
+        }
         error_after = graph.error(optimised_values);
 
         return true;

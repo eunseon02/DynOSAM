@@ -33,6 +33,11 @@
 
 namespace dyno {
 
+DisplayRos::DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node) : params_(params), node_(node)
+{
+    // camera_frustrum_pub_ = node_->create_publisher<visualization_msgs::msg::MarkerArray>("odom_frustrum", 1);
+}
+
 CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, const StatusLandmarkEstimates& landmarks, const gtsam::Pose3& T_world_camera) {
     pcl::PointCloud<pcl::PointXYZRGB> cloud;
 
@@ -377,57 +382,124 @@ void DisplayRos::constructBoundingBoxeMarkers(
 }
 
 
-MarkerArray DisplayRos::createCameraMarker(
-            Timestamp timestamp,
-            const std::string& namespace,
-            const cv::Scalar& colour,
+DisplayRos::MarkerArray DisplayRos::createCameraMarker(
             const gtsam::Pose3& T_world_x,
+            Timestamp timestamp,
+            const std::string& ns,
+            const cv::Scalar& colour,
             double marker_scale)
 {
-    // auto ros_time = utils::toRosTime(timestamp);
 
-    // // make rectangles as frame
-    // double r_w = 1.0;
-    // double z_plane = (r_w / 2.0)*marker_scale;
+    auto transform_odom_to = [&T_world_x](const geometry_msgs::msg::Pose& msg) -> geometry_msgs::msg::Pose {
+        //convert msg to pose
+        gtsam::Pose3 msg_as_pose;
+        dyno::convert(msg, msg_as_pose);
+        //transform pose into world frame
+        gtsam::Pose3 transformed_pose = T_world_x * msg_as_pose;
+        //transform pose back to ROS msg and return
+        geometry_msgs::msg::Pose transformed_msg;
+        dyno::convert(transformed_pose, transformed_msg);
+        return transformed_msg;
+    };
 
-    // static constexpr double sqrt2_2 = sqrt(2) / 2;
+    auto ros_time = utils::toRosTime(timestamp);
 
-    // MarkerArray marker_array;
-    // visualization_msgs::msg::Marker marker;
+    // make rectangles as frame
+    const double r_w = 1.0;
+    const double z_plane = (r_w / 2.0)*marker_scale;
 
-    // // the marker will be displayed in frame_id
-    // marker.header.frame_id = params_.world_frame_id_;
-    // marker.header.stamp = ros_time;
-    // marker.ns = namespace;
-    // marker.action = 0;
+    static constexpr double sqrt2_2 = sqrt(2) / 2;
 
-    // marker.type = visualization_msgs::Marker::CUBE;
-    // marker.scale.x = r_w*marker_scale;
-    // marker.scale.y = 0.04*marker_scale;
-    // marker.scale.z = 0.04*marker_scale;
-    // marker.color.r = colour(0)/255.0;
-    // marker.color.g = colour(1)/255.0;
-    // marker.color.b = colour(2)/255.0;
-    // marker.color.a = 1.0;
+    MarkerArray marker_array;
+    visualization_msgs::msg::Marker marker;
 
-    // //now make changes for each part of the frustrum
-    // {
-    //     gtsam::Point3 local_translation(
-    //         0.0,
-    //         (r_w / 4.0) *marker_scale,
-    //         z_plane
-    //     );
-    //     gtsam::Pose3 local_frame(gtsam::Rot3::Identity(), local_translation);
-    //     gtsam::Pose3 world_frame = T_world_x * local_frame;
-    //     convert(world_frame, marker.pose);
-    //     marker_array.markers.push_back(marker);
-    // }
+    // the marker will be displayed in frame_id
+    marker.header.frame_id = params_.world_frame_id_;
+    marker.header.stamp = ros_time;
+    marker.ns = ns;
+    marker.action = 0;
+    marker.id = 8; //8 of 8 markers
 
-    // {
-    //     visualization_msgs::msg::Marker new_marker = marker;
 
-    // }
+    marker.type = visualization_msgs::msg::Marker::CUBE;
+    marker.scale.x = r_w*marker_scale;
+    marker.scale.y = 0.04*marker_scale;
+    marker.scale.z = 0.04*marker_scale;
+    marker.color.r = colour(0)/255.0;
+    marker.color.g = colour(1)/255.0;
+    marker.color.b = colour(2)/255.0;
+    marker.color.a = 1.0;
 
+    marker.pose.orientation.x = 0;
+    marker.pose.orientation.y = 0;
+    marker.pose.orientation.z = 0;
+    marker.pose.orientation.w = 1;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+    marker.pose.position.y = -(r_w/ 4.0)*marker_scale;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    marker.scale.x = (r_w/2.0)*marker_scale;
+    marker.pose.position.x = (r_w / 2.0) *marker_scale;
+    marker.pose.position.y = 0;
+    marker.pose.orientation.w = sqrt2_2;
+    marker.pose.orientation.z = sqrt2_2;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+    marker.pose.position.x = -(r_w / 2.0) *marker_scale;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    // make pyramid edges
+    marker.scale.x = (3.0*r_w/4.0)*marker_scale;
+    marker.pose.position.z = 0.5*z_plane;
+
+    marker.pose.position.x = (r_w / 4.0) *marker_scale;
+    marker.pose.position.y = (r_w / 8.0) *marker_scale;
+    //  0.08198092, -0.34727674,  0.21462883,  0.9091823
+    marker.pose.orientation.x = 0.08198092;
+    marker.pose.orientation.y = -0.34727674;
+    marker.pose.orientation.z = 0.21462883;
+    marker.pose.orientation.w = 0.9091823;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    marker.pose.position.x = -(r_w / 4.0) *marker_scale;
+    marker.pose.position.y = (r_w / 8.0) *marker_scale;
+    // -0.27395078, -0.22863284,  0.9091823 ,  0.21462883
+    marker.pose.orientation.x = 0.08198092;
+    marker.pose.orientation.y = 0.34727674;
+    marker.pose.orientation.z = -0.21462883;
+    marker.pose.orientation.w = 0.9091823;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    marker.pose.position.x = -(r_w / 4.0) *marker_scale;
+    marker.pose.position.y = -(r_w / 8.0) *marker_scale;
+    //  -0.08198092,  0.34727674,  0.21462883,  0.9091823
+    marker.pose.orientation.x = -0.08198092;
+    marker.pose.orientation.y = 0.34727674;
+    marker.pose.orientation.z = 0.21462883;
+    marker.pose.orientation.w = 0.9091823;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    marker.pose.position.x = (r_w / 4.0) *marker_scale;
+    marker.pose.position.y = -(r_w / 8.0) *marker_scale;
+    // -0.08198092, -0.34727674, -0.21462883,  0.9091823
+    marker.pose.orientation.x = -0.08198092;
+    marker.pose.orientation.y = -0.34727674;
+    marker.pose.orientation.z = -0.21462883;
+    marker.pose.orientation.w = 0.9091823;
+    marker.id--;
+    marker_array.markers.push_back(marker);
+
+    for(auto& marker : marker_array.markers) {
+        //put in world frame
+        marker.pose = transform_odom_to(marker.pose);
+    }
+    return marker_array;
 
 
 }

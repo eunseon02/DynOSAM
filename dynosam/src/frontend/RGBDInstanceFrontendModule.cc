@@ -125,7 +125,7 @@ Frame::Ptr RGBDInstanceFrontendModule::trackNewFrame(FrontendInputPacketBase::Co
 
     Frame::Ptr frame = nullptr;
     {
-        utils::TimingStatsCollector tracking_timer("tracking_timer");
+        utils::TimingStatsCollector tracking_timer("frontend.feature_tracker");
         frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
 
     }
@@ -214,12 +214,15 @@ void RGBDInstanceFrontendModule::logOutputPacket(const RGBDInstanceOutputPacket:
 bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1) {
 
     Pose3SolverResult result;
+    {
+    utils::TimingStatsCollector timer("frontend.solve_camera_motion");
     if(base_params_.use_ego_motion_pnp) {
         result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k);
     }
     else {
         //TODO: untested
         result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
+    }
     }
 
     VLOG(15) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D") << "camera pose estimate at frame " << frame_k->frame_id_
@@ -248,11 +251,15 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
 bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
 
     Pose3SolverResult result;
+
+    {
+    utils::TimingStatsCollector timer("frontend.solve_object_motion");
     if(base_params_.use_object_motion_pnp) {
         result = object_motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
     }
     else {
         result = object_motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k,  frame_k->T_world_camera_, object_id);
+    }
     }
 
     VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D") << " object motion estimate " << object_id << " at frame " << frame_k->frame_id_
@@ -282,7 +289,7 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
 void RGBDInstanceFrontendModule::objectTrack(TrackingInputImages& tracking_images, FrameId frame_id) {
 
     if(FLAGS_use_byte_tracker) {
-        utils::TimingStatsCollector track_dynamic_timer("object_tracker_2d");
+        utils::TimingStatsCollector track_dynamic_timer("frontend.object_tracker_2d");
         cv::Mat& original_mask = tracking_images.get<ImageType::MotionMask>();
         original_mask = object_tracker_.track(tracking_images.get<ImageType::MotionMask>(), frame_id);
     }
@@ -306,7 +313,7 @@ void RGBDInstanceFrontendModule::determineDynamicObjects(const Frame& previous_f
 
     ObjectIds instance_labels_to_remove;
 
-    utils::TimingStatsCollector track_dynamic_timer("scene_flow_motion_seg");
+    utils::TimingStatsCollector track_dynamic_timer("frontend.scene_flow_motion_seg");
     //a semantic mask was used - determine motion segmentation with optical flow!!
     for(auto& [label, object_observation] : objects_by_instance_label) {
         double sf_min=100, sf_max=0, sf_mean=0, sf_count=0;

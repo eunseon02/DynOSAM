@@ -8,6 +8,8 @@ from pylatex.utils import italic
 import evo.tools.plot as evo_plot
 from cycler import cycler
 
+import math
+
 # Nic Barbara
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
@@ -59,6 +61,17 @@ def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=T
 
 def format_round_4(value: float) -> float:
     return round(value, 4)
+
+def calc_linear_average(values):
+    return np.sum(np.array(values))/float(len(values))
+
+def calc_angular_average(values):
+    # angles measured in radians
+    x_sum = np.sum([math.sin(x) for x in values])
+    y_sum = np.sum([math.cos(x) for x in values])
+    x_mean = x_sum / float(len(values))
+    y_mean = y_sum / float(len(values))
+    return np.arctan2(x_mean, y_mean)
 
 class LatexTableFormatter(object):
 
@@ -126,6 +139,11 @@ class LatexTableFormatter(object):
 
         metric_object_map = results["objects"]
 
+        mean_per_column = {
+            "ape_translation":[],
+            "ape_rotation": [],
+            "rpe_translation": [],
+            "rpe_rotation": []}
 
         with self._doc.create(Section(f"{name} Errors")):
             # pose errors
@@ -155,10 +173,32 @@ class LatexTableFormatter(object):
                         rpe_translation = format_round_4(poses_metric_map["rpe_translation"]["mean"])
                         rpe_rotation = format_round_4(poses_metric_map["rpe_rotation"]["mean"])
 
+
+                        # add to datastructure to post-calculate the mean
+                        mean_per_column["ape_translation"].append(ape_translation)
+                        mean_per_column["ape_rotation"].append(ape_rotation)
+                        mean_per_column["rpe_translation"].append(rpe_translation)
+                        mean_per_column["rpe_rotation"].append(rpe_rotation)
+
                         table.add_row(
                             object_id, ape_translation, ape_rotation, rpe_translation, rpe_rotation
                         )
+
+
+                    # calculate mean
+                    table.add_row(
+                        "mean",
+                        format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                        format_round_4(calc_angular_average(mean_per_column["ape_rotation"])),
+                        format_round_4(calc_linear_average(mean_per_column["rpe_translation"])),
+                        format_round_4(calc_angular_average(mean_per_column["rpe_rotation"])),
+                    )
+
                     table.add_hline()
+
+            mean_per_column = {
+                "ape_translation":[],
+                "ape_rotation": []}
 
             # motion errors
             with self._doc.create(Subsection('Object Motion Errors')):
@@ -183,9 +223,21 @@ class LatexTableFormatter(object):
                         ape_translation = format_round_4(motion_metric_map["ape_translation"]["mean"])
                         ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["mean"])
 
+                        # add to datastructure to post-calculate the mean
+                        mean_per_column["ape_translation"].append(ape_translation)
+                        mean_per_column["ape_rotation"].append(ape_rotation)
+
                         table.add_row(
                             object_id, ape_translation, ape_rotation
                         )
+
+                     # calculate mean
+                    table.add_row(
+                        "mean",
+                        format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                        format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
+                    )
+
                     table.add_hline()
 
             # vo errors

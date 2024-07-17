@@ -82,6 +82,27 @@ bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::Pose& msg)
 }
 
 template <>
+bool dyno::convert(const geometry_msgs::msg::Pose& msg, gtsam::Pose3& pose)
+{
+
+  gtsam::Point3 translation(
+    msg.position.x,
+    msg.position.y,
+    msg.position.z
+  );
+
+  gtsam::Rot3 rotation(
+    msg.orientation.w,
+    msg.orientation.x,
+    msg.orientation.y,
+    msg.orientation.z
+  );
+
+  pose = gtsam::Pose3(rotation, translation);
+  return true;
+}
+
+template <>
 bool dyno::convert(const gtsam::Pose3& pose, geometry_msgs::msg::PoseStamped& msg)
 {
   return convert<gtsam::Pose3, geometry_msgs::msg::Pose>(pose, msg.pose);

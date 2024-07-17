@@ -44,7 +44,7 @@ namespace dyno {
 
 class DisplayRos {
 public:
-    DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node) : params_(params), node_(node) {}
+    DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node);
     virtual ~DisplayRos() = default;
 
     using PointCloud2 = sensor_msgs::msg::PointCloud2;
@@ -106,12 +106,30 @@ public:
     );
 
     //T_world_x should put something in the local frame to the world frame
+    //taken from https://github.com/uzh-rpg/rpg_svo_pro_open/blob/master/vikit/vikit_ros/src/output_helper.cpp
     MarkerArray createCameraMarker(
-            Timestamp timestamp,
-            const std::string& namespace,
-            const cv::Scalar& colour,
             const gtsam::Pose3& T_world_x,
+            Timestamp timestamp,
+            const std::string& ns,
+            const cv::Scalar& colour,
             double marker_scale = 1.0);
+
+    void publishCameraMarker(
+        const gtsam::Pose3& T_world_x,
+        Timestamp timestamp,
+        const std::string& ns,
+        const cv::Scalar& colour,
+        double marker_scale = 1.0
+    )
+    {
+        camera_frustrum_pub_->publish(createCameraMarker(
+            T_world_x,
+            timestamp,
+            ns,
+            colour,
+            marker_scale
+        ));
+    }
 
     inline visualization_msgs::msg::Marker getDeletionMarker() const {
         static visualization_msgs::msg::Marker delete_marker;
@@ -122,6 +140,8 @@ public:
 protected:
     const DisplayParams params_;
     rclcpp::Node::SharedPtr node_;
+
+    MarkerArrayPub::SharedPtr camera_frustrum_pub_; //! publishes camera pose as a marker array, representing the frustrum, in the world frame
 };
 
 } //dyno

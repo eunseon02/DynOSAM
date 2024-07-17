@@ -6,3 +6,10 @@
 --use_frontend_logger=true
 
 --semantic_mask_step_size=5
+
+#we turn off for cluster as there is some problem with the OF I think?
+--use_propogate_mask=true
+
+# kitti values
+--shrink_row=25
+--shrink_col=25

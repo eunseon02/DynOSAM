@@ -891,7 +891,7 @@ OMDDataLoader::OMDDataLoader(const fs::path& dataset_path) : OMDDatasetProvider(
 
     this->setCallback(callback);
 
-    setStartingFrame(1u); ///have to start at at least 1 so we can index backwards with optical flow
+    // setStartingFrame(1u); ///have to start at at least 1 so we can index backwards with optical flow
 }
 
 } //dyno

@@ -34,10 +34,12 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
+#include <gflags/gflags.h>
 
 
 
 DEFINE_int32(semantic_mask_step_size, 3, "The step sized used across the semantic mask when sampling points");
+DEFINE_bool(use_propogate_mask, true, "If true, the semantic mask will be propogated with optical flow");
 
 namespace dyno {
 
@@ -74,7 +76,10 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
         initial_computation_ = false;
     }
     else {
-        propogateMask(input_images);
+
+        if(FLAGS_use_propogate_mask) {
+          propogateMask(input_images);
+        }
         CHECK(previous_frame_);
         CHECK_EQ(previous_frame_->frame_id_, frame_id - 1u) << "Incoming frame id must be consequative";
     }
@@ -547,7 +552,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
       }
     }
 
-    if (temp_label.size() < 15)
+    if (temp_label.size() < 100)
     {
       LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
@@ -611,6 +616,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
             //x, y
             Keypoint kp(k, j);
             const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(kp, flow);
+            LOG(INFO) << kp << " " << predicted_kp << " " << std::boolalpha << isWithinShrunkenImage(predicted_kp);
 
             if(!isWithinShrunkenImage(predicted_kp)) {
               continue;

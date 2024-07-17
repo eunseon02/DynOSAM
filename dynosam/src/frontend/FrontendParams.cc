@@ -25,6 +25,10 @@
 #include "dynosam/utils/YamlParser.hpp"
 
 #include <string>
+#include <gflags/gflags.h>
+
+DEFINE_int32(shrink_row, 0, "Number of rows to shrink the tracking image by");
+DEFINE_int32(shrink_col, 0, "Number of cols to shrink the tracking image by");
 
 namespace dyno {
 
@@ -51,6 +55,10 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
 
     yaml_parser.getYamlParam("shrink_row", &params.shrink_row, params.shrink_row);
     yaml_parser.getYamlParam("shrink_col", &params.shrink_col, params.shrink_col);
+
+    //update with FLAGS
+    params.shrink_row = FLAGS_shrink_row;
+    params.shrink_col = FLAGS_shrink_col;
 
     yaml_parser.getNestedYamlParam(
         "tracker", "ransac_use_2point_mono",
