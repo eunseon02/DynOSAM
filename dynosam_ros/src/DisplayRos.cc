@@ -184,7 +184,7 @@ void DisplayRos::publishObjectPaths(
 
         //draw a line list for viz
         visualization_msgs::msg::Marker line_list_marker;
-        line_list_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+        line_list_marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
         line_list_marker.header.frame_id = "world";
         line_list_marker.ns =  prefix_marker_namespace + "_object_path";
         line_list_marker.id = object_id;

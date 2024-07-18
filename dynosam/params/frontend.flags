@@ -11,5 +11,8 @@
 --use_propogate_mask=true
 
 # kitti values
---shrink_row=25
---shrink_col=25
+# --shrink_row=25
+# --shrink_col=25
+
+--shrink_row=0
+--shrink_col=0

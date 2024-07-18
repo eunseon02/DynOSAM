@@ -151,6 +151,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
         LOG(ERROR) << "Could not solve for camera";
     }
 
+    frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
+
     //mark observations as moving or not
     //if semantic mask is used, then use scene flow to try and determine if an object is moving or not!!
     determineDynamicObjects(*previous_frame, frame, is_semantic_mask);

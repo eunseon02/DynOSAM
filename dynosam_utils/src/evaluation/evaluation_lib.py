@@ -13,7 +13,8 @@ from .tools import (
     common_entries,
     transform_camera_trajectory_to_world,
     TrajectoryHelper,
-    load_pose_from_row
+    load_pose_from_row,
+    reconstruct_trajectory_from_relative
 )
 
 import evaluation.tools as tools
@@ -168,7 +169,6 @@ class MotionErrorEvaluator(Evaluator):
 
             # # TODO: align?
             object_trajectories[f"Object {object_id}"] = object_traj
-            # object_trajectories[f"Ground Truth Object {object_id}"] = object_traj_ref
             object_trajectories_ref[f"Ground Truth Object {object_id}"] = object_traj_ref
 
             logger.debug(f"Logging pose metrics for object {object_id}")
@@ -193,9 +193,6 @@ class MotionErrorEvaluator(Evaluator):
             results_per_object["rpe_translation"] = rpe_trans.get_all_statistics()
             results_per_object["rpe_rotation"] = rpe_rot.get_all_statistics()
 
-            # exepct results to already have results["objects"][id]["poses"] prepared
-            results["objects"][object_id]["poses"] = results_per_object
-
 
             plot_collection.add_figure(
                     f"Object_Pose_RPE_translation_{object_id}",
@@ -207,12 +204,25 @@ class MotionErrorEvaluator(Evaluator):
                 plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}", x_axis=object_traj.timestamps[1:])
             )
 
-        # add collected trajectories to fig
-        # correspondence edges already added
-        # TODO: fix size issue!!
-        # evo_plot.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
-        # tools.trajectories(fig_all_object_traj, object_trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
-        # tools.trajectories(fig_all_object_traj, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+
+            # do reconstruction with relative pose
+            reconstructed_object_traj = reconstruct_trajectory_from_relative(object_traj, object_traj_ref)
+            reconstructed_data = (reconstructed_object_traj, object_traj_ref)
+
+            rpe_trans_recon = metrics.RPE(metrics.PoseRelation.translation_part,
+                            1.0, metrics.Unit.frames, 0.0, False)
+            rpe_rot_recon = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
+                          1.0, metrics.Unit.frames, 1.0, False)
+            rpe_trans_recon.process_data(reconstructed_data)
+            rpe_rot_recon.process_data(reconstructed_data)
+
+            results_per_object["rpe_translation_reconstruction"] = rpe_trans_recon.get_all_statistics()
+            results_per_object["rpe_rotation_reconstruction"] = rpe_rot_recon.get_all_statistics()
+
+            # exepct results to already have results["objects"][id]["poses"] prepared
+            results["objects"][object_id]["poses"] = results_per_object
+
+
         tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
         ax = fig_all_object_traj.gca()
         trajectory_helper.set_ax_limits(ax)
@@ -279,11 +289,13 @@ class MotionErrorEvaluator(Evaluator):
         object_poses_traj_ref: ObjectTrajDict  = {}
 
         for object_id, est, ref in common_entries(object_poses_tmp_dict, object_poses_ref_tmp_dict):
-            poses_est = est["traj"]
-            poses_ref = ref["traj"]
+            # ignore last one for evaluation
 
-            timestamps = np.array(est["timestamps"])
-            timestamps_ref = np.array(ref["timestamps"])
+            poses_est = est["traj"][:-1]
+            poses_ref = ref["traj"][:-1]
+
+            timestamps = np.array(est["timestamps"][:-1])
+            timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
             if len(poses_est) < 2:

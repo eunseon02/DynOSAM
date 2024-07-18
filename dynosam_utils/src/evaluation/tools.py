@@ -264,6 +264,26 @@ def plot_object_trajectories(
     draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
 
 
+def reconstruct_trajectory_from_relative(traj, traj_ref):
+    assert isinstance(traj, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D)
+
+
+    starting_pose = traj_ref.poses_se3[0]
+    traj_poses = traj.poses_se3
+
+    poses = [starting_pose]
+    for traj_pose_k_1, traj_pose_k in zip(traj_poses[:-1], traj_poses[1:]):
+        motion = np.dot(traj_pose_k, evo_lie_algebra.se3_inverse(traj_pose_k_1))
+        pose_k = np.dot(motion, poses[-1])
+        # relative_transform = evo_lie_algebra.relative_se3(traj_pose_k_1, traj_pose_k)
+        # pose_k = np.dot(poses[-1], relative_transform)
+        poses.append(pose_k)
+    # print(poses)
+
+    assert len(poses) == len(traj_poses)
+
+    return evo_trajectory.PoseTrajectory3D(poses_se3=poses, timestamps=traj.timestamps)
+
 
 
 

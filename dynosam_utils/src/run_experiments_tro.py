@@ -1,4 +1,5 @@
 from eval_launch import run
+import os
 
 def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
     parsed_args = {
@@ -88,6 +89,13 @@ def prep_omd_sequence(path, name, *args):
 def run_omd_sequence(path, name, backend_type, *args):
     run_saved_sequence(path, name, omd_dataset, backend_type, *args)
 
+
+
+def run_all_eval():
+    results_path = "/root/results/Dynosam_tro2024/"
+    sub_folders = [name for name in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, name))]
+    for folder in sub_folders:
+        run_analysis(folder)
 
 
 def run_analysis(name):
@@ -204,66 +212,68 @@ if __name__ == '__main__':
 
 
     ## cluster
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1",
-        "--use_propogate_mask=false"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1",
+    #     "--use_propogate_mask=false"
+    # )
 
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-L2/",
-        "carla_l2",
-        "--use_propogate_mask=false"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "carla_l2",
+    #     "--use_propogate_mask=false"
+    # )
 
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-S1/",
-        "carla_s1",
-        "--use_propogate_mask=false"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-S1/",
+    #     "carla_s1",
+    #     "--use_propogate_mask=false"
+    # )
 
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-S2/",
-        "carla_s2",
-        "--use_propogate_mask=false"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "carla_s2",
+    #     "--use_propogate_mask=false"
+    # )
 
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5",
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L2/",
-        "carla_l2",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "carla_l2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-S1/",
-        "carla_s1",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S1/",
+    #     "carla_s1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-S2/",
-        "carla_s2",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "carla_s2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
+
+    run_all_eval()
 
     # kitti sliding window
     # prep_kitti_sequence(

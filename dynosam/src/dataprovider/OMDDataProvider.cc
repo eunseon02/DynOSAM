@@ -160,19 +160,6 @@ public:
 
         // cv::Mat depth;
         // const_disparity.copyTo(depth);
-        // for (int i = 0; i < depth.rows; i++)
-        // {
-        //     for (int j = 0; j < depth.cols; j++)
-        //     {
-        //         if (depth.at<double>(i, j) < 0) {
-        //             depth.at<double>(i, j) = 0;
-        //         }
-        //         else {
-        //             depth.at<double>(i, j) = 387.5744 / (depth.at<double>(i, j) / 1000.0);
-        //         }
-        //     }
-        // }
-
         return depth;
     }
 
