@@ -45,7 +45,7 @@ public:
     DYNO_POINTER_TYPEDEFS(OMDAllLoader)
 
     OMDAllLoader(const std::string& file_path)
-    :   rgbd_folder_path_(file_path + "/rgbd_undistorted"),
+    :   rgbd_folder_path_(file_path + "/rgbd"),
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         vicon_file_path_(file_path + "/vicon.csv"),
@@ -156,11 +156,60 @@ public:
         //why is dyno-sam so different that it needs the baseline scale factor as well as the scaling term
         //is this just depth to dispartiy?
         //imD.at<float>(i,j) = mbf/(imD.at<float>(i,j)/mDepthMapFactor);
-        depth /= 1000.0;
+
+         const cv::Mat K = rgbd_camera_params_.getCameraMatrix();
+        //expect D to be zeros
+        const cv::Mat D = rgbd_camera_params_.getDistortionCoeffs();
+        cv::Mat new_K;
+        new_K = cv::getOptimalNewCameraMatrix(K, D, rgbd_camera_params_.imageSize(), 1);
+        cv::Mat undistorted_image = depth;
+        // cv::undistort(depth, undistorted_image, K, D, new_K);
+
+        for (int i = 0; i < undistorted_image.rows; i++)
+        {
+            for (int j = 0; j < undistorted_image.cols; j++)
+            {
+                // LOG(INFO) << undistorted_image.at<double>(i, j);
+                if (undistorted_image.at<double>(i, j) <= 0) {
+                    undistorted_image.at<double>(i, j) = 0;
+                }
+                else {
+                    // baseline = 50mm (0.05)
+                    //bfm = 0.05 * fx (618.3587036132812)
+                    undistorted_image.at<double>(i, j) =  (undistorted_image.at<double>(i, j) / 1000.0);
+                }
+            }
+        }
+
+
+        // // CHECK_EQ()
+        // //check image sizes are the same!
+
+        // // LOG(INFO) << "Processing depth map";
+        // for (int i = 0; i < undistorted_image.rows; i++) {
+        //     for (int j = 0; j < undistorted_image.cols; j++) {
+        //         if (undistorted_image.at<double>(i,j)<0) {
+        //             undistorted_image.at<double>(i,j)=0;
+        //         }
+        //         else
+        //         {
+        //             undistorted_image.at<double>(i,j) = (undistorted_image.at<double>(i,j) / 1000.0);
+        //             // undistorted_image.at<double>(i,j) = 387.5744 /  (undistorted_image.at<double>(i,j) / 1000.0);
+        //         }
+
+        //         if(std::isinf(undistorted_image.at<double>(i,j))) {
+        //             undistorted_image.at<double>(i,j) = 0;
+        //         }
+        //     }
+        // }
+        // undistorted_image.convertTo(undistorted_image, CV_64F);
+        // LOG(INFO ) << "Finished processing";
+
+        // depth /= 1000.0;
 
         // cv::Mat depth;
         // const_disparity.copyTo(depth);
-        return depth;
+        return undistorted_image;
     }
 
     const GroundTruthInputPacket& getGtPacket(size_t idx) const {

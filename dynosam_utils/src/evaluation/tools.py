@@ -69,6 +69,9 @@ def camera_coordinate_to_world() -> np.ndarray:
     return se3(
         R.from_euler("ZYX", np.array([90, 0, 90]), degrees=True).as_matrix(),
         np.array([0.0, 0.0, 0.0]))
+    # return se3(
+    #     R.from_euler("ZYX", np.array([0, 0, 0]), degrees=True).as_matrix(),
+    #     np.array([0.0, 0.0, 0.0]))
 
 
 def transform_camera_trajectory_to_world(traj):
@@ -191,7 +194,7 @@ class TrajectoryHelper:
                 calc_min_max(t)
 
     def set_ax_limits(self, ax: plt.Axes):
-        ax.set_zlim3d([self.min_x, self.max_z])
+        ax.set_zlim3d([self.min_z, self.max_z])
         ax.set_xlim3d([self.min_x, self.max_x])
         ax.set_ylim3d([self.min_y, self.max_y])
         set_axes_equal(ax)

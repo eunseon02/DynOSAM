@@ -42,7 +42,7 @@ public:
 
     // Camera implementation provided by gtsam
     // original one is Cal3_S2 -> not sure what diff is?
-    using CalibrationType = gtsam::Cal3DS2;
+    using CalibrationType = gtsam::Cal3_S2;
     using CameraImpl = gtsam::PinholeCamera<CalibrationType>;
 
     /**

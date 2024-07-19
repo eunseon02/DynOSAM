@@ -261,6 +261,26 @@ void CameraParams::parseCameraDistortion(const YamlParser& yaml_parser, Distorti
 
 
 template<>
+gtsam::Cal3_S2 CameraParams::constructGtsamCalibration<gtsam::Cal3_S2>() const {
+  static const auto requested_calibration_name = type_name<gtsam::Cal3_S2>(); //only used for debug so seems waste to allocate everytime
+
+
+  if(distortion_model_ != DistortionModel::RADTAN) {
+    throw InvalidCameraCalibration("Requested gtsam calibration was " + requested_calibration_name +
+    " which is unsupported by this camera model: " + to_string(distortion_model_));
+  }
+
+  // if(distortion_coeff_.size() < 4u) {
+  //   throw InvalidCameraCalibration("Distortion coefficients have size <4 for camera params with distortion model"
+  //     + to_string(distortion_model_) + " and requested gtsam calibration of type " + requested_calibration_name);
+  // }
+
+  constexpr static double skew = 0.0;
+  return gtsam::Cal3_S2(fx(), fy(), skew, cu(), cv());
+}
+
+
+template<>
 gtsam::Cal3DS2 CameraParams::constructGtsamCalibration<gtsam::Cal3DS2>() const {
   static const auto requested_calibration_name = type_name<gtsam::Cal3DS2>(); //only used for debug so seems waste to allocate everytime
 

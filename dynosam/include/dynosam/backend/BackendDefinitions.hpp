@@ -140,7 +140,7 @@ constexpr static SymbolChar InvalidDynoSymbol = '\0';
 SymbolChar DynoChrExtractor(gtsam::Key);
 
 
-using CalibrationType = gtsam::Cal3DS2; //TODO: really need to check that this one matches the calibration in the camera!!
+using CalibrationType = gtsam::Cal3_S2; //TODO: really need to check that this one matches the calibration in the camera!!
 
 using Slot = long int;
 

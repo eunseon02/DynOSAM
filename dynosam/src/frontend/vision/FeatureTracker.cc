@@ -616,7 +616,6 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
             //x, y
             Keypoint kp(k, j);
             const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(kp, flow);
-            LOG(INFO) << kp << " " << predicted_kp << " " << std::boolalpha << isWithinShrunkenImage(predicted_kp);
 
             if(!isWithinShrunkenImage(predicted_kp)) {
               continue;
