@@ -498,7 +498,8 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
     object_path_marker_array.markers.push_back(delete_marker);
 
     for(const auto& object_pose_gt : gt_packet.object_poses_) {
-        const gtsam::Pose3 L_world = T_world_camera * object_pose_gt.L_camera_;
+        // const gtsam::Pose3 L_world = T_world_camera * object_pose_gt.L_camera_;
+        const gtsam::Pose3 L_world = object_pose_gt.L_world_;
         const ObjectId object_id = object_pose_gt.object_id_;
 
         seen_objects.insert(object_id);

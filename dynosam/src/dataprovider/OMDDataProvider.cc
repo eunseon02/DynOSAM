@@ -412,7 +412,7 @@ private:
             gtsam::Pose3 T_world_object_robotic = T_object_world_robotic;
             //rotate the reference 90\deg around z to put into real robotic convention; z up , x forward, y left
             //so apply a -90 transformation
-            T_world_object_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(-M_PI/2.0, 0, 0), gtsam::traits<gtsam::Point3>::Identity()) * T_world_object_robotic;
+            // T_world_object_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(-M_PI/2.0, 0, 0), gtsam::traits<gtsam::Point3>::Identity()) * T_world_object_robotic;
 
             // //rotation that takes a transform from the robotic convention
             //this is from actually the omd robotic convention
@@ -509,7 +509,10 @@ private:
                     //apply frame convention change to cancel out the frame convention change that is inbuilt into T_apparatus_rgbd_
                     //specifically this happens in the T_apparatus_left
                     // gt_packet.X_world_ = T_world_object * T_cv_robotic * T_apparatus_rgbd_;
+
+
                      gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;
+                    //  gt_packet.X_world_ = T_world_object;
                      //now in camera convention!!!
                     // gt_packet.X_world_ = camera_to_world.inverse() * gt_packet.X_world_;
                 }
