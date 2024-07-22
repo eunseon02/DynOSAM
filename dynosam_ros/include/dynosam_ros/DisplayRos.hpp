@@ -105,6 +105,17 @@ public:
         const std::string& prefix_marker_namespace
     );
 
+    static void createAxisMarkers(
+        const gtsam::Pose3& pose,
+        MarkerArray& axis_markers,
+        Timestamp timestamp,
+        const cv::Scalar& colour,
+        const std::string& frame,
+        const std::string& ns,
+        double length = 0.8,
+        double radius = 0.1
+    );
+
     //T_world_x should put something in the local frame to the world frame
     //taken from https://github.com/uzh-rpg/rpg_svo_pro_open/blob/master/vikit/vikit_ros/src/output_helper.cpp
     MarkerArray createCameraMarker(

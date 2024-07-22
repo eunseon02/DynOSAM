@@ -10,10 +10,12 @@ Panels:
         - /Backend1
         - /Backend1/Static Point Cloud (Optimized)1/Topic1
         - /Backend1/Odometry (OPT)1/Shape1
-        - /Frontend1
+        - /Backend1/Odometry Path (OPT)1
+        - /Frontend1/Odometry1
         - /Frontend1/Odometry1/Topic1
+        - /Frontend1/Odometry1/Shape1
         - /Ground Truth1
-        - /Ground Truth1/Object Paths (GT)1
+        - /Ground Truth1/Odometry (GT)1/Shape1
       Splitter Ratio: 0.5833333134651184
     Tree Height: 676
   - Class: rviz_common/Selection
@@ -55,54 +57,6 @@ Visualization Manager:
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
       Value: true
-    - Class: rviz_default_plugins/Image
-      Enabled: false
-      Max Value: 1
-      Median window: 5
-      Min Value: 0
-      Name: Image
-      Normalize Range: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /dynosam/tracking_image
-      Value: false
-    - Alpha: 0.30000001192092896
-      Autocompute Intensity Bounds: true
-      Autocompute Value Bounds:
-        Max Value: 10
-        Min Value: -10
-        Value: true
-      Axis: Z
-      Channel Name: intensity
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 255
-      Color Transformer: RGB8
-      Decay Time: 0
-      Enabled: false
-      Invert Rainbow: false
-      Max Color: 255; 255; 255
-      Max Intensity: 4096
-      Min Color: 0; 0; 0
-      Min Intensity: 0
-      Name: Dynamic Points Init
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.019999999552965164
-      Style: Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /dynosam/backend/dynamic_initial
-      Use Fixed Frame: true
-      Use rainbow: true
-      Value: false
     - Class: rviz_default_plugins/TF
       Enabled: false
       Frame Timeout: 15
@@ -131,7 +85,7 @@ Visualization Manager:
           Color: 255; 255; 255
           Color Transformer: RGB8
           Decay Time: 0
-          Enabled: true
+          Enabled: false
           Invert Rainbow: false
           Max Color: 255; 255; 255
           Max Intensity: 4096
@@ -152,7 +106,7 @@ Visualization Manager:
             Value: /dynosam/backend/dynamic_cloud
           Use Fixed Frame: true
           Use rainbow: true
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -211,7 +165,7 @@ Visualization Manager:
           Shape:
             Alpha: 1
             Axes Length: 0.5
-            Axes Radius: 0.10000000149011612
+            Axes Radius: 0.029999999329447746
             Color: 255; 25; 0
             Head Length: 0.30000001192092896
             Head Radius: 0.10000000149011612
@@ -267,17 +221,17 @@ Visualization Manager:
             Value: /dynosam/backend/composed_object_paths
           Value: true
         - Class: rviz_default_plugins/MarkerArray
-          Enabled: true
+          Enabled: false
           Name: Composed object poses (opt)
           Namespaces:
-            backend_object_positions: true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /dynosam/backend/composed_object_poses
-          Value: true
+          Value: false
         - Class: rviz_default_plugins/MarkerArray
           Enabled: false
           Name: Object AABB
@@ -307,7 +261,7 @@ Visualization Manager:
             Value: /dynosam/frontend/composed_object_paths
           Value: true
         - Class: rviz_default_plugins/MarkerArray
-          Enabled: true
+          Enabled: false
           Name: Object Poses (Composed)
           Namespaces:
             {}
@@ -317,7 +271,7 @@ Visualization Manager:
             History Policy: Keep All
             Reliability Policy: Best Effort
             Value: /dynosam/frontend/composed_object_poses
-          Value: true
+          Value: false
         - Alpha: 1
           Autocompute Intensity Bounds: true
           Autocompute Value Bounds:
@@ -375,8 +329,8 @@ Visualization Manager:
           Position Tolerance: 0.009999999776482582
           Shape:
             Alpha: 1
-            Axes Length: 1.5
-            Axes Radius: 0.30000001192092896
+            Axes Length: 0.5
+            Axes Radius: 0.029999999329447746
             Color: 255; 25; 0
             Head Length: 0.30000001192092896
             Head Radius: 0.10000000149011612
@@ -480,8 +434,8 @@ Visualization Manager:
           Position Tolerance: 0.009999999776482582
           Shape:
             Alpha: 1
-            Axes Length: 1.5
-            Axes Radius: 0.30000001192092896
+            Axes Length: 0.5
+            Axes Radius: 0.029999999329447746
             Color: 255; 25; 0
             Head Length: 0.30000001192092896
             Head Radius: 0.10000000149011612
@@ -505,7 +459,7 @@ Visualization Manager:
           Head Length: 0.20000000298023224
           Length: 0.30000001192092896
           Line Style: Billboards
-          Line Width: 0.20000000298023224
+          Line Width: 0.05000000074505806
           Name: Odometry Path (GT)
           Offset:
             X: 0
@@ -525,22 +479,22 @@ Visualization Manager:
             Value: /dynosam/dynosam/ground_truth/odom_path
           Value: true
         - Class: rviz_default_plugins/MarkerArray
-          Enabled: true
+          Enabled: false
           Name: Object Poses (GT)
           Namespaces:
-            gt_frontend_composed_object_path: true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
             History Policy: System Default
             Reliability Policy: System Default
             Value: /dynosam/dynosam/ground_truth/object_paths
-          Value: true
+          Value: false
         - Class: rviz_default_plugins/MarkerArray
           Enabled: true
           Name: Object Paths (GT)
           Namespaces:
-            gt_frontend_composed_object_path: true
+            ground_truth_object_path: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -610,25 +564,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 66.44512939453125
+      Distance: 2.858891487121582
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.24069492518901825
-        Y: 0.542214572429657
-        Z: -1.0844982862472534
+        X: -0.5675155520439148
+        Y: 0.11821587383747101
+        Z: 1.5810809135437012
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.22479762136936188
+      Pitch: 0.8447971343994141
       Target Frame: camera
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.0535387992858887
+      Yaw: 3.043541193008423
     Saved: ~
 Window Geometry:
   Displays:
@@ -638,7 +592,7 @@ Window Geometry:
   Hide Right Dock: false
   Image:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000003440000032dfc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b0000032d000000c700fffffffa000000020100000003fb0000000a0049006d0061006700650000000000ffffffff0000005a00fffffffb0000000a0049006d0061006700650000000000ffffffff0000005a00fffffffb000000100044006900730070006c00610079007301000000000000017c0000015600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006500000001e700000158000000000000000000000001000001000000032dfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003b0000032d000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000738000000a9fc0100000003fb0000000a0049006d0061006700650200000549000000d2000001fe00000169fb0000000a0049006d0061006700650300000cb3000000c20000020d00000147fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007800000003efc0100000002fb0000000800540069006d00650100000000000007800000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000003300000032d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd0000000400000000000003440000032dfc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afc0000003b0000032d000000c700fffffffa000000020100000003fb0000000a0049006d0061006700650000000000ffffffff0000005a00fffffffb0000000a0049006d0061006700650000000000ffffffff0000000000000000fb000000100044006900730070006c00610079007301000000000000017c0000015600fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006500000001e700000158000000000000000000000001000001000000032dfc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a00560069006500770073010000003b0000032d000000a000fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000738000000a9fc0100000003fb0000000a0049006d0061006700650200000549000000d2000001fe00000169fb0000000a0049006d0061006700650300000cb3000000c20000020d00000147fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000007800000003efc0100000002fb0000000800540069006d00650100000000000007800000025300fffffffb0000000800540069006d00650100000000000004500000000000000000000003300000032d00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Time:

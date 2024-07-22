@@ -98,7 +98,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
         dyno::RGBDBackendModule::UpdaterType::MotionInWorld
         );
 
-    for(size_t i = 0; i < 7; i++) {
+    for(size_t i = 0; i < 10; i++) {
         auto output = scenario.getOutput(i);
 
         std::stringstream ss;
@@ -205,8 +205,15 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     gtsam::NonlinearFactorGraph full_graph = backend.new_updater_->getGraph();
     full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"), dyno::DynoLikeKeyFormatter);
 
-    const auto[delayed_values, delayed_graph] = backend.constructGraph(2, 6, true);
-    delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test.dot"), dyno::DynoLikeKeyFormatter);
+    {
+        const auto[delayed_values, delayed_graph] = backend.constructGraph(2, 6, true);
+        delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test_2_6.dot"), dyno::DynoLikeKeyFormatter);
+    }
+
+    {
+    const auto[delayed_values, delayed_graph] = backend.constructGraph(5, 9, true);
+    delayed_graph.saveGraph(dyno::getOutputFilePath("construct_simple_delayed_graph_test_5_9.dot"), dyno::DynoLikeKeyFormatter);
+    }
 
     // gtsam::LevenbergMarquardtParams opt_params;
     // opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;

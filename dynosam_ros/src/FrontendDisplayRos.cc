@@ -483,140 +483,167 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
     cv::Mat disp_image;
     rgb.copyTo(disp_image);
 
-    static std::map<ObjectId, gtsam::Pose3Vector> gt_object_trajectories; //Used for gt path updating
-    static std::map<ObjectId, FrameId> gt_object_trajectories_update; // The last frame id that the object was seen in
-
-    std::set<ObjectId> seen_objects;
-
-    //prepare gt object pose markers
-    visualization_msgs::msg::MarkerArray object_pose_marker_array;
-    visualization_msgs::msg::MarkerArray object_path_marker_array;
-    static visualization_msgs::msg::Marker delete_marker;
-    delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
-
-    object_pose_marker_array.markers.push_back(delete_marker);
-    object_path_marker_array.markers.push_back(delete_marker);
-
+    static ObjectPoseMap gt_object_poses;
     for(const auto& object_pose_gt : gt_packet.object_poses_) {
-        // const gtsam::Pose3 L_world = T_world_camera * object_pose_gt.L_camera_;
-        const gtsam::Pose3 L_world = object_pose_gt.L_world_;
-        const ObjectId object_id = object_pose_gt.object_id_;
-
-        seen_objects.insert(object_id);
-
-        visualization_msgs::msg::Marker marker;
-        marker.header.frame_id = "world";
-        marker.ns = "ground_truth_object_poses";
-        marker.id = object_id;
-        marker.type = visualization_msgs::msg::Marker::CUBE;
-        marker.action = visualization_msgs::msg::Marker::ADD;
-        marker.header.stamp = node_->now();
-        marker.pose.position.x = L_world.x();
-        marker.pose.position.y = L_world.y();
-        marker.pose.position.z = L_world.z();
-        marker.pose.orientation.x = L_world.rotation().toQuaternion().x();
-        marker.pose.orientation.y = L_world.rotation().toQuaternion().y();
-        marker.pose.orientation.z = L_world.rotation().toQuaternion().z();
-        marker.pose.orientation.w = L_world.rotation().toQuaternion().w();
-        marker.scale.x = 0.5;
-        marker.scale.y = 0.5;
-        marker.scale.z = 0.5;
-        marker.color.a = 1.0; // Don't forget to set the alpha!
-
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-        marker.color.r = colour(0)/255.0;
-        marker.color.g = colour(1)/255.0;
-        marker.color.b = colour(2)/255.0;
-
-        visualization_msgs::msg::Marker text_marker = marker;
-        text_marker.ns = "ground_truth_object_labels";
-        text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
-        text_marker.text = std::to_string(object_id);
-        text_marker.pose.position.z += 1.0; //make it higher than the pose marker
-        text_marker.scale.z = 0.7;
-
-        object_pose_marker_array.markers.push_back(marker);
-        object_pose_marker_array.markers.push_back(text_marker);
-
-        //draw on bbox
-        object_pose_gt.drawBoundingBox(disp_image);
-
-        //update past trajectotries of objects
-        auto it = gt_object_trajectories.find(object_id);
-        if(it == gt_object_trajectories.end()) {
-            gt_object_trajectories[object_id] = gtsam::Pose3Vector();
-        }
-
-        gt_object_trajectories_update[object_id] = frame_id;
-        gt_object_trajectories[object_id].push_back(L_world);
-
+        gt_object_poses.insert22(
+            object_pose_gt.object_id_,
+            gt_packet.frame_id_,
+            object_pose_gt.L_world_
+        );
     }
 
-    //repeated code from publishObjectPositions function
-    //iterate over object trajectories and display the ones with enough poses and the ones weve seen recently
-    for(const auto& [object_id, poses] : gt_object_trajectories) {
-        const FrameId last_seen_frame = gt_object_trajectories_update.at(object_id);
+    publishObjectPositions(
+        gt_object_pose_pub_,
+        gt_object_poses,
+        frame_id,
+        timestamp,
+        "ground_truth"
+    );
 
-        //if weve seen the object in the last 30 frames and the length is at least 2
-        if(poses.size() < 2u) {
-            continue;
-        }
+    publishObjectPaths(
+        gt_object_path_pub_,
+        gt_object_poses,
+        frame_id,
+        timestamp,
+        "ground_truth",
+        60
+    );
 
-        //draw a line list for viz
-        visualization_msgs::msg::Marker line_list_marker;
-        line_list_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
-        line_list_marker.header.frame_id = "world";
-        line_list_marker.ns = "gt_frontend_composed_object_path";
-        line_list_marker.id = object_id;
-        line_list_marker.header.stamp = node_->now();
-        line_list_marker.scale.x = 0.5;
 
-        line_list_marker.pose.orientation.x = 0;
-        line_list_marker.pose.orientation.y = 0;
-        line_list_marker.pose.orientation.z = 0;
-        line_list_marker.pose.orientation.w = 1;
+    // static std::map<ObjectId, gtsam::Pose3Vector> gt_object_trajectories; //Used for gt path updating
+    // static std::map<ObjectId, FrameId> gt_object_trajectories_update; // The last frame id that the object was seen in
 
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
-        line_list_marker.color.r = colour(0)/255.0;
-        line_list_marker.color.g = colour(1)/255.0;
-        line_list_marker.color.b = colour(2)/255.0;
-        line_list_marker.color.a = 1;
+    // std::set<ObjectId> seen_objects;
 
-        //only draw the last 60 poses
-        const size_t traj_size = std::min(60, static_cast<int>(poses.size()));
-        // const size_t traj_size = poses.size();
-        //have to duplicate the first in each drawn pair so that we construct a complete line
-        for(size_t i = poses.size() - traj_size + 1; i < poses.size(); i++) {
-            const gtsam::Pose3& prev_pose = poses.at(i-1);
-            const gtsam::Pose3& curr_pose = poses.at(i);
+    // //prepare gt object pose markers
+    // visualization_msgs::msg::MarkerArray object_pose_marker_array;
+    // visualization_msgs::msg::MarkerArray object_path_marker_array;
+    // static visualization_msgs::msg::Marker delete_marker;
+    // delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
 
-            {
-                geometry_msgs::msg::Point p;
-                p.x = prev_pose.x();
-                p.y = prev_pose.y();
-                p.z = prev_pose.z();
+    // object_pose_marker_array.markers.push_back(delete_marker);
+    // object_path_marker_array.markers.push_back(delete_marker);
 
-                line_list_marker.points.push_back(p);
-            }
+    // for(const auto& object_pose_gt : gt_packet.object_poses_) {
+    //     // const gtsam::Pose3 L_world = T_world_camera * object_pose_gt.L_camera_;
+    //     const gtsam::Pose3 L_world = object_pose_gt.L_world_;
+    //     const ObjectId object_id = object_pose_gt.object_id_;
 
-            {
-                geometry_msgs::msg::Point p;
-                p.x = curr_pose.x();
-                p.y = curr_pose.y();
-                p.z = curr_pose.z();
+    //     seen_objects.insert(object_id);
 
-                line_list_marker.points.push_back(p);
-            }
-        }
+    //     visualization_msgs::msg::Marker marker;
+    //     marker.header.frame_id = "world";
+    //     marker.ns = "ground_truth_object_poses";
+    //     marker.id = object_id;
+    //     marker.type = visualization_msgs::msg::Marker::CUBE;
+    //     marker.action = visualization_msgs::msg::Marker::ADD;
+    //     marker.header.stamp = node_->now();
+    //     marker.pose.position.x = L_world.x();
+    //     marker.pose.position.y = L_world.y();
+    //     marker.pose.position.z = L_world.z();
+    //     marker.pose.orientation.x = L_world.rotation().toQuaternion().x();
+    //     marker.pose.orientation.y = L_world.rotation().toQuaternion().y();
+    //     marker.pose.orientation.z = L_world.rotation().toQuaternion().z();
+    //     marker.pose.orientation.w = L_world.rotation().toQuaternion().w();
+    //     marker.scale.x = 0.5;
+    //     marker.scale.y = 0.5;
+    //     marker.scale.z = 0.5;
+    //     marker.color.a = 1.0; // Don't forget to set the alpha!
 
-        object_path_marker_array.markers.push_back(line_list_marker);
-    }
+    //     const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+    //     marker.color.r = colour(0)/255.0;
+    //     marker.color.g = colour(1)/255.0;
+    //     marker.color.b = colour(2)/255.0;
+
+    //     visualization_msgs::msg::Marker text_marker = marker;
+    //     text_marker.ns = "ground_truth_object_labels";
+    //     text_marker.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
+    //     text_marker.text = std::to_string(object_id);
+    //     text_marker.pose.position.z += 1.0; //make it higher than the pose marker
+    //     text_marker.scale.z = 0.7;
+
+    //     object_pose_marker_array.markers.push_back(marker);
+    //     object_pose_marker_array.markers.push_back(text_marker);
+
+    //     //draw on bbox
+    //     object_pose_gt.drawBoundingBox(disp_image);
+
+    //     //update past trajectotries of objects
+    //     auto it = gt_object_trajectories.find(object_id);
+    //     if(it == gt_object_trajectories.end()) {
+    //         gt_object_trajectories[object_id] = gtsam::Pose3Vector();
+    //     }
+
+    //     gt_object_trajectories_update[object_id] = frame_id;
+    //     gt_object_trajectories[object_id].push_back(L_world);
+
+    // }
+
+    // //repeated code from publishObjectPositions function
+    // //iterate over object trajectories and display the ones with enough poses and the ones weve seen recently
+    // for(const auto& [object_id, poses] : gt_object_trajectories) {
+    //     const FrameId last_seen_frame = gt_object_trajectories_update.at(object_id);
+
+    //     //if weve seen the object in the last 30 frames and the length is at least 2
+    //     if(poses.size() < 2u) {
+    //         continue;
+    //     }
+
+    //     //draw a line list for viz
+    //     visualization_msgs::msg::Marker line_list_marker;
+    //     line_list_marker.type = visualization_msgs::msg::Marker::LINE_LIST;
+    //     line_list_marker.header.frame_id = "world";
+    //     line_list_marker.ns = "gt_frontend_composed_object_path";
+    //     line_list_marker.id = object_id;
+    //     line_list_marker.header.stamp = node_->now();
+    //     line_list_marker.scale.x = 0.5;
+
+    //     line_list_marker.pose.orientation.x = 0;
+    //     line_list_marker.pose.orientation.y = 0;
+    //     line_list_marker.pose.orientation.z = 0;
+    //     line_list_marker.pose.orientation.w = 1;
+
+    //     const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+    //     line_list_marker.color.r = colour(0)/255.0;
+    //     line_list_marker.color.g = colour(1)/255.0;
+    //     line_list_marker.color.b = colour(2)/255.0;
+    //     line_list_marker.color.a = 1;
+
+    //     //only draw the last 60 poses
+    //     const size_t traj_size = std::min(60, static_cast<int>(poses.size()));
+    //     // const size_t traj_size = poses.size();
+    //     //have to duplicate the first in each drawn pair so that we construct a complete line
+    //     for(size_t i = poses.size() - traj_size + 1; i < poses.size(); i++) {
+    //         const gtsam::Pose3& prev_pose = poses.at(i-1);
+    //         const gtsam::Pose3& curr_pose = poses.at(i);
+
+    //         {
+    //             geometry_msgs::msg::Point p;
+    //             p.x = prev_pose.x();
+    //             p.y = prev_pose.y();
+    //             p.z = prev_pose.z();
+
+    //             line_list_marker.points.push_back(p);
+    //         }
+
+    //         {
+    //             geometry_msgs::msg::Point p;
+    //             p.x = curr_pose.x();
+    //             p.y = curr_pose.y();
+    //             p.z = curr_pose.z();
+
+    //             line_list_marker.points.push_back(p);
+    //         }
+    //     }
+
+    //     object_path_marker_array.markers.push_back(line_list_marker);
+    // }
 
     // Publish centroids of composed object poses
-    gt_object_pose_pub_->publish(object_pose_marker_array);
+    // gt_object_pose_pub_->publish(object_pose_marker_array);
 
-    // Publish composed object path
-    gt_object_path_pub_->publish(object_path_marker_array);
+    // // Publish composed object path
+    // gt_object_path_pub_->publish(object_path_marker_array);
 
     cv::Mat resized_image;
     cv::resize(disp_image, resized_image, cv::Size(640, 480));

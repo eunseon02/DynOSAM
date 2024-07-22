@@ -49,7 +49,7 @@ public:
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         vicon_file_path_(file_path + "/vicon.csv"),
-        kalibr_file_path_(file_path + "/kalibr.yaml"),
+        kalibr_file_path_(file_path + "/manufacturer.yaml"),
         vicon_calibration_file_path_(file_path + "/vicon.yaml")
     {
         throwExceptionIfPathInvalid(rgbd_folder_path_);
@@ -370,6 +370,20 @@ private:
         std::vector<ViconPoseData> vicon_pose_data;
         gtsam::FastMap<FrameId, std::vector<ObjectPoseGT>> temp_object_poses;
 
+        //  np.array([[1, 0, 0, 0],
+        // [0, 0, -1, 0],
+        // [0, 1, 0, 0],
+        // [0, 0, 0, 1]], dtype=np.float32)
+        // const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(M_PI/2.0, 0, M_PI/2.0), gtsam::traits<gtsam::Point3>::Identity());
+        const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(
+            gtsam::Rot3(
+                1, 0, 0,
+                0, 0, -1,
+                0, 1, 0),
+            gtsam::traits<gtsam::Point3>::Identity());
+        const gtsam::Pose3 T_omd_cv = gtsam::Pose3(gtsam::Rot3::RzRyRx(-M_PI/2.0, 0, 0), gtsam::traits<gtsam::Point3>::Identity()) ;
+
+
         for(; it != csv_reader.end(); it++) {
             const auto row = *it;
             //Though the stereo camera, RGB-D camera, and IMU were recorded on the same machine,
@@ -412,7 +426,7 @@ private:
             gtsam::Pose3 T_world_object_robotic = T_object_world_robotic;
             //rotate the reference 90\deg around z to put into real robotic convention; z up , x forward, y left
             //so apply a -90 transformation
-            // T_world_object_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(-M_PI/2.0, 0, 0), gtsam::traits<gtsam::Point3>::Identity()) * T_world_object_robotic;
+            // T_world_object_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(0, 0, M_PI_2), gtsam::traits<gtsam::Point3>::Identity()) * T_world_object_robotic;
 
             // //rotation that takes a transform from the robotic convention
             //this is from actually the omd robotic convention
@@ -423,14 +437,14 @@ private:
             //         0, 1, 0
             //     ),
             //     gtsam::traits<gtsam::Point3>::Identity());
-            const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(gtsam::Rot3::RzRyRx(M_PI/2.0, 0, M_PI/2.0), gtsam::traits<gtsam::Point3>::Identity());
-            gtsam::Pose3 T_world_object_camera = T_cv_robotic * T_world_object_robotic * T_cv_robotic.inverse();
+            // gtsam::Pose3 T_world_object_camera = T_cv_robotic * T_world_object_robotic * T_cv_robotic.inverse();
 
 
             ViconPoseData vicon_data;
             vicon_data.timestamp = vicon_time;
             vicon_data.object_id = object_id;
-            vicon_data.T_world_object = T_world_object_camera;
+            vicon_data.T_world_object = T_object_world_robotic;
+            // vicon_data.T_world_object = T_world_object_robotic;
             vicon_pose_data.push_back(vicon_data);
 
         }
@@ -456,7 +470,6 @@ private:
             if (vicon_timestamp < earliest_camera_timestamp || vicon_timestamp > latest_camera_timestamp) {
                 continue;
             }
-
 
 
             //get closest camera timestamp to the vicon timestamp - this is the value we want to interpolate
@@ -498,20 +511,22 @@ private:
                     //where T_apparatus_leftstereo is given from the vicon.yaml config
                     //and T_leftstereo_depthcam is constructed from the kalibr config
                     //this is actually the omd robotic convention
-                    const gtsam::Pose3 T_cv_robotic = gtsam::Pose3(
-                        gtsam::Rot3(
-                            1, 0, 0,
-                            0, 0, -1,
-                            0, 1, 0
-                        ),
-                        gtsam::traits<gtsam::Point3>::Identity());
                     // LOG(INFO) << T_cv_robotic;
                     //apply frame convention change to cancel out the frame convention change that is inbuilt into T_apparatus_rgbd_
                     //specifically this happens in the T_apparatus_left
                     // gt_packet.X_world_ = T_world_object * T_cv_robotic * T_apparatus_rgbd_;
+                    // gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;
+                    // gt_packet.X_world_ = T_leftstereo_depthcam_.inverse() * T_apparatus_left_.inverse() * T_world_object;
+                    // gt_packet.X_world_ = T_leftstereo_depthcam_.inverse() * T_apparatus_left_.inverse() * T_world_object;
 
+                    //T_DO (relates rgbD camera to the origin frame O)
+                    //T_DO = T_AD^{-1} * T_AO
+                    // gt_packet.X_world_ = T_apparatus_rgbd_.inverse() * T_world_object;
+                    // gt_packet.X_world_ =  T_apparatus_rgbd_.inverse() * T_world_object;
+                    gt_packet.X_world_ =  T_world_object;
+                    gt_packet.X_world_ = T_cv_robotic * gt_packet.X_world_ * T_cv_robotic.inverse();
 
-                     gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;
+                    // gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;
                     //  gt_packet.X_world_ = T_world_object;
                      //now in camera convention!!!
                     // gt_packet.X_world_ = camera_to_world.inverse() * gt_packet.X_world_;
@@ -523,7 +538,7 @@ private:
                     //if this is object, the transform is the object as seen in the vicon frame
                     //we want it in the depth sensor frame
                     //T_world_object -> T_vicon_object
-                    object_pose_gt.L_world_ = T_world_object;
+                    object_pose_gt.L_world_ =  T_cv_robotic * T_world_object * T_cv_robotic.inverse();
                     // object_pose_gt.L_world_ = camera_to_world.inverse() * object_pose_gt.L_world_;
                     //cannot set L_camera yet as we might not have the camera pose
 
@@ -590,15 +605,23 @@ private:
 
             // offset initial pose so we start at "0, 0, 0"
             gtsam::Pose3 X_world_aligned = initial_pose.inverse() * gt_packet.X_world_;
+            //put into cv convention with Z-axis forward
+            // X_world_aligned = T_omd_cv * X_world_aligned * T_omd_cv.inverse();
+
 
             //get object vector for the tmp list
             auto& unprocessed_objects = temp_object_poses.at(gt_packet.frame_id_);
             for(auto& object_pose_gt : unprocessed_objects) {
 
-                //pose of the object in the camera frame usign the vicon world frame and not our aligned one
+                // // pose of the object in the camera frame usign the vicon world frame and not our aligned one
+
+                // using the original pose of the camera put into camera frame
                 gtsam::Pose3 object_pose_camera = gt_packet.X_world_.inverse() * object_pose_gt.L_world_;
                 gtsam::Pose3 object_pose_world_aligned = X_world_aligned * object_pose_camera;
                 gtsam::Pose3 object_pose_camera_aligned = X_world_aligned.inverse() * object_pose_world_aligned;
+
+                // gtsam::Pose3 object_pose_world_aligned = object_pose_gt.L_world_ * X_world_aligned * T_omd_cv;
+                // gtsam::Pose3 object_pose_camera_aligned = X_world_aligned.inverse() * object_pose_world_aligned;
 
                 object_pose_gt.L_camera_ = object_pose_camera_aligned;
                 object_pose_gt.L_world_ = object_pose_world_aligned;
@@ -622,46 +645,54 @@ private:
     }
 
     void setIntrisicsAndTransforms() {
+        //using manufacturer
         //kalirb file gives the rigid body transforms from the sensors to the apparatus frame
-        //cam0 -> left
-        //cam1 -> right
-        //cam2 -> rgbd
+        //cam0 -> rgbd
+        //cam1 -> stereo left
+        //cam2 -> stereo right
         //using the camera (opencv) convention, ie. with z forward
         YamlParser yaml_parser(kalibr_file_path_);
 
 
-        std::vector<double> v_cam1_cam0;
-        yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
-        gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
-        const gtsam::Pose3 T_left_right = T_cam0_cam1;
-
         std::vector<double> v_cam2_cam1;
-        yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
-        //transform from cam2 into camera 1 frame
+        yaml_parser.getNestedYamlParam("cam2", "T_cn_cnm1", &v_cam2_cam1);
         gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
-        const gtsam::Pose3 T_right_rgbd = T_cam1_cam2;
+        gtsam::Pose3 T_left_right = T_cam1_cam2;
 
-        // //transformation from cam2 INTO cam0
-        // //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
-        // gtsam::Pose3 T_cam0_cam2 = T_cam0_cam1 * T_cam1_cam2;
-        // T_leftstereo_depthcam_ = T_cam0_cam2;
 
-        //now load apparaturs to left camera (cam0) transform to put cam0 into the sensor frame (or A)
+        // std::vector<double> v_cam1_cam0;
+        // yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
+        // gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
+        // const gtsam::Pose3 T_left_right = T_cam0_cam1;
+
+        // std::vector<double> v_cam2_cam1;
+        // yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
+        // //transform from cam2 into camera 1 frame
+        // gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
+        // const gtsam::Pose3 T_right_rgbd = T_cam1_cam2;
+
+        // // //transformation from cam2 INTO cam0
+        // // //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
+        // // gtsam::Pose3 T_cam0_cam2 = T_cam0_cam1 * T_cam1_cam2;
+        // // T_leftstereo_depthcam_ = T_cam0_cam2;
+
+        // //now load apparaturs to left camera (cam0) transform to put cam0 into the sensor frame (or A)
         YamlParser vicon_yaml_parser(vicon_calibration_file_path_);
         std::vector<double> v_apparatus_left;
         vicon_yaml_parser.getYamlParam("T_apparatus_left", &v_apparatus_left);
         //transformation from cam0 (left) into the apparatus (A) frame
         gtsam::Pose3 T_apparatus_cam0 = utils::poseVectorToGtsamPose3(v_apparatus_left);
-        //this contains a (partial?) frame change convention from opencv to omd's robotic convention
+        // //this contains a (partial?) frame change convention from opencv to omd's robotic convention
         T_apparatus_left_ = T_apparatus_cam0;
-        T_apparatus_rgbd_ = T_apparatus_left_ * T_left_right * T_right_rgbd;
+        // T_leftstereo_depthcam_ = T_left_right * T_right_rgbd;
+        T_apparatus_rgbd_ = T_apparatus_left_;
 
 
 
         //NOTE: expect the rgbd camera to always be cam2
         CameraParams::IntrinsicsCoeffs intrinsics;
         std::vector<double> intrinsics_v;
-        yaml_parser.getNestedYamlParam("cam2_undistort", "intrinsics", &intrinsics_v);
+        yaml_parser.getNestedYamlParam("cam0", "intrinsics", &intrinsics_v);
         CHECK_EQ(intrinsics_v.size(), 4u);
         intrinsics.resize(4u);
         // Move elements from one to the other.
@@ -669,18 +700,16 @@ private:
                     intrinsics.size(),
                     intrinsics.begin());
 
-        CameraParams::DistortionCoeffs distortion;
-        yaml_parser.getNestedYamlParam("cam2_undistort", "distortion_coeffs", &distortion);
+        CameraParams::DistortionCoeffs distortion({0, 0, 0, 0});
 
         std::vector<int> resolution;
-        yaml_parser.getNestedYamlParam("cam2_undistort", "resolution", &resolution);
+        yaml_parser.getNestedYamlParam("cam0", "resolution", &resolution);
         CHECK_EQ(resolution.size(), 2);
         cv::Size image_size(resolution[0], resolution[1]);
 
         std::string distortion_model, camera_model;
-        yaml_parser.getNestedYamlParam("cam2_undistort", "distortion_model", &distortion_model);
-        yaml_parser.getNestedYamlParam("cam2_undistort", "camera_model", &camera_model);
-        auto model = CameraParams::stringToDistortion(distortion_model, camera_model);
+        yaml_parser.getNestedYamlParam("cam0", "camera_model", &camera_model);
+        auto model = CameraParams::stringToDistortion("radtan", camera_model);
 
         rgbd_camera_params_ = CameraParams(
             intrinsics,
@@ -829,7 +858,7 @@ private:
     CameraParams rgbd_camera_params_;
     gtsam::Pose3 T_apparatus_left_; //T_AL or the transform from the left stereo to the apparaturs frame, as given in vicon.yaml
     gtsam::Pose3 T_leftstereo_depthcam_; //T_LD or the transfrom from the depthcam to the left stereo. Given in the kalibr.yaml
-    gtsam::Pose3 T_apparatus_rgbd_; //T_AL * T_LD
+    gtsam::Pose3 T_apparatus_rgbd_; //T_AL * T_LD = T_AD
 
 };
 

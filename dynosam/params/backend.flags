@@ -1,13 +1,13 @@
 #!/bin/bash
 
---constant_object_motion_rotation_sigma=0.01
+--constant_object_motion_rotation_sigma=0.001
 --constant_object_motion_translation_sigma=0.001
 
 
 --motion_ternary_factor_noise_sigma=0.001
 
---odometry_rotation_sigma=0.1
---odometry_translation_sigma=0.2
+--odometry_rotation_sigma=0.01
+--odometry_translation_sigma=0.02
 # --odometry_rotation_sigma=0.05
 # --odometry_translation_sigma=0.1
 

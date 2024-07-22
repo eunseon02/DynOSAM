@@ -281,6 +281,65 @@ void DisplayRos::publishObjectBoundingBox(
 
 }
 
+
+void DisplayRos::createAxisMarkers(
+    const gtsam::Pose3& pose,
+    MarkerArray& axis_markers,
+    Timestamp timestamp,
+    const cv::Scalar& colour,
+    const std::string& frame,
+    const std::string& ns,
+    double length,
+    double radius
+)
+{
+    const auto pose_matrix = pose.matrix();
+    Eigen::Isometry3d x = Eigen::Translation3d(length / 2.0, 0, 0) * Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitY());
+    gtsam::Pose3 x_pose(pose_matrix * x.matrix());
+
+    // Publish y axis
+    Eigen::Isometry3d y = Eigen::Translation3d(0, length / 2.0, 0) * Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitX());
+    gtsam::Pose3 y_pose(pose_matrix * y.matrix());
+
+    Eigen::Isometry3d z = Eigen::Translation3d(0, 0, length / 2.0) * Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
+    gtsam::Pose3 z_pose(pose_matrix * z.matrix());
+
+    const auto ros_time = utils::toRosTime(timestamp);
+
+    auto make_cylinder = [
+            &length,
+            &radius,
+            &ros_time,
+            &ns,
+            &frame,
+            &colour] (const gtsam::Pose3& pose) -> visualization_msgs::msg::Marker {
+        visualization_msgs::msg::Marker marker;
+        marker.header.stamp = ros_time;
+        marker.ns = ns;
+        marker.header.frame_id = frame;
+
+        geometry_msgs::msg::Pose pose_msg;
+        dyno::convert(pose, pose_msg);
+
+        marker.pose = pose_msg;
+        marker.scale.x = radius;
+        marker.scale.y = radius;
+        marker.scale.z = length;
+
+        marker.color.r = colour(0)/255.0;
+        marker.color.g = colour(1)/255.0;
+        marker.color.b = colour(2)/255.0;
+
+        return marker;
+    };
+
+    axis_markers.markers.push_back(make_cylinder(x_pose));
+    axis_markers.markers.push_back(make_cylinder(y_pose));
+    axis_markers.markers.push_back(make_cylinder(z_pose));
+
+}
+
+
 void DisplayRos::constructBoundingBoxeMarkers(
         const CloudPerObject& cloud_per_object,
         MarkerArray& aabb_markers,
