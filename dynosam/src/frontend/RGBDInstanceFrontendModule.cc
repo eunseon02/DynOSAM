@@ -80,9 +80,8 @@ RGBDInstanceFrontendModule::validateImageContainer(const ImageContainer::Ptr& im
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input) {
     LOG(INFO) << "Frontend boostrap";
-    bool is_semantic_mask;
-    Frame::Ptr frame = trackNewFrame(input,is_semantic_mask);
-    RGBDInstanceOutputPacket::Ptr output = processFrame(frame, is_semantic_mask, input->optional_gt_);
+    Frame::Ptr frame = trackNewFrame(input);
+    RGBDInstanceOutputPacket::Ptr output = processFrame(frame, input->optional_gt_);
     logOutputPacket(output);
     return {State::Nominal, output};
 }
@@ -90,54 +89,32 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
 
 FrontendModule::SpinReturn
 RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input) {
-    bool is_semantic_mask;
-    Frame::Ptr frame = trackNewFrame(input,is_semantic_mask);
-    RGBDInstanceOutputPacket::Ptr output = processFrame(frame, is_semantic_mask, input->optional_gt_);
+    Frame::Ptr frame = trackNewFrame(input);
+    RGBDInstanceOutputPacket::Ptr output = processFrame(frame, input->optional_gt_);
     logOutputPacket(output);
     return {State::Nominal, output};
 }
 
-Frame::Ptr RGBDInstanceFrontendModule::trackNewFrame(FrontendInputPacketBase::ConstPtr input, bool& is_semantic_mask){
+Frame::Ptr RGBDInstanceFrontendModule::trackNewFrame(FrontendInputPacketBase::ConstPtr input){
     ImageContainer::Ptr image_container = input->image_container_;
-    //if we only have instance semgentation (not motion) then we need to make a motion mask out of the semantic mask
-    //we cannot do this for the first frame so we will just treat the semantic mask and the motion mask
-    //and then subsequently elimate non-moving objects later on
-    TrackingInputImages tracking_images;
 
-    is_semantic_mask = image_container->hasSemanticMask();
-    if(is_semantic_mask) {
-        CHECK(!image_container->hasMotionMask());
-
-        auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
-        tracking_images = TrackingInputImages(
-            intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-            intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-            ImageWrapper<ImageType::MotionMask>(
-                intermediate_tracking_images.get<ImageType::SemanticMask>()
-            )
-        );
-    }
-    else {
-        tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
-    }
-
-    objectTrack(tracking_images, input->getFrameId());
+    objectTrack(image_container, input->getFrameId());
 
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("frontend.feature_tracker");
-        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
+        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
 
     }
     CHECK(frame);
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+    frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
     return frame;
 
 }
 
-RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Ptr frame, const bool& is_semantic_mask, GroundTruthInputPacket::Optional ground_truth) {
+RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Ptr frame, GroundTruthInputPacket::Optional ground_truth) {
     Frame::Ptr previous_frame = tracker_->getPreviousFrame();
     if(!previous_frame) {
         return constructOutput(*frame, MotionEstimateMap{}, frame->T_world_camera_, ground_truth);
@@ -146,15 +123,16 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
     CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
     VLOG(20) << to_string(tracker_->getTrackerInfo());
 
+    auto image_container = frame->image_container_;
+
     //updates frame->T_world_camera_
     if(!solveCameraMotion(frame, previous_frame)) {
         LOG(ERROR) << "Could not solve for camera";
     }
 
-    frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
-
     //mark observations as moving or not
     //if semantic mask is used, then use scene flow to try and determine if an object is moving or not!!
+    const bool is_semantic_mask = image_container.hasSemanticMask();
     determineDynamicObjects(*previous_frame, frame, is_semantic_mask);
 
     MotionEstimateMap motion_estimates;
@@ -188,7 +166,25 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
     debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
     //use the tracking images from the frame NOT the input tracking images since the feature tracking
     //will do some modifications on the images (particularily the mask during mask propogation)
-    debug_imagery.input_images = frame->tracking_images_;
+    //TODO: this really needs to be cloned but this is complex so do later!!
+    TrackingInputImages tracking_images;
+    if(image_container.hasSemanticMask()) {
+        CHECK(!image_container.hasMotionMask());
+
+        auto intermediate_tracking_images = image_container.makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
+        tracking_images = TrackingInputImages(
+            intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
+            intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
+            ImageWrapper<ImageType::MotionMask>(
+                intermediate_tracking_images.get<ImageType::SemanticMask>()
+            )
+        );
+    }
+    else {
+        tracking_images = image_container.makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
+    }
+
+    debug_imagery.input_images = tracking_images;
 
     RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, ground_truth, debug_imagery);
 
@@ -241,6 +237,61 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
             CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
             //TODO: should also mark outliers on frame_k_1
             frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
+
+            gtsam::Pose3 refined_pose;
+            gtsam::Point2Vector refined_flows;
+            TrackletIds refined_inliers;
+            //TODO: this function marks things as outliers internally but keeps the inlier as a out-arg
+            //so if we're not careful there could be a mismatch!!
+            motion_solver_.refineJointPoseOpticalFlow(
+                result,
+                frame_k_1,
+                frame_k,
+                refined_pose,
+                refined_flows,
+                refined_inliers
+            );
+
+            //original flow image that goes from k to k+1 (gross, im sorry!)
+            const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
+
+            //update flow and depth
+            for(size_t i = 0; i < refined_inliers.size(); i++) {
+                TrackletId tracklet_id = refined_inliers.at(i);
+                gtsam::Point2 refined_flow = refined_flows.at(i);
+
+                const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
+                Feature::Ptr feature_k = frame_k->at(tracklet_id);
+
+                const Keypoint kp_k_1 = feature_k_1->keypoint_;
+                Keypoint refined_keypoint = kp_k_1 + refined_flow;
+
+                //check boundaries?
+
+                //update keypoint!!
+                feature_k->keypoint_ = refined_keypoint;
+
+                //we now have to update the prediced keypoint using the original flow!!
+                //TODO: code copied from feature tracker
+                const int x = functional_keypoint::u(refined_keypoint);
+                const int y = functional_keypoint::v(refined_keypoint);
+                double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
+                double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
+                //the measured flow after the origin has been updated
+                OpticalFlow new_measured_flow(flow_xe, flow_ye);
+                feature_k->measured_flow_ = new_measured_flow;
+                // TODO: check predicted flow is within image
+                Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
+                feature_k->predicted_keypoint_ = predicted_kp;
+
+
+                //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
+                //TODO:update depth
+            }
+            auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+            frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+            // frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+            frame_k->T_world_camera_ = refined_pose;
             return true;
     }
     else {
@@ -277,6 +328,12 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
 
+        //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
+        //keypoints and so we need to upadte the z values
+        //TODO: should not be separate from the optimisation so refactor API!!!
+        auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+        frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
         ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
 
         const std::lock_guard<std::mutex> lock(object_motion_mutex_);
@@ -288,12 +345,12 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     }
 }
 
-void RGBDInstanceFrontendModule::objectTrack(TrackingInputImages& tracking_images, FrameId frame_id) {
+void RGBDInstanceFrontendModule::objectTrack(ImageContainer::Ptr image_container, FrameId frame_id) {
 
     if(FLAGS_use_byte_tracker) {
         utils::TimingStatsCollector track_dynamic_timer("frontend.object_tracker_2d");
-        cv::Mat& original_mask = tracking_images.get<ImageType::MotionMask>();
-        original_mask = object_tracker_.track(tracking_images.get<ImageType::MotionMask>(), frame_id);
+        cv::Mat& original_mask = image_container->get<ImageType::MotionMask>();
+        original_mask = object_tracker_.track(image_container->get<ImageType::MotionMask>(), frame_id);
     }
 
 }

@@ -58,10 +58,10 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
     CHECK(!img_size_.empty());
 }
 
-Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images) {
-    //take "copy" of tracking_images which is then given to the frame
+Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const ImageContainer& image_container) {
+    //take "copy" of image_container which is then given to the frame
     //this will mean that the tracking images (input) are not necessarily the same as the ones inside the returned frame
-    TrackingInputImages input_images = tracking_images;
+    ImageContainer input_images = image_container;
 
     info_ = FeatureTrackerInfo(); //clear the info
     info_.frame_id = frame_id;
@@ -111,7 +111,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
       frame_id,
       timestamp,
       camera_,
-      tracking_images,
+      image_container,
       static_features,
       dynamic_features);
 
@@ -128,7 +128,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
 cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const {
   cv::Mat img_rgb;
 
-  const cv::Mat& rgb = current_frame.tracking_images_.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
   rgb.copyTo(img_rgb);
 
 
@@ -234,7 +234,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 }
 
 
-void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
+void FeatureTracker::trackStatic(FrameId frame_id, const ImageContainer& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                                  size_t& n_new_tracks)
 {
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = tracking_images.getImageWrapper<ImageType::RGBMono>();
@@ -243,93 +243,135 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
 
   const cv::Mat& motion_mask = tracking_images.get<ImageType::MotionMask>();
 
-  cv::Mat descriptors;
-  KeypointsCV detected_keypoints;
-  (*feature_detector_)(mono, cv::Mat(), detected_keypoints, descriptors);
+  bool use_external_optical_flow = false;
+
+  if(use_external_optical_flow) {
+    cv::Mat descriptors;
+    KeypointsCV detected_keypoints;
+    (*feature_detector_)(mono, cv::Mat(), detected_keypoints, descriptors);
 
 
- // assign tracked features to grid and add to static features
-  static_features.clear();
+    // assign tracked features to grid and add to static features
+    static_features.clear();
 
-  const int& min_tracks = params_.max_tracking_points_bg;
+    const int& min_tracks = params_.max_tracking_points_bg;
 
-  // appy tracking (ie get correspondences)
-  if (previous_frame_)
-  {
-    for (Feature::Ptr previous_feature : previous_frame_->static_features_)
+    // appy tracking (ie get correspondences)
+    if (previous_frame_)
     {
-      const size_t tracklet_id = previous_feature->tracklet_id_;
-      const size_t age = previous_feature->age_;
-      const Keypoint kp = previous_feature->predicted_keypoint_;
-      const int x = functional_keypoint::u(kp);
-      const int y = functional_keypoint::v(kp);
-      const size_t cell_idx = static_grid_.getCellIndex(kp);
-      const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
-
-      if(static_grid_.occupancy_.at(cell_idx)) continue;
-
-      if (camera_->isKeypointContained(kp) && previous_feature->usable() && instance_label == background_label)
+      for (Feature::Ptr previous_feature : previous_frame_->usableStaticFeaturesBegin())
       {
-        size_t new_age = age + 1;
-        Feature::Ptr feature = constructStaticFeature(tracking_images, kp, new_age, tracklet_id, frame_id);
-        if (feature)
+        const size_t tracklet_id = previous_feature->tracklet_id_;
+        const size_t age = previous_feature->age_;
+        const Keypoint kp = previous_feature->predicted_keypoint_;
+        const int x = functional_keypoint::u(kp);
+        const int y = functional_keypoint::v(kp);
+        const size_t cell_idx = static_grid_.getCellIndex(kp);
+        const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
+
+        if(static_grid_.occupancy_.at(cell_idx)) continue;
+
+        if (camera_->isKeypointContained(kp) && previous_feature->usable() && instance_label == background_label)
         {
-          static_features.add(feature);
-          static_grid_.occupancy_[cell_idx] = true;
-        }
-      }
-    }
-  }
-
-  n_optical_flow = static_features.size();
-  // LOG(INFO) << "tracked with optical flow - " << n_optical_flow;
-
-
-  if (static_features.size() < min_tracks)
-  {
-    // iterate over new observations
-    for (size_t i = 0; i < detected_keypoints.size(); i++)
-    {
-      if (static_features.size() >= min_tracks)
-      {
-        break;
-      }
-
-      const KeypointCV& kp_cv = detected_keypoints[i];
-      const int& x = kp_cv.pt.x;
-      const int& y = kp_cv.pt.y;
-
-      // if not already tracked with optical flow
-      if (motion_mask.at<int>(y, x) != background_label)
-      {
-        continue;
-      }
-
-      Keypoint kp(x, y);
-      const size_t cell_idx = static_grid_.getCellIndex(kp);
-        if (!static_grid_.isOccupied(cell_idx))
-        {
-          const size_t age = 0;
-          size_t tracklet_id = tracklet_count;
-          Feature::Ptr feature = constructStaticFeature(tracking_images, kp, age, tracklet_id, frame_id);
+          size_t new_age = age + 1;
+          Feature::Ptr feature = constructStaticFeature(tracking_images, kp, new_age, tracklet_id, frame_id);
           if (feature)
           {
-            tracklet_count++;
-            static_grid_.occupancy_[cell_idx] = true;
             static_features.add(feature);
+            static_grid_.occupancy_[cell_idx] = true;
           }
         }
-      // }
+      }
     }
-  }
 
-  size_t total_tracks = static_features.size();
-  n_new_tracks = total_tracks - n_optical_flow;
+    n_optical_flow = static_features.size();
+    // LOG(INFO) << "tracked with optical flow - " << n_optical_flow;
+
+
+    if (static_features.size() < min_tracks)
+    {
+      // iterate over new observations
+      for (size_t i = 0; i < detected_keypoints.size(); i++)
+      {
+        if (static_features.size() >= min_tracks)
+        {
+          break;
+        }
+
+        const KeypointCV& kp_cv = detected_keypoints[i];
+        const int& x = kp_cv.pt.x;
+        const int& y = kp_cv.pt.y;
+
+        // if not already tracked with optical flow
+        if (motion_mask.at<int>(y, x) != background_label)
+        {
+          continue;
+        }
+
+        Keypoint kp(x, y);
+        const size_t cell_idx = static_grid_.getCellIndex(kp);
+          if (!static_grid_.isOccupied(cell_idx))
+          {
+            const size_t age = 0;
+            size_t tracklet_id = tracklet_count;
+            Feature::Ptr feature = constructStaticFeature(tracking_images, kp, age, tracklet_id, frame_id);
+            if (feature)
+            {
+              tracklet_count++;
+              static_grid_.occupancy_[cell_idx] = true;
+              static_features.add(feature);
+            }
+          }
+        // }
+      }
+    }
+
+    size_t total_tracks = static_features.size();
+    n_new_tracks = total_tracks - n_optical_flow;
+  }
+  else {
+    std::vector<cv::Point2f> detected_keypoints;
+    cv::goodFeaturesToTrack(mono, detected_keypoints, 100, 0.3, 7, cv::Mat(), 7, false, 0.04);
+
+    TrackletIds previous_tracklet_ids;
+    std::vector<cv::Point2f> previous_keypoints;
+    if (previous_frame_) {
+      for(Feature::Ptr previous_feature : previous_frame_->usableStaticFeaturesBegin()) {
+        cv::Point2f kp(static_cast<float>(previous_feature->keypoint_(0)), static_cast<float>(previous_feature->keypoint_(1)));
+        previous_keypoints.push_back(kp);
+        previous_tracklet_ids.push_back(previous_feature->tracklet_id_);
+      }
+
+      const ImageWrapper<ImageType::RGBMono>& previous_rgb_wrapper = previous_frame_->image_container_.getImageWrapper<ImageType::RGBMono>();
+      const cv::Mat& previous_rgb = previous_rgb_wrapper.toRGB();
+      cv::Mat previous_mono = ImageType::RGBMono::toMono(previous_rgb);
+
+      std::vector<cv::Point2f> current_keypoints;
+      std::vector<uchar> status;
+      std::vector<double> error;
+      cv::calcOpticalFlowPyrLK(previous_mono, mono, previous_keypoints, current_keypoints, status, error);
+
+      TrackletIds trackled_ids;
+
+      CHECK_EQ(status.size(), previous_tracklet_ids.size());
+      std::vector<cv::Point2f> good_prev_keypoints;
+      std::vector<cv::Point2f> good_curr_keypoints;
+      for (size_t i = 0; i < status.size(); i++) {
+          if (status[i]) {
+              good_prev_keypoints.push_back(previous_keypoints[i]);
+              good_curr_keypoints.push_back(current_keypoints[i]);
+              trackled_ids.push_back(previous_tracklet_ids.at(i));
+          }
+      }
+
+    }
+
+  }
 
 }
 
 
-void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features) {
+void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& tracking_images, FeatureContainer& dynamic_features) {
   // first dectect dynamic points
   const cv::Mat& rgb = tracking_images.get<ImageType::RGBMono>();
   //flow is going to take us from THIS frame to the next frame (which does not make sense for a realtime system)
@@ -350,7 +392,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 
   if (previous_frame_)
   {
-    const cv::Mat& previous_motion_mask = previous_frame_->tracking_images_.get<ImageType::MotionMask>();
+    const cv::Mat& previous_motion_mask = previous_frame_->image_container_.get<ImageType::MotionMask>();
     utils::TimingStatsCollector tracked_dynamic_features("tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature : previous_frame_->usableDynamicFeaturesBegin())
     {
@@ -471,6 +513,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
         feature->age_ = 0;
         feature->tracklet_id_ = tracklet_count;
         tracklet_count++;
+        feature->measured_flow_ = flow;
         feature->predicted_keypoint_ = predicted_kp;
         feature->keypoint_ = keypoint;
 
@@ -488,13 +531,13 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const TrackingInputImages& t
 }
 
 
-void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
+void FeatureTracker::propogateMask(ImageContainer& tracking_images) {
   if(!previous_frame_) return;
 
 
-  const cv::Mat& previous_rgb = previous_frame_->tracking_images_.get<ImageType::RGBMono>();
-  const cv::Mat& previous_mask = previous_frame_->tracking_images_.get<ImageType::MotionMask>();
-  const cv::Mat& previous_flow = previous_frame_->tracking_images_.get<ImageType::OpticalFlow>();
+  const cv::Mat& previous_rgb = previous_frame_->image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& previous_mask = previous_frame_->image_container_.get<ImageType::MotionMask>();
+  const cv::Mat& previous_flow = previous_frame_->image_container_.get<ImageType::OpticalFlow>();
 
   // note reference
   cv::Mat& current_mask = tracking_images.get<ImageType::MotionMask>();
@@ -634,7 +677,7 @@ void FeatureTracker::propogateMask(TrackingInputImages& tracking_images) {
   }
 }
 
-Feature::Ptr FeatureTracker::constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id, FrameId frame_id) const {
+Feature::Ptr FeatureTracker::constructStaticFeature(const ImageContainer& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id, FrameId frame_id) const {
   //implicit double -> int cast for pixel location
   const int x = functional_keypoint::u(kp);
   const int y = functional_keypoint::v(kp);

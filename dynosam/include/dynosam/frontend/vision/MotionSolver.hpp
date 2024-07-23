@@ -142,7 +142,7 @@ class EssentialDecompositionResult; //forward declare
 
 template<typename T>
 struct SolverResult {
-    T best_pose;
+    T best_pose; //TODO: rename as not always pose!!
     TrackletIds inliers;
     TrackletIds outliers;
     TrackingStatus status;
@@ -198,6 +198,17 @@ public:
     Pose3SolverResult geometricOutlierRejection3d3d(
                             const PointCloudCorrespondences& correspondences,
                             std::optional<gtsam::Rot3> R_curr_ref = {});
+
+    //TODO: refactor API using the result struct
+    void refineJointPoseOpticalFlow(
+        Pose3SolverResult& solver_result,
+        const Frame::Ptr frame_k_1,
+        const Frame::Ptr frame_k,
+        gtsam::Pose3& refined_pose,
+        gtsam::Point2Vector& refined_flows,
+        TrackletIds& inliers //inlier set from the inliers in result
+    );
+
 
 
 protected:

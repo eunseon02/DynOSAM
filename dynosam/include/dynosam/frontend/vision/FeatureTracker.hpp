@@ -113,7 +113,7 @@ public:
     virtual ~FeatureTracker() {}
 
     //note: MOTION MASK!!
-    Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images);
+    Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const ImageContainer& image_container);
 
     cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const;
 
@@ -140,11 +140,11 @@ public:
 
 protected:
 
-    void trackStatic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
+    void trackStatic(FrameId frame_id, const ImageContainer& tracking_images, FeatureContainer& static_features, size_t& n_optical_flow,
                    size_t& n_new_tracks);
-    void trackDynamic(FrameId frame_id, const TrackingInputImages& tracking_images, FeatureContainer& dynamic_features);
+    void trackDynamic(FrameId frame_id, const ImageContainer& tracking_images, FeatureContainer& dynamic_features);
 
-    void propogateMask(TrackingInputImages& tracking_images);
+    void propogateMask(ImageContainer& tracking_images);
 
     inline bool isWithinShrunkenImage(const Keypoint& kp) {
         CHECK(!initial_computation_);
@@ -164,7 +164,7 @@ protected:
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
 
-    Feature::Ptr constructStaticFeature(const TrackingInputImages& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,
+    Feature::Ptr constructStaticFeature(const ImageContainer& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,
                                       FrameId frame_id) const;
 
 protected:

@@ -29,60 +29,155 @@
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/geometry/Point2.h>
 
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/geometry/PinholeCamera.h>
+
 namespace dyno {
 
+// //expects the camera to have a calibration()
+// template<class CAMERA>
+// class Pose3FlowProjectionFactor : public gtsam::NoiseModelFactor2<gtsam::Point2, gtsam::Pose3> {
+
+// public:
+//     using Camera = CAMERA;
+//     using This = Pose3FlowProjectionFactor<Camera>;
+//     using Base = gtsam::NoiseModelFactor2<gtsam::Point2, gtsam::Pose3>; //keypoint to camera pose
+
+//     using shared_ptr = std::shared_ptr<This>;
+
+
+//     Pose3FlowProjectionFactor(
+//         gtsam::Key optical_flow_key,
+//         gtsam::Key camera_pose_key,
+//         const gtsam::Point2& keypoint,
+//         double depth,
+//         const Camera& camera_ref,
+//         gtsam::SharedNoiseModel model)
+//     : Base(model, optical_flow_key, camera_pose_key), keypoint_(keypoint), depth_(depth), camera_ref_(camera_ref) {}
+
+
+//     gtsam::Vector evaluateError(const gtsam::Point2& optical_flow, const gtsam::Point3& camera_pose,
+//                               boost::optional<gtsam::Matrix&> J1 = boost::none,
+//                               boost::optional<gtsam::Matrix&> J2 = boost::none) const override
+//     {
+//         //project the ref keypoint into the world frame given the camera
+//         gtsam::Point3 P_W = camera_ref_.backproject(keypoint_, depth_);
+
+//         //assume current and ref camera have the same calibration
+//         const auto calibration = camera_ref_.calibration();
+//         Camera camera_curr(camera_pose, calibration);
+
+//         gtsam::Point2 predicted_keypoint = keypoint_ + optical_flow;
+//         //project P_w into the current frame frame which should be the predicted one
+//         gtsam::Point2 predicted_keypoint_from_projection = camera_curr.project2(P_W);
+
+//         //point in the current camera frame
+//         gtsam::Point3 P_curr = camera_curr.pose().inverse() * P_W;
+
+//         if(J1) {
+//             *J1 = gtsam::Matrix22::Identity();
+//         }
+
+//         if(J2) {
+//             const double x = P_curr(0);
+//             const double y = P_curr(1);
+//             const double z = P_curr(2);
+//             const double z_2 = z*z;
+
+//             const double fx = calibration.fx();
+//             const double fy = calibration.fy();
+
+//             gtsam::Matrix26 H;
+//             H(0,0) =  x*y/z_2 *fx;
+//             H(0,1) = -(1+(x*x/z_2)) *fx;
+//             H(0,2) = y/z *fx;
+//             H(0,3) = -1./z *fx;
+//             H(0,4) = 0;
+//             H(0,5) = x/z_2 *fx;
+
+//             H(1,0) = (1+y*y/z_2) *fy;
+//             H(1,1) = -x*y/z_2 *fy;
+//             H(1,2) = -x/z *fy;
+//             H(1,3) = 0;
+//             H(1,4) = -1./z *fy;
+//             H(1,5) = y/z_2 *fy;
+
+//             *J2 = H;
+//         }
+
+//         return predicted_keypoint - predicted_keypoint_from_projection;
+//     }
+
+
+// private:
+//     gtsam::Point2 keypoint_; //! Observed keypoint, the origin of the optical flow (in the ref frame)
+//     double depth_; //! Observed depth measurement of the keypoint (in the camera frame, as from an RGBD camera)
+//     Camera camera_ref_; //! ref Camera in which this feature was seen in
+// };
+
 //expects the camera to have a calibration()
-template<class CAMERA>
+template<class CALIBRATION = gtsam::Cal3_S2>
 class Pose3FlowProjectionFactor : public gtsam::NoiseModelFactor2<gtsam::Point2, gtsam::Pose3> {
 
 public:
-    using Camera = CAMERA;
-    using This = Pose3FlowProjectionFactor<Camera>;
+    using Calibration = CALIBRATION;
+    using This = Pose3FlowProjectionFactor<Calibration>;
     using Base = gtsam::NoiseModelFactor2<gtsam::Point2, gtsam::Pose3>; //keypoint to camera pose
 
-    using shared_ptr = std::shared_ptr<This>;
+    using shared_ptr = boost::shared_ptr<This>;
 
 
     Pose3FlowProjectionFactor(
         gtsam::Key optical_flow_key,
         gtsam::Key camera_pose_key,
-        const gtsam::Point2& keypoint,
+        const gtsam::Point2& keypoint_previous,
         double depth,
-        const Camera& camera_ref,
+        const gtsam::Pose3& pose_previous,
+        const Calibration& calibration,
         gtsam::SharedNoiseModel model)
-    : Base(model, optical_flow_key, camera_pose_key), keypoint_(keypoint), depth_(depth), camera_ref_(camera_ref) {}
+    : Base(model, optical_flow_key, camera_pose_key),
+      keypoint_previous_(keypoint_previous),
+      depth_(depth),
+      pose_previous_(pose_previous),
+      calibration_(calibration) {}
+
+    gtsam::NonlinearFactor::shared_ptr clone() const override
+    {
+        return boost::static_pointer_cast<gtsam::NonlinearFactor>(gtsam::NonlinearFactor::shared_ptr(new This(*this)));
+    }
 
 
-    gtsam::Vector evaluateError(const gtsam::Point2& optical_flow, const gtsam::Point3& camera_pose,
+    gtsam::Vector evaluateError(const gtsam::Point2& optical_flow, const gtsam::Pose3& camera_pose,
                               boost::optional<gtsam::Matrix&> J1 = boost::none,
                               boost::optional<gtsam::Matrix&> J2 = boost::none) const override
     {
-        //project the ref keypoint into the world frame given the camera
-        gtsam::Point3 P_W = camera_ref_.backproject(keypoint_, depth_);
 
-        //assume current and ref camera have the same calibration
-        const auto calibration = camera_ref_.calibration();
-        Camera camera_curr(camera_pose, calibration);
+        auto I = gtsam::traits<gtsam::Pose3>::Identity();
+        gtsam::PinholeCamera<Calibration> previous_camera(I, calibration_);
+        //project the ref keypoint into the world frame given the camera at k-1
+        gtsam::Point3 P_W = pose_previous_ * previous_camera.backproject(keypoint_previous_, depth_);
+        //camera at k using the same calibration
+        gtsam::PinholeCamera<Calibration> camera_current(I, calibration_);
 
-        gtsam::Point2 predicted_keypoint = keypoint_ + optical_flow;
+        gtsam::Point2 predicted_keypoint = keypoint_previous_ + optical_flow;
         //project P_w into the current frame frame which should be the predicted one
-        gtsam::Point2 predicted_keypoint_from_projection = camera_curr.project2(P_W);
+        gtsam::Point3 P_curr = camera_pose.inverse() * P_W;
+        gtsam::Point2 predicted_keypoint_from_projection = camera_current.project2(P_curr);
 
-        //point in the current camera frame
-        gtsam::Point3 P_curr = camera_curr.pose().inverse() * P_W;
 
         if(J1) {
             *J1 = gtsam::Matrix22::Identity();
         }
 
         if(J2) {
+            //point in the current camera frame
             const double x = P_curr(0);
             const double y = P_curr(1);
             const double z = P_curr(2);
             const double z_2 = z*z;
 
-            const double fx = calibration.fx();
-            const double fy = calibration.fy();
+            const double fx = calibration_.fx();
+            const double fy = calibration_.fy();
 
             gtsam::Matrix26 H;
             H(0,0) =  x*y/z_2 *fx;
@@ -99,7 +194,7 @@ public:
             H(1,4) = -1./z *fy;
             H(1,5) = y/z_2 *fy;
 
-            *J2 = H;
+            *J2 = -1.0 * H;
         }
 
         return predicted_keypoint - predicted_keypoint_from_projection;
@@ -107,9 +202,10 @@ public:
 
 
 private:
-    gtsam::Point2 keypoint_; //! Observed keypoint, the origin of the optical flow (in the ref frame)
-    double depth_; //! Observed depth measurement of the keypoint (in the camera frame, as from an RGBD camera)
-    Camera camera_ref_; //! ref Camera in which this feature was seen in
+    gtsam::Point2 keypoint_previous_; //! Observed keypoint, the origin of the optical flow (in the ref frame)
+    double depth_; //! Observed depth measurement of the keypoint (in the ref frame)
+    gtsam::Pose3 pose_previous_; //! Pose of the reference frame
+    Calibration calibration_;
 };
 
 } //dyno

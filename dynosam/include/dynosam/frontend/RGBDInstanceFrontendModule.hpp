@@ -60,9 +60,9 @@ private:
     SpinReturn nominalSpin(FrontendInputPacketBase::ConstPtr input) override;
 
     //track on new frame and update depths
-    Frame::Ptr trackNewFrame(FrontendInputPacketBase::ConstPtr input, bool& is_semantic_mask);
+    Frame::Ptr trackNewFrame(FrontendInputPacketBase::ConstPtr input);
 
-    RGBDInstanceOutputPacket::Ptr processFrame(Frame::Ptr frame, const bool& is_semantic_mask, GroundTruthInputPacket::Optional ground_truth = {});
+    RGBDInstanceOutputPacket::Ptr processFrame(Frame::Ptr frame, GroundTruthInputPacket::Optional ground_truth = {});
 
     void logOutputPacket(const RGBDInstanceOutputPacket::Ptr& output);
 
@@ -94,7 +94,7 @@ private:
 
     //if FLAGS_use_byte_tracker is true, runs the Byte Tracking algorithm on the input image and generates a global track
     //which is ued to update the motion mask such that each pixel value is set to the global track for that object
-    void objectTrack(TrackingInputImages& tracking_images, FrameId frame_id);
+    void objectTrack(ImageContainer::Ptr image_container, FrameId frame_id);
 
     //determines if the objects in the current frame are static/dynamic by looking at the scene flow
     //depth must be provided for each feature

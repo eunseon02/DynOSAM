@@ -128,6 +128,10 @@ public:
     template<typename... SubsetImageTypes>
     ImageContainerSubset<SubsetImageTypes...> makeSubset(const bool clone = false) const;
 
+    This clone() const {
+        return this->makeSubset<ImageTypes...>(true);
+    }
+
     /**
      * @brief Returns true if the corresponding image corresponding to the requested ImageType exists (i.e is not empty)
      *
@@ -237,6 +241,9 @@ protected:
 
 class UndistorterRectifier; //TODO:!!
 
+//TODO: make some clone or better tested copy function so we can control when cv::mats are cloned
+//difficult as we want the behaviour in the base class but the base class does not know the derived type
+//this and also implicit casting to other subset types
 class ImageContainer : public ImageContainerSubset<
     ImageType::RGBMono,
     ImageType::Depth,
@@ -256,6 +263,21 @@ public:
         ImageType::MotionMask,
         ImageType::ClassSegmentation>;
 
+    //TODO: gross, think of a better way of doing this (I think will need to have the base know abot derived type, but
+    // unsure how to do this as we already have much templating!!)
+    inline auto toBaseSubset(bool clone = false) const {
+    // auto construct_subset = [&](auto&&... args) { return Base::makeSubset(args..); };
+    // return std::apply(construct_subset, subset_wrappers);
+    //     return Base::makeSubset<Base::ImageTypesTuple...>(clone);
+        return Base::makeSubset<ImageType::RGBMono,
+                                ImageType::Depth,
+                                ImageType::OpticalFlow,
+                                ImageType::SemanticMask,
+                                ImageType::MotionMask,
+                                ImageType::ClassSegmentation>
+                            (clone);
+    }
+
 
     /**
      * @brief Returns image. Could be RGB or greyscale
@@ -274,6 +296,8 @@ public:
 
     cv::Mat getClassSegmentation() const { return Base::get<ImageType::ClassSegmentation>(); }
 
+
+
     /**
      * @brief Returns true if the set of input images does not contain depth and
      * therefore should be used as part of a Monocular VO pipeline
@@ -286,6 +310,8 @@ public:
     inline bool hasSemanticMask() const { return !getSemanticMask().empty(); }
     inline bool hasMotionMask() const { return !getMotionMask().empty(); }
     inline bool hasClassSegmentation() const { return !getClassSegmentation().empty(); }
+
+
 
     /**
      * @brief True if the image has 3 channels and is therefore expected to be RGB.
@@ -363,6 +389,8 @@ public:
     static ImageContainer::Ptr RectifyImages(ImageContainer::Ptr images, const UndistorterRectifier& undistorter);
 
 protected:
+    using Base::clone; //make private so we can implement this one!
+
     /**
      * @brief Static construction of a full image container and calls validateSetup on the resulting object.
      *

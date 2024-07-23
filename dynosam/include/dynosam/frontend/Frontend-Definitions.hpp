@@ -81,7 +81,7 @@ inline std::string to_string(const TrackingStatus& status) {
 }
 
 
-
+//TODO: depcricate!!!
 using TrackingInputImages = ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>;
 
 /**
@@ -94,6 +94,7 @@ struct DebugImagery {
   //TODO: make const!!
   cv::Mat detected_bounding_boxes;
   cv::Mat tracking_image;
+  //TODO: for now!
   TrackingInputImages input_images;
 
 

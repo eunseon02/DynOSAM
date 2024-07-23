@@ -35,13 +35,13 @@ Frame::Frame(
         FrameId frame_id,
         Timestamp timestamp,
         Camera::Ptr camera,
-        const TrackingInputImages& tracking_images,
+        const ImageContainer& image_container,
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features)
         :   frame_id_(frame_id),
             timestamp_(timestamp),
             camera_(camera),
-            tracking_images_(tracking_images),
+            image_container_(image_container),
             static_features_(static_features),
             dynamic_features_(dynamic_features)
         {
@@ -151,7 +151,7 @@ void Frame::updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max
 
 cv::Mat Frame::drawDetectedObjectBoxes() const {
     cv::Mat rgb_objects;
-    tracking_images_.cloneImage<ImageType::RGBMono>(rgb_objects);
+    image_container_.cloneImage<ImageType::RGBMono>(rgb_objects);
 
     for(auto& object_observation_pair : object_observations_) {
         const ObjectId object_id = object_observation_pair.first;
@@ -346,7 +346,7 @@ void Frame::updateDepthsFeatureContainer(FeatureContainer& container, const Imag
 
 void Frame::constructDynamicObservations() {
     object_observations_.clear();
-    const ObjectIds instance_labels = vision_tools::getObjectLabels(tracking_images_.get<ImageType::MotionMask>());
+    const ObjectIds instance_labels = vision_tools::getObjectLabels(image_container_.get<ImageType::MotionMask>());
 
     auto inlier_iterator = dynamic_features_.beginUsable();
     for(const Feature::Ptr& dynamic_feature : inlier_iterator) {
@@ -373,7 +373,7 @@ void Frame::constructDynamicObservations() {
     // and draw it.
     // We apply some eroding/dilation on it to make the resulting submask smoother
     // so that we can more easily fit an rectangle to it
-    const cv::Mat& mask = tracking_images_.get<ImageType::MotionMask>();
+    const cv::Mat& mask = image_container_.get<ImageType::MotionMask>();
     for(auto& object_observation_pair : object_observations_) {
         const ObjectId object_id = object_observation_pair.first;
         DynamicObjectObservation& obs = object_observation_pair.second;

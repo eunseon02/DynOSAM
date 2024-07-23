@@ -22,11 +22,18 @@
  */
 
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
+#include "dynosam/factors/Pose3FlowProjectionFactor.h"
+#include "dynosam/utils/GtsamUtils.hpp"
+
+#include "internal/helpers.hpp"
+
+
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 
 #include <gtsam/geometry/Pose3.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
+#include <gtsam/base/numericalDerivative.h>
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
@@ -77,7 +84,56 @@ TEST(LandmarkMotionPoseFactor, visualiseJacobiansWithNonZeros) {
         gtsam::Ordering::OrderingType::COLAMD,
         factor_graph_tools::DrawBlockJacobiansOptions::makeDynoSamOptions());
 
-    cv::imshow("LandmarkMotionPoseFactor block jacobians", block_jacobians);
-    cv::waitKey(0);
+    // cv::imshow("LandmarkMotionPoseFactor block jacobians", block_jacobians);
+    // cv::waitKey(0);
+
+}
+
+TEST(Pose3FlowProjectionFactor, testJacobians) {
+
+    gtsam::Pose3 previous_pose = utils::createRandomAroundIdentity<gtsam::Pose3>(0.4);
+    static gtsam::Pose3 kDeltaPose(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                            gtsam::Point3(0.05, -0.10, 0.20));
+    gtsam::Pose3 current_pose = previous_pose * kDeltaPose;
+
+    gtsam::Point2 kp(1.2, 2.4);
+    double depth = 0.5;
+    gtsam::Point2 flow(0.1, -0.3);
+
+    auto noise = gtsam::noiseModel::Isotropic::Sigma(2u, 0.1);
+
+    auto camera_params = dyno_testing::makeDefaultCameraParams();
+    gtsam::Cal3_S2 calibration = camera_params.constructGtsamCalibration<gtsam::Cal3_S2>();
+
+    Pose3FlowProjectionFactor<gtsam::Cal3_S2> factor(
+        0,
+        1,
+        kp,
+        depth,
+        previous_pose,
+        calibration,
+        noise
+    );
+
+    gtsam::Matrix H1, H2;
+    gtsam::Vector error = factor.evaluateError(flow, current_pose, H1, H2);
+
+    //now do numerical jacobians
+    gtsam::Matrix numerical_H1 =
+            gtsam::numericalDerivative21<gtsam::Vector2, gtsam::Point2, gtsam::Pose3>(
+                std::bind(&Pose3FlowProjectionFactor<gtsam::Cal3_S2>::evaluateError, &factor,
+                std::placeholders::_1, std::placeholders::_2, boost::none, boost::none),
+            flow, current_pose);
+
+    gtsam::Matrix numerical_H2 =
+            gtsam::numericalDerivative22<gtsam::Vector2, gtsam::Point2, gtsam::Pose3>(
+                std::bind(&Pose3FlowProjectionFactor<gtsam::Cal3_S2>::evaluateError, &factor,
+                std::placeholders::_1, std::placeholders::_2,boost::none, boost::none),
+            flow, current_pose);
+
+    EXPECT_TRUE(gtsam::assert_equal(H1, numerical_H1, 1e-4));
+    EXPECT_TRUE(gtsam::assert_equal(H2, numerical_H2, 1e-4));
+
+
 
 }

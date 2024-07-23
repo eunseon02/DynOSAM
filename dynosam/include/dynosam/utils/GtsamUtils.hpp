@@ -42,6 +42,8 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 
+#include <glog/logging.h>
+
 
 template <typename T>
 struct is_gtsam_factor : std::is_base_of<gtsam::Factor, T>

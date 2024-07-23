@@ -25,6 +25,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/utils/Numerical.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
@@ -62,6 +63,39 @@ void addBetweenFactor(
 
 
 void addSmartProjectionMeasurement(SmartProjectionFactor::shared_ptr smart_factor, Keypoint measurement, FrameId frame_id);
+
+
+//expects DERIVEDFACTOR to be a NoiseModelFactor so that we can use whitenedError
+template<typename DERIVEDFACTOR>
+gtsam::FactorIndices determineFactorOutliers(
+    const gtsam::NonlinearFactorGraph& graph,
+    const gtsam::Values& values,
+    double confidence = 0.99)
+{
+    gtsam::FactorIndices outlier_indicies;
+    for (size_t k = 0; k < graph.size(); k++) {
+        if (!graph[k]) continue;
+
+        auto derived_factor = boost::dynamic_pointer_cast<DERIVEDFACTOR>(graph[k]);
+        if(derived_factor) {
+            double weighted_threshold = 0.5 * chi_squared_quantile(derived_factor->dim(), confidence); // 0.5 derives from the error definition in gtsam
+            //NOTE: double casting as we expect DERIVEDFACTOR to be a NoiseModelFactor
+            gtsam::NoiseModelFactor::shared_ptr nm_factor = boost::dynamic_pointer_cast<gtsam::NoiseModelFactor>(derived_factor);
+            CHECK(nm_factor);
+            // all noise models must be gaussian otherwise whittening will be reweighted
+            auto robust = boost::dynamic_pointer_cast<gtsam::noiseModel::Robust>(nm_factor->noiseModel());
+            auto gaussian_nm_factor = robust ? nm_factor-> cloneWithNewNoiseModel(robust->noise()) : nm_factor;
+            CHECK(gaussian_nm_factor);
+
+            double error = gaussian_nm_factor->error(values);
+
+            if(error > weighted_threshold ) {
+                outlier_indicies.push_back(k);
+            }
+        }
+    }
+    return outlier_indicies;
+}
 
 
 template<typename GRAPH>

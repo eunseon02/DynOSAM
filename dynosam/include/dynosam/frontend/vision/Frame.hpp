@@ -48,7 +48,7 @@ public:
     const FrameId frame_id_;
     const Timestamp timestamp_;
     Camera::Ptr camera_;
-    const TrackingInputImages tracking_images_;
+    const ImageContainer image_container_;
 
     gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
 
@@ -65,7 +65,7 @@ public:
         FrameId frame_id,
         Timestamp timestamp,
         Camera::Ptr camera,
-        const TrackingInputImages& tracking_images,
+        const ImageContainer& image_container,
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features);
 

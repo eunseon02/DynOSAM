@@ -191,7 +191,15 @@ int main(int argc, char* argv[]) {
         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
 
-        auto frame = tracker->track(frame_id, timestamp, TrackingInputImages(rgb, optical_flow, motion));
+        ImageContainer::Ptr container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::MotionMask>(motion));
+
+        auto frame = tracker->track(frame_id, timestamp, *container);
         Frame::Ptr previous_frame = tracker->getPreviousFrame();
         if(previous_frame) {
             cv::imshow("Tracking", tracker->computeImageTracks(*previous_frame, *frame));
