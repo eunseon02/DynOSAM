@@ -116,7 +116,7 @@ class Accumulator {
 
   /* ------------------------------------------------------------------------ */
   SumType Mean() const {
-    return (total_samples_ < 1) ? 0.0 : sum_ / total_samples_;
+    return (total_samples_ < 1) ? 0.0 : sum_ / static_cast<SumType>(total_samples_);
   }
 
   /* ------------------------------------------------------------------------ */

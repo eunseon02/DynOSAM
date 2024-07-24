@@ -60,6 +60,7 @@ public:
     //semantic instance label to object observation (by the actual observations in the image)
     //set in constructor
     std::map<ObjectId, DynamicObjectObservation> object_observations_;
+    MotionEstimateMap motion_estimates_; //map of object ids to object motions that take the object from k-1 to k in W. Updated in the frontend and will not initially have a value
 
     Frame(
         FrameId frame_id,

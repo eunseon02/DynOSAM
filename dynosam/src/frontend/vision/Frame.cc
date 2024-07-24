@@ -449,14 +449,15 @@ FeatureFilterIterator Frame::usableDynamicFeaturesBegin() const {
 
 
 Landmark Frame::getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature, const gtsam::Pose3& X_world) const {
-    const auto& it = cache.find(feature->tracklet_id_);
-    if(it != cache.end()) {
-        return it->second;
-    }
+    //TODO: dont cache as we now update the optical flow and the depth in the frontend and cacheing it will not use the right values!!!
+    // const auto& it = cache.find(feature->tracklet_id_);
+    // if(it != cache.end()) {
+    //     return it->second;
+    // }
 
     Landmark lmk;
     camera_->backProject(feature->keypoint_, feature->depth_, &lmk, X_world);
-    cache.insert({feature->tracklet_id_, lmk});
+    // cache.insert({feature->tracklet_id_, lmk});
     return lmk;
 }
 

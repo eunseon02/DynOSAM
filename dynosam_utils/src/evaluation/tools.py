@@ -267,6 +267,43 @@ def plot_object_trajectories(
     draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
 
 
+def calculate_omd_errors(traj, traj_ref, object_id):
+    assert isinstance(traj, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D)
+
+    assert len(traj.poses_se3) == len(traj_ref.poses_se3)
+
+    gt_pose_0 = traj_ref.poses_se3[0]
+    est_pose_0 = traj.poses_se3[0]
+
+    # the difference in pose of the estimated pose (at s = 0) and the gt pose (at s = 0), w.r.t the gt pose
+    # if the poses are properly aligned, this will be identity
+    error_0 = np.dot(evo_lie_algebra.se3_inverse(gt_pose_0), est_pose_0)
+
+    import gtsam
+
+    t_errors = []
+
+
+    for est_pose, gt_pose in zip(traj.poses_se3[1:], traj_ref.poses_se3[1:]):
+        # the difference in pose between the ground truth pose (at s = k) and the estimated pose (at s = k) w.r.t the estimated pose
+        error_k = np.dot(evo_lie_algebra.se3_inverse(est_pose), gt_pose)
+        # following equation 29 in https://arxiv.org/pdf/2110.15169
+        # after treating all F's as I and j = k and k = 0, as per GE(l, t_k)
+        err_se3 = np.dot(error_k, error_0)
+        err_log = gtsam.Pose3.Logmap(gtsam.Pose3(err_se3))
+
+        err_rot = err_log[0:3]
+        err_xyz = err_log[3:6]
+
+        #t error is reported separately
+        err_t = np.linalg.norm(err_xyz)
+        t_errors.append(err_t)
+
+    t_errors = np.array(t_errors)
+    print(f"xyz largest error is {t_errors.max()} for {object_id}")
+
+
+
 def reconstruct_trajectory_from_relative(traj, traj_ref):
     assert isinstance(traj, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D)
 

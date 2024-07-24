@@ -120,6 +120,10 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
         return constructOutput(*frame, MotionEstimateMap{}, frame->T_world_camera_, ground_truth);
     }
 
+    //TODO: currently hack - the tracker now udpates the previous frame too (by resampling) so we need to udapte the depth too!
+    auto depth_image_wrapper = previous_frame->image_container_.getImageWrapper<ImageType::Depth>();
+    previous_frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
     CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
     VLOG(20) << to_string(tracker_->getTrackerInfo());
 
@@ -135,14 +139,13 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
     const bool is_semantic_mask = image_container.hasSemanticMask();
     determineDynamicObjects(*previous_frame, frame, is_semantic_mask);
 
-    MotionEstimateMap motion_estimates;
     ObjectIds failed_object_tracks;
 
     for(const auto& [object_id, observations] : frame->object_observations_) {
 
         LOG(INFO) << "Solving motion for " << object_id << " with " << observations.numFeatures();
 
-        if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
+        if(!solveObjectMotion(frame, previous_frame, object_id, frame->motion_estimates_)) {
             VLOG(5) << "Could not solve motion for object " << object_id <<
                 " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
             failed_object_tracks.push_back(object_id);
@@ -157,7 +160,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
     }
 
     //update the object_poses trajectory map which will be send to the viz
-    propogateObjectPoses(motion_estimates, frame->frame_id_);
+    propogateObjectPoses(frame->motion_estimates_, frame->frame_id_);
 
     DebugImagery debug_imagery;
     debug_imagery.tracking_image = tracker_->computeImageTracks(*previous_frame, *frame);
@@ -186,7 +189,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::processFrame(Frame::Pt
 
     debug_imagery.input_images = tracking_images;
 
-    RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, motion_estimates, frame->T_world_camera_, ground_truth, debug_imagery);
+    RGBDInstanceOutputPacket::Ptr output = constructOutput(*frame, frame->motion_estimates_, frame->T_world_camera_, ground_truth, debug_imagery);
 
     return output;
 }

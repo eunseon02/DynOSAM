@@ -25,6 +25,7 @@
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/Numerical.hpp"
+#include "dynosam/utils/Accumulator.hpp"
 #include "dynosam/frontend/MonoInstance-Definitions.hpp"
 
 #include "dynosam/backend/FactorGraphTools.hpp"
@@ -441,13 +442,13 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     gtsam::SharedNoiseModel flow_noise =
         gtsam::noiseModel::Isotropic::Sigma(2u, 0.1);
 
-    const static double k_huber_value = 0.04;
+    const static double k_huber_value = 0.0001;
     //robust noise model!
     flow_noise = gtsam::noiseModel::Robust::Create(
             gtsam::noiseModel::mEstimator::Huber::Create(k_huber_value), flow_noise);
 
     gtsam::SharedNoiseModel flow_prior_noise =
-        gtsam::noiseModel::Isotropic::Sigma(2u, 0.5);
+        gtsam::noiseModel::Isotropic::Sigma(2u, 0.3);
 
     //pose (this might not actually be the camera pose, as we use this to sovle motion too)
     gtsam::Pose3 pose = solver_result.best_pose;
@@ -481,7 +482,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         const Depth depth_k_1 = feature_k_1->depth_;
 
         const gtsam::Point2 flow = feature_k_1->measured_flow_;
-        CHECK(gtsam::equal(kp_k_1 + flow, feature_k->keypoint_)) << gtsam::Point2(kp_k_1 + flow) << " " << feature_k->keypoint_ << " object id " << feature_k->instance_label_;
+        CHECK(gtsam::equal(kp_k_1 + flow, feature_k->keypoint_)) << gtsam::Point2(kp_k_1 + flow) << " " << feature_k->keypoint_ << " object id " << feature_k->instance_label_ << " flow " << flow;
 
         gtsam::Symbol flow_symbol(flowSymbol(tracklet_id));
         auto flow_factor = boost::make_shared<Pose3FlowProjectionFactorCalib>(
@@ -509,53 +510,68 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     //graph we will mutate by removing outlier factors
     gtsam::NonlinearFactorGraph mutable_graph = graph;
     gtsam::Values optimised_values = values;
-    for(size_t itr = 0; itr < 4; itr++) {
-        optimised_values.update(pose_key, pose);
 
-        gtsam::LevenbergMarquardtParams opt_params;
-        if(VLOG_IS_ON(200))
-            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        //do we use values or optimised values here?
-        optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
-        double error_after = mutable_graph.error(optimised_values);
+    gtsam::LevenbergMarquardtParams opt_params;
+    if(VLOG_IS_ON(200))
+        opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        post_errors.push_back(error_after);
-        gtsam::FactorIndices outlier_factors = factor_graph_tools::determineFactorOutliers<Pose3FlowProjectionFactorCalib>(
-            mutable_graph,
-            optimised_values
-        );
+    optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
+    double error_after = mutable_graph.error(optimised_values);
+    post_errors.push_back(error_after);
 
-        //if we have no outliers, break the iteration loop
-        if(outlier_factors.size() == 0u) {
-            break;
-        }
+    gtsam::FactorIndices outlier_factors = factor_graph_tools::determineFactorOutliers<Pose3FlowProjectionFactorCalib>(
+        mutable_graph,
+        optimised_values
+    );
 
-        //currently removing factors from graph makes them nullptr
-        gtsam::NonlinearFactorGraph mutable_graph_with_null = mutable_graph;
-        for(auto outlier_idx : outlier_factors) {
-            auto factor = mutable_graph_with_null.at(outlier_idx);
-            gtsam::Symbol flow_symbol = factor->keys()[0];
-            CHECK_EQ(flow_symbol.chr(), 'f');
+    //if we have outliers, enter iteration loop
+    if(outlier_factors.size() > 0u) {
+        for(size_t itr = 0; itr < 4; itr++) {
 
-            outlier_flows.insert(flow_symbol);
-            mutable_graph_with_null.remove(outlier_idx);
-        }
-        //now iterate over graph and add factors that are not null to ensure all factors are ok
-        mutable_graph.resize(0);
-        for (size_t i = 0; i < mutable_graph_with_null.size(); i++) {
 
-            auto factor = mutable_graph_with_null.at(i);
-            if(factor) {
-                mutable_graph.add(factor);
+            //currently removing factors from graph makes them nullptr
+            gtsam::NonlinearFactorGraph mutable_graph_with_null = mutable_graph;
+            for(auto outlier_idx : outlier_factors) {
+                auto factor = mutable_graph_with_null.at(outlier_idx);
+                gtsam::Symbol flow_symbol = factor->keys()[0];
+                CHECK_EQ(flow_symbol.chr(), 'f');
+
+                outlier_flows.insert(flow_symbol);
+                mutable_graph_with_null.remove(outlier_idx);
+            }
+            //now iterate over graph and add factors that are not null to ensure all factors are ok
+            mutable_graph.resize(0);
+            for (size_t i = 0; i < mutable_graph_with_null.size(); i++) {
+
+                auto factor = mutable_graph_with_null.at(i);
+                if(factor) {
+                    mutable_graph.add(factor);
+                }
+            }
+            LOG(INFO) << "Removed " << outlier_factors.size() << " factors on iteration: " << itr;
+
+            optimised_values.update(pose_key, pose);
+            //do we use values or optimised values here?
+            optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
+            error_after = mutable_graph.error(optimised_values);
+            post_errors.push_back(error_after);
+
+            outlier_factors = factor_graph_tools::determineFactorOutliers<Pose3FlowProjectionFactorCalib>(
+                mutable_graph,
+                optimised_values
+            );
+
+            if(outlier_factors.size() == 0) {
+                break;
             }
         }
-        LOG(INFO) << "Removed " << outlier_factors.size() << " factors on iteration: " << itr;
     }
+
 
     size_t initial_size = graph.size();
     size_t inlier_size = mutable_graph.size();
-    double error_after = mutable_graph.error(optimised_values);
+    error_after = mutable_graph.error(optimised_values);
     LOG(INFO) << "Joint optical-flow/pose refinement - error before: "
         << error_before << " error after: " << error_after
         << " with initial size " << initial_size << " inlier size " << inlier_size;
@@ -605,8 +621,30 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
     const size_t& n_matches = dynamic_correspondences.size();
 
+    Pose3SolverResult geometric_result = EgoMotionSolver::geometricOutlierRejection3d2d(dynamic_correspondences);
+    Pose3SolverResult motion_model_result = motionModelOutlierRejection3d2d(
+        dynamic_correspondences,
+        frame_k_1,
+        frame_k,
+        T_world_k,
+        object_id
+    );
+
     Pose3SolverResult result;
-    result = EgoMotionSolver::geometricOutlierRejection3d2d(dynamic_correspondences);
+    if(geometric_result.status == TrackingStatus::VALID && motion_model_result.status == TrackingStatus::VALID) {
+        if(geometric_result.inliers.size() >= motion_model_result.inliers.size()) {
+            VLOG(10) << "Geometric model used (inliers " << geometric_result.inliers.size() << " vs " << motion_model_result.inliers.size();
+            result = geometric_result;
+        }
+        else {
+            VLOG(10) << "Motion motion model used (inliers " << motion_model_result.inliers.size() << " vs " << geometric_result.inliers.size();
+            result = motion_model_result;
+        }
+    }
+    //if no motion model, fall back on gemoetric result
+    else {
+        result = geometric_result;
+    }
 
     if(result.status == TrackingStatus::VALID) {
 
@@ -621,68 +659,73 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         gtsam::Pose3 refined_pose;
         gtsam::Point2Vector refined_flows;
         TrackletIds refined_inliers;
-        this->refineJointPoseOpticalFlow(
-            result,
-            frame_k_1,
-            frame_k,
-            refined_pose,
-            refined_flows,
-            refined_inliers
-        );
+        // this->refineJointPoseOpticalFlow(
+        //     result,
+        //     frame_k_1,
+        //     frame_k,
+        //     refined_pose,
+        //     refined_flows,
+        //     refined_inliers
+        // );
 
-        //original flow image that goes from k to k+1 (gross, im sorry!)
-        const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
-        const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
+        // //original flow image that goes from k to k+1 (gross, im sorry!)
+        // const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
+        // const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
 
-        //HACK: internally just mark as outlier if it is so!!
-        //update flow and depth
-        for(size_t i = 0; i < refined_inliers.size(); i++) {
-            TrackletId tracklet_id = refined_inliers.at(i);
-            gtsam::Point2 refined_flow = refined_flows.at(i);
+        // //HACK: internally just mark as outlier if it is so!!
+        // //update flow and depth
+        // for(size_t i = 0; i < refined_inliers.size(); i++) {
+        //     TrackletId tracklet_id = refined_inliers.at(i);
+        //     gtsam::Point2 refined_flow = refined_flows.at(i);
 
-            const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
-            Feature::Ptr feature_k = frame_k->at(tracklet_id);
+        //     const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
+        //     Feature::Ptr feature_k = frame_k->at(tracklet_id);
 
-            CHECK_EQ(feature_k->instance_label_, object_id);
+        //     CHECK_EQ(feature_k->instance_label_, object_id);
 
-            const Keypoint kp_k_1 = feature_k_1->keypoint_;
-            Keypoint refined_keypoint = kp_k_1 + refined_flow;
+        //     const Keypoint kp_k_1 = feature_k_1->keypoint_;
+        //     Keypoint refined_keypoint = kp_k_1 + refined_flow;
 
-            //check boundaries?
+        //     //check boundaries?
 
-            //update keypoint!!
-            feature_k->keypoint_ = refined_keypoint;
-            ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
-            if(predicted_label != object_id) {
-                feature_k->inlier_ = false;
-                //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
-                //etc are no longer correct!!?
-                continue;
-            }
+        //     //update keypoint!!
+        //     feature_k->keypoint_ = refined_keypoint;
+        //     ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
+        //     if(predicted_label != object_id) {
+        //         feature_k->inlier_ = false;
+        //         //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
+        //         //etc are no longer correct!!?
+        //         continue;
+        //     }
 
-            //we now have to update the prediced keypoint using the original flow!!
-            //TODO: code copied from feature tracker
-            const int x = functional_keypoint::u(refined_keypoint);
-            const int y = functional_keypoint::v(refined_keypoint);
-            double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
-            double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
-            //the measured flow after the origin has been updated
-            OpticalFlow new_measured_flow(flow_xe, flow_ye);
-            feature_k->measured_flow_ = new_measured_flow;
-            // TODO: check predicted flow is within image
-            Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
-            feature_k->predicted_keypoint_ = predicted_kp;
+        //     //we now have to update the prediced keypoint using the original flow!!
+        //     //TODO: code copied from feature tracker
+        //     const int x = functional_keypoint::u(refined_keypoint);
+        //     const int y = functional_keypoint::v(refined_keypoint);
+        //     double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
+        //     double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
+        //     //the measured flow after the origin has been updated
+        //     OpticalFlow new_measured_flow(flow_xe, flow_ye);
+        //     feature_k->measured_flow_ = new_measured_flow;
+        //     // TODO: check predicted flow is within image
+        //     Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
+        //     feature_k->predicted_keypoint_ = predicted_kp;
 
 
-            //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
-            //TODO:update depth
-        }
+        //     //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
+        //     //TODO:update depth
+        // }
         // //TODO: this runs over all tracklets so massive waste of time doing this here
         // //TODO: big refactor api
         //still need to take the inverse as we get the inverse of G out
         const gtsam::Pose3 G_w_refined = refined_pose.inverse();
-        const gtsam::Pose3 H_w = T_world_k * G_w_refined;
+        const gtsam::Pose3 H_w = T_world_k * G_w;
         result.best_pose = H_w;
+
+        //outliers are being marked in the solveObjectMotion
+        // //update inliers/outliers
+        // result.inliers = refined_inliers;
+        // determineOutlierIds(inliers, tracklets, outliers);
 
         if(params_.refine_object_motion_esimate) {
             refineLocalObjectMotionEstimate(
@@ -729,6 +772,80 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d3d(
     return result;
 }
 
+//TODO: dont actually need all these variables
+Pose3SolverResult ObjectMotionSovler::motionModelOutlierRejection3d2d(
+                            const AbsolutePoseCorrespondences& dynamic_correspondences,
+                            Frame::Ptr frame_k_1,
+                            Frame::Ptr frame_k,
+                            const gtsam::Pose3& T_world_k,
+                            ObjectId object_id)
+{
+    Pose3SolverResult result;
+
+    //get object motions in previous frame (so k-2 to k-1)
+    const MotionEstimateMap& motion_estiamtes_k_1 = frame_k_1->motion_estimates_;
+    if(!motion_estiamtes_k_1.exists(object_id)) {
+        result.status = TrackingStatus::INVALID;
+        return result;
+    }
+
+    //previous motion model: k-2 to k-1 in w
+    const gtsam::Pose3 motion_model = motion_estiamtes_k_1.at(object_id);
+
+    using Calibration = Camera::CalibrationType;
+    const auto calibration = camera_params_.constructGtsamCalibration<Calibration>();
+
+    auto I = gtsam::traits<gtsam::Pose3>::Identity();
+    gtsam::PinholeCamera<Calibration> camera(I, calibration);
+
+    const double reprojection_error = params_.ransac_threshold_pnp;
+
+    TrackletIds tracklets;
+    TrackletIds inlier_tracklets;
+
+    utils::Accumulatord total_repr_error, inlier_repr_error;
+
+    const size_t& n_matches = dynamic_correspondences.size();
+    for(size_t i = 0u; i < n_matches; i ++) {
+        const AbsolutePoseCorrespondence& corres = dynamic_correspondences.at(i);
+        tracklets.push_back(corres.tracklet_id_);
+
+        const Keypoint& kp_k = corres.cur_;
+        //the landmark int the world frame at k-1
+        const Landmark& w_lmk_k_1 = corres.ref_;
+
+        //using the motion, put the lmk in the world frame at k
+        const Landmark w_lmk_k = motion_model * w_lmk_k_1;
+        //using camera pose, put the lmk in the camera frame at k
+        const Landmark c_lmk_c = T_world_k.inverse() * w_lmk_k;
+
+        try {
+            double repr_error = camera.reprojectionError(c_lmk_c, kp_k).squaredNorm();
+
+            total_repr_error.Add(repr_error);
+            if(repr_error < reprojection_error) {
+                inlier_tracklets.push_back(corres.tracklet_id_);
+                inlier_repr_error.Add(repr_error);
+            }
+        }
+        catch (const gtsam::CheiralityException&) {}
+
+    }
+
+    TrackletIds outliers;
+    determineOutlierIds(inlier_tracklets, tracklets, outliers);
+
+    VLOG(20) << "(Object) motion model inliers/total(error) "
+        << inlier_tracklets.size() << "(" << inlier_repr_error.Mean() << ") / "
+        << tracklets.size() << "(" << total_repr_error.Mean() << ")";
+
+    result.best_pose = motion_model;
+    result.inliers = inlier_tracklets;
+    result.outliers = outliers;
+    result.status = TrackingStatus::VALID;
+    return result;
+
+}
 
 
 void ObjectMotionSovler::refineLocalObjectMotionEstimate(
@@ -749,7 +866,7 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     gtsam::SharedNoiseModel projection_noise =
         gtsam::noiseModel::Isotropic::Sigma(2u, 2);
 
-    static constexpr auto k_huber_value = 0.0001;
+    static constexpr auto k_huber_value = 0.01;
 
     //make robust
     landmark_motion_noise = gtsam::noiseModel::Robust::Create(
@@ -844,43 +961,83 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
 
     }
 
-    VLOG(20) << "Constructing local object motion refinement optimisation for object " << object_id;
-    gtsam::LevenbergMarquardtParams opt_params;
+    double error_before = graph.error(values);
+    // std::vector<double> post_errors;
+    // std::set<TrackletId> outlier_tracks;
+
+
+    gtsam::NonlinearFactorGraph mutable_graph = graph;
+    gtsam::Values optimised_values = values;
+
+     gtsam::LevenbergMarquardtParams opt_params;
     if(VLOG_IS_ON(200))
         opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-    double error_before = graph.error(values);
-    const gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-    double error_after = graph.error(optimised_values);
+    optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
+    double error_after = mutable_graph.error(optimised_values);
+    // post_errors.push_back(error_after);
 
-    static constexpr auto kConfidence = 0.99;
-    gtsam::FactorIndices outlier_indicies;
-    for (size_t k = 0; k < graph.size(); k++) {
-      if (graph[k]) {
-        double weighted_threshold = 0.5 * chi_squared_quantile(graph[k]->dim(), kConfidence); // 0.5 derives from the error definition in gtsam
+    // gtsam::FactorIndices outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
+    //     mutable_graph,
+    //     optimised_values
+    // );
 
-        //mark as outlier
-        if(weighted_threshold < graph[k]->error(optimised_values)) {
-            outlier_indicies.push_back(k);
-        }
-      }
-    }
+    // //if we have outliers, enter iteration loop
+    // if(outlier_factors.size() > 0u) {
+    //     for(size_t itr = 0; itr < 4; itr++) {
 
-   VLOG(20)
-        << "Marked " << outlier_indicies.size() << " factors are outliers out of " << graph.size()
-        << " error before=" << error_before << ", error after=" << error_after;
 
-    //TODO: right now ignoring outliers
+    //         //currently removing factors from graph makes them nullptr
+    //         gtsam::NonlinearFactorGraph mutable_graph_with_null = mutable_graph;
+    //         for(auto outlier_idx : outlier_factors) {
+    //             auto factor = mutable_graph_with_null.at(outlier_idx);
+    //             DynamicPointSymbol point_symbol = factor->keys()[0];
+    //             outlier_tracks.insert(point_symbol.trackletId());
+    //             mutable_graph_with_null.remove(outlier_idx);
+    //         }
+    //         //now iterate over graph and add factors that are not null to ensure all factors are ok
+    //         mutable_graph.resize(0);
+    //         for (size_t i = 0; i < mutable_graph_with_null.size(); i++) {
+
+    //             auto factor = mutable_graph_with_null.at(i);
+    //             if(factor) {
+    //                 mutable_graph.add(factor);
+    //             }
+    //         }
+    //         // LOG(INFO) << "Removed " << outlier_factors.size() << " factors on iteration: " << itr;
+
+    //         values.insert(object_motion_key, solver_result.best_pose);
+    //         //do we use values or optimised values here?
+    //         optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
+    //         error_after = mutable_graph.error(optimised_values);
+    //         post_errors.push_back(error_after);
+
+    //         outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
+    //             mutable_graph,
+    //             optimised_values
+    //         );
+
+    //         if(outlier_factors.size() == 0) {
+    //             break;
+    //         }
+    //     }
+    // }
+
+
+    // size_t initial_size = graph.size();
+    // size_t inlier_size = mutable_graph.size();
+    // error_after = mutable_graph.error(optimised_values);
+    // LOG(INFO) << "Object Motion refinement - error before: "
+    //     << error_before << " error after: " << error_after
+    //     << " with initial size " << initial_size << " inlier size " << inlier_size;
+
+    //recover values!
     solver_result.best_pose = optimised_values.at<gtsam::Pose3>(object_motion_key);
 
-    //recover values
-    // for(TrackletId tracklet_id : solver_result.inliers) {
-    //     const gtsam::Key lmk_k_1_key = DynamicLandmarkSymbol(frame_k_1->getFrameId(), tracklet_id);
-    //     const gtsam::Key lmk_k_key = DynamicLandmarkSymbol(frame_k->getFrameId(), tracklet_id);
+    //for each outlier edge, update the set of inliers
+    // for(const auto tracklet_id : outlier_tracks) {
+    //     frame_k->at(tracklet_id)->inlier_ = false;
 
-    //     // const gtsam::Point3 lmk_k_1_world_recovered = frame_k_1->backProjectToWorld(tracklet_id);
-    //     // const gtsam::Point3 lmk_k_world = frame_k->backProjectToWorld(tracklet_id);
-    //     //
     // }
 
 }

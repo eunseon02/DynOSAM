@@ -162,6 +162,13 @@ protected:
     }
 
 private:
+    //return number tracked
+    size_t trackOnPreviousFrame(FeatureContainer& dynamic_features, OccupandyGrid2D& grid, FrameId frame_id, const ImageContainer& tracking_images);
+    void resampleAndTrack(FeatureContainer& dynamic_features, OccupandyGrid2D& grid, FrameId frame_id, const ImageContainer& tracking_images, const ObjectIds& objects_to_resample);
+
+    void sampleDynamicPoints(FeatureContainer& dynamic_features, FrameId frame_id, int step, const ImageContainer& tracking_images, std::optional<ObjectIds> objects_to_sample = {});
+
+
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
 
     Feature::Ptr constructStaticFeature(const ImageContainer& tracking_images, const Keypoint& kp, size_t age, TrackletId tracklet_id,

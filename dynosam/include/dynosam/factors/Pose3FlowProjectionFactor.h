@@ -162,42 +162,50 @@ public:
         gtsam::Point2 predicted_keypoint = keypoint_previous_ + optical_flow;
         //project P_w into the current frame frame which should be the predicted one
         gtsam::Point3 P_curr = camera_pose.inverse() * P_W;
-        gtsam::Point2 predicted_keypoint_from_projection = camera_current.project2(P_curr);
+
+        try {
+            gtsam::Point2 predicted_keypoint_from_projection = camera_current.project2(P_curr);
 
 
-        if(J1) {
-            *J1 = gtsam::Matrix22::Identity();
+            if(J1) {
+                *J1 = gtsam::Matrix22::Identity();
+            }
+
+            if(J2) {
+                //point in the current camera frame
+                const double x = P_curr(0);
+                const double y = P_curr(1);
+                const double z = P_curr(2);
+                const double z_2 = z*z;
+
+                const double fx = calibration_.fx();
+                const double fy = calibration_.fy();
+
+                gtsam::Matrix26 H;
+                H(0,0) =  x*y/z_2 *fx;
+                H(0,1) = -(1+(x*x/z_2)) *fx;
+                H(0,2) = y/z *fx;
+                H(0,3) = -1./z *fx;
+                H(0,4) = 0;
+                H(0,5) = x/z_2 *fx;
+
+                H(1,0) = (1+y*y/z_2) *fy;
+                H(1,1) = -x*y/z_2 *fy;
+                H(1,2) = -x/z *fy;
+                H(1,3) = 0;
+                H(1,4) = -1./z *fy;
+                H(1,5) = y/z_2 *fy;
+
+                *J2 = -1.0 * H;
+            }
+
+            return predicted_keypoint - predicted_keypoint_from_projection;
         }
-
-        if(J2) {
-            //point in the current camera frame
-            const double x = P_curr(0);
-            const double y = P_curr(1);
-            const double z = P_curr(2);
-            const double z_2 = z*z;
-
-            const double fx = calibration_.fx();
-            const double fy = calibration_.fy();
-
-            gtsam::Matrix26 H;
-            H(0,0) =  x*y/z_2 *fx;
-            H(0,1) = -(1+(x*x/z_2)) *fx;
-            H(0,2) = y/z *fx;
-            H(0,3) = -1./z *fx;
-            H(0,4) = 0;
-            H(0,5) = x/z_2 *fx;
-
-            H(1,0) = (1+y*y/z_2) *fy;
-            H(1,1) = -x*y/z_2 *fy;
-            H(1,2) = -x/z *fy;
-            H(1,3) = 0;
-            H(1,4) = -1./z *fy;
-            H(1,5) = y/z_2 *fy;
-
-            *J2 = -1.0 * H;
+        catch(gtsam::CheiralityException&) {
+            if (J1) *J1 = gtsam::Matrix::Zero(2,2);
+            if (J2) *J2 = gtsam::Matrix::Zero(2,6);
+            return gtsam::Vector2::Constant(2.0 * calibration_.fx());
         }
-
-        return predicted_keypoint - predicted_keypoint_from_projection;
     }
 
 

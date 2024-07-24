@@ -14,7 +14,8 @@ from .tools import (
     transform_camera_trajectory_to_world,
     TrajectoryHelper,
     load_pose_from_row,
-    reconstruct_trajectory_from_relative
+    reconstruct_trajectory_from_relative,
+    calculate_omd_errors
 )
 
 import evaluation.tools as tools
@@ -151,6 +152,7 @@ class MotionErrorEvaluator(Evaluator):
         # this is used to draw the trajectories
         object_trajectories = {}
         object_trajectories_ref = {}
+        object_trajectories_calibrated = {}
 
         fig_all_object_traj = plt.figure(figsize=(8,8))
 
@@ -194,6 +196,8 @@ class MotionErrorEvaluator(Evaluator):
             results_per_object["rpe_rotation"] = rpe_rot.get_all_statistics()
 
 
+            calculate_omd_errors(object_traj, object_traj_ref, object_id)
+
             plot_collection.add_figure(
                     f"Object_Pose_RPE_translation_{object_id}",
                     plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}", x_axis=object_traj.timestamps[1:])
@@ -209,6 +213,8 @@ class MotionErrorEvaluator(Evaluator):
             reconstructed_object_traj = reconstruct_trajectory_from_relative(object_traj, object_traj_ref)
             reconstructed_data = (reconstructed_object_traj, object_traj_ref)
 
+            object_trajectories_calibrated[f"Object {object_id}"] = reconstructed_object_traj
+
             rpe_trans_recon = metrics.RPE(metrics.PoseRelation.translation_part,
                             1.0, metrics.Unit.frames, 0.0, False)
             rpe_rot_recon = metrics.RPE(metrics.PoseRelation.rotation_angle_deg,
@@ -222,14 +228,25 @@ class MotionErrorEvaluator(Evaluator):
             # exepct results to already have results["objects"][id]["poses"] prepared
             results["objects"][object_id]["poses"] = results_per_object
 
-
+        # plot object poses
         tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
         ax = fig_all_object_traj.gca()
         trajectory_helper.set_ax_limits(ax)
 
 
+        # plot reconsructed (calibrated) object poses
+        fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
+        tools.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
+        ax = fig_all_object_traj_calibrated.gca()
+        trajectory_helper.set_ax_limits(ax)
+
         plot_collection.add_figure(
             "Obj Trajectories", fig_all_object_traj
+        )
+
+        plot_collection.add_figure(
+            "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
         )
 
     @staticmethod

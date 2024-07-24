@@ -209,8 +209,8 @@ inline cv::Point_<T> gtsamPointToCv(const gtsam::Point2& point) {
   return cv::Point_<T>(static_cast<T>(point(0)), static_cast<T>(point(1)));
 }
 
-template<typename T=float>
-std::vector<cv::Point_<T>> gtsamPointsToCv(const gtsam::Point2Vector& points) {
+template<typename T=float, typename Allocator>
+std::vector<cv::Point_<T>> gtsamPointsToCv(const std::vector<gtsam::Point2,Allocator>& points) {
   std::vector<cv::Point_<T>> cv_points;
   for(const auto& p : points) {
     cv_points.push_back(gtsamPointToCv<T>(p));
