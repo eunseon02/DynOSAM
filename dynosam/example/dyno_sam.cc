@@ -199,12 +199,12 @@ int main(int argc, char* argv[]) {
                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
                     ImageWrapper<ImageType::MotionMask>(motion));
 
-        auto frame = tracker->track(frame_id, timestamp, *container);
-        Frame::Ptr previous_frame = tracker->getPreviousFrame();
-        if(previous_frame) {
-            cv::imshow("Tracking", tracker->computeImageTracks(*previous_frame, *frame));
+        // auto frame = tracker->track(frame_id, timestamp, *container);
+        // Frame::Ptr previous_frame = tracker->getPreviousFrame();
+        // if(previous_frame) {
+        //     cv::imshow("Tracking", tracker->computeImageTracks(*previous_frame, *frame));
 
-        }
+        // }
 
 
 

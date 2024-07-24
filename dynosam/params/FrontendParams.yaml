@@ -1,7 +1,7 @@
 %YAML:1.0
 
 # max_nr_static_points: 800
-max_nr_static_points: 1200
+max_nr_static_points: 800
 max_nr_object_points: 800
 # cell_size: 15 #kitti
 cell_size_static: 15
@@ -29,7 +29,7 @@ tracker:
   # When using mono-pipeline AND and additional inertial sensor is provided,
   # Then 2-point ransac will be used (eg. 2d2d ransac with rotation), else 5-point 2d2d pnp will be used
   ransac_use_2point_mono: 0
-  ransac_randomize: 1
+  ransac_randomize: 0
   # ransac_threshold_mono:
   optimize_2d2d_pose_from_inliers: 0
 
@@ -45,7 +45,7 @@ tracker:
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
   # ransac_threshold_pnp: 0.5
-  ransac_threshold_pnp: 0.2
+  ransac_threshold_pnp: 0.5
   # ransac_threshold_pnp: 0.1
   optimize_3d2d_pose_from_inliers: 0
 
