@@ -87,11 +87,13 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     std::vector<int> sf_range(10,0);
 
     const size_t num_object_features = object_observation.object_features_.size();
-    // LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
+    LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
 
     int feature_pairs_valid = 0;
+    int num_found = 0;
     for(const TrackletId tracklet_id : object_observation.object_features_) {
       if(previous_dynamic_feature_container.exists(tracklet_id)) {
+        num_found++;
         CHECK(current_dynamic_feature_container.exists(tracklet_id));
 
         Feature::Ptr current_feature = current_dynamic_feature_container.getByTrackletId(tracklet_id);
@@ -151,9 +153,16 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 
     }
 
-    VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out of " << num_object_features << " for instance  " << instance_label;
+    VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out of " << num_object_features << " for instance  " << instance_label << " num found " << num_found;
 
-    if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
+    //if no points found (i.e tracked)
+    //dont do anything as this is a new object so we cannot say if its dynamic or not
+    if(num_found == 0) {
+      //TODO: i guess?
+object_observation.marked_as_moving_ = true;
+    }
+    // if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
+    else if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 15)
     {
       // label this object as static background
       // LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;

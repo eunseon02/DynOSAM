@@ -867,7 +867,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     {
         //TODO: bring back byte tracker??
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        // vision_tools::trackDynamic(base_params_,*previous_frame, frame);
+        vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
 
 
@@ -1036,6 +1036,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     StatusLandmarkEstimates dynamic_landmarks;
     for(const auto& [object_id, obs] : frame.object_observations_) {
         CHECK_EQ(object_id, obs.instance_label_);
+        //TODO: add back in?
         // CHECK(obs.marked_as_moving_);
 
         for(const TrackletId tracklet : obs.object_features_) {
