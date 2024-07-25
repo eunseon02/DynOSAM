@@ -986,6 +986,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Tr
     //this will mean that the tracking images (input) are not necessarily the same as the ones inside the returned frame
     TrackingInputImages input_images = tracking_images;
 
+    info_.frame_id = frame_id;
+
     if(initial_computation_) {
         //intitial computation
         const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
@@ -1147,7 +1149,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const TrackingInputImages& tr
   KeypointsCV detected_keypoints;
   (*feature_detector_)(mono, cv::Mat(), detected_keypoints, descriptors);
 
-
+  info_.frame_id = frame_id;
  // assign tracked features to grid and add to static features
   static_features.clear();
 

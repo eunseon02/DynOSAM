@@ -31,7 +31,7 @@ Camera::Camera(const CameraParams& camera_params) : camera_params_(camera_params
 {
     camera_impl_ = std::make_unique<CameraImpl>(
         gtsam::Pose3::Identity(), //this should be the body pose cam from the calibration but currently we want everything in camera frame,
-        camera_params_.constructGtsamCalibration<gtsam::Cal3_S2>()
+        camera_params_.constructGtsamCalibration<CalibrationType>()
     );
 
     CHECK(camera_impl_);
