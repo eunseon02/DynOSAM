@@ -161,8 +161,8 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
       //TODO: i guess?
 object_observation.marked_as_moving_ = true;
     }
-    // if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
-    else if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 15)
+    if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 150u)
+    // else if (sf_count/num_object_features>params.scene_flow_percentage || num_object_features < 15)
     {
       // label this object as static background
       // LOG(INFO) << "Instance object " << instance_label << " to static for frame " << current_frame->frame_id_;
