@@ -35,6 +35,8 @@
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 
 
+#include "dynosam/common/Camera.hpp" //for calibration type
+
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/inference/LabeledSymbol.h>
 
@@ -140,7 +142,7 @@ constexpr static SymbolChar InvalidDynoSymbol = '\0';
 SymbolChar DynoChrExtractor(gtsam::Key);
 
 
-using CalibrationType = gtsam::Cal3_S2; //TODO: really need to check that this one matches the calibration in the camera!!
+using CalibrationType = Camera::CalibrationType; //TODO: really need to check that this one matches the calibration in the camera!!
 
 using Slot = long int;
 

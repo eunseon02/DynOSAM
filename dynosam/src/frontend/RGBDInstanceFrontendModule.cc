@@ -121,8 +121,8 @@
 //     }
 
 //     //TODO: currently hack - the tracker now udpates the previous frame too (by resampling) so we need to udapte the depth too!
-//     auto depth_image_wrapper = previous_frame->image_container_.getImageWrapper<ImageType::Depth>();
-//     previous_frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+//     // auto depth_image_wrapper = previous_frame->image_container_.getImageWrapper<ImageType::Depth>();
+//     // previous_frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 //     CHECK_EQ(previous_frame->frame_id_ + 1u, frame->frame_id_);
 //     VLOG(20) << to_string(tracker_->getTrackerInfo());
@@ -334,8 +334,8 @@
 //         //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
 //         //keypoints and so we need to upadte the z values
 //         //TODO: should not be separate from the optimisation so refactor API!!!
-//         auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-//         frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+//         // auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+//         // frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 //         ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
 
@@ -642,72 +642,72 @@
 
 // }
 
-// // void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
+// void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
 
-// // }
+// }
 
-// // void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
-// //     //start from previous frame -> if we have a motion we must have observations in k-1
-// //     const FrameId frame_id_k_1 = frame_id - 1;
-// //     if(!object_poses_.exists(object_id)) {
+// void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
+//     //start from previous frame -> if we have a motion we must have observations in k-1
+//     const FrameId frame_id_k_1 = frame_id - 1;
+//     if(!object_poses_.exists(object_id)) {
 
-// //         gtsam::Pose3 starting_pose;
+//         gtsam::Pose3 starting_pose;
 
-// //         //need gt pose for rotation even if not for translation
-// //         CHECK(gt_packet_map_.exists(frame_id_k_1)) << "Cannot initalise object poses for viz using gt as the ground truth does not exist for frame " << frame_id_k_1;
-// //         const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map_.at(frame_id_k_1);
+//         //need gt pose for rotation even if not for translation
+//         CHECK(gt_packet_map_.exists(frame_id_k_1)) << "Cannot initalise object poses for viz using gt as the ground truth does not exist for frame " << frame_id_k_1;
+//         const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map_.at(frame_id_k_1);
 
-// //         ObjectPoseGT object_pose_gt_k;
-// //         if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
-// //             LOG(ERROR) << "Object Id " << object_id <<  " cannot be found in the gt packet. Unable to initalise object starting point use gt pose. Skipping!";
-// //             return;
-// //             // throw std::runtime_error("Object Id " + std::to_string(object_id) + " cannot be found in the gt packet. Unable to initalise object starting point use gt pose");
-// //         }
+//         ObjectPoseGT object_pose_gt_k;
+//         if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
+//             LOG(ERROR) << "Object Id " << object_id <<  " cannot be found in the gt packet. Unable to initalise object starting point use gt pose. Skipping!";
+//             return;
+//             // throw std::runtime_error("Object Id " + std::to_string(object_id) + " cannot be found in the gt packet. Unable to initalise object starting point use gt pose");
+//         }
 
-// //         starting_pose = object_pose_gt_k.L_world_;
+//         starting_pose = object_pose_gt_k.L_world_;
 
-// //         //if not use gt translation, find centroid of object
-// //         if(!FLAGS_init_object_pose_from_gt) {
-// //             const auto frame_k_1 = tracker_->getPreviousFrame();
-// //             const auto frame_k = tracker_->getCurrentFrame();
+//         //if not use gt translation, find centroid of object
+//         if(!FLAGS_init_object_pose_from_gt) {
+//             const auto frame_k_1 = tracker_->getPreviousFrame();
+//             const auto frame_k = tracker_->getCurrentFrame();
 
-// //             auto object_points = FeatureFilterIterator(
-// //                 const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
-// //                 [object_id, &frame_k](const Feature::Ptr& f) -> bool {
-// //                     return Feature::IsUsable(f) && f->instance_label_ == object_id &&
-// //                     frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
-// //                 });
+//             auto object_points = FeatureFilterIterator(
+//                 const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+//                 [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+//                     return Feature::IsUsable(f) && f->instance_label_ == object_id &&
+//                     frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
+//                 });
 
-// //             gtsam::Point3 centroid(0, 0, 0);
-// //             size_t count = 0;
-// //             for(const auto& feature : object_points) {
-// //                 gtsam::Point3 lmk = frame_k_1->backProjectToWorld(feature->tracklet_id_);
-// //                 centroid += lmk;
-// //                 count++;
-// //             }
+//             gtsam::Point3 centroid(0, 0, 0);
+//             size_t count = 0;
+//             for(const auto& feature : object_points) {
+//                 gtsam::Point3 lmk = frame_k_1->backProjectToWorld(feature->tracklet_id_);
+//                 centroid += lmk;
+//                 count++;
+//             }
 
-// //             centroid /= count;
-// //             //update starting pose
-// //             starting_pose = gtsam::Pose3(object_pose_gt_k.L_world_.rotation(), centroid);
+//             centroid /= count;
+//             //update starting pose
+//             starting_pose = gtsam::Pose3(object_pose_gt_k.L_world_.rotation(), centroid);
 
 
-// //         }
-// //         //new object
-// //         object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
-// //         object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
-// //     }
+//         }
+//         //new object
+//         object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
+//         object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
+//     }
 
-// //     auto& pose_map = object_poses_.at(object_id);
-// //     if(!pose_map.exists(frame_id_k_1)) {
-// //         //this can happen if the object misses a frame (e.g becomes too small - this is problematic while we do not properly propogate out own tracking labels!!)
-// //         LOG(ERROR)<< "Previous frame " << frame_id_k_1 << " does not exist for object " << object_id << ". They should be in order?";
-// //         return;
-// //     }
+//     auto& pose_map = object_poses_.at(object_id);
+//     if(!pose_map.exists(frame_id_k_1)) {
+//         //this can happen if the object misses a frame (e.g becomes too small - this is problematic while we do not properly propogate out own tracking labels!!)
+//         LOG(ERROR)<< "Previous frame " << frame_id_k_1 << " does not exist for object " << object_id << ". They should be in order?";
+//         return;
+//     }
 
-// //     const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
-// //     gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
-// //     pose_map.insert2(frame_id, object_pose_k);
-// // }
+//     const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
+//     gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
+//     pose_map.insert2(frame_id, object_pose_k);
+// }
 
 // } //dyno
 
@@ -807,7 +807,7 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
     }
 
 
-    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
+    Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
 
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
@@ -842,7 +842,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("tracking_timer");
-        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), tracking_images);
+        frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
 
     }
     CHECK(frame);
@@ -865,8 +865,9 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     }
 
     {
+        //TODO: bring back byte tracker??
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
-        vision_tools::trackDynamic(base_params_,*previous_frame, frame);
+        // vision_tools::trackDynamic(base_params_,*previous_frame, frame);
     }
 
 
@@ -903,7 +904,8 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
     //use the tracking images from the frame NOT the input tracking images since the feature tracking
     //will do some modifications on the images (particularily the mask during mask propogation)
-    debug_imagery.input_images = frame->tracking_images_;
+    // debug_imagery.input_images = frame->tracking_images_;
+    debug_imagery.input_images = tracking_images;
 
 
 
@@ -1034,7 +1036,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     StatusLandmarkEstimates dynamic_landmarks;
     for(const auto& [object_id, obs] : frame.object_observations_) {
         CHECK_EQ(object_id, obs.instance_label_);
-        CHECK(obs.marked_as_moving_);
+        // CHECK(obs.marked_as_moving_);
 
         for(const TrackletId tracklet : obs.object_features_) {
             if(frame.isFeatureUsable(tracklet)) {
@@ -1096,73 +1098,129 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 }
 
 
+// void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id) {
+//     for(const auto& [object_id, motion_estimate] : motion_estimates) {
+//         propogateObjectPose(motion_estimate, object_id, frame_id);
+//     }
+// }
+
+// void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
+//     //start from previous frame -> if we have a motion we must have observations in k-1
+//     const FrameId frame_id_k_1 = frame_id - 1;
+//     if(!object_poses_.exists(object_id)) {
+
+//         gtsam::Pose3 starting_pose;
+
+//         //need gt pose for rotation even if not for translation
+//         CHECK(gt_packet_map_.exists(frame_id_k_1)) << "Cannot initalise object poses for viz using gt as the ground truth does not exist for frame " << frame_id_k_1;
+//         const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map_.at(frame_id_k_1);
+
+//         ObjectPoseGT object_pose_gt_k;
+//         if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
+//             LOG(ERROR) << "Object Id " << object_id <<  " cannot be found in the gt packet. Unable to initalise object starting point use gt pose. Skipping!";
+//             return;
+//             // throw std::runtime_error("Object Id " + std::to_string(object_id) + " cannot be found in the gt packet. Unable to initalise object starting point use gt pose");
+//         }
+
+//         starting_pose = object_pose_gt_k.L_world_;
+
+//         //if not use gt translation, find centroid of object
+//         if(!FLAGS_init_object_pose_from_gt) {
+//             const auto frame_k_1 = tracker_->getPreviousFrame();
+//             const auto frame_k = tracker_->getCurrentFrame();
+
+//             auto object_points = FeatureFilterIterator(
+//                 const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+//                 [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+//                     return Feature::IsUsable(f) && f->instance_label_ == object_id &&
+//                     frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
+//                 });
+
+//             gtsam::Point3 centroid(0, 0, 0);
+//             size_t count = 0;
+//             for(const auto& feature : object_points) {
+//                 gtsam::Point3 lmk = frame_k_1->backProjectToWorld(feature->tracklet_id_);
+//                 centroid += lmk;
+//                 count++;
+//             }
+
+//             centroid /= count;
+//             //update starting pose
+//             starting_pose = gtsam::Pose3(object_pose_gt_k.L_world_.rotation(), centroid);
+
+
+//         }
+//         //new object
+//         object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
+//         object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
+//     }
+
+//     auto& pose_map = object_poses_.at(object_id);
+//     if(!pose_map.exists(frame_id_k_1)) {
+//         //this can happen if the object misses a frame (e.g becomes too small - this is problematic while we do not properly propogate out own tracking labels!!)
+//         LOG(ERROR)<< "Previous frame " << frame_id_k_1 << " does not exist for object " << object_id << ". They should be in order?";
+//         return;
+//     }
+
+//     const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
+//     gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
+//     pose_map.insert2(frame_id, object_pose_k);
+// }
+
 void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& motion_estimates, FrameId frame_id) {
+
+    gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+
     for(const auto& [object_id, motion_estimate] : motion_estimates) {
-        propogateObjectPose(motion_estimate, object_id, frame_id);
-    }
-}
+        const auto frame_k_1 = tracker_->getPreviousFrame();
+        const auto frame_k = tracker_->getCurrentFrame();
 
-void RGBDInstanceFrontendModule::propogateObjectPose(const gtsam::Pose3& prev_H_world_curr, ObjectId object_id, FrameId frame_id) {
-    //start from previous frame -> if we have a motion we must have observations in k-1
-    const FrameId frame_id_k_1 = frame_id - 1;
-    if(!object_poses_.exists(object_id)) {
-
-        gtsam::Pose3 starting_pose;
-
-        //need gt pose for rotation even if not for translation
-        CHECK(gt_packet_map_.exists(frame_id_k_1)) << "Cannot initalise object poses for viz using gt as the ground truth does not exist for frame " << frame_id_k_1;
-        const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map_.at(frame_id_k_1);
-
-        ObjectPoseGT object_pose_gt_k;
-        if(!gt_packet_k_1.getObject(object_id, object_pose_gt_k)) {
-            LOG(ERROR) << "Object Id " << object_id <<  " cannot be found in the gt packet. Unable to initalise object starting point use gt pose. Skipping!";
-            return;
-            // throw std::runtime_error("Object Id " + std::to_string(object_id) + " cannot be found in the gt packet. Unable to initalise object starting point use gt pose");
-        }
-
-        starting_pose = object_pose_gt_k.L_world_;
-
-        //if not use gt translation, find centroid of object
-        if(!FLAGS_init_object_pose_from_gt) {
-            const auto frame_k_1 = tracker_->getPreviousFrame();
-            const auto frame_k = tracker_->getCurrentFrame();
-
-            auto object_points = FeatureFilterIterator(
-                const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
-                [object_id, &frame_k](const Feature::Ptr& f) -> bool {
-                    return Feature::IsUsable(f) && f->instance_label_ == object_id &&
+        auto object_points = FeatureFilterIterator(
+            const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+            [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+                return Feature::IsUsable(f) && f->instance_label_ == object_id &&
                     frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
-                });
+            });
 
-            gtsam::Point3 centroid(0, 0, 0);
-            size_t count = 0;
-            for(const auto& feature : object_points) {
-                gtsam::Point3 lmk = frame_k_1->backProjectToWorld(feature->tracklet_id_);
-                centroid += lmk;
-                count++;
-            }
+        gtsam::Point3 centroid_k_1(0, 0, 0);
+        gtsam::Point3 centroid_k(0, 0, 0);
+        size_t count = 0;
+        for(const auto& feature : object_points) {
+            gtsam::Point3 lmk_k_1 = frame_k_1->backProjectToWorld(feature->tracklet_id_);
+            centroid_k_1 += lmk_k_1;
 
-            centroid /= count;
-            //update starting pose
-            starting_pose = gtsam::Pose3(object_pose_gt_k.L_world_.rotation(), centroid);
+            gtsam::Point3 lmk_k = frame_k->backProjectToWorld(feature->tracklet_id_);
+            centroid_k += lmk_k;
 
-
+            count++;
         }
-        //new object
-        object_poses_.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
-        object_poses_.at(object_id).insert2(frame_id_k_1, starting_pose);
+
+        centroid_k_1 /= count;
+        centroid_k /= count;
+
+        object_centroids_k_1.push_back(centroid_k_1);
+        object_centroids_k.push_back(centroid_k);
     }
 
-    auto& pose_map = object_poses_.at(object_id);
-    if(!pose_map.exists(frame_id_k_1)) {
-        //this can happen if the object misses a frame (e.g becomes too small - this is problematic while we do not properly propogate out own tracking labels!!)
-        LOG(ERROR)<< "Previous frame " << frame_id_k_1 << " does not exist for object " << object_id << ". They should be in order?";
-        return;
+    if(FLAGS_init_object_pose_from_gt) {
+        dyno::propogateObjectPoses(
+            object_poses_,
+            motion_estimates,
+            object_centroids_k_1,
+            object_centroids_k,
+            frame_id,
+            gt_packet_map_);
+    }
+    else {
+        dyno::propogateObjectPoses(
+            object_poses_,
+            motion_estimates,
+            object_centroids_k_1,
+            object_centroids_k,
+            frame_id);
     }
 
-    const gtsam::Pose3& object_pose_k_1 = pose_map.at(frame_id_k_1);
-    gtsam::Pose3 object_pose_k = prev_H_world_curr * object_pose_k_1;
-    pose_map.insert2(frame_id, object_pose_k);
 }
+
 
 } //dyno

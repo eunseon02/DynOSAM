@@ -5,7 +5,7 @@ max_nr_static_points: 800
 max_nr_object_points: 800
 # cell_size: 15 #kitti
 cell_size_static: 15
-cell_size_dynamic: 15
+cell_size_dynamic: 5
 # scene_flow_mag_threshold: 0.005
 # scene_flow_dist_threshold: 0.12 #percentage
 scene_flow_mag_threshold: 0.12
@@ -22,7 +22,7 @@ init_threshold_fast: 20
 min_threshold_fast: 7
 
 shrink_row: 25 # KITTI # these will actuall get overwritten by GFLAGS
-shrink_col: 200 # KITTI!!!
+shrink_col: 20 # KITTI!!!
 # shrink_row: 1
 # shrink_col: 1
 
@@ -42,7 +42,7 @@ tracker:
 
   # When using RGBD pipeline, object motion will be refined ba NLO using motion factor
   # e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
-  refine_object_motion_esimate: 0
+  refine_object_motion_esimate: 1
 
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
