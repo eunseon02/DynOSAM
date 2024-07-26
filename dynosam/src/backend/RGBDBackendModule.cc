@@ -790,7 +790,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
     constexpr static size_t kMinNumberPoints = 3u;
 
     const FrameId frame_id_k_1 = frame_id_k - 1u;
-    LOG(INFO) << "Add dynamic observations between frames " << frame_id_k_1 << " and " << frame_id_k;
+    VLOG(20) << "Add dynamic observations between frames " << frame_id_k_1 << " and " << frame_id_k;
     const auto frame_node_k = map->getFrame(frame_id_k);
     const auto frame_node_k_1 = map->getFrame(frame_id_k_1);
     CHECK_NOTNULL(frame_node_k_1);
@@ -819,7 +819,7 @@ RGBDBackendModule::Updater::updateDynamicObservations(
         }
 
         utils::TimingStatsCollector dyn_point_itr_timer(this->loggerPrefix() + ".dynamic_point_itr");
-       VLOG(20) << "Seen lmks at frame " << frame_id_k << " obj " << object_id << ": " << seen_lmks_k.size();
+       VLOG(40) << "Seen lmks at frame " << frame_id_k << " obj " << object_id << ": " << seen_lmks_k.size();
         //iterate over each lmk we have on this object
         for(const auto& obj_lmk_node : seen_lmks_k) {
             CHECK_EQ(obj_lmk_node->getObjectId(), object_id);

@@ -54,6 +54,9 @@
 
 namespace dyno {
 
+DEFINE_bool(refine_motion_estimate, true, "If true, 3D motion refinement will be used");
+DEFINE_bool(refine_with_optical_flow, true, "If true, then joint refinement with optical flow will be used");
+
 // RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
 
 //     const size_t& n_matches = correspondences.size();
@@ -440,7 +443,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     gtsam::Values values;
 
     gtsam::SharedNoiseModel flow_noise =
-        gtsam::noiseModel::Isotropic::Sigma(2u, 0.1);
+        gtsam::noiseModel::Isotropic::Sigma(2u, 10);
 
     const static double k_huber_value = 0.0001;
     //robust noise model!
@@ -448,7 +451,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
             gtsam::noiseModel::mEstimator::Huber::Create(k_huber_value), flow_noise);
 
     gtsam::SharedNoiseModel flow_prior_noise =
-        gtsam::noiseModel::Isotropic::Sigma(2u, 0.3);
+        gtsam::noiseModel::Isotropic::Sigma(2u, 3.33);
 
     //pose (this might not actually be the camera pose, as we use this to sovle motion too)
     gtsam::Pose3 pose = solver_result.best_pose;
@@ -648,77 +651,80 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
     if(result.status == TrackingStatus::VALID) {
 
-        const gtsam::Pose3 G_w = result.best_pose.inverse();
-        //Use the original result as the input to the refine joint optical flow function
-        //the result.best_pose variable is actually equivalent to ^wG^{-1}
-        //and we want to solve something in the form
-        //e(T, flow) = [u,v]_{k-1} + {k-1}_flow_k - pi(T^{-1}^wm_{k-1})
-        //so T must take the point from k-1 in the world frame to the local frame at k-1
-        //^wG^{-1} = ^wX_k \: {k-1}^wH_k (which takes does this) but the error term uses the inverse of T
-        //hence we must parse in the inverse of G
-        gtsam::Pose3 refined_pose;
-        gtsam::Point2Vector refined_flows;
-        TrackletIds refined_inliers;
-        // this->refineJointPoseOpticalFlow(
-        //     result,
-        //     frame_k_1,
-        //     frame_k,
-        //     refined_pose,
-        //     refined_flows,
-        //     refined_inliers
-        // );
+        gtsam::Pose3 G_w = result.best_pose.inverse();
+        if(FLAGS_refine_with_optical_flow) {
+            //Use the original result as the input to the refine joint optical flow function
+            //the result.best_pose variable is actually equivalent to ^wG^{-1}
+            //and we want to solve something in the form
+            //e(T, flow) = [u,v]_{k-1} + {k-1}_flow_k - pi(T^{-1}^wm_{k-1})
+            //so T must take the point from k-1 in the world frame to the local frame at k-1
+            //^wG^{-1} = ^wX_k \: {k-1}^wH_k (which takes does this) but the error term uses the inverse of T
+            //hence we must parse in the inverse of G
+            gtsam::Pose3 refined_pose;
+            gtsam::Point2Vector refined_flows;
+            TrackletIds refined_inliers;
+            this->refineJointPoseOpticalFlow(
+                result,
+                frame_k_1,
+                frame_k,
+                refined_pose,
+                refined_flows,
+                refined_inliers
+            );
 
-        // //original flow image that goes from k to k+1 (gross, im sorry!)
-        // const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
-        // const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
+            // //original flow image that goes from k to k+1 (gross, im sorry!)
+            const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
+            const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
 
-        // //HACK: internally just mark as outlier if it is so!!
-        // //update flow and depth
-        // for(size_t i = 0; i < refined_inliers.size(); i++) {
-        //     TrackletId tracklet_id = refined_inliers.at(i);
-        //     gtsam::Point2 refined_flow = refined_flows.at(i);
+            //HACK: internally just mark as outlier if it is so!!
+            //update flow and depth
+            for(size_t i = 0; i < refined_inliers.size(); i++) {
+                TrackletId tracklet_id = refined_inliers.at(i);
+                gtsam::Point2 refined_flow = refined_flows.at(i);
 
-        //     const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
-        //     Feature::Ptr feature_k = frame_k->at(tracklet_id);
+                const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
+                Feature::Ptr feature_k = frame_k->at(tracklet_id);
 
-        //     CHECK_EQ(feature_k->instance_label_, object_id);
+                CHECK_EQ(feature_k->instance_label_, object_id);
 
-        //     const Keypoint kp_k_1 = feature_k_1->keypoint_;
-        //     Keypoint refined_keypoint = kp_k_1 + refined_flow;
+                const Keypoint kp_k_1 = feature_k_1->keypoint_;
+                Keypoint refined_keypoint = kp_k_1 + refined_flow;
 
-        //     //check boundaries?
+                //check boundaries?
 
-        //     //update keypoint!!
-        //     feature_k->keypoint_ = refined_keypoint;
-        //     ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
-        //     if(predicted_label != object_id) {
-        //         feature_k->inlier_ = false;
-        //         //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
-        //         //etc are no longer correct!!?
-        //         continue;
-        //     }
+                //update keypoint!!
+                feature_k->keypoint_ = refined_keypoint;
+                ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
+                if(predicted_label != object_id) {
+                    feature_k->inlier_ = false;
+                    //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
+                    //etc are no longer correct!!?
+                    continue;
+                }
 
-        //     //we now have to update the prediced keypoint using the original flow!!
-        //     //TODO: code copied from feature tracker
-        //     const int x = functional_keypoint::u(refined_keypoint);
-        //     const int y = functional_keypoint::v(refined_keypoint);
-        //     double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
-        //     double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
-        //     //the measured flow after the origin has been updated
-        //     OpticalFlow new_measured_flow(flow_xe, flow_ye);
-        //     feature_k->measured_flow_ = new_measured_flow;
-        //     // TODO: check predicted flow is within image
-        //     Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
-        //     feature_k->predicted_keypoint_ = predicted_kp;
+                //we now have to update the prediced keypoint using the original flow!!
+                //TODO: code copied from feature tracker
+                const int x = functional_keypoint::u(refined_keypoint);
+                const int y = functional_keypoint::v(refined_keypoint);
+                double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
+                double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
+                //the measured flow after the origin has been updated
+                OpticalFlow new_measured_flow(flow_xe, flow_ye);
+                feature_k->measured_flow_ = new_measured_flow;
+                // TODO: check predicted flow is within image
+                Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
+                feature_k->predicted_keypoint_ = predicted_kp;
 
 
-        //     //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
-        //     //TODO:update depth
-        // }
+                //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
+                //TODO:update depth
+            }
+            //still need to take the inverse as we get the inverse of G out
+            G_w = refined_pose.inverse();
+        }
         // //TODO: this runs over all tracklets so massive waste of time doing this here
         // //TODO: big refactor api
         //still need to take the inverse as we get the inverse of G out
-        // const gtsam::Pose3 G_w_refined = refined_pose.inverse();
         const gtsam::Pose3 H_w = T_world_k * G_w;
         result.best_pose = H_w;
 
@@ -727,7 +733,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         // result.inliers = refined_inliers;
         // determineOutlierIds(inliers, tracklets, outliers);
 
-        if(params_.refine_object_motion_esimate) {
+        // if(params_.refine_object_motion_esimate) {
+        if(FLAGS_refine_motion_estimate) {
             refineLocalObjectMotionEstimate(
                 result,
                 frame_k_1,
@@ -1028,8 +1035,8 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     // size_t initial_size = graph.size();
     // size_t inlier_size = mutable_graph.size();
     // error_after = mutable_graph.error(optimised_values);
-    // LOG(INFO) << "Object Motion refinement - error before: "
-    //     << error_before << " error after: " << error_after
+    LOG(INFO) << "Object Motion refinement - error before: "
+        << error_before << " error after: " << error_after;
     //     << " with initial size " << initial_size << " inlier size " << inlier_size;
 
     //recover values!

@@ -147,6 +147,7 @@ add_library(${PROJECT_NAME} SHARED
   src/utils/TimingStats.cc
   src/utils/Metrics.cc
   src/utils/CsvParser.cc
+  src/utils/Histogram.cc
   src/utils/JsonUtils.cc
 
   src/visualizer/ColourMap.cc
@@ -288,6 +289,7 @@ if(BUILD_TESTING)
     test/test_landmark_quadric_factor.cc
     test/test_tools.cc
     test/test_map.cc
+    test/test_histogram.cc
     test/test_pipelines.cc
     test/test_structured_containers.cc
     test/test_triangulation.cc

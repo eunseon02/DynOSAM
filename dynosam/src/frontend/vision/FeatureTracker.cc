@@ -472,6 +472,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
         feature->tracklet_id_ = tracklet_count;
         tracklet_count++;
         feature->predicted_keypoint_ = predicted_kp;
+        feature->measured_flow_ = flow;
         feature->keypoint_ = keypoint;
 
         dynamic_features.add(feature);

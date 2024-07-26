@@ -24,6 +24,7 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
@@ -150,7 +151,14 @@ private:
 class RGBDFrontendLogger : public EstimationModuleLogger {
 public:
     DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)
-    RGBDFrontendLogger() : EstimationModuleLogger("frontend") {}
+    RGBDFrontendLogger();
+    virtual ~RGBDFrontendLogger();
+
+    void logTrackingLengthHistogram(const Frame::Ptr frame);
+
+private:
+    std::string tracking_length_hist_file_name_;
+    json tracklet_length_json_;
 };
 
 } //dymo

@@ -14,6 +14,13 @@ from typing import Tuple
 from typing import List
 import typing
 
+def load_bson(path:str):
+    import bson
+    with open(path,'rb') as f:
+        content = f.read()
+        data = bson.decode_all(content)
+        return data
+
 def so3_from_euler(euler_angles: np.ndarray, order:str = "xyz", degrees: bool = False) -> np.ndarray:
     from scipy.spatial.transform import Rotation as R
     return R.from_euler(order, euler_angles, degrees=degrees).as_matrix()

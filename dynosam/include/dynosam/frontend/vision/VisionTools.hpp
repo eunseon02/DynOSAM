@@ -32,6 +32,8 @@
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 
+#include "dynosam/utils/Histogram.hpp"
+
 #include "dynosam/common/ImageContainer.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
@@ -72,6 +74,16 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
 bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect);
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels);
+
+/**
+ * @brief Constructs a map of histograms (static features: 0, one for each dynamic object)
+ * containing the tracklet length at this frame.
+ *
+ * @param frame
+ * @param bins
+ * @return gtsam::FastMap<ObjectId, Histogram>
+ */
+gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Ptr frame, const std::vector<size_t>& bins = {0, 1, 2, 3, 5, 7, 10, 15, 20, std::numeric_limits<size_t>::max()});
 
 
 // /**

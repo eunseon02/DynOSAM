@@ -15,7 +15,8 @@ from .tools import (
     TrajectoryHelper,
     load_pose_from_row,
     reconstruct_trajectory_from_relative,
-    calculate_omd_errors
+    calculate_omd_errors,
+    load_bson
 )
 
 import evaluation.tools as tools
@@ -60,12 +61,169 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
     except Exception as e:
         raise Exception(f"Failed to read csv file {csv_file_path}. Exception raised was {str(e)}")
 
+
+
+class DataFiles:
+    def __init__(self, prefix:str, output_folder_path: str, **kwargs) -> None:
+        # These files will match the output logger file names from Logger.cc
+        # as the prefix here is the prefix used in the logger
+        self.prefix = prefix
+        self.output_folder_path = output_folder_path
+        self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
+        self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
+
+    @property
+    def object_pose_log(self):
+        return self.prefix + "_object_pose_log.csv"
+
+    @property
+    def object_motion_log(self):
+        return self.prefix + "_object_motion_log.csv"
+
+    @property
+    def camera_pose_log(self):
+        return self.prefix + "_camera_pose_log.csv"
+
+    @property
+    def map_point_log(self):
+        return self.prefix + "_map_points_log.csv"
+
+    def __str__(self):
+        return "DataFiles [\n\tprefix: {}\n\tresult file name: {}\n\tplot collection name: {}".format(
+            self.prefix,
+            self.results_file_name,
+            self.plot_collection_name
+        )
+
 class Evaluator(ABC):
 
     @abstractmethod
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         pass
 
+
+class MiscEvaluator(Evaluator):
+
+    def __init__(self, df: DataFiles):
+        self._df = df
+
+        # right now just tracklet length
+        # TODO: stats
+        self.tracklet_length_hist_file =  self._df.output_folder_path + "/tracklet_length_hist.json"
+
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
+
+        # def process_bin_data(tracking_data):
+        #     bin_labels = []
+        #     values = []
+        #     for bin_data in tracking_data:
+        #         count = bin_data["count"]
+        #         lower = bin_data["lower"]
+        #         upper = bin_data["upper"]
+        #         label = f"{int(lower)} - {int(upper)}"
+        #         bin_labels.append(label)
+
+        #         values.append(count)
+
+        #     fig = plt.figure(figsize=(8,8))
+        #     ax = fig.gca()
+        #     ax.bar(bin_labels, values)
+
+        #     # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates
+        #     ax.set_xticklabels(bin_labels, rotation=90)
+        #     ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True)
+
+        #     # Remove the x-axis line
+        #     ax.spines['bottom'].set_visible(False)
+
+        #     # Add labels for each bar
+        #     for i, v in enumerate(values):
+        #         ax.text(i, v + 1, str(v), ha='center', va='bottom')
+
+        #     return fig
+
+        bin_labels = None
+        # per object average per bin
+        average_histograms = {}
+
+        def process_bin_data(tracking_data, object_id):
+            bin_labels_impl = []
+            values = []
+            for index, bin_data in enumerate(tracking_data):
+                count = bin_data["count"]
+                lower = bin_data["lower"]
+                upper = bin_data["upper"]
+                label = f"{int(lower)} - {int(upper)}"
+                bin_labels_impl.append(label)
+                values.append(count)
+
+            # assume bins are always all the same!!
+            nonlocal bin_labels
+            if bin_labels is None:
+                bin_labels = bin_labels_impl
+
+            values = np.array(values)
+            if object_id not in average_histograms:
+                average_histograms[object_id] = values
+            else:
+                previous_stack = average_histograms[object_id]
+                average_histograms[object_id] = np.vstack((previous_stack, values))
+
+
+
+
+        # assume bin size is all the same!!
+        tracklet_length_data = load_bson(self.tracklet_length_hist_file)[0]['data']
+        # print(tracklet_length_data)
+        for frame_id, per_object_tracking_data in tracklet_length_data.items():
+            for object_id, histogram in per_object_tracking_data.items():
+                object_id = int(object_id)
+                # Tracking data is a dictionary of histogram name (which really we can ignore)
+                # and then a vector of bin information
+                # each bin will contain ["count", "lower", "upper"] indicating the size and value for each bin
+                # e.g. {'tacklet-length-0': [[{'count': 156.0, 'lower': 0.0, 'upper': 1.0}, {...}]]}
+                # note that the vector is nested because thei histrogram class in C++ contains an array of each axis
+                # so even if we have one axis we have a vector
+                # note: get the first element as wrapping in a list adds a new list
+                # e.g {'tacklet-length-0': [[[{}]]]
+                # and we want to mantain the original structure
+                histogram = list(histogram.values())[0]
+                # check that the tracking data contains only one axis
+                assert(len(histogram) == 1)
+                # access the first axis of the histogram
+                tracking_data = histogram[0]
+
+                process_bin_data(tracking_data, object_id)
+
+        # print(average_histograms)
+        # # take average over histogram
+        for object_id, avgs in average_histograms.items():
+            print(object_id)
+            # reshape to get (N x columns) where N is the number of data points
+            # print(avgs)
+            avgs = avgs.reshape(-1, len(bin_labels))
+            avgs = np.mean(avgs, axis=0).astype(int)
+
+
+
+            fig = plt.figure(figsize=(8,8))
+            ax = fig.gca()
+            ax.bar(bin_labels, avgs)
+
+            # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates
+            ax.set_xticklabels(bin_labels, rotation=90)
+            ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True)
+
+            # Remove the x-axis line
+            ax.spines['bottom'].set_visible(False)
+
+            # Add labels for each bar
+            for i, v in enumerate(avgs):
+                ax.text(i, v + 1, str(v), ha='center', va='bottom')
+
+
+            fig.suptitle(f"Tracking Length Hist {object_id}")
+            plot_collection.add_figure(f"Tracking Length Hist {object_id}", fig)
 
 
 
@@ -462,37 +620,6 @@ class EgoObjectMotionEvaluator(Evaluator):
         )
 
 
-class DataFiles:
-    def __init__(self, prefix:str, **kwargs) -> None:
-        # These files will match the output logger file names from Logger.cc
-        # as the prefix here is the prefix used in the logger
-        self.prefix = prefix
-        self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
-        self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
-
-    @property
-    def object_pose_log(self):
-        return self.prefix + "_object_pose_log.csv"
-
-    @property
-    def object_motion_log(self):
-        return self.prefix + "_object_motion_log.csv"
-
-    @property
-    def camera_pose_log(self):
-        return self.prefix + "_camera_pose_log.csv"
-
-    @property
-    def map_point_log(self):
-        return self.prefix + "_map_points_log.csv"
-
-    def __str__(self):
-        return "DataFiles [\n\tprefix: {}\n\tresult file name: {}\n\tplot collection name: {}".format(
-            self.prefix,
-            self.results_file_name,
-            self.plot_collection_name
-        )
-
 
 class DatasetEvaluator:
     def __init__(self, output_folder_path:str, args) -> None:
@@ -510,7 +637,7 @@ class DatasetEvaluator:
         table_formatter = LatexTableFormatter()
 
         for prefixs in possible_path_prefixes:
-            data_files = DataFiles(prefixs)
+            data_files = DataFiles(prefixs, self._output_folder_path)
             data = self.run_and_save_single_analysis(data_files)
 
             if data is None:
@@ -573,6 +700,11 @@ class DatasetEvaluator:
             camera_pose_log_path,
         )
 
+        misc_evaluator = self._check_and_cosntruct_generic_eval(
+            MiscEvaluator,
+            datafiles
+        )
+
         if motion_eval:
             analysis_logger.info("Adding motion eval")
             evaluators.append(motion_eval)
@@ -584,6 +716,10 @@ class DatasetEvaluator:
         if camera_pose_eval and motion_eval:
             analysis_logger.info("Adding EgoObjectMotionEvaluator")
             evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
+
+        if misc_evaluator:
+            analysis_logger.info("Adding MiscEvaluator")
+            evaluators.append(misc_evaluator)
 
         plot_collection_name = datafiles.plot_collection_name
         analysis_logger.info("Constructing plot collection {}".format(plot_collection_name))
@@ -603,7 +739,7 @@ class DatasetEvaluator:
 
         path_prefix_set = set()
 
-        dummy_data_files = DataFiles("")
+        dummy_data_files = DataFiles("","")
 
         def get_datafile_properties(data_files: DataFiles):
             # get functions relating to file paths of expected output logs
@@ -674,11 +810,11 @@ class DatasetEvaluator:
         if not issubclass(cls, Evaluator):
             logger.fatal("Argument cls ({}) must derive from Evaluator!".format(cls.__name__))
 
-        for arg in args:
-            if arg is None:
-                logger.warning("Expected file path is none when constructing evaluator {} with args: {}".format(cls.__name__, args))
-                return None
-            assert isinstance(arg, str), "arg is not a string"
+        # for arg in args:
+        #     if arg is None:
+        #         logger.warning("Expected file path is none when constructing evaluator {} with args: {}".format(cls.__name__, args))
+        #         return None
+        #     assert isinstance(arg, str), "arg is not a string"
 
 
         logger.debug("Constructor evaluator: {}".format(cls.__name__))

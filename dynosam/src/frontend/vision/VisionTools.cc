@@ -87,7 +87,7 @@ std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const 
     std::vector<int> sf_range(10,0);
 
     const size_t num_object_features = object_observation.object_features_.size();
-    LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
+    // LOG(INFO) << "tracking object observation with instance label " << instance_label << " and " << num_object_features << " features";
 
     int feature_pairs_valid = 0;
     int num_found = 0;
@@ -330,6 +330,39 @@ void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds
 
 
 }
+
+
+gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Ptr frame, const std::vector<size_t>& bins) {
+  //one for every object + 1 for static points
+  gtsam::FastMap<ObjectId, Histogram> histograms;
+
+  //collect dynamic features
+  for(const auto&[object_id, observations] : frame->getObjectObservations()) {
+    Histogram hist(bh::make_histogram(bh::axis::variable<>(bins)));
+    hist.name_ = "tacklet-length-" + std::to_string(object_id);
+
+    for(auto tracklet_id : observations.object_features_) {
+      const Feature::Ptr feature = frame->at(tracklet_id);
+      CHECK(feature);
+      if(feature->usable()) {
+        hist.histogram_(feature->age_);
+      }
+    }
+
+    histograms.insert2(object_id, hist);
+  }
+
+  //collect static features
+  Histogram static_hist(bh::make_histogram(bh::axis::variable<>(bins)));
+  static_hist.name_ = "tacklet-length-0";
+  for(const auto& static_feature : frame->static_features_.beginUsable()) {
+    static_hist.histogram_(static_feature->age_);
+  }
+  histograms.insert2(background_label, static_hist);
+  return histograms;
+}
+
+
 
 } //vision_tools
 

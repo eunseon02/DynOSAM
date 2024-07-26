@@ -22,7 +22,9 @@
  */
 
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include <glog/logging.h>
 
@@ -62,6 +64,28 @@ GenericTrackedStatusVector<LandmarkKeypointStatus> RGBDInstanceOutputPacket::col
 }
 GenericTrackedStatusVector<LandmarkKeypointStatus> RGBDInstanceOutputPacket::collectDynamicMeasurements() const {
     return collectMeasurementsHelper(dynamic_landmarks_, dynamic_keypoint_measurements_);
+}
+
+
+RGBDFrontendLogger::RGBDFrontendLogger()
+    : EstimationModuleLogger("frontend"),
+      tracking_length_hist_file_name_(getOutputFilePath("tracklet_length_hist.json")) {}
+
+void RGBDFrontendLogger::logTrackingLengthHistogram(const Frame::Ptr frame) {
+    gtsam::FastMap<ObjectId, Histogram> histograms = vision_tools::makeTrackletLengthHistorgram(frame);
+    //collect histograms per object and then nest them per frame
+    //must cast keys (object id, frame id) to string to get the json library to properly construct nested maps
+    json per_object_hist;
+    for(const auto&[object_id, hist] : histograms) {
+        per_object_hist[std::to_string(object_id)] = hist;
+    }
+    tracklet_length_json_[std::to_string(frame->getFrameId())] = per_object_hist;
+
+}
+
+
+RGBDFrontendLogger::~RGBDFrontendLogger() {
+    JsonConverter::WriteOutJson(tracklet_length_json_, tracking_length_hist_file_name_);
 }
 
 }

@@ -57,8 +57,8 @@ FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
     yaml_parser.getYamlParam("shrink_col", &params.shrink_col, params.shrink_col);
 
     //update with FLAGS
-    // params.shrink_row = FLAGS_shrink_row;
-    // params.shrink_col = FLAGS_shrink_col;
+    params.shrink_row = FLAGS_shrink_row;
+    params.shrink_col = FLAGS_shrink_col;
 
     yaml_parser.getNestedYamlParam(
         "tracker", "ransac_use_2point_mono",

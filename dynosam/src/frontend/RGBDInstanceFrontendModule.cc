@@ -749,6 +749,7 @@
 #include "dynosam/common/Flags.hpp" //for common flags
 
 DEFINE_bool(use_frontend_logger, false , "If true, the frontend logger will be used");
+DEFINE_bool(use_dynamic_track, true, "If true, the dynamic tracking will be used");
 
 namespace dyno {
 
@@ -864,7 +865,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         LOG(ERROR) << "Could not solve for camera";
     }
 
-    {
+    if(FLAGS_use_dynamic_track) {
         //TODO: bring back byte tracker??
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
         vision_tools::trackDynamic(base_params_,*previous_frame, frame);
@@ -895,6 +896,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     if(logger_) {
         logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_);
         logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
+        logger_->logTrackingLengthHistogram(frame);
     }
 
     DebugImagery debug_imagery;
@@ -946,6 +948,13 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
         frame_k->T_world_camera_ = result.best_pose;
             TrackletIds tracklets = frame_k->static_features_.collectTracklets();
             CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
+
+            //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
+//         //keypoints and so we need to upadte the z values
+//         //TODO: should not be separate from the optimisation so refactor API!!!
+        auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+        frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
 
             frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
             return true;

@@ -121,36 +121,37 @@ if __name__ == '__main__':
 
 
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0004/",
-    #     "kitti_0004"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0004/",
+        "kitti_0004"
+    )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0005/",
-    #     "kitti_0005"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0005/",
+        "kitti_0005"
+    )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0000/",
+        "kitti_0000"
+    )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0003/",
-    #     "kitti_0003"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0003/",
+        "kitti_0003"
+    )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0018/",
-    #     "kitti_0018"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0018/",
+        "kitti_0018"
+    )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0020/",
-    #     "kitti_0020",
-    #     "--ending_frame=500"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0020/",
+        "kitti_0020",
+        "--ending_frame=500"
+    )
+
 
     # # run with world centric
     # run_both_backend(
@@ -192,49 +193,49 @@ if __name__ == '__main__':
 
 
     # omd
-    # prep_omd_sequence(
+    prep_omd_sequence(
+        "/root/data/omm/swinging_4_unconstrained/",
+        "omd_swinging_4_unconstrained_sliding",
+        "--ending_frame=300",
+        "--semantic_mask_step_size=4")
+
+    # run_both_backend(
+    #     run_omd_sequence,
     #     "/root/data/omm/swinging_4_unconstrained/",
     #     "omd_swinging_4_unconstrained_sliding_500",
-    #     "--ending_frame=300",
-    #     "--semantic_mask_step_size=10")
-
-    run_both_backend(
-        run_omd_sequence,
-        "/root/data/omm/swinging_4_unconstrained/",
-        "omd_swinging_4_unconstrained_sliding_500",
-        "--use_full_batch_opt=true",
-        "--ending_frame=200",
-        "--semantic_mask_step_size=15",
-        "--constant_object_motion_rotation_sigma=0.001",
-        "--constant_object_motion_translation_sigma=0.001",
-        "--odometry_translation_sigma=0.001",
-        "--odometry_rotation_sigma=0.001")
+    #     "--use_full_batch_opt=true",
+    #     "--ending_frame=200",
+    #     "--semantic_mask_step_size=15",
+    #     "--constant_object_motion_rotation_sigma=0.001",
+    #     "--constant_object_motion_translation_sigma=0.001",
+    #     "--odometry_translation_sigma=0.001",
+    #     "--odometry_rotation_sigma=0.001")
 
 
     ## cluster
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-L1/",
-    #     "carla_l1",
-    #     "--use_propogate_mask=false"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-L1/",
+        "carla_l1",
+        "--use_propogate_mask=false"
+    )
 
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-L2/",
-    #     "carla_l2",
-    #     "--use_propogate_mask=false"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-L2/",
+        "carla_l2",
+        "--use_propogate_mask=false"
+    )
 
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-S1/",
-    #     "carla_s1",
-    #     "--use_propogate_mask=false"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-S1/",
+        "carla_s1",
+        "--use_propogate_mask=false"
+    )
 
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-S2/",
-    #     "carla_s2",
-    #     "--use_propogate_mask=false"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-S2/",
+        "carla_s2",
+        "--use_propogate_mask=false"
+    )
 
 
     # run_both_backend(
