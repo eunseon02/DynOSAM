@@ -473,7 +473,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(poses_est) < 2:
+            if len(poses_est) < 4:
                 continue
 
             object_poses_traj[object_id] = transform_camera_trajectory_to_world(
