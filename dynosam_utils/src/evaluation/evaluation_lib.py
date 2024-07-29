@@ -266,7 +266,7 @@ class MotionErrorEvaluator(Evaluator):
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         # prepare results dict
         results["objects"] = {}
-        for object_id, _, _ in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
+        for object_id, _, _ in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
             results["objects"][object_id] = {}
 
         self._process_motion_traj(plot_collection, results)
