@@ -303,6 +303,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
     const double threshold =
         1.0 - std::cos(std::atan(std::sqrt(2.0) * reprojection_error /
                                  avg_focal_length));
+    // const double threshold = params_.ransac_threshold_pnp;
 
 
     AbsolutePoseAdaptor adapter(bearing_vectors, points);
@@ -678,6 +679,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
             //HACK: internally just mark as outlier if it is so!!
             //update flow and depth
+            TrackletIds still_good_inliers;
+
             for(size_t i = 0; i < refined_inliers.size(); i++) {
                 TrackletId tracklet_id = refined_inliers.at(i);
                 gtsam::Point2 refined_flow = refined_flows.at(i);
@@ -701,6 +704,9 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                     //etc are no longer correct!!?
                     continue;
                 }
+                else {
+                    still_good_inliers.push_back(tracklet_id);
+                }
 
                 //we now have to update the prediced keypoint using the original flow!!
                 //TODO: code copied from feature tracker
@@ -719,8 +725,17 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                 //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
                 //TODO:update depth
             }
+
+
+            result.inliers = still_good_inliers; //TODO: this will NOT update the outliers in this struct, we have to manually remove those by setting the features to outliers
+
+
             //still need to take the inverse as we get the inverse of G out
             G_w = refined_pose.inverse();
+            //update depths
+            //TODO: remove the caching in the frame!!
+            auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+            frame_k->updateDepths(depth_image_wrapper, params_.depth_background_thresh, params_.depth_obj_thresh);
         }
         // //TODO: this runs over all tracklets so massive waste of time doing this here
         // //TODO: big refactor api
@@ -729,19 +744,24 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         result.best_pose = H_w;
 
         //outliers are being marked in the solveObjectMotion
-        // //update inliers/outliers
-        // result.inliers = refined_inliers;
-        // determineOutlierIds(inliers, tracklets, outliers);
+
+        //TODO: make identity!?
+        auto result_copy = result;
+        result_copy.best_pose = gtsam::Pose3::Identity();
 
         // if(params_.refine_object_motion_esimate) {
         if(FLAGS_refine_motion_estimate) {
             refineLocalObjectMotionEstimate(
-                result,
+                result_copy,
                 frame_k_1,
                 frame_k,
                 object_id
             );
         }
+        //a lot of weird places where we mark things as inliers,take results of some functions into others etc..
+        //and is very confusion!
+        //TODO: clean up!!!
+        result = result_copy;
     }
 
     //if not valid, return motion result as is

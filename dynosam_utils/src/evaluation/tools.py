@@ -72,21 +72,37 @@ def load_pose_from_row(row) -> Tuple[np.ndarray, np.ndarray]:
     return T_est, T_ref
 
 def camera_coordinate_to_world() -> np.ndarray:
-    from scipy.spatial.transform import Rotation as R
-    return se3(
-        R.from_euler("ZYX", np.array([90, 0, 90]), degrees=True).as_matrix(),
+    # we construct the transform that takes somethign in the robot convention
+    # to the opencv convention and then apply the inverse
+    return evo_lie_algebra.se3_inverse(se3(
+        np.array([[1.0, 0.0, 0.0],
+                  [0.0, 0.0, -1.0],
+                  [0.0, 1.0, 0.0]]),
         np.array([0.0, 0.0, 0.0]))
-    # return se3(
-    #     R.from_euler("ZYX", np.array([0, 0, 0]), degrees=True).as_matrix(),
-    #     np.array([0.0, 0.0, 0.0]))
-
+    )
 
 def transform_camera_trajectory_to_world(traj):
     from copy import deepcopy
     transform = camera_coordinate_to_world()
     traj_copy = deepcopy(traj)
-    traj_copy.transform(transform)
-    return traj_copy
+
+    poses_in_robotic_convention = []
+    poses = traj_copy.poses_se3
+    for pose_cv in poses:
+        pose_robotic = transform @ pose_cv @ evo_lie_algebra.se3_inverse(transform)
+        poses_in_robotic_convention.append(pose_robotic)
+
+    if isinstance(traj, evo_trajectory.PoseTrajectory3D):
+        return evo_trajectory.PoseTrajectory3D(
+            poses_se3=poses_in_robotic_convention,
+            timestamps=traj.timestamps
+        )
+    elif isinstance(traj, evo_trajectory.PosePath3D):
+        return evo_trajectory.PosePath3D(
+            poses_se3=poses_in_robotic_convention
+        )
+    else:
+        raise RuntimeError(f"Unknown trajectory type {type(traj)}")
 
 def common_entries(*dcts):
     """
@@ -307,7 +323,7 @@ def calculate_omd_errors(traj, traj_ref, object_id):
         t_errors.append(err_t)
 
     t_errors = np.array(t_errors)
-    print(f"xyz largest error is {t_errors.max()} for {object_id}")
+    # print(f"xyz largest error is {t_errors.max()} for {object_id}")
 
 
 
@@ -320,8 +336,10 @@ def reconstruct_trajectory_from_relative(traj, traj_ref):
 
     poses = [starting_pose]
     for traj_pose_k_1, traj_pose_k in zip(traj_poses[:-1], traj_poses[1:]):
-        motion = np.dot(traj_pose_k, evo_lie_algebra.se3_inverse(traj_pose_k_1))
-        pose_k = np.dot(motion, poses[-1])
+        # motion = np.dot(traj_pose_k, evo_lie_algebra.se3_inverse(traj_pose_k_1))
+        motion = traj_pose_k @ evo_lie_algebra.se3_inverse(traj_pose_k_1)
+        # pose_k = np.dot(motion, poses[-1])
+        pose_k = motion @ poses[-1]
         # relative_transform = evo_lie_algebra.relative_se3(traj_pose_k_1, traj_pose_k)
         # pose_k = np.dot(poses[-1], relative_transform)
         poses.append(pose_k)

@@ -247,8 +247,8 @@ class MotionErrorEvaluator(Evaluator):
         # TODO: dont need dynosam to do the error metrics for us - let evo do it all, just record all the se3 things
         # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
         # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
-        self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file)
-        self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file)
+        self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file, convert_to_world_coordinates=True)
+        self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file, convert_to_world_coordinates=False)
 
         # self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
 
@@ -316,6 +316,8 @@ class MotionErrorEvaluator(Evaluator):
 
         trajectory_helper = TrajectoryHelper()
 
+
+
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
 
             object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
@@ -323,7 +325,9 @@ class MotionErrorEvaluator(Evaluator):
 
             # add reference edges
             # TODO: doesnt seem to work?
-            evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
+            object_traj.check()
+
+            # evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
             trajectory_helper.append(object_traj)
 
@@ -391,6 +395,10 @@ class MotionErrorEvaluator(Evaluator):
         ax = fig_all_object_traj.gca()
         trajectory_helper.set_ax_limits(ax)
 
+        # must happen after plot_object_trajectories becuase this is where we call the 'prepare axis'
+        # evo_plot.draw_coordinate_axes(ax, object_trajectories[f"Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
+        # evo_plot.draw_coordinate_axes(ax, object_trajectories_ref[f"Ground Truth Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
+
 
         # plot reconsructed (calibrated) object poses
         fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
@@ -408,7 +416,7 @@ class MotionErrorEvaluator(Evaluator):
         )
 
     @staticmethod
-    def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader) -> Tuple[ObjectPoseDict, ObjectTrajDict]:
+    def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader, convert_to_world_coordinates: bool) -> Tuple[ObjectPoseDict, ObjectTrajDict]:
         """
         Constructs dictionaries representing the object poses from the object_poses_log_file.
         The object_poses_log_file is expected to have a header with the form ["frame_id", "object_id", "x", "y", "z", "roll", "pitch", "yaw"].
@@ -476,10 +484,14 @@ class MotionErrorEvaluator(Evaluator):
             if len(poses_est) < 4:
                 continue
 
-            object_poses_traj[object_id] = transform_camera_trajectory_to_world(
-                trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps))
-            object_poses_traj_ref[object_id] = transform_camera_trajectory_to_world(
-                trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref))
+            if convert_to_world_coordinates:
+                object_poses_traj[object_id] = transform_camera_trajectory_to_world(
+                    trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps))
+                object_poses_traj_ref[object_id] = transform_camera_trajectory_to_world(
+                    trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref))
+            else:
+                object_poses_traj[object_id] =  trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps)
+                object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref)
 
         return object_poses_traj, object_poses_traj_ref
 
@@ -537,6 +549,7 @@ class CameraPoseEvaluator(Evaluator):
         trajectories["Ground Truth VO"] = traj_ref_vo
 
         evo_plot.trajectories(fig_traj, trajectories, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # evo_plot.draw_coordinate_axes(fig_traj.gca(), traj_est_vo, plot_mode=evo_plot.PlotMode.xyz)
         evo_plot.draw_correspondence_edges(fig_traj.gca(), traj_est_vo, traj_ref_vo, evo_plot.PlotMode.xyz)
 
         # ax_traj = evo_plot.prepare_axis(fig_traj, plot_mode)

@@ -1,5 +1,6 @@
 from eval_launch import run
 import os
+import sys
 
 def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
     parsed_args = {
@@ -119,12 +120,15 @@ if __name__ == '__main__':
         run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
+    # run_analysis("kitti_0000")
     # run_all_eval()
+    # sys.exit()
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0004/",
-    #     "kitti_0004"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0004/",
+        "kitti_0004"
+    )
+    # sys.exit()
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0005/",
@@ -147,7 +151,7 @@ if __name__ == '__main__':
     # )
 
     # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0020/",
+    #     "/root/data/falsevdo_slam/kitti/kitti/0020/",
     #     "kitti_0020",
     #     "--ending_frame=500"
     # )
@@ -175,7 +179,8 @@ if __name__ == '__main__':
     run_both_backend(
         run_kitti_sequence,
         "/root/data/vdo_slam/kitti/kitti/0003/",
-        "kitti_0003"
+        "kitti_0003",
+        "--use_full_batch_opt=true"
     )
 
     run_both_backend(
@@ -200,17 +205,17 @@ if __name__ == '__main__':
     #     "--ending_frame=300",
     #     "--semantic_mask_step_size=4")
 
-    run_both_backend(
-        run_omd_sequence,
-        "/root/data/omm/swinging_4_unconstrained/",
-        "omd_swinging_4_unconstrained_sliding",
-        "--use_full_batch_opt=false",
-        "--ending_frame=300",
-        "--semantic_mask_step_size=15",
-        "--constant_object_motion_rotation_sigma=0.001",
-        "--constant_object_motion_translation_sigma=0.001",
-        "--odometry_translation_sigma=0.001",
-        "--odometry_rotation_sigma=0.001")
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/omm/swinging_4_unconstrained/",
+    #     "omd_swinging_4_unconstrained_sliding",
+    #     "--use_full_batch_opt=false",
+    #     "--ending_frame=300",
+    #     "--semantic_mask_step_size=15",
+    #     "--constant_object_motion_rotation_sigma=0.001",
+    #     "--constant_object_motion_translation_sigma=0.001",
+    #     "--odometry_translation_sigma=0.001",
+    #     "--odometry_rotation_sigma=0.001")
 
 
     ## cluster
@@ -243,41 +248,41 @@ if __name__ == '__main__':
     # )
 
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5",
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L2/",
-        "carla_l2",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "carla_l2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-S1/",
-        "carla_s1",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S1/",
+    #     "carla_s1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-S2/",
-        "carla_s2",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "carla_s2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
     # run_all_eval()
 

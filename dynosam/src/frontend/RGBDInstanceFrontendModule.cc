@@ -945,18 +945,78 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
           << "\t- # outliers: " << result.outliers.size() << '\n';
 
     if(result.status == TrackingStatus::VALID) {
-        frame_k->T_world_camera_ = result.best_pose;
+
+            gtsam::Pose3 refined_pose;
+            gtsam::Point2Vector refined_flows;
+            TrackletIds refined_inliers;
+            motion_solver_.refineJointPoseOpticalFlow(
+                result,
+                frame_k_1,
+                frame_k,
+                refined_pose,
+                refined_flows,
+                refined_inliers
+            );
+
+            // //original flow image that goes from k to k+1 (gross, im sorry!)
+            const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
+            const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
+
+            //HACK: internally just mark as outlier if it is so!!
+            //update flow and depth
+            for(size_t i = 0; i < refined_inliers.size(); i++) {
+                TrackletId tracklet_id = refined_inliers.at(i);
+                gtsam::Point2 refined_flow = refined_flows.at(i);
+
+                const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
+                Feature::Ptr feature_k = frame_k->at(tracklet_id);
+
+                CHECK_EQ(feature_k->instance_label_, background_label);
+
+                const Keypoint kp_k_1 = feature_k_1->keypoint_;
+                Keypoint refined_keypoint = kp_k_1 + refined_flow;
+
+                //check boundaries?
+
+                //update keypoint!!
+                feature_k->keypoint_ = refined_keypoint;
+                ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
+                if(predicted_label != background_label) {
+                    feature_k->inlier_ = false;
+                    //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
+                    //etc are no longer correct!!?
+                    continue;
+                }
+
+                //we now have to update the prediced keypoint using the original flow!!
+                //TODO: code copied from feature tracker
+                const int x = functional_keypoint::u(refined_keypoint);
+                const int y = functional_keypoint::v(refined_keypoint);
+                double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
+                double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
+                //the measured flow after the origin has been updated
+                OpticalFlow new_measured_flow(flow_xe, flow_ye);
+                feature_k->measured_flow_ = new_measured_flow;
+                // TODO: check predicted flow is within image
+                Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
+                feature_k->predicted_keypoint_ = predicted_kp;
+
+
+                //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
+                //TODO:update depth
+            }
+
+            // frame_k->T_world_camera_ = result.best_pose;
+
+            frame_k->T_world_camera_ = refined_pose;
             TrackletIds tracklets = frame_k->static_features_.collectTracklets();
             CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
-            //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
-//         //keypoints and so we need to upadte the z values
-//         //TODO: should not be separate from the optimisation so refactor API!!!
-        auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-        frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-
-
+            auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+            frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
             frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
+
+
             return true;
     }
     else {
@@ -988,6 +1048,13 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     //if valid, remove outliers and add to motion estimation
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
+
+         //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
+//         //keypoints and so we need to upadte the z values
+//         //TODO: should not be separate from the optimisation so refactor API!!!
+        // auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+        // frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+
 
         ReferenceFrameValue<Motion3> estimate(result.best_pose, ReferenceFrame::GLOBAL);
         motion_estimates.insert({object_id, estimate});
@@ -1196,10 +1263,10 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& m
         gtsam::Point3 centroid_k(0, 0, 0);
         size_t count = 0;
         for(const auto& feature : object_points) {
-            gtsam::Point3 lmk_k_1 = frame_k_1->backProjectToWorld(feature->tracklet_id_);
+            gtsam::Point3 lmk_k_1 = frame_k_1->backProjectToCamera(feature->tracklet_id_);
             centroid_k_1 += lmk_k_1;
 
-            gtsam::Point3 lmk_k = frame_k->backProjectToWorld(feature->tracklet_id_);
+            gtsam::Point3 lmk_k = frame_k->backProjectToCamera(feature->tracklet_id_);
             centroid_k += lmk_k;
 
             count++;
@@ -1207,6 +1274,10 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& m
 
         centroid_k_1 /= count;
         centroid_k /= count;
+
+        centroid_k_1 = frame_k_1->getPose() * centroid_k_1;
+        centroid_k = frame_k->getPose() * centroid_k;
+
 
         object_centroids_k_1.push_back(centroid_k_1);
         object_centroids_k.push_back(centroid_k);
@@ -1222,6 +1293,7 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& m
             gt_packet_map_);
     }
     else {
+        CHECK(false);
         dyno::propogateObjectPoses(
             object_poses_,
             motion_estimates,

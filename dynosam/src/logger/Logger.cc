@@ -207,10 +207,9 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(const GroundTruthP
 
 //assume poses are in world?
 std::optional<size_t> EstimationModuleLogger::logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses) {
-  const FrameId frame_id_k_1 = frame_id - 1u;
 
-  if(!gt_packets.exists(frame_id) || !gt_packets.exists(frame_id_k_1)) {
-    VLOG(100) << "No gt packet at frame id " << frame_id << " or previous frame. Unable to log object pose errors";
+  if(!gt_packets.exists(frame_id)) {
+    VLOG(100) << "No gt packet at frame id " << frame_id << ". Unable to log object pose errors";
     return {};
   }
 
@@ -223,22 +222,19 @@ std::optional<size_t> EstimationModuleLogger::logObjectPose(const GroundTruthPac
           continue;
       }
 
-      if(!poses_map.exists(frame_id_k_1)) {
-          continue;
-      }
+      // //TODO: dont need to do this anymore as RTE poses are calculated offline!!
+      // if(!poses_map.exists(frame_id_k_1)) {
+      //     continue;
+      // }
 
       const GroundTruthInputPacket& gt_packet_k = gt_packets.at(frame_id);
-      const GroundTruthInputPacket& gt_packet_k_1 = gt_packets.at(frame_id_k_1);
+      // const GroundTruthInputPacket& gt_packet_k_1 = gt_packets.at(frame_id_k_1);
       //check object exists in this frame
-      const ObjectPoseGT* object_gt_k;
-      const ObjectPoseGT* object_gt_k_1;
-      if(gt_packet_k.findAssociatedObject(object_id, gt_packet_k_1, &object_gt_k, &object_gt_k_1)) {
-        CHECK_NOTNULL(object_gt_k);
-        CHECK_NOTNULL(object_gt_k_1);
+      ObjectPoseGT object_gt_k;
+      if(gt_packet_k.getObject(object_id, object_gt_k)) {
         //get gt poses
-        const auto& gt_L_world_k = object_gt_k->L_world_;
+        const auto& gt_L_world_k = object_gt_k.L_world_;
         const auto& gt_R_k = gt_L_world_k.rotation().toQuaternion();
-        const auto& gt_L_world_k_1 = object_gt_k_1->L_world_;
         //estimate
         const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
         const auto R_world_k = L_world_k.rotation().toQuaternion();
@@ -247,8 +243,10 @@ std::optional<size_t> EstimationModuleLogger::logObjectPose(const GroundTruthPac
           frame_id << object_id <<
           L_world_k.x() << L_world_k.y() << L_world_k.z() << R_world_k.x() << R_world_k.y() << R_world_k.z() << R_world_k.w() <<
           gt_L_world_k.x() << gt_L_world_k.y() << gt_L_world_k.z() << gt_R_k.x() << gt_R_k.y() << gt_R_k.z() << gt_R_k.w();
+
+          number_logged++;
+
       }
-      number_logged++;
 
   }
   return number_logged;
