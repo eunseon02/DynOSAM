@@ -67,7 +67,7 @@ def run_saved_sequence(path, name, data_loader_num, backend_type, *args):
 def prep_kitti_sequence(path, name, *args):
     args_list = list(args)
     args_list.append("--shrink_row=25")
-    args_list.append("--shrink_col=25")
+    args_list.append("--shrink_col=50")
     prep_dataset(path, name, kitti_dataset, *args_list)
 
 def run_kitti_sequence(path, name, backend_type, *args):
@@ -117,17 +117,17 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        run_sequence_func(path, name, ll_backend, *args)
+        # run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_analysis("kitti_0000")
     # run_all_eval()
     # sys.exit()
 
-    prep_kitti_sequence(
-        "/root/data/vdo_slam/kitti/kitti/0004/",
-        "kitti_0004"
-    )
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004"
+    # )
     # sys.exit()
 
     # prep_kitti_sequence(
@@ -147,7 +147,8 @@ if __name__ == '__main__':
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0018/",
-    #     "kitti_0018"
+    #     "kitti_0018",
+    #     "--use_propogate_mask=false"
     # )
 
     # prep_kitti_sequence(
@@ -158,43 +159,43 @@ if __name__ == '__main__':
 
 
     # # run with world centric
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0004/",
-        "kitti_0004"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0005/",
-        "kitti_0005"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0005/",
+    #     "kitti_0005"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0000/",
-        "kitti_0000"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0003/",
-        "kitti_0003",
-        "--use_full_batch_opt=true"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003",
+    #     "--use_full_batch_opt=true"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0018/",
-        "kitti_0018"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0018/",
+    #     "kitti_0018"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0020/",
-        "kitti_0020",
-        "--ending_frame=500"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0020/",
+    #     "kitti_0020",
+    #     "--ending_frame=500"
+    # )
 
 
     # omd
@@ -205,11 +206,31 @@ if __name__ == '__main__':
     #     "--ending_frame=300",
     #     "--semantic_mask_step_size=4")
 
+    # prep_omd_sequence(
+    #     "/root/data/omm/swinging_4_unconstrained/",
+    #     "omd_swinging_4_unconstrained",
+    #     "--use_dynamic_track=false",
+    #     "--ending_frame=300",
+    #     "--semantic_mask_step_size=4")
+
+
+    run_both_backend(
+        run_omd_sequence,
+        "/root/data/omm/swinging_4_unconstrained/",
+        "omd_swinging_4_unconstrained_sliding",
+        "--use_full_batch_opt=false",
+        "--ending_frame=300",
+        "--semantic_mask_step_size=15",
+        "--constant_object_motion_rotation_sigma=0.001",
+        "--constant_object_motion_translation_sigma=0.001",
+        "--odometry_translation_sigma=0.001",
+        "--odometry_rotation_sigma=0.001")
+
     # run_both_backend(
     #     run_omd_sequence,
     #     "/root/data/omm/swinging_4_unconstrained/",
-    #     "omd_swinging_4_unconstrained_sliding",
-    #     "--use_full_batch_opt=false",
+    #     "omd_swinging_4_unconstrained",
+    #     "--use_full_batch_opt=true",
     #     "--ending_frame=300",
     #     "--semantic_mask_step_size=15",
     #     "--constant_object_motion_rotation_sigma=0.001",

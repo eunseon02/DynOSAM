@@ -2,6 +2,7 @@ import csv
 import os
 import logging
 from typing import Optional, List, Tuple, Dict, TypeAlias
+from pathlib import Path
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
@@ -104,43 +105,20 @@ class Evaluator(ABC):
 
 class MiscEvaluator(Evaluator):
 
-    def __init__(self, df: DataFiles):
-        self._df = df
-
-        # right now just tracklet length
-        # TODO: stats
-        self.tracklet_length_hist_file =  self._df.output_folder_path + "/tracklet_length_hist.json"
+    def __init__(self, output_folder_path: str):
+        self._output_folder_path: str = output_folder_path
+        self._tracklet_length_hist_file = os.path.join(
+            self._output_folder_path,
+            "tracklet_length_hist.json"
+        )
 
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
+        self._process_tracklet_length_data(plot_collection)
 
-        # def process_bin_data(tracking_data):
-        #     bin_labels = []
-        #     values = []
-        #     for bin_data in tracking_data:
-        #         count = bin_data["count"]
-        #         lower = bin_data["lower"]
-        #         upper = bin_data["upper"]
-        #         label = f"{int(lower)} - {int(upper)}"
-        #         bin_labels.append(label)
-
-        #         values.append(count)
-
-        #     fig = plt.figure(figsize=(8,8))
-        #     ax = fig.gca()
-        #     ax.bar(bin_labels, values)
-
-        #     # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates
-        #     ax.set_xticklabels(bin_labels, rotation=90)
-        #     ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True)
-
-        #     # Remove the x-axis line
-        #     ax.spines['bottom'].set_visible(False)
-
-        #     # Add labels for each bar
-        #     for i, v in enumerate(values):
-        #         ax.text(i, v + 1, str(v), ha='center', va='bottom')
-
-        #     return fig
+    def _process_tracklet_length_data(self, plot_collection):
+        import matplotlib.ticker as mticker
+        # assume bin size is all the same!!
+        tracklet_length_data = load_bson(self._tracklet_length_hist_file)[0]['data']
 
         bin_labels = None
         # per object average per bin
@@ -170,10 +148,6 @@ class MiscEvaluator(Evaluator):
                 average_histograms[object_id] = np.vstack((previous_stack, values))
 
 
-
-
-        # assume bin size is all the same!!
-        tracklet_length_data = load_bson(self.tracklet_length_hist_file)[0]['data']
         # print(tracklet_length_data)
         for frame_id, per_object_tracking_data in tracklet_length_data.items():
             for object_id, histogram in per_object_tracking_data.items():
@@ -198,21 +172,24 @@ class MiscEvaluator(Evaluator):
         # print(average_histograms)
         # # take average over histogram
         for object_id, avgs in average_histograms.items():
-            print(object_id)
+            # print(object_id)
             # reshape to get (N x columns) where N is the number of data points
             # print(avgs)
             avgs = avgs.reshape(-1, len(bin_labels))
             avgs = np.mean(avgs, axis=0).astype(int)
 
-
-
             fig = plt.figure(figsize=(8,8))
             ax = fig.gca()
-            ax.bar(bin_labels, avgs)
+            # ax.bar(bin_labels, avgs)
 
-            # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates
-            ax.set_xticklabels(bin_labels, rotation=90)
             ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True)
+            # # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates
+            ax.set_xticklabels(bin_labels, rotation=90)
+            # fixing xticks with FixedLocator but also using MaxNLocator to avoid cramped x-labels
+            # ax.xaxis.set_major_locator(mticker.MaxNLocator(len(bin_labels) + 1))
+            # ticks_loc = ax.get_xticks().tolist()
+            # ax.xaxis.set_major_locator(mticker.FixedLocator(ticks_loc))
+            # ax.set_xticklabels(bin_labels, rotation=90)
 
             # Remove the x-axis line
             ax.spines['bottom'].set_visible(False)
@@ -224,8 +201,6 @@ class MiscEvaluator(Evaluator):
 
             fig.suptitle(f"Tracking Length Hist {object_id}")
             plot_collection.add_figure(f"Tracking Length Hist {object_id}", fig)
-
-
 
 
 class MotionErrorEvaluator(Evaluator):
@@ -266,6 +241,9 @@ class MotionErrorEvaluator(Evaluator):
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         # prepare results dict
         results["objects"] = {}
+        for object_id, _, _ in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
+            results["objects"][object_id] = {}
+
         for object_id, _, _ in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
             results["objects"][object_id] = {}
 
@@ -292,7 +270,7 @@ class MotionErrorEvaluator(Evaluator):
             results_per_object["ape_translation"] = ape_trans.get_all_statistics()
             results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
 
-            # exepct results to already have results["objects"][id]["motions"] prepared
+            # expect results to already have results["objects"][id]["motions"] prepared
             results["objects"][object_id]["motions"] = results_per_object
 
             plot_collection.add_figure(
@@ -387,7 +365,7 @@ class MotionErrorEvaluator(Evaluator):
             results_per_object["rpe_translation_reconstruction"] = rpe_trans_recon.get_all_statistics()
             results_per_object["rpe_rotation_reconstruction"] = rpe_rot_recon.get_all_statistics()
 
-            # exepct results to already have results["objects"][id]["poses"] prepared
+            # expect results to already have results["objects"][id]["poses"] prepared
             results["objects"][object_id]["poses"] = results_per_object
 
         # plot object poses
@@ -641,38 +619,56 @@ class DatasetEvaluator:
 
     def run_analysis(self):
         logger.info("Running analysis using files at output path {}".format(self._output_folder_path))
-
-        possible_path_prefixes = self._search_for_datafiles()
-        logger.info(f"Searching for datafiles using prefixes {possible_path_prefixes}")
-
         from .formatting_utils import LatexTableFormatter
 
-        table_formatter = LatexTableFormatter()
+        def run_data_file_analysis():
+            possible_path_prefixes = self._search_for_datafiles()
+            logger.info(f"Searching for datafiles using prefixes {possible_path_prefixes}")
 
-        for prefixs in possible_path_prefixes:
-            data_files = DataFiles(prefixs, self._output_folder_path)
-            data = self.run_and_save_single_analysis(data_files)
+            table_formatter = LatexTableFormatter()
 
-            if data is None:
-                continue
+            for prefixs in possible_path_prefixes:
+                data_files = DataFiles(prefixs, self._output_folder_path)
+                data = self.run_and_save_single_analysis(data_files)
 
-            plot_collection, results = data
+                if data is None:
+                    continue
 
-            table_formatter.add_results(data_files.plot_collection_name, results)
-            # right now just save metric plots per prefix
+                plot_collection, results = data
+
+                table_formatter.add_results(data_files.plot_collection_name, results)
+                # right now just save metric plots per prefix
+                plot_collection.export(
+                    self._create_new_file_path(data_files.plot_collection_name + "_metrics.pdf"),
+                    confirm_overwrite=False)
+
+                # plot_collection.show()
+
+            table_formatter.save_pdf(self._create_new_file_path("result_tables"))
+
+                # # plot_collection.show()
+                # self._save_to_pdf(data_files.plot_collection_name, plot_collection, results)
+                # # TEST
+                # plot_collection.export(self._create_new_file_path(data_files.plot_collection_name + ".pdf"))
+
+        def run_misc_analysis():
+            plot_collection = evo_plot.PlotCollection("Statistics & mis")
+            result_dict = {}
+
+            misc_evaluator = self._check_and_cosntruct_generic_eval(
+                MiscEvaluator,
+                self._output_folder_path
+            )
+            misc_evaluator.process(plot_collection, result_dict)
+
             plot_collection.export(
-                self._create_new_file_path(data_files.plot_collection_name + "_metrics" + ".pdf"),
+                self._create_new_file_path("stats_misc.pdf"),
                 confirm_overwrite=False)
 
-            # plot_collection.show()
+        run_data_file_analysis()
+        run_misc_analysis()
 
 
-        table_formatter.save_pdf(self._create_new_file_path("result_tables"))
-
-            # # plot_collection.show()
-            # self._save_to_pdf(data_files.plot_collection_name, plot_collection, results)
-            # # TEST
-            # plot_collection.export(self._create_new_file_path(data_files.plot_collection_name + ".pdf"))
 
     def run_and_save_single_analysis(self, datafiles: DataFiles) -> Tuple[evo_plot.PlotCollection, Dict]:
         try:
@@ -713,11 +709,6 @@ class DatasetEvaluator:
             camera_pose_log_path,
         )
 
-        misc_evaluator = self._check_and_cosntruct_generic_eval(
-            MiscEvaluator,
-            datafiles
-        )
-
         if motion_eval:
             analysis_logger.info("Adding motion eval")
             evaluators.append(motion_eval)
@@ -729,10 +720,6 @@ class DatasetEvaluator:
         if camera_pose_eval and motion_eval:
             analysis_logger.info("Adding EgoObjectMotionEvaluator")
             evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
-
-        if misc_evaluator:
-            analysis_logger.info("Adding MiscEvaluator")
-            evaluators.append(misc_evaluator)
 
         plot_collection_name = datafiles.plot_collection_name
         analysis_logger.info("Constructing plot collection {}".format(plot_collection_name))

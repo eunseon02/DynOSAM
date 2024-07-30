@@ -342,6 +342,7 @@ public:
         MaskType mask_type;
 
         //needed for input dispartity to depth conversion
+        //TODO: remove and hardocde per dataset!!
         double base_line =  387.5744;
         double depth_scale_factor = 256.0;
 
@@ -412,6 +413,7 @@ public:
         CHECK(camera_pose_folder);
         CHECK(object_pose_gt_folder);
 
+        // will also update the params!!
         setCameraParams(dataset_path);
 
         this->setLoaders(
@@ -525,6 +527,8 @@ private:
 
             cv::Size image_size(1242, 375);
             camera_params_= CameraParams(intrinsics, distortion, image_size, "radial-tangential");
+
+            params_.base_line = 387.5744;
         }
         else if(dataset_id >= 18 && dataset_id <=20) {
             CameraParams::IntrinsicsCoeffs intrinsics({ 718.8560, 718.8560, 607.1928, 185.2157 });
@@ -543,13 +547,15 @@ private:
                 LOG(WARNING) << "Unknown KITTI dataset when loading camera params. Returning no camera params!";
             }
 
+            params_.base_line = 388.1822;
+
         }
         else {
             LOG(WARNING) << "Unknown KITTI dataset when loading camera params. Returning no camera params!";
         }
     }
 
-    const Params params_;
+    Params params_;
     CameraParams::Optional camera_params_;
 
 

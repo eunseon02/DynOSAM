@@ -10,9 +10,9 @@ import evo.core.lie_algebra as evo_lie_algebra
 
 from typing import Tuple
 
-
-from typing import List
+from copy import deepcopy
 import typing
+import math
 
 def load_bson(path:str):
     import bson
@@ -233,7 +233,8 @@ def plot_object_trajectories(
         title: str = "",
         subplot_arg: int = 111,
         plot_start_end_markers: bool = False,
-        length_unit: evo_plot.Unit = evo_plot.Unit.meters) -> None:
+        length_unit: evo_plot.Unit = evo_plot.Unit.meters,
+        **kwargs) -> None:
 
     if len(obj_trajectories) != len(obj_trajectories_ref):
         raise evo_plot.PlotException(f"Expected trajectories and ref trajectories to have the same length {len(obj_trajectories)} != {len(obj_trajectories_ref)}")
@@ -241,6 +242,11 @@ def plot_object_trajectories(
     ax = evo_plot.prepare_axis(fig, plot_mode, subplot_arg, length_unit)
     if title:
         ax.set_title(title)
+
+    plot_axis_est = kwargs.get("plot_axis_est", False)
+    plot_axis_ref = kwargs.get("plot_axis_ref", False)
+    # downscale as a percentage - how many poses to use when plotting anything over the top of the tajectories
+    downscale = kwargs.get("downscale", 0.1)
 
     cmap_colors = None
     import collections
@@ -272,7 +278,8 @@ def plot_object_trajectories(
         if evo_plot.SETTINGS.plot_usetex:
             name = name.replace("_", "\\_")
         evo_plot.traj(ax, plot_mode, t, style, color, name,
-             plot_start_end_markers=plot_start_end_markers, alpha=alpha)
+             plot_start_end_markers=plot_start_end_markers,
+             alpha=alpha)
 
     def draw(traj: typing.Any, **kwargs):
         if isinstance(traj, evo_trajectory.PosePath3D):
@@ -284,10 +291,40 @@ def plot_object_trajectories(
             for t in traj:
                 draw_impl(t, **kwargs)
 
+    def reduce_trajectory(downscale_percentage: float, traj:evo_trajectory.PosePath3D):
+        assert downscale_percentage >= 0.0 and downscale_percentage <= 1.0
+        reduced_pose_num = downscale_percentage * traj.num_poses
+        # round UP to the nearest int (so we at least get 1 pose
+        reduced_pose_num = int(math.ceil(reduced_pose_num))
+        traj.downsample(reduced_pose_num)
+        return traj
+
+    def plot_coordinate_axis(trajectories: typing.Dict[str, evo_trajectory.PosePath3D]):
+        """
+        Plot coordinate axes on a map of object trajectories.
+        This is down by downscaling the numner of poses over which the coordiante axes will
+        be drawn for visability.
+
+        Args:
+            trajectories (typing.Dict[str, evo_trajectory.PosePath3D]): _description_
+        """
+        reduced_trajectories = deepcopy(trajectories)
+        for obj_traj in reduced_trajectories.items():
+            obj_traj = reduce_trajectory(downscale, obj_traj)
+            evo_plot.draw_coordinate_axes(
+                ax, obj_traj, plot_mode,
+                kwargs.get("marker_scale", 0.1))
+
+    # draw trajectories
     draw(obj_trajectories, style='-')
+    if plot_axis_est:
+        plot_coordinate_axis(obj_trajectories)
+
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
     draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
+    if plot_axis_ref:
+        plot_coordinate_axis(obj_trajectories_ref)
 
 
 def calculate_omd_errors(traj, traj_ref, object_id):
