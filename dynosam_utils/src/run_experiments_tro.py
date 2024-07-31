@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        # run_sequence_func(path, name, ll_backend, *args)
+        run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_analysis("kitti_0000")
@@ -226,17 +226,17 @@ if __name__ == '__main__':
         "--odometry_translation_sigma=0.001",
         "--odometry_rotation_sigma=0.001")
 
-    # run_both_backend(
-    #     run_omd_sequence,
-    #     "/root/data/omm/swinging_4_unconstrained/",
-    #     "omd_swinging_4_unconstrained",
-    #     "--use_full_batch_opt=true",
-    #     "--ending_frame=300",
-    #     "--semantic_mask_step_size=15",
-    #     "--constant_object_motion_rotation_sigma=0.001",
-    #     "--constant_object_motion_translation_sigma=0.001",
-    #     "--odometry_translation_sigma=0.001",
-    #     "--odometry_rotation_sigma=0.001")
+    run_both_backend(
+        run_omd_sequence,
+        "/root/data/omm/swinging_4_unconstrained/",
+        "omd_swinging_4_unconstrained",
+        "--use_full_batch_opt=true",
+        "--ending_frame=300",
+        "--semantic_mask_step_size=15",
+        "--constant_object_motion_rotation_sigma=0.001",
+        "--constant_object_motion_translation_sigma=0.001",
+        "--odometry_translation_sigma=0.001",
+        "--odometry_rotation_sigma=0.001")
 
 
     ## cluster
