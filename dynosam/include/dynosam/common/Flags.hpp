@@ -37,3 +37,4 @@ DECLARE_bool(frontend_from_file);
 DECLARE_bool(use_smoothing_factor);
 DECLARE_int32(backend_updater_enum);
 DECLARE_bool(use_byte_tracker);
+DECLARE_bool(refine_with_optical_flow);

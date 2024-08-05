@@ -523,7 +523,7 @@ private:
                     //T_DO = T_AD^{-1} * T_AO
                     // gt_packet.X_world_ = T_apparatus_rgbd_.inverse() * T_world_object;
                     // gt_packet.X_world_ =  T_apparatus_rgbd_.inverse() * T_world_object;
-                    gt_packet.X_world_ =  T_world_object;
+                    gt_packet.X_world_ =  T_world_object * T_apparatus_rgbd_;
                     gt_packet.X_world_ = T_cv_robotic * gt_packet.X_world_ * T_cv_robotic.inverse();
 
                     // gt_packet.X_world_ = T_world_object * T_apparatus_rgbd_;

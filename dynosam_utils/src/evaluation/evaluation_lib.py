@@ -176,11 +176,16 @@ class MiscEvaluator(Evaluator):
             # reshape to get (N x columns) where N is the number of data points
             # print(avgs)
             avgs = avgs.reshape(-1, len(bin_labels))
-            avgs = np.mean(avgs, axis=0).astype(int)
+            # print(object_id)
+            # print(avgs)
+            # avgs = np.mean(avgs, axis=0).astype(int)
+            avgs = np.median(avgs, axis=0).astype(int)
+
+            # print(avgs)
 
             fig = plt.figure(figsize=(8,8))
             ax = fig.gca()
-            # ax.bar(bin_labels, avgs)
+            ax.bar(bin_labels, avgs)
 
             ax.tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=True)
             # # Rotate x-axis labels at 90 degrees and remove default x-axis coordinates

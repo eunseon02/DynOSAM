@@ -21,6 +21,7 @@
  *   SOFTWARE.
  */
 
+#include "dynosam/common/Flags.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
@@ -52,10 +53,13 @@
 
 #include <glog/logging.h>
 
-namespace dyno {
 
 DEFINE_bool(refine_motion_estimate, true, "If true, 3D motion refinement will be used");
+
+//TODO: clear up flags - this is defined in Flags.h
 DEFINE_bool(refine_with_optical_flow, true, "If true, then joint refinement with optical flow will be used");
+
+namespace dyno {
 
 // RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
 
@@ -447,6 +451,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         gtsam::noiseModel::Isotropic::Sigma(2u, 10);
 
     const static double k_huber_value = 0.0001;
+    // const static double k_huber_value = 0.04;
     //robust noise model!
     flow_noise = gtsam::noiseModel::Robust::Create(
             gtsam::noiseModel::mEstimator::Huber::Create(k_huber_value), flow_noise);
@@ -529,8 +534,10 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         optimised_values
     );
 
+    bool remove_outliers = true;
+
     //if we have outliers, enter iteration loop
-    if(outlier_factors.size() > 0u) {
+    if(outlier_factors.size() > 0u && remove_outliers) {
         for(size_t itr = 0; itr < 4; itr++) {
 
 
@@ -576,9 +583,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     size_t initial_size = graph.size();
     size_t inlier_size = mutable_graph.size();
     error_after = mutable_graph.error(optimised_values);
-    LOG(INFO) << "Joint optical-flow/pose refinement - error before: "
-        << error_before << " error after: " << error_after
-        << " with initial size " << initial_size << " inlier size " << inlier_size;
+
 
     //recover values!
     refined_pose = optimised_values.at<gtsam::Pose3>(pose_key);
@@ -601,6 +606,10 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         }
 
     }
+
+    LOG(INFO) << "Joint optical-flow/pose refinement - error before: "
+        << error_before << " error after: " << error_after
+        << " with initial size " << solver_result.inliers.size() << " inlier size " << inliers.size();
 }
 
 
@@ -677,6 +686,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
             const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
             const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
 
+            auto camera = frame_k->camera_;
+
             //HACK: internally just mark as outlier if it is so!!
             //update flow and depth
             TrackletIds still_good_inliers;
@@ -694,6 +705,11 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                 Keypoint refined_keypoint = kp_k_1 + refined_flow;
 
                 //check boundaries?
+                if(!camera->isKeypointContained(refined_keypoint)) {
+                    feature_k->inlier_ = false;
+                    continue;
+                }
+
 
                 //update keypoint!!
                 feature_k->keypoint_ = refined_keypoint;
@@ -746,13 +762,13 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         //outliers are being marked in the solveObjectMotion
 
         //TODO: make identity!?
-        auto result_copy = result;
-        result_copy.best_pose = gtsam::Pose3::Identity();
+        // auto result_copy = result;
+        // result_copy.best_pose = gtsam::Pose3::Identity();
 
         // if(params_.refine_object_motion_esimate) {
         if(FLAGS_refine_motion_estimate) {
             refineLocalObjectMotionEstimate(
-                result_copy,
+                result,
                 frame_k_1,
                 frame_k,
                 object_id
@@ -761,7 +777,7 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         //a lot of weird places where we mark things as inliers,take results of some functions into others etc..
         //and is very confusion!
         //TODO: clean up!!!
-        result = result_copy;
+        // result = result_copy;
     }
 
     //if not valid, return motion result as is
@@ -919,9 +935,13 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     graph.addPrior(pose_k_key, frame_k->getPose(), pose_prior);
 
     utils::TimingStatsCollector timer("motion_solver.object_nlo_refinement");
+    //TODO: some might be marked outliers after update depth
     for(TrackletId tracklet_id : solver_result.inliers) {
+
         Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
         Feature::Ptr feature_k = frame_k->at(tracklet_id);
+
+        if(!feature_k_1->usable() || !feature_k->usable()) { continue; }
 
         CHECK_NOTNULL(feature_k_1);
         CHECK_NOTNULL(feature_k);

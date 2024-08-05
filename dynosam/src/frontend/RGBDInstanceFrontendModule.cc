@@ -946,6 +946,9 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
 
     if(result.status == TrackingStatus::VALID) {
 
+        frame_k->T_world_camera_ = result.best_pose;
+
+        if(FLAGS_refine_with_optical_flow || true) {
             gtsam::Pose3 refined_pose;
             gtsam::Point2Vector refined_flows;
             TrackletIds refined_inliers;
@@ -962,6 +965,8 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
             const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
             const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
 
+            auto camera = frame_k->camera_;
+
             //HACK: internally just mark as outlier if it is so!!
             //update flow and depth
             for(size_t i = 0; i < refined_inliers.size(); i++) {
@@ -977,6 +982,10 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
                 Keypoint refined_keypoint = kp_k_1 + refined_flow;
 
                 //check boundaries?
+                if(!camera->isKeypointContained(refined_keypoint)) {
+                    feature_k->inlier_ = false;
+                    continue;
+                }
 
                 //update keypoint!!
                 feature_k->keypoint_ = refined_keypoint;
@@ -1006,18 +1015,19 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
                 //TODO:update depth
             }
 
-            // frame_k->T_world_camera_ = result.best_pose;
-
             frame_k->T_world_camera_ = refined_pose;
-            TrackletIds tracklets = frame_k->static_features_.collectTracklets();
-            CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
 
-            auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-            frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-            frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
+        }
+        TrackletIds tracklets = frame_k->static_features_.collectTracklets();
+        CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
+        frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
+
+        // update depths after fetures marked as outliers?
+        auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
+        frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
 
-            return true;
+        return true;
     }
     else {
         frame_k->T_world_camera_ = gtsam::Pose3::Identity();

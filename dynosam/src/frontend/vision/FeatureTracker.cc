@@ -113,7 +113,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
       camera_,
       input_images,
       static_features,
-      dynamic_features);
+      dynamic_features,
+      info_);
 
     LOG(INFO) << "Tracked on frame " << frame_id << " t= " << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
     previous_frame_ = new_frame;
@@ -228,6 +229,15 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
   }
 
+  //draw text info
+  // std::stringstream ss;
+  // ss << "Frame: " << current_frame.getFrameId() << ", ";
+
+  // auto optional_tracking_info = current_frame.getTrackingInfo();
+  // if(optional_tracking_info) {
+  //   ss  << "VO matches: " << optional_tracking_info->static_track_optical_flow
+  // }
+
 
   return img_rgb;
 
@@ -261,14 +271,20 @@ void FeatureTracker::trackStatic(FrameId frame_id, const ImageContainer& image_c
       const size_t tracklet_id = previous_feature->tracklet_id_;
       const size_t age = previous_feature->age_;
       const Keypoint kp = previous_feature->predicted_keypoint_;
+
+      //check kp contained before we do a static grid look up to ensure we don't go out of bounds
+      if(!camera_->isKeypointContained(kp)) {
+        continue;
+      }
+
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
       const size_t cell_idx = static_grid_.getCellIndex(kp);
       const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
 
-      if(static_grid_.occupancy_.at(cell_idx)) continue;
+      if(static_grid_.isOccupied(cell_idx)) continue;
 
-      if (camera_->isKeypointContained(kp) && previous_feature->usable() && instance_label == background_label)
+      if (previous_feature->usable() && instance_label == background_label)
       {
         size_t new_age = age + 1;
         Feature::Ptr feature = constructStaticFeature(image_container, kp, new_age, tracklet_id, frame_id);
@@ -455,11 +471,11 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
       const Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(keypoint, flow);
       const size_t cell_idx = grid.getCellIndex(keypoint);
 
-      //TODO: this is a problem for the omd dataset?
-      if(grid.isOccupied(cell_idx)) {continue;}
+      // //TODO: this is a problem for the omd dataset?
+      // if(grid.isOccupied(cell_idx)) {continue;}
 
       // if ((predicted_kp(0) < rgb.cols && predicted_kp(0) > 0 && predicted_kp(1) < rgb.rows && predicted_kp(1) > 0))
-      if(isWithinShrunkenImage(keypoint))
+      if(isWithinShrunkenImage(keypoint) && !grid.isOccupied(cell_idx))
       {
         // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();

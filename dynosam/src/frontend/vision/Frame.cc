@@ -37,13 +37,15 @@ Frame::Frame(
         Camera::Ptr camera,
         const ImageContainer& image_container,
         const FeatureContainer& static_features,
-        const FeatureContainer& dynamic_features)
+        const FeatureContainer& dynamic_features,
+        std::optional<FeatureTrackerInfo> tracking_info)
         :   frame_id_(frame_id),
             timestamp_(timestamp),
             camera_(camera),
             image_container_(image_container),
             static_features_(static_features),
-            dynamic_features_(dynamic_features)
+            dynamic_features_(dynamic_features),
+            tracking_info_(tracking_info)
         {
             constructDynamicObservations();
 

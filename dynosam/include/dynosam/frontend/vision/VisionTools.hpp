@@ -83,7 +83,7 @@ void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds
  * @param bins
  * @return gtsam::FastMap<ObjectId, Histogram>
  */
-gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Ptr frame, const std::vector<size_t>& bins = {0, 1, 2, 3, 5, 7, 10, 15, 20, std::numeric_limits<size_t>::max()});
+gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Ptr frame, const std::vector<size_t>& bins = {0, 2, 5, 7, 10, 15, 25, 40, 60, std::numeric_limits<size_t>::max()});
 
 
 // /**

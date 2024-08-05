@@ -55,6 +55,8 @@ public:
     FeatureContainer static_features_;
     FeatureContainer dynamic_features_;
 
+    std::optional<FeatureTrackerInfo> tracking_info_; //! information from the tracker that was used to created this frame
+
     static ObjectId global_object_id;
 
     //semantic instance label to object observation (by the actual observations in the image)
@@ -68,7 +70,8 @@ public:
         Camera::Ptr camera,
         const ImageContainer& image_container,
         const FeatureContainer& static_features,
-        const FeatureContainer& dynamic_features);
+        const FeatureContainer& dynamic_features,
+        std::optional<FeatureTrackerInfo> tracking_info = {});
 
     inline FrameId getFrameId() const { return frame_id_; }
     inline Timestamp getTimestamp() const { return timestamp_; }
@@ -86,6 +89,9 @@ public:
 
     inline const std::map<ObjectId, DynamicObjectObservation>& getObjectObservations() const { return object_observations_; }
     inline std::map<ObjectId, DynamicObjectObservation>& getObjectObservations() { return object_observations_; }
+
+    //note: this doesnt mean inliers/outliers in the current frame (as this happens after tracking)
+    inline const std::optional<FeatureTrackerInfo>& getTrackingInfo() const { return tracking_info_; }
 
     /**
      * @brief Gets the total number of static features observed at this frame. Includes usables (inliers) and outliers.
