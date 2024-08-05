@@ -948,7 +948,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
 
         frame_k->T_world_camera_ = result.best_pose;
 
-        if(FLAGS_refine_with_optical_flow || true) {
+        if(FLAGS_refine_with_optical_flow) {
             gtsam::Pose3 refined_pose;
             gtsam::Point2Vector refined_flows;
             TrackletIds refined_inliers;
