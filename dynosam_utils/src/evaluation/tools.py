@@ -363,9 +363,17 @@ def calculate_omd_errors(traj, traj_ref, object_id):
     # print(f"xyz largest error is {t_errors.max()} for {object_id}")
 
 
+def align_object_motion(traj_pose, traj_motion, traj_ref_motion):
+    assert isinstance(traj_pose, evo_trajectory.PoseTrajectory3D) and isinstance(traj_motion, evo_trajectory.PoseTrajectory3D)
+
+    import copy
+    traj_motion_aligned = copy.deepcopy(traj_motion)
+    # traj_motion_aligned_timestamps = traj_motion_aligned.timestamps
+    print(traj_motion_aligned.num_poses)
+    print(traj_pose.num_poses)
+
 
 def reconstruct_trajectory_from_relative(traj, traj_ref):
-    assert isinstance(traj, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D)
 
 
     starting_pose = traj_ref.poses_se3[0]

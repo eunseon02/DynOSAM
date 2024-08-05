@@ -49,7 +49,8 @@ public:
         instance_masks_folder_(file_path + "/instance_masks"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         vicon_file_path_(file_path + "/vicon.csv"),
-        kalibr_file_path_(file_path + "/manufacturer.yaml"),
+        // kalibr_file_path_(file_path + "/manufacturer.yaml"),
+        kalibr_file_path_(file_path + "/kalibr.yaml"),
         vicon_calibration_file_path_(file_path + "/vicon.yaml")
     {
         throwExceptionIfPathInvalid(rgbd_folder_path_);
@@ -646,30 +647,33 @@ private:
 
     void setIntrisicsAndTransforms() {
         //using manufacturer
-        //kalirb file gives the rigid body transforms from the sensors to the apparatus frame
         //cam0 -> rgbd
         //cam1 -> stereo left
         //cam2 -> stereo right
+        //kalirb file gives the rigid body transforms from the sensors to the apparatus frame
+        //cam0 -> stereo left
+        //cam1 -> stereo right
+        //cam2 -> rgbd
         //using the camera (opencv) convention, ie. with z forward
         YamlParser yaml_parser(kalibr_file_path_);
 
 
-        std::vector<double> v_cam2_cam1;
-        yaml_parser.getNestedYamlParam("cam2", "T_cn_cnm1", &v_cam2_cam1);
-        gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
-        gtsam::Pose3 T_left_right = T_cam1_cam2;
-
-
-        // std::vector<double> v_cam1_cam0;
-        // yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
-        // gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
-        // const gtsam::Pose3 T_left_right = T_cam0_cam1;
-
         // std::vector<double> v_cam2_cam1;
-        // yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
-        // //transform from cam2 into camera 1 frame
+        // yaml_parser.getNestedYamlParam("cam2", "T_cn_cnm1", &v_cam2_cam1);
         // gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
-        // const gtsam::Pose3 T_right_rgbd = T_cam1_cam2;
+        // gtsam::Pose3 T_left_right = T_cam1_cam2;
+
+
+        std::vector<double> v_cam1_cam0;
+        yaml_parser.getNestedYamlParam("cam1", "T_cn_cnm1", &v_cam1_cam0);
+        gtsam::Pose3 T_cam0_cam1 = utils::poseVectorToGtsamPose3(v_cam1_cam0).inverse();
+        const gtsam::Pose3 T_left_right = T_cam0_cam1;
+
+        std::vector<double> v_cam2_cam1;
+        yaml_parser.getNestedYamlParam("cam2_undistort", "T_cn_cnm1", &v_cam2_cam1);
+        //transform from cam2 into camera 1 frame
+        gtsam::Pose3 T_cam1_cam2 = utils::poseVectorToGtsamPose3(v_cam2_cam1).inverse();
+        const gtsam::Pose3 T_right_rgbd = T_cam1_cam2;
 
         // // //transformation from cam2 INTO cam0
         // // //in this case camera2 is the RGBD camera and cam0 is the stereo left camera
@@ -685,14 +689,16 @@ private:
         // //this contains a (partial?) frame change convention from opencv to omd's robotic convention
         T_apparatus_left_ = T_apparatus_cam0;
         // T_leftstereo_depthcam_ = T_left_right * T_right_rgbd;
-        T_apparatus_rgbd_ = T_apparatus_left_;
+        // T_apparatus_rgbd_ = T_apparatus_left_;
+        T_apparatus_rgbd_ = T_apparatus_left_ * T_left_right * T_right_rgbd;
 
 
 
         //NOTE: expect the rgbd camera to always be cam2
         CameraParams::IntrinsicsCoeffs intrinsics;
         std::vector<double> intrinsics_v;
-        yaml_parser.getNestedYamlParam("cam0", "intrinsics", &intrinsics_v);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "intrinsics", &intrinsics_v);
+        // yaml_parser.getNestedYamlParam("cam0", "intrinsics", &intrinsics_v);
         CHECK_EQ(intrinsics_v.size(), 4u);
         intrinsics.resize(4u);
         // Move elements from one to the other.
@@ -703,12 +709,12 @@ private:
         CameraParams::DistortionCoeffs distortion({0, 0, 0, 0});
 
         std::vector<int> resolution;
-        yaml_parser.getNestedYamlParam("cam0", "resolution", &resolution);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "resolution", &resolution);
         CHECK_EQ(resolution.size(), 2);
         cv::Size image_size(resolution[0], resolution[1]);
 
         std::string distortion_model, camera_model;
-        yaml_parser.getNestedYamlParam("cam0", "camera_model", &camera_model);
+        yaml_parser.getNestedYamlParam("cam2_undistort", "camera_model", &camera_model);
         auto model = CameraParams::stringToDistortion("radtan", camera_model);
 
         rgbd_camera_params_ = CameraParams(
