@@ -346,12 +346,11 @@ def calculate_omd_errors(traj, traj_ref, object_id):
 
     for est_pose, gt_pose in zip(traj.poses_se3[1:], traj_ref.poses_se3[1:]):
         # the difference in pose between the ground truth pose (at s = k) and the estimated pose (at s = k) w.r.t the estimated pose
-        error_k = np.dot(evo_lie_algebra.se3_inverse(est_pose), gt_pose)
+        error_k = evo_lie_algebra.se3_inverse(est_pose) @ gt_pose
         # following equation 29 in https://arxiv.org/pdf/2110.15169
         # after treating all F's as I and j = k and k = 0, as per GE(l, t_k)
-        err_se3 = np.dot(error_k, error_0)
+        err_se3 = error_k @ error_0
         err_log = gtsam.Pose3.Logmap(gtsam.Pose3(err_se3))
-
         err_rot = err_log[0:3]
         err_xyz = err_log[3:6]
 
@@ -360,17 +359,10 @@ def calculate_omd_errors(traj, traj_ref, object_id):
         t_errors.append(err_t)
 
     t_errors = np.array(t_errors)
-    # print(f"xyz largest error is {t_errors.max()} for {object_id}")
+    print(f"xyz largest error is {t_errors.max()} for {object_id}")
+    print(f"xyz avg error is {np.mean(t_errors)} for {object_id}")
 
 
-def align_object_motion(traj_pose, traj_motion, traj_ref_motion):
-    assert isinstance(traj_pose, evo_trajectory.PoseTrajectory3D) and isinstance(traj_motion, evo_trajectory.PoseTrajectory3D)
-
-    import copy
-    traj_motion_aligned = copy.deepcopy(traj_motion)
-    # traj_motion_aligned_timestamps = traj_motion_aligned.timestamps
-    print(traj_motion_aligned.num_poses)
-    print(traj_pose.num_poses)
 
 
 def reconstruct_trajectory_from_relative(traj, traj_ref):

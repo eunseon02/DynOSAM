@@ -59,7 +59,7 @@ CloudPerObject DisplayRos::publishPointCloud(PointCloud2Pub::SharedPtr pub, cons
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), 0, 0, 0);
         }
         else {
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            const cv::Scalar colour = Color::uniqueId(object_id);
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0), colour(1), colour(2));
         }
         cloud.points.push_back(pt);
@@ -139,7 +139,7 @@ void DisplayRos::publishObjectPositions(
         marker.scale.z = scale;
         marker.color.a = 1.0; // Don't forget to set the alpha!
 
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+        const cv::Scalar colour = Color::uniqueId(object_id);
         marker.color.r = colour(0)/255.0;
         marker.color.g = colour(1)/255.0;
         marker.color.b = colour(2)/255.0;
@@ -196,7 +196,7 @@ void DisplayRos::publishObjectPaths(
         line_list_marker.pose.orientation.z = 0;
         line_list_marker.pose.orientation.w = 1;
 
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+        const cv::Scalar colour = Color::uniqueId(object_id);
         line_list_marker.color.r = colour(0)/255.0;
         line_list_marker.color.g = colour(1)/255.0;
         line_list_marker.color.b = colour(2)/255.0;
@@ -353,7 +353,7 @@ void DisplayRos::constructBoundingBoxeMarkers(
         pcl::PointXYZ centroid;
         pcl::computeCentroid(obj_cloud, centroid);
 
-        const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+        const cv::Scalar colour = Color::uniqueId(object_id);
 
         visualization_msgs::msg::Marker txt_marker;
         txt_marker.header.frame_id = "world";

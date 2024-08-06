@@ -30,20 +30,33 @@
 
 using namespace dyno;
 
-TEST(ColourMap, rgbToHsvRed) {
-    {
-        //basic red (normalized version, i.e between 0-1.0)
-        cv::Scalar red = ColourMap::HSV2RGB(cv::Scalar(0, 1.0, 1.0));
-        EXPECT_EQ(red[0], 1);
-        EXPECT_EQ(red[1], 0);
-        EXPECT_EQ(red[2], 0);
-    }
+TEST(Color, testRGBDDownCasting) {
 
-    {
-        //basic red (non-normalized version, i.e between 0-255.0)
-        cv::Scalar red = ColourMap::HSV2RGB(cv::Scalar(0, 255.0, 255.0));
-        EXPECT_EQ(red[0], 255);
-        EXPECT_EQ(red[1], 0);
-        EXPECT_EQ(red[2], 0);
-    }
+    RGBA<uint8_t> rgbd_int(255, 255, 0);
+    EXPECT_EQ(rgbd_int.r, 255);
+    EXPECT_EQ(rgbd_int.g, 255);
+    EXPECT_EQ(rgbd_int.b, 0);
+    EXPECT_EQ(rgbd_int.a, 255);
+
+    RGBA<float> rgbd_float(rgbd_int);
+    EXPECT_EQ(rgbd_float.r, 1.0);
+    EXPECT_EQ(rgbd_float.g, 1.0);
+    EXPECT_EQ(rgbd_float.b, 0);
+    EXPECT_EQ(rgbd_float.a, 1.0);
+}
+
+TEST(Color, testRGBDUpCasting) {
+
+    RGBA<float> rgbd_float(0.5, 0.2, 0.1);
+    EXPECT_FLOAT_EQ(rgbd_float.r, 0.5);
+    EXPECT_FLOAT_EQ(rgbd_float.g, 0.2);
+    EXPECT_FLOAT_EQ(rgbd_float.b, 0.1);
+    EXPECT_FLOAT_EQ(rgbd_float.a, 1.0);
+
+    RGBA<uint8_t> rgbd_int(rgbd_float);
+    EXPECT_EQ(rgbd_int.r, static_cast<uint8_t>(0.5 * 255.0));
+    EXPECT_EQ(rgbd_int.g, static_cast<uint8_t>(0.2 * 255.0));
+    EXPECT_EQ(rgbd_int.b, static_cast<uint8_t>(0.1 * 255.0));
+    EXPECT_EQ(rgbd_int.a, static_cast<uint8_t>(255.0));
+
 }

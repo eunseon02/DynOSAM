@@ -76,7 +76,7 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
     //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
     //         }
     //         else {
-    //             const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
+    //             const cv::Scalar colour = Color::uniqueId(status_estimate.label_);
     //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
     //         }
     //         cloud.points.push_back(pt);
@@ -101,7 +101,7 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
     //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), 0, 0, 0);
     //         }
     //         else {
-    //             const cv::Scalar colour = ColourMap::getObjectColour(status_estimate.label_);
+    //             const cv::Scalar colour = Color::uniqueId(status_estimate.label_);
     //             pt = pcl::PointXYZRGB(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
     //         }
     //         cloud.points.push_back(pt);
@@ -122,7 +122,7 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
     //         const StatusLandmarkEstimate& sle = backend_output->initial_dynamic_lmks_.at(i);
     //         const Landmark lmk = sle.value_;
 
-    //         const cv::Scalar colour = ColourMap::getObjectColour(sle.label_);
+    //         const cv::Scalar colour = Color::uniqueId(sle.label_);
     //         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
     //         cloud.points.push_back(pt);
     //     }
@@ -141,7 +141,7 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
     //         const StatusLandmarkEstimate& sle = backend_output->scaled_dynamic_lmk_estimate_.at(i);
     //         const Landmark lmk = sle.value_;
 
-    //         const cv::Scalar colour = ColourMap::getObjectColour(sle.label_);
+    //         const cv::Scalar colour = Color::uniqueId(sle.label_);
     //         pcl::PointXYZRGB pt(lmk(0), lmk(1), lmk(2), colour(0), colour(1), colour(2));
     //         cloud.points.push_back(pt);
     //     }
@@ -169,7 +169,7 @@ void BackendDisplayRos::spinOnce(const BackendOutputPacket::ConstPtr& backend_ou
     //         marker.action = visualization_msgs::msg::Marker::ADD;
     //         // marker.header.stamp = node_->now();
 
-    //         const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+    //         const cv::Scalar colour = Color::uniqueId(object_id);
     //         std_msgs::msg::ColorRGBA marker_colour;
     //         marker_colour.r = colour(0)/255.0;
     //         marker_colour.g = colour(1)/255.0;

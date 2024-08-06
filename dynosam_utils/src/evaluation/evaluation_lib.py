@@ -16,7 +16,6 @@ from .tools import (
     TrajectoryHelper,
     load_pose_from_row,
     reconstruct_trajectory_from_relative,
-    align_object_motion,
     calculate_omd_errors,
     load_bson
 )
@@ -259,8 +258,6 @@ class MotionErrorEvaluator(Evaluator):
 
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
-
-            align_object_motion(self._object_poses_traj[object_id], object_traj, object_traj_ref)
 
             # no need to sync and align motions since they are all relative anyway
             # if anything we should put them into the gt object frame via a PCG(3) object change

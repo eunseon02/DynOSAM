@@ -301,8 +301,9 @@ class LatexTableFormatter(object):
                     table.add_hline()
                     table.add_hline()
 
-                    ape_translation = format_round_4(vo_map["ape_translation"]["mean"])
-                    ape_rotation = format_round_4(vo_map["ape_rotation"]["mean"])
+                    # use RMSE for VO APE to match error metrics
+                    ape_translation = format_round_4(vo_map["ape_translation"]["rmse"])
+                    ape_rotation = format_round_4(vo_map["ape_rotation"]["rmse"])
                     rpe_translation = format_round_4(vo_map["rpe_translation"]["mean"])
                     rpe_rotation = format_round_4(vo_map["rpe_rotation"]["mean"])
 

@@ -396,8 +396,7 @@ struct DrawBlockJacobiansOptions {
         dyno_sam_options.label_formatter = DynoLikeKeyFormatter;
 
         auto dyno_sam_colour_selector = [](gtsam::Key key) {
-            SymbolChar chr = DynoChrExtractor(key);
-            return ColourMap::generateUniqueColour((int)chr);
+            return Color::uniqueId((size_t)key);
         };
 
         dyno_sam_options.colour_selector = dyno_sam_colour_selector;

@@ -71,7 +71,7 @@ CloudPerObject groupObjectCloud(const StatusLandmarkEstimates& landmarks, const 
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), 0, 0, 0);
         }
         else {
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            const cv::Scalar colour = Color::uniqueId(object_id);
             pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0), colour(1), colour(2));
         }
         clouds_per_obj[object_id].push_back(pt);

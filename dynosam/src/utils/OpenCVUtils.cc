@@ -195,7 +195,8 @@ cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label, const cv::Mat&
       // background is zero
       if (mask.at<int>(i, j) != background_label)
       {
-        cv::Scalar color = ColourMap::getObjectColour(mask.at<int>(i, j));
+
+        cv::Scalar color = Color::uniqueId(mask.at<int>(i, j));
         // rgb or bgr?
         mask_viz.at<cv::Vec3b>(i, j)[0] = color[0];
         mask_viz.at<cv::Vec3b>(i, j)[1] = color[1];

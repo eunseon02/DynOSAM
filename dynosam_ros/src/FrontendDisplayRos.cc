@@ -142,7 +142,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             pcl::PointXYZ centroid;
             pcl::computeCentroid(obj_cloud, centroid);
 
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            const cv::Scalar colour = Color::uniqueId(object_id);
 
             visualization_msgs::msg::Marker txt_marker;
             txt_marker.header.frame_id = "world";
@@ -298,7 +298,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
                 ObjectId object_id = this_px.objectId();
                 const gtsam::Point2& px_coordinate = this_px.value();
 
-                const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+                const cv::Scalar colour = Color::uniqueId(object_id).bgra();
                 // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
                 cv::Point centre(functional_keypoint::u(px_coordinate), functional_keypoint::v(px_coordinate));
                 int radius = 1;
@@ -311,7 +311,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
             const gtsam::Pose3& cam_pose = rgbd_frontend_output->T_world_camera_;
             int line_thinkness = 3;
             for (const auto& [object_id, this_obj_traj] : obj_poses){
-                cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+                cv::Scalar colour = Color::uniqueId(object_id).bgra();
                 // const cv::Scalar colour_bgr(colour[2], colour[1], colour[0]);
                 std::vector<cv::Point> cv_line;
                 for (const auto& [frame_id, this_obj_pose] : this_obj_traj){
@@ -376,7 +376,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(const RGBDInstanceOutputPacket:
         visualization_msgs::msg::MarkerArray object_pred_marker_array;
 
         for (const auto& [object_id, this_obj_predicted_poses] : obj_predicted_poses){
-            const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+            const cv::Scalar colour = Color::uniqueId(object_id);
             int pose_length = this_obj_predicted_poses.size();
             for (int i_pose = 0; i_pose < pose_length - 1; i_pose++){
                 gtsam::Point3 point_0 = this_obj_predicted_poses[i_pose].translation();
@@ -550,7 +550,7 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
     //     marker.scale.z = 0.5;
     //     marker.color.a = 1.0; // Don't forget to set the alpha!
 
-    //     const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+    //     const cv::Scalar colour = Color::uniqueId(object_id);
     //     marker.color.r = colour(0)/255.0;
     //     marker.color.g = colour(1)/255.0;
     //     marker.color.b = colour(2)/255.0;
@@ -603,7 +603,7 @@ void FrontendDisplayRos::publishGroundTruthInfo(Timestamp timestamp, const Groun
     //     line_list_marker.pose.orientation.z = 0;
     //     line_list_marker.pose.orientation.w = 1;
 
-    //     const cv::Scalar colour = ColourMap::getObjectColour(object_id);
+    //     const cv::Scalar colour = Color::uniqueId(object_id);
     //     line_list_marker.color.r = colour(0)/255.0;
     //     line_list_marker.color.g = colour(1)/255.0;
     //     line_list_marker.color.b = colour(2)/255.0;

@@ -88,7 +88,7 @@ void ObjectPoseGT::setMotions(const ObjectPoseGT& previous_object_gt, const gtsa
 }
 
 void ObjectPoseGT::drawBoundingBox(cv::Mat& img) const {
-    const cv::Scalar colour = ColourMap::getObjectColour(object_id_, true);
+    const cv::Scalar colour = Color::uniqueId(object_id_).bgra();
     const std::string label = "Object: " + std::to_string(object_id_);
     utils::drawLabeledBoundingBox(img, label, colour, bounding_box_);
 }

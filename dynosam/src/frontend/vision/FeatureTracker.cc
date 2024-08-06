@@ -207,7 +207,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
         // green circle/line:
         // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint_;
-        const cv::Scalar colour = ColourMap::getObjectColour(feature->instance_label_, true);
+        const cv::Scalar colour = Color::uniqueId(feature->instance_label_).bgra();
         cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), colour, 1);
       } else {  // New feature tracks are blue.
         // cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 1, blue, 1);
@@ -223,7 +223,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
       if(bb.empty()) { continue; }
 
-      const cv::Scalar colour = ColourMap::getObjectColour(object_id, true);
+      const cv::Scalar colour = Color::uniqueId(object_id).bgra();
       const std::string label = "Obj " + std::to_string(object_id);
       utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
 
@@ -569,7 +569,7 @@ void FeatureTracker::propogateMask(ImageContainer& image_container) {
       }
     }
 
-    if (temp_label.size() < 100)
+    if (temp_label.size() < 150)
     {
       LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
