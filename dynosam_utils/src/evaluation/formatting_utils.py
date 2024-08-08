@@ -170,8 +170,8 @@ class LatexTableFormatter(object):
 
                         ape_translation = format_round_4(poses_metric_map["ape_translation"]["mean"])
                         ape_rotation = format_round_4(poses_metric_map["ape_rotation"]["mean"])
-                        rpe_translation = format_round_4(poses_metric_map["rpe_translation"]["mean"])
-                        rpe_rotation = format_round_4(poses_metric_map["rpe_rotation"]["mean"])
+                        rpe_translation = format_round_4(poses_metric_map["rpe_translation"]["rmse"])
+                        rpe_rotation = format_round_4(poses_metric_map["rpe_rotation"]["rmse"])
 
 
                         # add to datastructure to post-calculate the mean

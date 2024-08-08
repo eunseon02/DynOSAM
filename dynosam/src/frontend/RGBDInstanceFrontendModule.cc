@@ -810,6 +810,10 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
 
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
 
+    if(gt_packet_map_.find(frame->getFrameId()) != gt_packet_map_.end()) {
+        frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
+    }
+
     auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
     frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 

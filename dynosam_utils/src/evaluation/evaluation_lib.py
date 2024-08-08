@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 from evo.core import lie_algebra, trajectory, metrics, transformations
 import evo.tools.plot as evo_plot
 
+import copy
+
 from .tools import (
     so3_from_euler,
     common_entries,
@@ -228,7 +230,7 @@ class MotionErrorEvaluator(Evaluator):
         # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
         # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
         self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file, convert_to_world_coordinates=True)
-        self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file, convert_to_world_coordinates=False)
+        self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file, convert_to_world_coordinates=True)
 
         # self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
 
@@ -262,14 +264,48 @@ class MotionErrorEvaluator(Evaluator):
             # no need to sync and align motions since they are all relative anyway
             # if anything we should put them into the gt object frame via a PCG(3) object change
             # to ensure the estimation is in the gt frame from which the original error was calculated!!
-            data = (object_traj_ref, object_traj)
+
+            # PUT INTO L
+            object_motion_L = []
+            object_poses = self._object_poses_traj_ref[object_id].poses_se3
+            # for object_pose, object_motion in zip(object_poses[:-1], object_traj.poses_se3[1:]):
+            #     object_motion_L.append(lie_algebra.se3_inverse(object_pose) @ object_motion @ object_pose)
+
+            object_motion_L_gt = []
+            # for object_pose, object_motion in zip(object_poses[:-1], object_traj_ref.poses_se3[1:]):
+            #     object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose) @ object_motion @ object_pose)
+
+            # # object_motion_L_gt = []
+            # for object_pose_k_1, object_pose_k in zip(object_poses[:-1], object_poses[1:]):
+            #     object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose_k_1) @ object_pose_k)
+
+            for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_traj.poses_se3[1:]):
+                object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
+                object_motion_L_gt.append(lie_algebra.se3())
+                # object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose_k_1) @ object_pose_k)
+
+
+
+
+            # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
+            object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=object_motion_L, timestamps=object_traj.timestamps[1:])
+            object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=object_motion_L_gt, timestamps=object_traj_ref.timestamps[1:])
+
+            # data = (object_traj_ref, object_traj)
+            # data = (object_traj_ref, object_traj_in_L)
+            data = (object_traj_in_L_ref, object_traj_in_L)
 
             # only interested in APE as this matches our error metrics
             ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
             ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
 
+            ape_full = metrics.APE(metrics.PoseRelation.full_transformation)
+
             ape_trans.process_data(data)
             ape_rot.process_data(data)
+            ape_full.process_data(data)
+
+            print(ape_full.get_all_statistics())
 
             results_per_object = {}
             results_per_object["ape_translation"] = ape_trans.get_all_statistics()
@@ -280,12 +316,12 @@ class MotionErrorEvaluator(Evaluator):
 
             plot_collection.add_figure(
                     f"Object_Motion_translation_{object_id}",
-                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}", x_axis=object_traj.timestamps)
+                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
                 )
 
             plot_collection.add_figure(
                 f"Object_Motion_rotation_{object_id}",
-                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}", x_axis=object_traj.timestamps)
+                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
             )
 
     def _process_pose_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -374,21 +410,23 @@ class MotionErrorEvaluator(Evaluator):
             results["objects"][object_id]["poses"] = results_per_object
 
         # plot object poses
-        tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        plot_mode = evo_plot.PlotMode.xy
+        tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=plot_mode, plot_start_end_markers=True)
+        fig_all_object_traj.suptitle(r"Estimated \& Ground Truth Object Trajectories")
         ax = fig_all_object_traj.gca()
-        trajectory_helper.set_ax_limits(ax)
+        # trajectory_helper.set_ax_limits(ax, plot_mode)
+        fig_all_object_traj.tight_layout()
 
         # must happen after plot_object_trajectories becuase this is where we call the 'prepare axis'
         # evo_plot.draw_coordinate_axes(ax, object_trajectories[f"Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
         # evo_plot.draw_coordinate_axes(ax, object_trajectories_ref[f"Ground Truth Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
-
 
         # plot reconsructed (calibrated) object poses
         fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
         tools.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
         fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
         ax = fig_all_object_traj_calibrated.gca()
-        trajectory_helper.set_ax_limits(ax)
+        trajectory_helper.set_ax_limits(ax, evo_plot.PlotMode.xyz)
 
         plot_collection.add_figure(
             "Obj Trajectories", fig_all_object_traj

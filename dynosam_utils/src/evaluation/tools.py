@@ -216,11 +216,19 @@ class TrajectoryHelper:
             for t in trajectories:
                 calc_min_max(t)
 
-    def set_ax_limits(self, ax: plt.Axes):
-        ax.set_zlim3d([self.min_z, self.max_z])
-        ax.set_xlim3d([self.min_x, self.max_x])
-        ax.set_ylim3d([self.min_y, self.max_y])
-        set_axes_equal(ax)
+    def set_ax_limits(self, ax: plt.Axes, plot_mode: evo_plot.PlotMode = evo_plot.PlotMode.xyz):
+        from mpl_toolkits.mplot3d import Axes3D
+
+        if  plot_mode == evo_plot.PlotMode.xyz and isinstance(ax, Axes3D):
+            ax.set_xlim3d([self.min_x, self.max_x])
+            ax.set_ylim3d([self.min_y, self.max_y])
+            ax.set_zlim3d([self.min_z, self.max_z])
+            set_axes_equal(ax)
+
+        elif plot_mode == evo_plot.PlotMode.xy:
+            ax.set_xlim([self.min_x, self.max_x])
+            ax.set_ylim([self.min_y, self.max_y])
+
 
 
 

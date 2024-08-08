@@ -1,7 +1,7 @@
 #!/bin/bash
 
---constant_object_motion_rotation_sigma=0.2
---constant_object_motion_translation_sigma=0.2
+--constant_object_motion_rotation_sigma=0.01
+--constant_object_motion_translation_sigma=0.01
 
 
 --motion_ternary_factor_noise_sigma=0.05
@@ -11,15 +11,21 @@
 # --odometry_rotation_sigma=0.05
 # --odometry_translation_sigma=0.1
 
---opt_window_size=15
+--opt_window_size=10
 --opt_window_overlap=4
 
 
 --use_smoothing_factor=true
---use_full_batch_opt=true
+--use_full_batch_opt=false
 
 
 # currently only for rgbd, indicates which updater the rgbd backend should use
 # i.e which formulation is used for solving
 # MotionInWorld = 0, LLWorld=1
 --backend_updater_enum=0
+
+
+# for experiments only
+--use_identity_rot_L_for_init=false
+--corrupt_L_for_init=false
+--corrupt_L_for_init_sigma=0.2

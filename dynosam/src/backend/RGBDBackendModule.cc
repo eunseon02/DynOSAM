@@ -50,6 +50,10 @@ DEFINE_int32(opt_window_overlap,  4, "Overlap for window size optimisation");
 
 DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if true, else sliding window");
 
+DEFINE_bool(use_identity_rot_L_for_init, false, "For experiments: set the initalisation point of L with identity rotation");
+DEFINE_bool(corrupt_L_for_init, false, "For experiments: corrupt the initalisation point for L with gaussian noise");
+DEFINE_double(corrupt_L_for_init_sigma, 0.2, "For experiments: sigma value to correupt initalisation point for L. When corrupt_L_for_init is true");
+
 namespace dyno {
 
 RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2d::Ptr map, Camera::Ptr camera, const UpdaterType& updater_type, ImageDisplayQueue* display_queue)
@@ -1245,6 +1249,15 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
                 theta_accessor->query<gtsam::Pose3>(object_pose_key_k),
                 initial_object_pose
             );
+        }
+
+        //for experiments and testing
+        if(FLAGS_use_identity_rot_L_for_init) {
+            auto tmp_pose = gtsam::Pose3(gtsam::Rot3::Identity(), object_pose_k.translation());
+            object_pose_k = tmp_pose;
+        }
+        if(FLAGS_corrupt_L_for_init) {
+            object_pose_k = utils::perturbWithNoise<gtsam::Pose3>(object_pose_k, FLAGS_corrupt_L_for_init_sigma);
         }
 
         new_values.insert(object_pose_key_k, object_pose_k);
