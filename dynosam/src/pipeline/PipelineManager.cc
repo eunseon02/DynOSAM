@@ -303,8 +303,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
     //TODO: right now we cannot use the viz when we load from file as do not load certain data values (e.g. camera and debug info)
     //so these will be null - the viz's try and access these causing a seg fault. Just need to add checks
     if(!use_offline_frontend_) {
-         if(backend && backend_display) {
-        backend_viz_pipeline_ = std::make_unique<BackendVizPipeline>("backend-viz-pipeline", &backend_output_queue_, backend_display);
+        if(backend && backend_display) {
+            backend_viz_pipeline_ = std::make_unique<BackendVizPipeline>("backend-viz-pipeline", &backend_output_queue_, backend_display);
         }
 
         frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>("frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);

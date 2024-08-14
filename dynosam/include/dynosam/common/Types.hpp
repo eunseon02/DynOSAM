@@ -82,6 +82,36 @@ using Keypoints = gtsam::Point2Vector; //! Vector of 2D keypoints using gtsam's 
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 
+/**
+ * @brief Pose class that add the 3-indexed notation from the "Pose changes
+ * from a different point of view" paper
+ *
+ */
+template<typename T>
+class IndexedPose {
+  // Top left index representing observing frame
+  std::string tl;
+  // Bottom left index, representing from frame
+  std::string bl{};
+  // Bottom right index, representing to frame
+  std::string br{};
+  // Data
+  T data;
+
+  /**
+   * @brief Returns true if the captured data represents a pose or a motion.
+   * As per Equation 10 and 11 we can, if the top left and bottom left notation is the same,
+   * it can be re-written in the ususal two index form
+   *
+   * @return true
+   * @return false
+   */
+  inline bool isPose() const {
+    return tl == bl;
+  }
+
+};
+
 using Motion3 = gtsam::Pose3;
 using MotionMap = gtsam::FastMap<TrackletId, Motion3>; //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
@@ -146,6 +176,7 @@ enum ReferenceFrame {
   OBJECT
 };
 
+//TODO: depricate and replace with the IndexedPose thing!!!
 /**
  * @brief Estimate with a reference frame and operator casting
  *

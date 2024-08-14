@@ -126,7 +126,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
 }
 
 
-cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Frame& current_frame) const {
+cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug) const {
   cv::Mat img_rgb;
 
   const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
@@ -146,21 +146,40 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   //   cv::circle(img_rgb, px, 4, blue, 2);
   // }
 
+  constexpr static int kFeatureThicknessDebug = 4;
+  constexpr static int kFeatureThickness = 2;
+  int static_point_thickness = debug ? kFeatureThicknessDebug : kFeatureThickness;
+
   // Add all keypoints in cur_frame with the tracks.
   for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint_;
-    if (!feature->usable()) {  // Untracked landmarks are red.
-      cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 4, red, 2);
+    if (!feature->usable() && debug) {  // Untracked landmarks are red.
+      cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), static_point_thickness, red, 2);
     } else {
 
       const Feature::Ptr& prev_feature = previous_frame.static_features_.getByTrackletId(feature->tracklet_id_);
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 4, green, 1);
-        const Keypoint& px_prev = prev_feature->keypoint_;
-        cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), green, 1);
-      } else {  // New feature tracks are blue.
+        const auto pc_cur = utils::gtsamPointToCv(px_cur);
+        if (debug) {
+          //if debug draw circle
+          cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), static_point_thickness, green, 1);
+        }
+        else {
+          //else draw rectangle around the center point
+          const cv::Point tl(pc_cur.x - static_point_thickness/2, pc_cur.y - static_point_thickness/2);
+          const cv::Point br(pc_cur.x + static_point_thickness/2, pc_cur.y + static_point_thickness/2);
+          cv::rectangle(img_rgb,  tl, br, green, static_point_thickness, 1);
+        }
+
+        if(debug) {
+          //if debug draw the optical flow arrow
+          const Keypoint& px_prev = prev_feature->keypoint_;
+          cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), green, 1);
+        }
+
+      } else if(debug) {  // New feature tracks are blue.
         cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 6, blue, 1);
       }
     }
@@ -250,8 +269,10 @@ void FeatureTracker::trackStatic(FrameId frame_id, const ImageContainer& image_c
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.getImageWrapper<ImageType::RGBMono>();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
+  CHECK(!mono.empty());
 
   const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  CHECK(!motion_mask.empty());
 
   cv::Mat descriptors;
   KeypointsCV detected_keypoints;
@@ -264,6 +285,7 @@ void FeatureTracker::trackStatic(FrameId frame_id, const ImageContainer& image_c
   const int& min_tracks = params_.max_tracking_points_bg;
 
   // appy tracking (ie get correspondences)
+  //TODO: only track frames that have been tracked for some time?
   if (previous_frame_)
   {
     for (Feature::Ptr previous_feature : previous_frame_->static_features_)
@@ -659,6 +681,9 @@ Feature::Ptr FeatureTracker::constructStaticFeature(const ImageContainer& image_
   const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
   const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
   const cv::Mat& optical_flow = image_container.get<ImageType::OpticalFlow>();
+
+  CHECK(!optical_flow.empty());
+  CHECK(!motion_mask.empty());
 
   if (motion_mask.at<int>(y, x) != background_label)
   {

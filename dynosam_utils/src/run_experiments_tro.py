@@ -134,7 +134,7 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
 
     # run_prep_sequence_func(path, name_P, *args_list_P)
     # run_prep_sequence_func(path, name_PO, *args_list_PO)
-    run_prep_sequence_func(path, name_POM, *args_list_POM)
+    # run_prep_sequence_func(path, name_POM, *args_list_POM)
 
     # run_analysis(name_P)
     # run_analysis(name_PO)
@@ -155,10 +155,21 @@ if __name__ == '__main__':
 
     # run_POM_tests(prep_cluster_sequence, "/root/data/cluster_slam/CARLA-L1/", "carla_l1", "--use_propogate_mask=false", "--use_dynamic_track=false", "--ending_frame=300")
 
-    run_POM_tests(prep_omd_sequence, "/root/data/omm/swinging_4_unconstrained/","omd_swinging_4_unconstrained", "--use_dynamic_track=false", "--ending_frame=300", "--semantic_mask_step_size=6", "--v=0")
-
+    # run_POM_tests(prep_omd_sequence, "/root/data/omm/swinging_4_unconstrained/","omd_swinging_4_unconstrained", "--use_dynamic_track=false", "--ending_frame=300", "--semantic_mask_step_size=6", "--v=0")
+    run_analysis("carla_l1")
+    run_analysis("carla_l2")
+    run_analysis("carla_s1")
+    run_analysis("carla_s2")
 
     # run_analysis("kitti_0000")
+    # run_analysis("kitti_0001")
+    # run_analysis("kitti_0002")
+    # run_analysis("kitti_0003")
+    # run_analysis("kitti_0004")
+    # run_analysis("kitti_0005")
+    # run_analysis("kitti_0006")
+    # run_analysis("kitti_0018")
+    # run_analysis("kitti_0020")
     # run_analysis("omd_swinging_4_unconstrained_sliding")
     # run_all_eval()
     sys.exit()

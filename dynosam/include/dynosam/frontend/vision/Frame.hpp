@@ -39,7 +39,7 @@
 
 namespace dyno {
 
-
+//TODO: make refresh funnction to update things like depth, clear cache etc etc...
 class Frame {
 
 public:

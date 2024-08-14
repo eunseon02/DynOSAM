@@ -57,6 +57,9 @@ ObjectIds getObjectLabels(const cv::Mat& image);
 
 std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const Frame& previous_frame, Frame::Ptr current_frame);
 
+
+void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size);
+
 /**
  * @brief From a instance/semantic mask type img, construct the bounding box for the mask of object_id
  *

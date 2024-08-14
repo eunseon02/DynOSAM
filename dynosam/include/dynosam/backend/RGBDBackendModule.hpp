@@ -87,6 +87,7 @@ public:
         gtsam::FastMap<ObjectId, std::set<FrameId>> objects_affected_per_frame; //per frame
         DebugInfo::Optional debug_info{};
 
+        //TODO: debug info
         inline UpdateObservationResult& operator+=(const UpdateObservationResult& oth) {
             for(const auto& [key, value] : oth.objects_affected_per_frame) {
                 objects_affected_per_frame[key].insert(value.begin(), value.end());
@@ -151,6 +152,31 @@ public:
             MotionEstimateMap getObjectMotions(FrameId frame_id) const;
             virtual EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(FrameId frame_id) const;
 
+            /**
+             * @brief Gets an estimate map of objects with their motion and and PREVIOUS pose.
+             * This will find motions and poses (using the internal API) and return a motion from k-1 to k and the associated
+             * pose at k-1.
+             *
+             * @param frame_id
+             * @return EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>>
+             */
+            EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>> getObjectPrevPosePair(FrameId frame_id) const {
+                //TODO: check object pose exists? (ie. s!=0?)
+                return this->getRequestedObjectPosePair(frame_id, frame_id-1u);
+            }
+
+            /**
+             * @brief Gets an estimate map of objects with their motion and and CURRENT pose.
+             * This will find motions and poses (using the internal API) and return a motion from k-1 to k and the associated
+             * pose at k.
+             *
+             * @param frame_id
+             * @return EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>>
+             */
+            EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>> getObjectPosePair(FrameId frame_id) const {
+                return this->getRequestedObjectPosePair(frame_id, frame_id);
+            }
+
             //full object poses with interpolation (if possible!!) (used for vis and not evaluation)
             //TODO::
             //relies on all the virtual fucntions doing their thing and getting the desired value in the right frame etc
@@ -212,6 +238,9 @@ public:
 
          protected:
             auto getMap() const { return parent_->getMap(); }
+
+        private:
+            EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>> getRequestedObjectPosePair(FrameId motion_frame_id, FrameId pose_frame_id) const;
 
         private:
             const gtsam::Values* theta_;

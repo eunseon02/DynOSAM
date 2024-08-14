@@ -793,7 +793,8 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
     TrackingInputImages tracking_images;
     if(image_container->hasSemanticMask()) {
         CHECK(!image_container->hasMotionMask());
-
+        //TODO: some bug when going from semantic mask to motion mask as motion mask is empty in the tracker after this process!!!
+        //its becuase we dont actually use the tracking_images!!
         auto intermediate_tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::SemanticMask>();
         tracking_images = TrackingInputImages(
             intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
@@ -807,9 +808,11 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
+    //shrinnk motion mask image
+    //TODO: fix
+    // vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), image_container->get<ImageType::MotionMask>(), 1);
 
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
-
     if(gt_packet_map_.find(frame->getFrameId()) != gt_packet_map_.end()) {
         frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
     }
@@ -843,6 +846,13 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     else {
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
+
+    //shrinnk motion mask image
+    cv::Mat shrink_mask;
+    // //this value is super dependant per dataset
+    // //for zed (indoors) = 6
+    vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), shrink_mask, 2);
+    image_container->get<ImageType::MotionMask>() = shrink_mask;
 
     Frame::Ptr frame = nullptr;
     {
@@ -1307,7 +1317,6 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& m
             gt_packet_map_);
     }
     else {
-        CHECK(false);
         dyno::propogateObjectPoses(
             object_poses_,
             motion_estimates,

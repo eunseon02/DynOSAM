@@ -261,68 +261,91 @@ class MotionErrorEvaluator(Evaluator):
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
 
-            # no need to sync and align motions since they are all relative anyway
-            # if anything we should put them into the gt object frame via a PCG(3) object change
-            # to ensure the estimation is in the gt frame from which the original error was calculated!!
-
-            # PUT INTO L
-            object_motion_L = []
-            object_poses = self._object_poses_traj_ref[object_id].poses_se3
-            # for object_pose, object_motion in zip(object_poses[:-1], object_traj.poses_se3[1:]):
-            #     object_motion_L.append(lie_algebra.se3_inverse(object_pose) @ object_motion @ object_pose)
-
-            object_motion_L_gt = []
-            # for object_pose, object_motion in zip(object_poses[:-1], object_traj_ref.poses_se3[1:]):
-            #     object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose) @ object_motion @ object_pose)
-
-            # # object_motion_L_gt = []
-            # for object_pose_k_1, object_pose_k in zip(object_poses[:-1], object_poses[1:]):
-            #     object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose_k_1) @ object_pose_k)
-
-            for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_traj.poses_se3[1:]):
-                object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
-                object_motion_L_gt.append(lie_algebra.se3())
-                # object_motion_L_gt.append(lie_algebra.se3_inverse(object_pose_k_1) @ object_pose_k)
+            # motion errors in W
+            absolute_motion_errors = self._compute_motion_in_W_errors(object_id, object_traj, object_traj_ref, plot_collection)
+            # motion errors in L
+            relatvive_motion_errors = self._compute_motion_in_L_errors(object_id, object_traj)
 
 
+            # expect results to already have results["objects"][id] prepared
+            if absolute_motion_errors:
+                results["objects"][object_id]["motions_W"] = absolute_motion_errors
+
+            if relatvive_motion_errors:
+                results["objects"][object_id]["motions_L"] = relatvive_motion_errors
 
 
-            # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
-            object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=object_motion_L, timestamps=object_traj.timestamps[1:])
-            object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=object_motion_L_gt, timestamps=object_traj_ref.timestamps[1:])
+    def _compute_motion_in_W_errors(self, object_id, object_motion_traj, object_motion_traj_ref, plots: Optional[evo_plot.PlotCollection] = None):
+        # only interested in APE as this matches our error metrics
+        ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+        ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
 
-            # data = (object_traj_ref, object_traj)
-            # data = (object_traj_ref, object_traj_in_L)
-            data = (object_traj_in_L_ref, object_traj_in_L)
+        data = (object_motion_traj_ref, object_motion_traj)
+        ape_trans.process_data(data)
+        ape_rot.process_data(data)
 
-            # only interested in APE as this matches our error metrics
-            ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
-            ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+        results_per_object = {}
+        results_per_object["ape_translation"] = ape_trans.get_all_statistics()
+        results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
 
-            ape_full = metrics.APE(metrics.PoseRelation.full_transformation)
 
-            ape_trans.process_data(data)
-            ape_rot.process_data(data)
-            ape_full.process_data(data)
-
-            print(ape_full.get_all_statistics())
-
-            results_per_object = {}
-            results_per_object["ape_translation"] = ape_trans.get_all_statistics()
-            results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
-
-            # expect results to already have results["objects"][id]["motions"] prepared
-            results["objects"][object_id]["motions"] = results_per_object
-
-            plot_collection.add_figure(
-                    f"Object_Motion_translation_{object_id}",
-                    plot_metric(ape_trans, f"Object Motion Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
-                )
-
-            plot_collection.add_figure(
-                f"Object_Motion_rotation_{object_id}",
-                plot_metric(ape_rot, f"Object Motion Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+        if plots:
+            plots.add_figure(
+                f"Object_Motion_W_translation_{object_id}",
+                plot_metric(ape_trans, f"AME Translation Error: {object_id}", x_axis=object_motion_traj.timestamps)
             )
+
+            plots.add_figure(
+                f"Object_Motion_W_rotation_{object_id}",
+                plot_metric(ape_rot, f"AME Rotation Error: {object_id}", x_axis=object_motion_traj.timestamps)
+            )
+
+        return results_per_object
+
+    def _compute_motion_in_L_errors(self, object_id, object_motion_traj, plots: Optional[evo_plot.PlotCollection] = None) -> Dict:
+        # PUT INTO L
+        object_motion_L = []
+        object_motion_L_gt = []
+
+        if object_id not in self._object_poses_traj_ref:
+            logger.warning(f"{object_id} not found for object pose ground truth. Skipping RME calculation")
+            return None
+
+        object_poses = self._object_poses_traj_ref[object_id].poses_se3
+
+
+        for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_motion_traj.poses_se3[1:]):
+            object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
+            object_motion_L_gt.append(lie_algebra.se3())
+
+        # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
+        object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=object_motion_L, timestamps=object_motion_traj.timestamps[1:])
+        object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=object_motion_L_gt, timestamps=object_motion_traj.timestamps[1:])
+
+        # only interested in APE as this matches our error metrics
+        ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+        ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+
+        data = (object_traj_in_L_ref, object_traj_in_L)
+        ape_trans.process_data(data)
+        ape_rot.process_data(data)
+
+        results_per_object = {}
+        results_per_object["ape_translation"] = ape_trans.get_all_statistics()
+        results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
+
+        if plots is not None:
+            plots.add_figure(
+                f"Object_Motion_L_translation_{object_id}",
+                plot_metric(ape_trans, f"RME Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+            )
+
+            plots.add_figure(
+                f"Object_Motion_L_rotation_{object_id}",
+                plot_metric(ape_rot, f"RME Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+            )
+
+        return results_per_object
 
     def _process_pose_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
         # est and ref object trajectories
@@ -502,7 +525,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(poses_est) < 4:
+            if len(poses_est) < 6:
                 continue
 
             if convert_to_world_coordinates:

@@ -69,9 +69,9 @@ def calc_angular_average(values):
     # angles measured in radians
     x_sum = np.sum([math.sin(x) for x in values])
     y_sum = np.sum([math.cos(x) for x in values])
-    x_mean = x_sum / float(len(values))
-    y_mean = y_sum / float(len(values))
-    return np.arctan2(x_mean, y_mean)
+    # x_mean = x_sum / float(len(values))
+    # y_mean = y_sum / float(len(values))
+    return math.atan2(x_sum, y_sum)
 
 class LatexTableFormatter(object):
 
@@ -247,11 +247,11 @@ class LatexTableFormatter(object):
                 "ape_translation":[],
                 "ape_rotation": []}
 
-            # motion errors
-            with self._doc.create(Subsection('Object Motion Errors')):
+            # absolute motion errors
+            with self._doc.create(Subsection(r'AME (Absolute motion errors) ($E(^wH)$)')):
                 with self._doc.create(Tabular('|c|cc|')) as table:
                     table.add_hline()
-                    header_row = ("", MultiColumn(2, align='c', data='APE'))
+                    header_row = ("", MultiColumn(2, align='c', data='AME'))
                     table.add_row(header_row)
                     table.add_row((
                         "obj",
@@ -261,14 +261,58 @@ class LatexTableFormatter(object):
 
                     # populate rows with results
                     for object_id, all_metrics in metric_object_map.items():
-                        if "motions" not in all_metrics:
+                        if "motions_W" not in all_metrics:
                             print(f"Motion metrics missing from object: {object_id}")
                             continue
 
-                        motion_metric_map = all_metrics["motions"]
+                        motion_metric_map = all_metrics["motions_W"]
 
-                        ape_translation = format_round_4(motion_metric_map["ape_translation"]["mean"])
-                        ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["mean"])
+                        ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
+                        ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
+
+                        # add to datastructure to post-calculate the mean
+                        mean_per_column["ape_translation"].append(ape_translation)
+                        mean_per_column["ape_rotation"].append(ape_rotation)
+
+                        table.add_row(
+                            object_id, ape_translation, ape_rotation
+                        )
+
+                     # calculate mean
+                    table.add_row(
+                        "mean",
+                        format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                        format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
+                    )
+
+                    table.add_hline()
+
+            mean_per_column = {
+                "ape_translation":[],
+                "ape_rotation": []}
+
+            # relative motion errors
+            with self._doc.create(Subsection(r'RME (Relative motion errors) ($E(^LH)$)')):
+                with self._doc.create(Tabular('|c|cc|')) as table:
+                    table.add_hline()
+                    header_row = ("", MultiColumn(2, align='c', data='AME'))
+                    table.add_row(header_row)
+                    table.add_row((
+                        "obj",
+                        NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
+                    table.add_hline()
+                    table.add_hline()
+
+                    # populate rows with results
+                    for object_id, all_metrics in metric_object_map.items():
+                        if "motions_L" not in all_metrics:
+                            print(f"Motion metrics missing from object: {object_id}")
+                            continue
+
+                        motion_metric_map = all_metrics["motions_L"]
+
+                        ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
+                        ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
 
                         # add to datastructure to post-calculate the mean
                         mean_per_column["ape_translation"].append(ape_translation)

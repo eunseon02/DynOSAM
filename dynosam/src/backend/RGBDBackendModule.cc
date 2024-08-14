@@ -556,6 +556,33 @@ std::tuple<gtsam::Point3, bool> RGBDBackendModule::Accessor::computeObjectCentro
     return {translation, true};
 }
 
+EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>>
+RGBDBackendModule::Accessor::getRequestedObjectPosePair(FrameId motion_frame_id, FrameId pose_frame_id) const {
+    const MotionEstimateMap motions_k = this->getObjectMotions(motion_frame_id);
+    const EstimateMap<ObjectId, gtsam::Pose3> poses_k = this->getObjectPoses(pose_frame_id);
+
+    EstimateMap<ObjectId, std::pair<Motion3, gtsam::Pose3>> result;
+    //collect common objects
+    for(const auto&[object_id, _] : motions_k) {
+        if(poses_k.exists(object_id)) {
+            auto motion_reference_values = motions_k.at(object_id);
+            auto pose_reference_values = poses_k.at(object_id);
+
+            CHECK_EQ(motion_reference_values.frame_, pose_reference_values.frame_);
+
+            ReferenceFrameValue<std::pair<Motion3, gtsam::Pose3>> estimate(
+                std::make_pair(
+                motion_reference_values.estimate_,
+                pose_reference_values.estimate_),
+                motion_reference_values.frame_
+            );
+            result.insert2(object_id,estimate);
+        }
+    }
+    return result;
+}
+
+
 gtsam::Pose3 RGBDBackendModule::Updater::getInitialOrLinearizedSensorPose(FrameId frame_id) const {
     const auto accessor = this->accessorFromTheta();
     // sensor pose from a previous/current linearisation point

@@ -165,59 +165,8 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 // }
 
 
-#include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
-#include "dynosam/dataprovider/OMDDataProvider.hpp"
-
-int main(int argc, char* argv[]) {
-
-    using namespace dyno;
-    google::ParseCommandLineFlags(&argc, &argv, true);
-    google::InitGoogleLogging(argv[0]);
-    FLAGS_logtostderr = 1;
-    FLAGS_colorlogtostderr = 1;
-    FLAGS_log_prefix = 1;
-
-    ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L2");
-    // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
-    auto camera = std::make_shared<Camera>(*loader.getCameraParams());
-    auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
-
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
-
-        LOG(INFO) << frame_id << " " << timestamp;
-
-        cv::imshow("RGB", rgb);
-        cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
-        cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
-        cv::imshow("Depth", ImageType::Depth::toRGB(depth));
-
-        ImageContainer::Ptr container = ImageContainer::Create(
-                    timestamp,
-                    frame_id,
-                    ImageWrapper<ImageType::RGBMono>(rgb),
-                    ImageWrapper<ImageType::Depth>(depth),
-                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-                    ImageWrapper<ImageType::MotionMask>(motion));
-
-        // auto frame = tracker->track(frame_id, timestamp, *container);
-        // Frame::Ptr previous_frame = tracker->getPreviousFrame();
-        // if(previous_frame) {
-        //     cv::imshow("Tracking", tracker->computeImageTracks(*previous_frame, *frame));
-
-        // }
-
-
-
-        cv::waitKey(0);
-        return true;
-    });
-
-    while(loader.spin()) {}
-
-
-}
-
-// #include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
+// #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
+// #include "dynosam/dataprovider/OMDDataProvider.hpp"
 
 // int main(int argc, char* argv[]) {
 
@@ -228,10 +177,12 @@ int main(int argc, char* argv[]) {
 //     FLAGS_colorlogtostderr = 1;
 //     FLAGS_log_prefix = 1;
 
-//     // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
-//     ProjectARIADataLoader loader("/root/data/zed/acfr_1_moving_small/");
+//     ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L2");
+//     // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
+//     auto camera = std::make_shared<Camera>(*loader.getCameraParams());
+//     auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
 
-//     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+//     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, dyno::GroundTruthInputPacket gt_packet) -> bool {
 
 //         LOG(INFO) << frame_id << " " << timestamp;
 
@@ -240,7 +191,24 @@ int main(int argc, char* argv[]) {
 //         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
 //         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
 
-//         cv::waitKey(1);
+//         ImageContainer::Ptr container = ImageContainer::Create(
+//                     timestamp,
+//                     frame_id,
+//                     ImageWrapper<ImageType::RGBMono>(rgb),
+//                     ImageWrapper<ImageType::Depth>(depth),
+//                     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+//                     ImageWrapper<ImageType::MotionMask>(motion));
+
+//         // auto frame = tracker->track(frame_id, timestamp, *container);
+//         // Frame::Ptr previous_frame = tracker->getPreviousFrame();
+//         // if(previous_frame) {
+//         //     cv::imshow("Tracking", tracker->computeImageTracks(*previous_frame, *frame));
+
+//         // }
+
+
+
+//         cv::waitKey(0);
 //         return true;
 //     });
 
@@ -248,3 +216,40 @@ int main(int argc, char* argv[]) {
 
 
 // }
+
+#include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
+#include "dynosam/frontend/vision/VisionTools.hpp"
+
+int main(int argc, char* argv[]) {
+
+    using namespace dyno;
+    google::ParseCommandLineFlags(&argc, &argv, true);
+    google::InitGoogleLogging(argv[0]);
+    FLAGS_logtostderr = 1;
+    FLAGS_colorlogtostderr = 1;
+    FLAGS_log_prefix = 1;
+
+    // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+    ProjectARIADataLoader loader("/root/data/zed/acfr_3_moving_medium/");
+
+    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+
+        LOG(INFO) << frame_id << " " << timestamp;
+
+        cv::imshow("RGB", rgb);
+        cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
+        cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+        cv::imshow("Depth", ImageType::Depth::toRGB(depth));
+
+        cv::Mat shrunk_mask;
+        vision_tools::shrinkMask(motion, shrunk_mask, 20);
+        cv::imshow("Shrunk Motion", ImageType::MotionMask::toRGB(shrunk_mask));
+
+        cv::waitKey(1);
+        return true;
+    });
+
+    while(loader.spin()) {}
+
+
+}

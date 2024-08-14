@@ -306,6 +306,23 @@ bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& re
 }
 
 
+void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size) {
+  shrunk_mask = cv::Mat::zeros(mask.size(), mask.type());
+  shrunk_mask.setTo(background_label);
+
+  const ObjectIds original_object_labels = getObjectLabels(mask);
+
+  const cv::Mat element = cv::getStructuringElement(cv::MORPH_RECT,
+                                                cv::Size(2 * erosion_size + 1, 2 * erosion_size + 1));
+
+  for(const auto object_id : original_object_labels) {
+    cv::Mat obj_mask = (mask == object_id);
+    cv::Mat eroded_mask;
+    cv::erode(obj_mask, eroded_mask, element);
+    shrunk_mask = shrunk_mask.setTo(object_id, eroded_mask);
+  }
+}
+
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels) {
   if (old_labels.size() != old_labels.size()) {
         throw std::invalid_argument("Old labels and new labels must have the same size");
