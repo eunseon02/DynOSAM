@@ -247,8 +247,9 @@ class LatexTableFormatter(object):
                 "ape_translation":[],
                 "ape_rotation": []}
 
+            # r"AME (Absolute motion errors) $^wH$ ($E(^wH)$)"
             # absolute motion errors
-            with self._doc.create(Subsection(r'AME (Absolute motion errors) ($E(^wH)$)')):
+            with self._doc.create(Subsection(r"AME (Absolute motion errors) ($E(^wH)$)")):
                 with self._doc.create(Tabular('|c|cc|')) as table:
                     table.add_hline()
                     header_row = ("", MultiColumn(2, align='c', data='AME'))

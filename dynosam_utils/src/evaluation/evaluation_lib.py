@@ -15,6 +15,7 @@ from .tools import (
     so3_from_euler,
     common_entries,
     transform_camera_trajectory_to_world,
+    camera_coordinate_to_world,
     TrajectoryHelper,
     load_pose_from_row,
     reconstruct_trajectory_from_relative,
@@ -103,6 +104,8 @@ class Evaluator(ABC):
     @abstractmethod
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         pass
+
+
 
 
 class MiscEvaluator(Evaluator):
@@ -243,6 +246,14 @@ class MotionErrorEvaluator(Evaluator):
     @property
     def object_poses_traj_ref(self) -> ObjectTrajDict:
         return self._object_poses_traj_ref
+
+    @property
+    def object_motion_traj(self) -> ObjectTrajDict:
+        return self._object_motions_traj
+
+    @property
+    def object_motion_traj_ref(self) -> ObjectTrajDict:
+        return self._object_motions_traj_ref
 
 
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -460,7 +471,7 @@ class MotionErrorEvaluator(Evaluator):
         )
 
     @staticmethod
-    def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader, convert_to_world_coordinates: bool) -> Tuple[ObjectPoseDict, ObjectTrajDict]:
+    def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader, convert_to_world_coordinates: bool) -> Tuple[ObjectTrajDict, ObjectTrajDict]:
         """
         Constructs dictionaries representing the object poses from the object_poses_log_file.
         The object_poses_log_file is expected to have a header with the form ["frame_id", "object_id", "x", "y", "z", "roll", "pitch", "yaw"].
@@ -676,6 +687,72 @@ class EgoObjectMotionEvaluator(Evaluator):
             fig_traj
         )
 
+class MapPlotter3D(Evaluator):
+
+    def __init__(self, map_points_csv_file_path: str, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator):
+        self._camera_eval = camera_eval
+        self._object_eval = object_eval
+
+        self._map_points_file = read_csv(
+            map_points_csv_file_path,
+            ["frame_id", "object_id", "tracklet_id", "x_world", "y_world", "z_world"]
+        )
+
+    def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
+        print("Logging 3d points")
+        self.plot_3d_map_points(plot_collection)
+
+    def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection):
+        map_fig = plt.figure(figsize=(8,8))
+        # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xzz)
+
+        camera_traj = self._camera_eval.camera_pose_traj
+        object_trajs = self._object_eval.object_poses_traj
+
+        all_traj = object_trajs
+        all_traj["Camera"] = camera_traj
+        evo_plot.trajectories(map_fig, all_traj, plot_mode=evo_plot.PlotMode.xyz)
+
+        x_points = []
+        y_points = []
+        z_points = []
+
+        import itertools
+        import seaborn as sns
+        color_palette = itertools.cycle(sns.color_palette())
+
+        # colour_map = {}
+        # # get colours to match the way colours are generated in evo_plot.trajectories
+        # for object_id, _ in object_trajs:
+        #     colour_map[object_id]= next(color_palette)
+
+
+        for row in self._map_points_file:
+            frame_id = float(row["frame_id"])
+            object_id = int(row["object_id"])
+            tracklet_id = int(row["tracklet_id"])
+
+            x_world = float(row["x_world"])
+            y_world = float(row["y_world"])
+            z_world = float(row["z_world"])
+
+            # do lazy conversion from camera convention to world convention
+            t_cam_convention = np.array([x_world, y_world, z_world, 1])
+            transform =camera_coordinate_to_world()
+            t_robot_convention = transform @ t_cam_convention
+
+            if object_id == 0:
+                x_points.append(t_robot_convention[0])
+                y_points.append(t_robot_convention[1])
+                z_points.append(t_robot_convention[2])
+
+
+        ax = map_fig.gca()
+        ax.view_init(azim=0, elev=90)
+
+        ax.scatter(x_points, y_points, z_points, s=1, c='black')
+        plot_collection.add_figure("Static map", map_fig)
+
 
 
 class DatasetEvaluator:
@@ -707,8 +784,6 @@ class DatasetEvaluator:
                 plot_collection.export(
                     self._create_new_file_path(data_files.plot_collection_name + "_metrics.pdf"),
                     confirm_overwrite=False)
-
-                # plot_collection.show()
 
             table_formatter.save_pdf(self._create_new_file_path("result_tables"))
 
@@ -762,6 +837,7 @@ class DatasetEvaluator:
         object_pose_log_path = self._create_existing_file_path(datafiles.object_pose_log)
         object_motion_log_path = self._create_existing_file_path(datafiles.object_motion_log)
         camera_pose_log_path = self._create_existing_file_path(datafiles.camera_pose_log)
+        map_points_log_path = self._create_existing_file_path(datafiles.map_point_log)
 
         evaluators = []
         motion_eval = self._check_and_cosntruct_generic_eval(
@@ -786,6 +862,18 @@ class DatasetEvaluator:
         if camera_pose_eval and motion_eval:
             analysis_logger.info("Adding EgoObjectMotionEvaluator")
             evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
+
+        if map_points_log_path and camera_pose_eval and motion_eval:
+            map_points_eval = self._check_and_cosntruct_generic_eval(
+                MapPlotter3D,
+                map_points_log_path,
+                camera_pose_eval,
+                motion_eval
+            )
+            if map_points_eval:
+                analysis_logger.info("Adding Map points plotter")
+                evaluators.append(map_points_eval)
+
 
         plot_collection_name = datafiles.plot_collection_name
         analysis_logger.info("Constructing plot collection {}".format(plot_collection_name))

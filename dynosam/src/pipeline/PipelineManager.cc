@@ -92,7 +92,6 @@ DynoPipelineManager::~DynoPipelineManager() {
 
     //TODO: make shutdown hook!
     writeStatisticsSamplesToFile("statistics_samples.csv");
-    // writeStatisticsSummaryToFile("statistics.csv");
     writeStatisticsModuleSummariesToFile();
 
 }

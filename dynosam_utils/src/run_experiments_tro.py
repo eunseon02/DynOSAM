@@ -136,8 +136,8 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
     # run_prep_sequence_func(path, name_PO, *args_list_PO)
     # run_prep_sequence_func(path, name_POM, *args_list_POM)
 
-    # run_analysis(name_P)
-    # run_analysis(name_PO)
+    run_analysis(name_P)
+    run_analysis(name_PO)
     run_analysis(name_POM)
 
 if __name__ == '__main__':
@@ -147,7 +147,7 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        run_sequence_func(path, name, ll_backend, *args)
+        # run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
@@ -156,10 +156,10 @@ if __name__ == '__main__':
     # run_POM_tests(prep_cluster_sequence, "/root/data/cluster_slam/CARLA-L1/", "carla_l1", "--use_propogate_mask=false", "--use_dynamic_track=false", "--ending_frame=300")
 
     # run_POM_tests(prep_omd_sequence, "/root/data/omm/swinging_4_unconstrained/","omd_swinging_4_unconstrained", "--use_dynamic_track=false", "--ending_frame=300", "--semantic_mask_step_size=6", "--v=0")
-    run_analysis("carla_l1")
-    run_analysis("carla_l2")
-    run_analysis("carla_s1")
-    run_analysis("carla_s2")
+    # run_analysis("carla_l1")
+    # run_analysis("carla_l2")
+    # run_analysis("carla_s1")
+    # run_analysis("carla_s2")
 
     # run_analysis("kitti_0000")
     # run_analysis("kitti_0001")
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     # run_analysis("kitti_0020")
     # run_analysis("omd_swinging_4_unconstrained_sliding")
     # run_all_eval()
-    sys.exit()
+    # sys.exit()
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",
@@ -262,7 +262,21 @@ if __name__ == '__main__':
     # run_both_backend(
     #     run_kitti_sequence,
     #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000"
+    #     "kitti_0000_sliding",
+    #     "--use_full_batch_opt=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004_sliding",
+    #     "--use_full_batch_opt=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
     # )
 
     # run_both_backend(
@@ -289,9 +303,9 @@ if __name__ == '__main__':
     # omd
     # prep_omd_sequence(
     #     "/root/data/omm/swinging_4_unconstrained/",
-    #     "omd_swinging_4_unconstrained_sliding",
+    #     "omd_swinging_4_unconstrained",
     #     "--use_dynamic_track=false",
-    #     "--ending_frame=300",
+    #     "--ending_frame=150",
     #     "--semantic_mask_step_size=4")
 
     # prep_omd_sequence(
@@ -305,15 +319,20 @@ if __name__ == '__main__':
     # run_both_backend(
     #     run_omd_sequence,
     #     "/root/data/omm/swinging_4_unconstrained/",
-    #     "omd_swinging_4_unconstrained_sliding",
-    #     "--use_full_batch_opt=false",
-    #     "--ending_frame=300",
-    #     "--semantic_mask_step_size=15",
-    #     #"--constant_object_motion_rotation_sigma=0.001",
-    #     #"--constant_object_motion_translation_sigma=0.001",
-    #     #"--odometry_translation_sigma=0.001",
-    #     #"--odometry_rotation_sigma=0.001"
+    #     "omd_swinging_4_unconstrained",
+    #     "--use_full_batch_opt=true",
+    #     "--constant_object_motion_rotation_sigma=0.01",
+    #     "--constant_object_motion_translation_sigma=0.03",
     #     )
+
+    run_both_backend(
+        run_omd_sequence,
+        "/root/data/omm/swinging_4_unconstrained/",
+        "omd_swinging_4_unconstrained_sliding_compare",
+        "--use_full_batch_opt=false",
+        "--constant_object_motion_rotation_sigma=0.01",
+        "--constant_object_motion_translation_sigma=0.03",
+        )
 
     # run_both_backend(
     #     run_omd_sequence,

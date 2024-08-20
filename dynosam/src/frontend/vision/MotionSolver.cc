@@ -477,6 +477,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     auto gtsam_calibration = boost::make_shared<Calibration>(
         frame_k_1->getFrameCamera().calibration());
 
+    utils::TimingStatsCollector timer("motion_solver.joint_of_pose");
     for(TrackletId tracklet_id : solver_result.inliers) {
         Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
         Feature::Ptr feature_k = frame_k->at(tracklet_id);
@@ -520,6 +521,8 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     gtsam::NonlinearFactorGraph mutable_graph = graph;
     gtsam::Values optimised_values = values;
 
+    //number of all variables
+    utils::StatsCollector("motion_solver.joint_of_pose_num_vars_all").AddSample(optimised_values.size());
 
     gtsam::LevenbergMarquardtParams opt_params;
     if(VLOG_IS_ON(200))
@@ -583,13 +586,12 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
     size_t initial_size = graph.size();
     size_t inlier_size = mutable_graph.size();
     error_after = mutable_graph.error(optimised_values);
-
-
     //recover values!
     refined_pose = optimised_values.at<gtsam::Pose3>(pose_key);
+    //number of variables after outlier removal
+    utils::StatsCollector("motion_solver.joint_of_pose_num_vars_inliers").AddSample(optimised_values.size());
 
     //for each outlier edge, update the set of inliers
-
     for(TrackletId tracklet_id : solver_result.inliers) {
         gtsam::Symbol flow_symbol(flowSymbol(tracklet_id));
 
@@ -606,6 +608,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         }
 
     }
+
 
     LOG(INFO) << "Joint optical-flow/pose refinement - error before: "
         << error_before << " error after: " << error_after
@@ -1017,9 +1020,13 @@ void ObjectMotionSovler::refineLocalObjectMotionEstimate(
     gtsam::NonlinearFactorGraph mutable_graph = graph;
     gtsam::Values optimised_values = values;
 
-     gtsam::LevenbergMarquardtParams opt_params;
+    utils::StatsCollector("motion_solver.object_nlo_refinement_num_vars_all").AddSample(optimised_values.size());
+
+    gtsam::LevenbergMarquardtParams opt_params;
     if(VLOG_IS_ON(200))
         opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+
 
     optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
     double error_after = mutable_graph.error(optimised_values);

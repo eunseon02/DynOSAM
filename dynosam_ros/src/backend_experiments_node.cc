@@ -105,6 +105,14 @@ public:
 
     }
 
+    //TODO: copy pasted from DynoManager class - streamline/make shutdown hook
+    ~BackendExperimentsNode() {
+        //TODO: make shutdown hook!
+        writeStatisticsSamplesToFile("statistics_samples.csv");
+        writeStatisticsModuleSummariesToFile();
+
+    }
+
      bool spinOnce() override {
        RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000, getStats());
        if(frontend_pipeline_->isWorking()) {

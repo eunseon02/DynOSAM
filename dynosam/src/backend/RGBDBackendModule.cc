@@ -187,9 +187,10 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
             const auto theta =  new_updater_->getTheta();
             const auto graph = new_updater_->getGraph();
+            utils::StatsCollector(new_updater_->loggerPrefix() + ".full_batch_opt_num_vars_all").AddSample(theta.size());
 
             double error_before = graph.error(theta);
-            utils::TimingStatsCollector timer("backend.full_batch_opt");
+            utils::TimingStatsCollector timer(new_updater_->loggerPrefix() + ".full_batch_opt");
             gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph,theta, opt_params).optimize();
             double error_after = graph.error(optimised_values);
             new_updater_->updateTheta(optimised_values);
@@ -1655,7 +1656,8 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::V
         if(VLOG_IS_ON(20))
             opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
-        utils::TimingStatsCollector timer("backend.sliding_window_optimise");
+        utils::TimingStatsCollector timer(new_updater_->loggerPrefix() + ".sliding_window_optimise");
+        utils::StatsCollector(new_updater_->loggerPrefix() + ".sliding_window_optimise_num_vars_all").AddSample(values.size());
         try {
             optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
             LOG(INFO) << "Finished op!";

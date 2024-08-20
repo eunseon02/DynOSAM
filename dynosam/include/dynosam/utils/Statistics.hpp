@@ -81,7 +81,8 @@ namespace utils {
 const double kNumSecondsPerNanosecond = 1.e-9;
 
 struct StatisticsMapValue {
-  static const int kWindowSize = 100;
+  //this is the same for EVERY value, do we really want this?
+  static const int kWindowSize = 1000;
 
   inline StatisticsMapValue() {
     time_last_called_ = std::chrono::system_clock::now();
