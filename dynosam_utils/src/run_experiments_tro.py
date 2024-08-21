@@ -158,7 +158,7 @@ if __name__ == '__main__':
     # run_POM_tests(prep_omd_sequence, "/root/data/omm/swinging_4_unconstrained/","omd_swinging_4_unconstrained", "--use_dynamic_track=false", "--ending_frame=300", "--semantic_mask_step_size=6", "--v=0")
     # run_analysis("carla_l1")
     # run_analysis("carla_l2")
-    # run_analysis("carla_s1")
+    run_analysis("carla_s1")
     # run_analysis("carla_s2")
 
     # run_analysis("kitti_0000")
@@ -166,13 +166,13 @@ if __name__ == '__main__':
     # run_analysis("kitti_0002")
     # run_analysis("kitti_0003")
     # run_analysis("kitti_0004")
-    # run_analysis("kitti_0005")
-    # run_analysis("kitti_0006")
+    run_analysis("kitti_0005")
+    run_analysis("kitti_0006")
     # run_analysis("kitti_0018")
     # run_analysis("kitti_0020")
     # run_analysis("omd_swinging_4_unconstrained_sliding")
     # run_all_eval()
-    # sys.exit()
+    sys.exit()
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",
@@ -222,7 +222,7 @@ if __name__ == '__main__':
     #     "kitti_0006"
     # )
 
-     # prep_kitti_sequence(
+    # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",
     #     "kitti_0004"
     # )
@@ -325,14 +325,14 @@ if __name__ == '__main__':
     #     "--constant_object_motion_translation_sigma=0.03",
     #     )
 
-    run_both_backend(
-        run_omd_sequence,
-        "/root/data/omm/swinging_4_unconstrained/",
-        "omd_swinging_4_unconstrained_sliding_compare",
-        "--use_full_batch_opt=false",
-        "--constant_object_motion_rotation_sigma=0.01",
-        "--constant_object_motion_translation_sigma=0.03",
-        )
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/omm/swinging_4_unconstrained/",
+    #     "omd_swinging_4_unconstrained_sliding_compare",
+    #     "--use_full_batch_opt=false",
+    #     "--constant_object_motion_rotation_sigma=0.01",
+    #     "--constant_object_motion_translation_sigma=0.03",
+    #     )
 
     # run_both_backend(
     #     run_omd_sequence,

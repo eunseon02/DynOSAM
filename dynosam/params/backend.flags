@@ -1,7 +1,10 @@
 #!/bin/bash
 
+# --constant_object_motion_rotation_sigma=0.05
+# --constant_object_motion_translation_sigma=0.1
+
 --constant_object_motion_rotation_sigma=0.01
---constant_object_motion_translation_sigma=0.001
+--constant_object_motion_translation_sigma=0.01
 
 
 --motion_ternary_factor_noise_sigma=0.001

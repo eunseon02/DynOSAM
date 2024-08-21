@@ -851,7 +851,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     cv::Mat shrink_mask;
     // //this value is super dependant per dataset
     // //for zed (indoors) = 6
-    vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), shrink_mask, 2);
+    vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), shrink_mask, 3);
     image_container->get<ImageType::MotionMask>() = shrink_mask;
 
     Frame::Ptr frame = nullptr;

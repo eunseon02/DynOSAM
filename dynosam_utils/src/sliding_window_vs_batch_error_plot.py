@@ -210,7 +210,7 @@ trans_axes_2.legend(loc="upper right", fontsize=19)
 rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=26)
 rot_fig.supxlabel("Frame Index [-]",fontsize=24)
 
-trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ qComparison",  fontweight="bold", fontsize=26)
+trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=26)
 trans_fig.supxlabel("Frame Index [-]", fontsize=24)
 
 rot_fig.tight_layout(pad=0.5)
@@ -218,5 +218,5 @@ trans_fig.tight_layout(pad=0.5)
 
 # plt.show()
 
-# rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
-# trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")
+rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
+trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")

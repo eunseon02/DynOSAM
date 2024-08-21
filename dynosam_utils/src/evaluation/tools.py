@@ -3,12 +3,14 @@ import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from evo.core.lie_algebra import se3
 from evo.core.trajectory import PosePath3D
+from matplotlib.axes import Axes
+
 
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
 import evo.core.lie_algebra as evo_lie_algebra
 
-from typing import Tuple
+from typing import Tuple, Optional
 
 from copy import deepcopy
 import typing
@@ -230,13 +232,44 @@ class TrajectoryHelper:
             ax.set_ylim([self.min_y, self.max_y])
 
 
+def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PosePath3D,
+         style: str = '-', color='black', label: str = "", alpha: float = 1.0,
+         plot_start_end_markers: bool = False, **kwargs) -> None:
+    """
+    plot a path/trajectory based on xyz coordinates into an axis
+    :param ax: the matplotlib axis
+    :param plot_mode: PlotMode
+    :param traj: trajectory.PosePath3D or trajectory.PoseTrajectory3D object
+    :param style: matplotlib line style
+    :param color: matplotlib color
+    :param label: label (for legend)
+    :param alpha: alpha value for transparency
+    :param plot_start_end_markers: Mark the start and end of a trajectory
+                                   with a symbol.
+    """
+    from evo.tools.settings import SETTINGS
+    x_idx, y_idx, z_idx = evo_plot.plot_mode_to_idx(plot_mode)
+    x = traj.positions_xyz[:, x_idx]
+    y = traj.positions_xyz[:, y_idx]
+    if plot_mode == evo_plot.PlotMode.xyz:
+        z = traj.positions_xyz[:, z_idx]
+        ax.plot(x, y, z, style, color=color, label=label, alpha=alpha, **kwargs)
+    else:
+        ax.plot(x, y, style, color=color, label=label, alpha=alpha, **kwargs)
+    if SETTINGS.plot_xyz_realistic:
+        evo_plot.set_aspect_equal(ax)
+    if label and SETTINGS.plot_show_legend:
+        ax.legend(frameon=True)
+    if plot_start_end_markers:
+        evo_plot.add_start_end_markers(ax, plot_mode, traj, start_color=color,
+                              end_color=color, alpha=alpha)
 
 
 # modification of evo.trajectories
 def plot_object_trajectories(
         fig: Figure,
         obj_trajectories: typing.Dict[str, evo_trajectory.PosePath3D],
-        obj_trajectories_ref: typing.Dict[str, evo_trajectory.PosePath3D],
+        obj_trajectories_ref: Optional[typing.Dict[str, evo_trajectory.PosePath3D]] = None,
         plot_mode=evo_plot.PlotMode.xy,
         title: str = "",
         subplot_arg: int = 111,
@@ -244,10 +277,15 @@ def plot_object_trajectories(
         length_unit: evo_plot.Unit = evo_plot.Unit.meters,
         **kwargs) -> None:
 
-    if len(obj_trajectories) != len(obj_trajectories_ref):
+    if obj_trajectories_ref is not None and len(obj_trajectories) != len(obj_trajectories_ref):
         raise evo_plot.PlotException(f"Expected trajectories and ref trajectories to have the same length {len(obj_trajectories)} != {len(obj_trajectories_ref)}")
 
-    ax = evo_plot.prepare_axis(fig, plot_mode, subplot_arg, length_unit)
+    ax = None
+    if len(fig.axes) == 0:
+        ax = evo_plot.prepare_axis(fig, plot_mode, subplot_arg, length_unit)
+    else:
+        # use existing axis TODO: check 3d?
+        ax = fig.gca()
     if title:
         ax.set_title(title)
 
@@ -257,21 +295,33 @@ def plot_object_trajectories(
     downscale = kwargs.get("downscale", 0.1)
 
     cmap_colors = None
+    provided_colours = None
     import collections
     import matplotlib.cm as cm
     import itertools
     import seaborn as sns
 
-    if evo_plot.SETTINGS.plot_multi_cmap.lower() != "none" and isinstance(
+    # use provided colour map
+    if kwargs.get("colours") is not None:
+        # should be list of colours, one for each obj traj
+        provided_colours = kwargs.get("colours")
+        if len(provided_colours) != len(obj_trajectories):
+            raise evo_plot.PlotException(f"Expected trajectories and provided colours to have the same length {len(obj_trajectories)} != {len(provided_colours)}")
+    elif evo_plot.SETTINGS.plot_multi_cmap.lower() != "none" and isinstance(
             obj_trajectories, collections.abc.Iterable):
         cmap = getattr(cm, evo_plot.SETTINGS.plot_multi_cmap)
         cmap_colors = iter(cmap(np.linspace(0, 1, len(obj_trajectories))))
 
     color_palette = itertools.cycle(sns.color_palette())
 
+    if provided_colours:
+        provided_colours = itertools.cycle(provided_colours)
+
     # helper function
     def draw_impl(t, style: str = '-',name="", alpha: float = 1.0, shift_color: bool = False):
-        if cmap_colors is None:
+        if provided_colours is not None:
+            color = next(provided_colours)
+        elif cmap_colors is None:
             color = next(color_palette)
         else:
             color = next(cmap_colors)
@@ -285,9 +335,14 @@ def plot_object_trajectories(
 
         if evo_plot.SETTINGS.plot_usetex:
             name = name.replace("_", "\\_")
-        evo_plot.traj(ax, plot_mode, t, style, color, name,
+        # evo_plot.traj(ax, plot_mode, t, style, color, name,
+        #      plot_start_end_markers=plot_start_end_markers,
+        #      alpha=alpha)
+        plot_traj(ax, plot_mode, t, style, color, name,
              plot_start_end_markers=plot_start_end_markers,
-             alpha=alpha)
+             alpha=alpha,
+             zorder=kwargs.get("traj_zorder", 1),
+             linewidth=kwargs.get("traj_linewidth", plt.rcParams["lines.linewidth"]))
 
     def draw(traj: typing.Any, **kwargs):
         if isinstance(traj, evo_trajectory.PosePath3D):
@@ -304,7 +359,8 @@ def plot_object_trajectories(
         reduced_pose_num = downscale_percentage * traj.num_poses
         # round UP to the nearest int (so we at least get 1 pose
         reduced_pose_num = int(math.ceil(reduced_pose_num))
-        traj.downsample(reduced_pose_num)
+        if reduced_pose_num >= 2:
+            traj.downsample(reduced_pose_num)
         return traj
 
     def plot_coordinate_axis(trajectories: typing.Dict[str, evo_trajectory.PosePath3D]):
@@ -317,11 +373,11 @@ def plot_object_trajectories(
             trajectories (typing.Dict[str, evo_trajectory.PosePath3D]): _description_
         """
         reduced_trajectories = deepcopy(trajectories)
-        for obj_traj in reduced_trajectories.items():
+        for _, obj_traj in reduced_trajectories.items():
             obj_traj = reduce_trajectory(downscale, obj_traj)
             evo_plot.draw_coordinate_axes(
                 ax, obj_traj, plot_mode,
-                kwargs.get("marker_scale", 0.1))
+                kwargs.get("axis_marker_scale", 0.1))
 
     # draw trajectories
     draw(obj_trajectories, style='-')
@@ -330,9 +386,11 @@ def plot_object_trajectories(
 
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
-    draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
-    if plot_axis_ref:
-        plot_coordinate_axis(obj_trajectories_ref)
+    if obj_trajectories_ref is not None:
+        draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
+        if plot_axis_ref:
+            plot_coordinate_axis(obj_trajectories_ref)
+    return ax
 
 
 def calculate_omd_errors(traj, traj_ref, object_id):

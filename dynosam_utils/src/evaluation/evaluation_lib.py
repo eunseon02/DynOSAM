@@ -9,7 +9,11 @@ import matplotlib.pyplot as plt
 from evo.core import lie_algebra, trajectory, metrics, transformations
 import evo.tools.plot as evo_plot
 
+import matplotlib
+
 import copy
+
+from .filesystem_utils import DataFiles, read_csv
 
 from .tools import (
     so3_from_euler,
@@ -45,59 +49,6 @@ logger.addHandler(_ch)
 
 
 
-def read_csv(csv_file_path:str, expected_header: List[str]):
-    assert csv_file_path is not None
-    csvfile = open(csv_file_path)
-    reader = csv.DictReader(csvfile)
-
-    try:
-        header = next(reader)
-        keys = list(header.keys())
-        if keys != expected_header:
-            raise Exception(
-                "Csv file headers were not valid when loading file at path: {}. "
-                "Expected header was {} but actual keys were {}".format(
-                    csv_file_path, expected_header, keys
-                )
-            )
-
-        return reader
-    except Exception as e:
-        raise Exception(f"Failed to read csv file {csv_file_path}. Exception raised was {str(e)}")
-
-
-
-class DataFiles:
-    def __init__(self, prefix:str, output_folder_path: str, **kwargs) -> None:
-        # These files will match the output logger file names from Logger.cc
-        # as the prefix here is the prefix used in the logger
-        self.prefix = prefix
-        self.output_folder_path = output_folder_path
-        self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
-        self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
-
-    @property
-    def object_pose_log(self):
-        return self.prefix + "_object_pose_log.csv"
-
-    @property
-    def object_motion_log(self):
-        return self.prefix + "_object_motion_log.csv"
-
-    @property
-    def camera_pose_log(self):
-        return self.prefix + "_camera_pose_log.csv"
-
-    @property
-    def map_point_log(self):
-        return self.prefix + "_map_points_log.csv"
-
-    def __str__(self):
-        return "DataFiles [\n\tprefix: {}\n\tresult file name: {}\n\tplot collection name: {}".format(
-            self.prefix,
-            self.results_file_name,
-            self.plot_collection_name
-        )
 
 class Evaluator(ABC):
 
@@ -120,7 +71,12 @@ class MiscEvaluator(Evaluator):
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         self._process_tracklet_length_data(plot_collection)
 
+
     def _process_tracklet_length_data(self, plot_collection):
+        if not os.path.isfile(self._tracklet_length_hist_file):
+            logger.error(f"Missing tracklet length histogram file at {self._tracklet_length_hist_file}. Skipping process.")
+            return
+
         import matplotlib.ticker as mticker
         # assume bin size is all the same!!
         tracklet_length_data = load_bson(self._tracklet_length_hist_file)[0]['data']
@@ -536,7 +492,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(poses_est) < 6:
+            if len(poses_est) < 3:
                 continue
 
             if convert_to_world_coordinates:
@@ -668,8 +624,8 @@ class EgoObjectMotionEvaluator(Evaluator):
 
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         fig_traj = plt.figure(figsize=(8,8))
-        camera_traj = self._camera_eval.camera_pose_traj
-        object_trajs = self._object_eval.object_poses_traj
+        camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
+        object_trajs = copy.deepcopy(self._object_eval.object_poses_traj)
 
         trajectory_helper = TrajectoryHelper()
         trajectory_helper.append(camera_traj)
@@ -689,6 +645,10 @@ class EgoObjectMotionEvaluator(Evaluator):
 
 class MapPlotter3D(Evaluator):
 
+    SEQUENTIAL_COLOUR_MAPS = ['Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
+                      'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+                      'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn']
+
     def __init__(self, map_points_csv_file_path: str, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator):
         self._camera_eval = camera_eval
         self._object_eval = object_eval
@@ -704,33 +664,60 @@ class MapPlotter3D(Evaluator):
 
     def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection):
         map_fig = plt.figure(figsize=(8,8))
-        # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xzz)
+        # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
+        ax = map_fig.add_subplot(111, projection="3d", proj_type = 'ortho')
 
-        camera_traj = self._camera_eval.camera_pose_traj
-        object_trajs = self._object_eval.object_poses_traj
+
+        camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
+        object_trajs = copy.deepcopy(self._object_eval.object_poses_traj)
+
+        trajectory_helper = TrajectoryHelper()
+        # trajectory_helper.append(camera_traj)
+        trajectory_helper.append(object_trajs)
 
         all_traj = object_trajs
-        all_traj["Camera"] = camera_traj
-        evo_plot.trajectories(map_fig, all_traj, plot_mode=evo_plot.PlotMode.xyz)
+
+        import itertools
+
+        # list for the object trajectory generator
+        colour_list = []
+        # map for the point cloud plot per object id
+        colour_generator_map = {}
+
+
+        colour_map_names = itertools.cycle(MapPlotter3D.SEQUENTIAL_COLOUR_MAPS)
+        for object_id, _ in all_traj.items():
+            id = int(object_id)
+            # get colour map
+            colour_map  = matplotlib.colormaps[next(colour_map_names)]
+            colour_list.append(colour_map(0.8))
+            colour_generator_map[id] = colour_map
+
+        # all_traj["Camera"] = camera_traj
+
+        # tools.plot_object_trajectories(map_fig, {"camera":camera_traj},
+        #                                plot_mode=evo_plot.PlotMode.xyz,
+        #                                colours=['red'],
+        #                                plot_axis_est=True,
+        #                                plot_start_end_markers=True,
+        #                                axis_marker_scale=1.5)
+        # # print(all_traj)
 
         x_points = []
         y_points = []
         z_points = []
 
-        import itertools
-        import seaborn as sns
-        color_palette = itertools.cycle(sns.color_palette())
+        object_points = {}
 
-        # colour_map = {}
-        # # get colours to match the way colours are generated in evo_plot.trajectories
-        # for object_id, _ in object_trajs:
-        #     colour_map[object_id]= next(color_palette)
-
+        tracklet_set = set()
 
         for row in self._map_points_file:
             frame_id = float(row["frame_id"])
             object_id = int(row["object_id"])
             tracklet_id = int(row["tracklet_id"])
+
+            if tracklet_id in tracklet_set:
+                continue
 
             x_world = float(row["x_world"])
             y_world = float(row["y_world"])
@@ -746,11 +733,55 @@ class MapPlotter3D(Evaluator):
                 y_points.append(t_robot_convention[1])
                 z_points.append(t_robot_convention[2])
 
+                tracklet_set.add(tracklet_id)
+            else:
+                pass
+                # # this might happen becuase we log ALL the points, even on objects we only see a few number of times
+                # if object_id not in object_trajs:
+                #     continue
+                # object_trajectory_frames = object_trajs[object_id].timestamps
 
-        ax = map_fig.gca()
+                # # get normalised timestamp in range 0-1
+                # normalised_frame_id = (frame_id - np.min(object_trajectory_frames))/(np.max(object_trajectory_frames) - np.min(object_trajectory_frames))
+                # # print(frame_id)
+                # # print(normalised_frame_id)
+                # time_dependant_colour = colour_generator_map[object_id](normalised_frame_id)
+
+                # if object_id not in object_points:
+                #     # x,y,z,colour
+                #     object_points[object_id] = [[], [], [],[]]
+
+                # object_points[object_id][0].append(t_robot_convention[0])
+                # object_points[object_id][1].append(t_robot_convention[1])
+                # object_points[object_id][2].append(t_robot_convention[2])
+                # object_points[object_id][3].append(time_dependant_colour)
+
+
+            # else:
+
+
         ax.view_init(azim=0, elev=90)
+        ax.patch.set_facecolor('white')
+        ax.axis('off')
+        map_fig.tight_layout()
 
-        ax.scatter(x_points, y_points, z_points, s=1, c='black')
+        # static points
+        ax.scatter(x_points, y_points, z_points, s=1.0, c='black',alpha=0.5, zorder=0, marker=".")
+        for _, data in object_points.items():
+            ax.scatter(data[0], data[1], data[2], s=1, c=data[3])
+
+        tools.plot_object_trajectories(map_fig, all_traj,
+                                       plot_mode=evo_plot.PlotMode.xyz,
+                                       colours=colour_list,
+                                    #    plot_axis_est=True,
+                                       plot_start_end_markers=True,
+                                       axis_marker_scale=1.5,
+                                       traj_zorder=30,
+                                       traj_linewidth=3.0)
+
+        print(len(x_points))
+        trajectory_helper.set_ax_limits(map_fig.gca())
+
         plot_collection.add_figure("Static map", map_fig)
 
 
@@ -888,41 +919,8 @@ class DatasetEvaluator:
         return plot_collection, result_dict
 
     def _search_for_datafiles(self):
-        from pathlib import Path
-        output_folder_path = Path(self._output_folder_path)
-
-        path_prefix_set = set()
-
-        dummy_data_files = DataFiles("","")
-
-        def get_datafile_properties(data_files: DataFiles):
-            # get functions relating to file paths of expected output logs
-            # note: we dont look at ALL the possible properties of DataFiles, just the main ones
-            return [
-                data_files.camera_pose_log,
-                data_files.object_motion_log,
-                data_files.object_pose_log
-            ]
-
-
-        # these strings will return the names of the output log files, the suffix of which
-        # we want to find in the output_folder_path
-        data_files = get_datafile_properties(dummy_data_files)
-
-        for p in output_folder_path.iterdir():
-            # p is absolute path
-            if p.is_file():
-                found_file_name = p.name
-                # expect file name of loggers to be suffixed with the output of data_file_property_functons
-                for expected_log_suffx_name in data_files:
-                    # found file name should be in the form prefix_suffix
-                    # e.g. rgbd_backend_object_pose_log.csv
-                    # where rgbd_backend is the prefix_we want to find
-                    # and _object_pose_log is a known suffux to a log file
-                    if found_file_name.endswith(expected_log_suffx_name):
-                        possible_prefix = found_file_name.removesuffix(expected_log_suffx_name)
-                        path_prefix_set.add(possible_prefix)
-        return list(path_prefix_set)
+        from .filesystem_utils import search_for_results_prefixes
+        return search_for_results_prefixes(self._output_folder_path)
 
 
     def _save_results_dict_json(self, file_name: str, results: Dict):
