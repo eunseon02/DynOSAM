@@ -10,6 +10,28 @@ class DataFiles:
         self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
         self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
 
+    def check_is_dynosam_results(self) -> bool:
+        """
+        Checks that the files that this datastructure represent actually exist (locally) and therefore is a valid
+        dynosam results folder
+
+        Returns:
+            bool: Is a valid dynosam results folder
+        """
+        from pathlib import Path
+        output_folder_path = Path(self.output_folder_path)
+
+        expected_file_names = get_datafile_properties(self)
+        found_file_names =  [path.name for path in output_folder_path.iterdir()]
+
+        # check if all names are found
+        all_found = set(expected_file_names) <= set(found_file_names)
+        return all_found
+
+
+
+
+
     @property
     def object_pose_log(self):
         return self.prefix + "_object_pose_log.csv"
@@ -55,6 +77,14 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
         raise Exception(f"Failed to read csv file {csv_file_path}. Exception raised was {str(e)}")
 
 
+def get_datafile_properties(data_files: DataFiles):
+    # get functions relating to file paths of expected output logs
+    # note: we dont look at ALL the possible properties of DataFiles, just the main ones
+    return [
+        data_files.camera_pose_log,
+        data_files.object_motion_log,
+        data_files.object_pose_log
+    ]
 
 
 def check_if_results_folder(possible_results_folder:str) -> bool:
@@ -92,16 +122,6 @@ def search_for_results_prefixes(possible_results_folder:str) -> List[str]:
     path_prefix_set = set()
 
     dummy_data_files = DataFiles("","")
-
-    def get_datafile_properties(data_files: DataFiles):
-        # get functions relating to file paths of expected output logs
-        # note: we dont look at ALL the possible properties of DataFiles, just the main ones
-        return [
-            data_files.camera_pose_log,
-            data_files.object_motion_log,
-            data_files.object_pose_log
-        ]
-
 
     # these strings will return the names of the output log files, the suffix of which
     # we want to find in the output_folder_path

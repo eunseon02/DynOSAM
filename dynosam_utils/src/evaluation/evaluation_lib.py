@@ -212,6 +212,13 @@ class MotionErrorEvaluator(Evaluator):
         return self._object_motions_traj_ref
 
 
+    def make_object_trajectory(self, object_id: int) -> Optional[tools.ObjectMotionTrajectory]:
+        if object_id in self.object_poses_traj and object_id in self.object_motion_traj:
+            return tools.ObjectMotionTrajectory(self.object_poses_traj[object_id], self.object_motion_traj[object_id])
+        return None
+
+
+
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
         # prepare results dict
         results["objects"] = {}
@@ -688,6 +695,7 @@ class MapPlotter3D(Evaluator):
         colour_map_names = itertools.cycle(MapPlotter3D.SEQUENTIAL_COLOUR_MAPS)
         for object_id, _ in all_traj.items():
             id = int(object_id)
+            self._object_eval.make_object_trajectory(object_id)
             # get colour map
             colour_map  = matplotlib.colormaps[next(colour_map_names)]
             colour_list.append(colour_map(0.8))
@@ -695,13 +703,14 @@ class MapPlotter3D(Evaluator):
 
         # all_traj["Camera"] = camera_traj
 
-        # tools.plot_object_trajectories(map_fig, {"camera":camera_traj},
-        #                                plot_mode=evo_plot.PlotMode.xyz,
-        #                                colours=['red'],
-        #                                plot_axis_est=True,
-        #                                plot_start_end_markers=True,
-        #                                axis_marker_scale=1.5)
-        # # print(all_traj)
+        tools.plot_object_trajectories(map_fig, {"camera":camera_traj},
+                                       plot_mode=evo_plot.PlotMode.xyz,
+                                       colours=['blue'],
+                                       plot_axis_est=True,
+                                       plot_start_end_markers=True,
+                                       axis_marker_scale=0.4,
+                                       traj_zorder=30)
+        # print(all_traj)
 
         x_points = []
         y_points = []
@@ -777,7 +786,7 @@ class MapPlotter3D(Evaluator):
                                        plot_start_end_markers=True,
                                        axis_marker_scale=1.5,
                                        traj_zorder=30,
-                                       traj_linewidth=3.0)
+                                       traj_linewidth=1.0)
 
         print(len(x_points))
         trajectory_helper.set_ax_limits(map_fig.gca())
@@ -787,7 +796,8 @@ class MapPlotter3D(Evaluator):
 
 
 class DatasetEvaluator:
-    def __init__(self, output_folder_path:str, args) -> None:
+    # args should be dictionary of keyword arguments. shoudl default be none?
+    def __init__(self, output_folder_path:str, args = None) -> None:
         self._output_folder_path = output_folder_path
         self._args = args
 
@@ -802,7 +812,7 @@ class DatasetEvaluator:
             table_formatter = LatexTableFormatter()
 
             for prefixs in possible_path_prefixes:
-                data_files = DataFiles(prefixs, self._output_folder_path)
+                data_files = self.make_data_files(prefixs)
                 data = self.run_and_save_single_analysis(data_files)
 
                 if data is None:
@@ -841,6 +851,25 @@ class DatasetEvaluator:
         run_misc_analysis()
 
 
+    def make_data_files(self, prefix) -> DataFiles:
+        return DataFiles(prefix, self._output_folder_path)
+
+    def create_motion_error_evaluator(self, data_files: DataFiles) -> MotionErrorEvaluator:
+        object_pose_log_path = self.create_existing_file_path(data_files.object_pose_log)
+        object_motion_log_path = self.create_existing_file_path(data_files.object_motion_log)
+
+        return self._check_and_cosntruct_generic_eval(
+            MotionErrorEvaluator,
+            object_motion_log_path,
+            object_pose_log_path
+        )
+
+    def create_camera_pose_evaluator(self, data_files: DataFiles) -> CameraPoseEvaluator:
+        camera_pose_log_path = self.create_existing_file_path(data_files.camera_pose_log)
+        return self._check_and_cosntruct_generic_eval(
+            CameraPoseEvaluator,
+            camera_pose_log_path,
+        )
 
     def run_and_save_single_analysis(self, datafiles: DataFiles) -> Tuple[evo_plot.PlotCollection, Dict]:
         try:
@@ -865,22 +894,11 @@ class DatasetEvaluator:
         analysis_logger = logger.getChild(prefix)
 
         analysis_logger.info("Running analysis with datafile prefix: {}".format(prefix))
-        object_pose_log_path = self._create_existing_file_path(datafiles.object_pose_log)
-        object_motion_log_path = self._create_existing_file_path(datafiles.object_motion_log)
-        camera_pose_log_path = self._create_existing_file_path(datafiles.camera_pose_log)
-        map_points_log_path = self._create_existing_file_path(datafiles.map_point_log)
+        map_points_log_path = self.create_existing_file_path(datafiles.map_point_log)
 
         evaluators = []
-        motion_eval = self._check_and_cosntruct_generic_eval(
-            MotionErrorEvaluator,
-            object_motion_log_path,
-            object_pose_log_path
-        )
-
-        camera_pose_eval = self._check_and_cosntruct_generic_eval(
-            CameraPoseEvaluator,
-            camera_pose_log_path,
-        )
+        motion_eval = self.create_motion_error_evaluator(datafiles)
+        camera_pose_eval = self.create_camera_pose_evaluator(datafiles)
 
         if motion_eval:
             analysis_logger.info("Adding motion eval")
@@ -894,16 +912,17 @@ class DatasetEvaluator:
             analysis_logger.info("Adding EgoObjectMotionEvaluator")
             evaluators.append(EgoObjectMotionEvaluator(camera_pose_eval, motion_eval))
 
-        if map_points_log_path and camera_pose_eval and motion_eval:
-            map_points_eval = self._check_and_cosntruct_generic_eval(
-                MapPlotter3D,
-                map_points_log_path,
-                camera_pose_eval,
-                motion_eval
-            )
-            if map_points_eval:
-                analysis_logger.info("Adding Map points plotter")
-                evaluators.append(map_points_eval)
+        #TODO: and note, we now do this in the plot_3d_map.py script
+        # if map_points_log_path and camera_pose_eval and motion_eval:
+        #     map_points_eval = self._check_and_cosntruct_generic_eval(
+        #         MapPlotter3D,
+        #         map_points_log_path,
+        #         camera_pose_eval,
+        #         motion_eval
+        #     )
+        #     if map_points_eval:
+        #         analysis_logger.info("Adding Map points plotter")
+        #         evaluators.append(map_points_eval)
 
 
         plot_collection_name = datafiles.plot_collection_name
@@ -936,7 +955,7 @@ class DatasetEvaluator:
     def _create_new_file_path(self, file:str) -> str:
         return os.path.join(self._output_folder_path, file)
 
-    def _create_existing_file_path(self, file:str) -> Optional[str]:
+    def create_existing_file_path(self, file:str) -> Optional[str]:
         """
         Create a full file path at the output folder path using the input file name to an existing file path.
         Checks that a file exists at the path given

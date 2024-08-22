@@ -1041,7 +1041,9 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 
 void RGBDBackendModule::Updater::logBackendFromMap() {
     BackendLogger logger(loggerPrefix());
-    const auto& gt_packet_map = parent_->gt_packet_map_;
+
+    //will be std::nullopt if empty!
+    const auto& gt_packet_map = parent_->getGroundTruthPackets();
     auto map = getMap();
     auto accessor = this->accessorFromTheta();
 
@@ -1062,7 +1064,7 @@ void RGBDBackendModule::Updater::logBackendFromMap() {
         // const MotionEstimateMap motions = map->getMotionEstimates(frame_k);
         {
         const MotionEstimateMap motions = accessor->getObjectMotions(frame_k);
-        auto result = logger.logObjectMotion(gt_packet_map, frame_k, motions);
+        auto result = logger.logObjectMotion(frame_k, motions, gt_packet_map);
         if(result) ss << " Logged " << *result << " motions from " << motions.size() << " computed motions.";
         else ss << " Could not log object motions.";
         }
@@ -1070,14 +1072,14 @@ void RGBDBackendModule::Updater::logBackendFromMap() {
         StateQuery<gtsam::Pose3> X_k_query = accessor->getSensorPose(frame_k);
 
         if(X_k_query) {
-            logger.logCameraPose(gt_packet_map, frame_k, X_k_query.get());
+            logger.logCameraPose(frame_k, X_k_query.get(), gt_packet_map);
         }
         else {
             LOG(WARNING) << "Could not log camera pose estimate at frame " << frame_k;
         }
 
 
-        logger.logObjectPose(gt_packet_map, frame_k, object_pose_map);
+        logger.logObjectPose(frame_k, object_pose_map, gt_packet_map);
 
 
         if(map->frameExists(frame_k)) {

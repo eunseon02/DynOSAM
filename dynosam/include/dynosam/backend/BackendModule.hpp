@@ -76,6 +76,7 @@ public:
     virtual ~BackendModule() = default;
 
     //if empty, return none
+    //TODo: also use this in the frontend!
     std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
         if(gt_packet_map_.empty()) {
             return {};

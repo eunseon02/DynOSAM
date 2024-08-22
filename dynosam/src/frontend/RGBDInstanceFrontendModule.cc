@@ -908,8 +908,12 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     propogateObjectPoses(motion_estimates, frame->frame_id_);
 
     if(logger_) {
-        logger_->logCameraPose(gt_packet_map_, frame->frame_id_, frame->T_world_camera_);
-        logger_->logObjectMotion(gt_packet_map_, frame->frame_id_, motion_estimates);
+        //TODO: hack to set ground truths as empty if non provided to ensure that values still log with no gt
+        std::optional<GroundTruthPacketMap> ground_truths;
+        if(gt_packet_map_.size() > 0) ground_truths = gt_packet_map_;
+
+        logger_->logCameraPose(frame->frame_id_, frame->T_world_camera_, ground_truths);
+        logger_->logObjectMotion(frame->frame_id_, motion_estimates, ground_truths);
         logger_->logTrackingLengthHistogram(frame);
     }
 
@@ -930,9 +934,13 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     if(FLAGS_save_frontend_json) output_packet_record_.insert({output->getFrameId(), output});
 
     if(logger_) {
+        //TODO: hack to set ground truths as empty if non provided to ensure that values still log with no gt
+        std::optional<GroundTruthPacketMap> ground_truths;
+        if(gt_packet_map_.size() > 0) ground_truths = gt_packet_map_;
+
         logger_->logPoints(output->getFrameId(), output->T_world_camera_, output->dynamic_landmarks_);
         //object_poses_ are in frontend module
-        logger_->logObjectPose(gt_packet_map_, output->getFrameId(), object_poses_);
+        logger_->logObjectPose(output->getFrameId(), object_poses_, ground_truths);
         logger_->logObjectBbxes(output->getFrameId(), output->getObjectBbxes());
     }
     return {State::Nominal, output};

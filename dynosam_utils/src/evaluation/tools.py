@@ -1,3 +1,6 @@
+import evo.core
+import evo.core.geometry
+import evo.core.transformations
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
@@ -9,6 +12,8 @@ from matplotlib.axes import Axes
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
 import evo.core.lie_algebra as evo_lie_algebra
+
+import evo
 
 from typing import Tuple, Optional
 
@@ -232,6 +237,62 @@ class TrajectoryHelper:
             ax.set_ylim([self.min_y, self.max_y])
 
 
+class ObjectMotionTrajectory(object):
+
+    def __init__(self, pose_trajectory: evo_trajectory.PosePath3D, motion_trajectory: evo_trajectory.PosePath3D):
+        from evo.core import sync
+        self._pose_trajectory, self._motion_trajectory = sync.associate_trajectories(pose_trajectory, motion_trajectory)
+
+        assert np.array_equal(self._pose_trajectory.timestamps,self._motion_trajectory.timestamps)
+
+    def __repr__(self) -> str:
+        return f"Poses {self._pose_trajectory} Motions {self._motion_trajectory}"
+
+    class Iterator(object):
+
+        def __init__(self, timestamps, get_motion_call):
+            self._timestamps = timestamps
+            self._get_motion_call = get_motion_call
+
+        def __iter__(self):
+            self._current_timestamp_iterator = iter(self._timestamps)
+            return self
+
+        def __next__(self):
+            timestamp = next(self._current_timestamp_iterator)
+            return self._get_motion_call(timestamp)
+
+    def get_motion_with_pose_previous_iterator(self) -> Iterator:
+        return ObjectMotionTrajectory.Iterator(self._pose_trajectory.timestamps, self.get_motion_with_pose_previous)
+
+    def get_motion_with_pose_current_iterator(self) -> Iterator:
+        return ObjectMotionTrajectory.Iterator(self._pose_trajectory.timestamps, self.get_motion_with_pose_current)
+
+    def get_motion_with_pose_previous(self, k: int):
+        return self._get_motion_with_pose(k, k-1)
+
+    def get_motion_with_pose_current(self, k: int):
+        return self._get_motion_with_pose(k, k)
+
+
+    def _get_motion_with_pose(self, k_motion: int, k_pose: int):
+        k_pose_index = np.where(self._pose_trajectory.timestamps == k_pose)[0]
+        # then this value is not in the pose timestamps
+        if len(k_pose_index) == 0:
+            return None, None
+
+        k_motion_index = np.where(self._motion_trajectory.timestamps == k_motion)[0]
+         # then this value is not in the motion timestamps
+        if len(k_motion_index) == 0:
+            return None, None
+
+        # go from np.array to value
+        k_pose_index = k_pose_index[0]
+        k_motion_index = k_motion_index[0]
+
+        return self._pose_trajectory.poses_se3[k_pose_index], self._motion_trajectory.poses_se3[k_motion_index]
+
+
 def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PosePath3D,
          style: str = '-', color='black', label: str = "", alpha: float = 1.0,
          plot_start_end_markers: bool = False, **kwargs) -> None:
@@ -263,6 +324,37 @@ def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PoseP
     if plot_start_end_markers:
         evo_plot.add_start_end_markers(ax, plot_mode, traj, start_color=color,
                               end_color=color, alpha=alpha)
+
+#TODO: plotmode?
+# or just the ObjectMotionTrajectory
+def plot_velocities(
+        ax: Axes,
+        object_trajetory: ObjectMotionTrajectory):
+
+    for (pose_k_1, motion_k) in object_trajetory.get_motion_with_pose_previous_iterator():
+        if pose_k_1 is None or motion_k is None:
+            continue
+        I =  evo.core.transformations.identity_matrix()
+        R_motion =  evo.core.transformations.identity_matrix()
+        # ensure homogenous
+        R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+
+        t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+        t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
+
+        # make homogenous
+        t_motion = np.insert(t_motion, 3, 1)
+        t_pose = np.insert(t_pose, 3, 1)
+
+        # # implement ^o_Ad_B = (I - ^o_AR_B)^o_ot_A + ^o_At_B from Chirikjian
+        # velocity = (I - R_motion) @ t_pose + t_motion
+        # from VDO-SLAM
+        velocity = t_motion - (I - R_motion) @ t_pose
+
+        # arrow_length_ratio
+        ax.quiver(t_pose[0], t_pose[1], t_pose[2], velocity[0], velocity[1], velocity[2], length=2.0, normalize=False, color="red")
+
+
 
 
 # modification of evo.trajectories
@@ -409,7 +501,7 @@ def calculate_omd_errors(traj, traj_ref, object_id):
 
     t_errors = []
 
-
+    # TODO: can use object trajectory object now
     for est_pose, gt_pose in zip(traj.poses_se3[1:], traj_ref.poses_se3[1:]):
         # the difference in pose between the ground truth pose (at s = k) and the estimated pose (at s = k) w.r.t the estimated pose
         error_k = evo_lie_algebra.se3_inverse(est_pose) @ gt_pose

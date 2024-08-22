@@ -243,13 +243,13 @@ public:
   virtual ~EstimationModuleLogger();
 
   //logs to motion errors
-  virtual std::optional<size_t> logObjectMotion(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const MotionEstimateMap& motion_estimates);
+  virtual std::optional<size_t> logObjectMotion(FrameId frame_id, const MotionEstimateMap& motion_estimates, const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
   //logs object pose (to a differnet file)
-  virtual std::optional<size_t> logObjectPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const ObjectPoseMap& propogated_poses);
+  virtual std::optional<size_t> logObjectPose(FrameId frame_id, const ObjectPoseMap& propogated_poses, const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
   //logs camera pose (to a differnet file)
-  virtual std::optional<size_t> logCameraPose(const GroundTruthPacketMap& gt_packets, FrameId frame_id, const gtsam::Pose3& T_world_camera);
+  virtual std::optional<size_t> logCameraPose(FrameId frame_id, const gtsam::Pose3& T_world_camera, const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
   virtual void logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k, const StatusLandmarkEstimates& landmarks);
 
