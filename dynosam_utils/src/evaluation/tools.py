@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+
 import evo.core
 import evo.core.geometry
 import evo.core.transformations
 import numpy as np
-import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from evo.core.lie_algebra import se3
 from evo.core.trajectory import PosePath3D
 from matplotlib.axes import Axes
+
+# apparently this ordereed needed
+import matplotlib.pyplot as plt
+import mpl_toolkits
+from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.mplot3d import proj3d
+from matplotlib.patches import FancyArrowPatch
 
 
 import evo.tools.plot as evo_plot
@@ -250,23 +259,38 @@ class ObjectMotionTrajectory(object):
 
     class Iterator(object):
 
-        def __init__(self, timestamps, get_motion_call):
+        def __init__(self, skip, timestamps, get_motion_call):
+            self._skip = skip
             self._timestamps = timestamps
             self._get_motion_call = get_motion_call
 
         def __iter__(self):
+            self._is_first = True
             self._current_timestamp_iterator = iter(self._timestamps)
             return self
 
         def __next__(self):
-            timestamp = next(self._current_timestamp_iterator)
+            timestamp = None
+            if self._is_first or self._skip == 0:
+                timestamp = next(self._current_timestamp_iterator)
+                self._is_first = False
+            else:
+                for _ in range(self._skip):
+                    timestamp = next(self._current_timestamp_iterator)
+
+            assert timestamp is not None
             return self._get_motion_call(timestamp)
 
-    def get_motion_with_pose_previous_iterator(self) -> Iterator:
-        return ObjectMotionTrajectory.Iterator(self._pose_trajectory.timestamps, self.get_motion_with_pose_previous)
+    @property
+    def num_poses(self) -> int:
+        assert self._motion_trajectory.num_poses == self._pose_trajectory.num_poses
+        return self._motion_trajectory.num_poses
 
-    def get_motion_with_pose_current_iterator(self) -> Iterator:
-        return ObjectMotionTrajectory.Iterator(self._pose_trajectory.timestamps, self.get_motion_with_pose_current)
+    def get_motion_with_pose_previous_iterator(self, skip: int = 0) -> Iterator:
+        return ObjectMotionTrajectory.Iterator(skip, self._pose_trajectory.timestamps, self.get_motion_with_pose_previous)
+
+    def get_motion_with_pose_current_iterator(self, skip: int = 0) -> Iterator:
+        return ObjectMotionTrajectory.Iterator(skip, self._pose_trajectory.timestamps, self.get_motion_with_pose_current)
 
     def get_motion_with_pose_previous(self, k: int):
         return self._get_motion_with_pose(k, k-1)
@@ -325,13 +349,41 @@ def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PoseP
         evo_plot.add_start_end_markers(ax, plot_mode, traj, start_color=color,
                               end_color=color, alpha=alpha)
 
+
+# fix from here https://github.com/matplotlib/matplotlib/issues/21688
+# TODO: clean up
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        super().__init__((0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def do_3d_projection(self, renderer=None):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+
+        return np.min(zs)
+
+
 #TODO: plotmode?
+# TODO: outdoor vs indoor presets
 # or just the ObjectMotionTrajectory
 def plot_velocities(
         ax: Axes,
-        object_trajetory: ObjectMotionTrajectory):
+        object_trajectory: ObjectMotionTrajectory,
+        color = 'r'):
 
-    for (pose_k_1, motion_k) in object_trajetory.get_motion_with_pose_previous_iterator():
+    # Function to draw a custom arrow using FancyArrowPatch
+    # def draw_arrow(ax, start, end, color):
+    #     arrow = FancyArrowPatch(posA=start, posB=end, arrowstyle='-|>', color=color, mutation_scale=20, lw=1)
+    #     ax.add_artist(arrow)
+
+    def draw_arrow(ax, xs, ys, zs, color):
+        arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=15, lw=3)
+        # arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=8, lw=1)
+        ax.add_artist(arrow)
+
+    for (pose_k_1, motion_k) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
         if pose_k_1 is None or motion_k is None:
             continue
         I =  evo.core.transformations.identity_matrix()
@@ -351,13 +403,19 @@ def plot_velocities(
         # from VDO-SLAM
         velocity = t_motion - (I - R_motion) @ t_pose
 
+        start = t_pose
+        end = t_pose +  20.0 *velocity
+        # end = t_pose +  3.0 *velocity
+        draw_arrow(ax, (start[0], end[0]), (start[1], end[1]), (start[2], end[2]), color)
+
         # arrow_length_ratio
-        ax.quiver(t_pose[0], t_pose[1], t_pose[2], velocity[0], velocity[1], velocity[2], length=2.0, normalize=False, color="red")
+        # ax.quiver(t_pose[0], t_pose[1], t_pose[2], velocity[0], velocity[1], velocity[2], length=5.0, normalize=False, color="red", pivot='tail')
 
 
 
 
 # modification of evo.trajectories
+# so much going on in this function - refactor and comment!!!!
 def plot_object_trajectories(
         fig: Figure,
         obj_trajectories: typing.Dict[str, evo_trajectory.PosePath3D],
@@ -385,6 +443,7 @@ def plot_object_trajectories(
     plot_axis_ref = kwargs.get("plot_axis_ref", False)
     # downscale as a percentage - how many poses to use when plotting anything over the top of the tajectories
     downscale = kwargs.get("downscale", 0.1)
+
 
     cmap_colors = None
     provided_colours = None
@@ -441,11 +500,16 @@ def plot_object_trajectories(
             draw_impl(traj, **kwargs)
         elif isinstance(traj, dict):
             for name, t in traj.items():
-                draw_impl(t,name=name,**kwargs)
+                # if dictionary, we alrady know the name we prepend with object
+                # TODO: for now a hack ;)
+                if str(name).lower() != "camera":
+                    name = "object " + str(name)
+                draw_impl(t,name= name,**kwargs)
         else:
             for t in traj:
                 draw_impl(t, **kwargs)
 
+    # duplicated in ObjectTrajectory
     def reduce_trajectory(downscale_percentage: float, traj:evo_trajectory.PosePath3D):
         assert downscale_percentage >= 0.0 and downscale_percentage <= 1.0
         reduced_pose_num = downscale_percentage * traj.num_poses

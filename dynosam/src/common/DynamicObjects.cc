@@ -40,16 +40,11 @@ void propogateObjectPoses(
     CHECK_EQ(object_centroids_k.size(), object_centroids_k_1.size());
     const FrameId frame_id_k_1 = frame_id_k - 1;
 
-    size_t i = 0; //used to index the object centroid vectors
-    for(const auto&[object_id, motion] : object_motions_k) {
-        const auto centroid_k = object_centroids_k.at(i);
-        const auto centroid_k_1 = object_centroids_k_1.at(i);
-        const gtsam::Pose3 prev_H_world_curr = motion;
-        //new object - so we need to add at k-1 and k
-        if(!object_poses.exists(object_id)) {
+    //get centroid for object at k-1 using the gt pose if available, or the centroid if not
+    auto get_centroid = [=](
+        ObjectId object_id, const gtsam::Point3& centroid_k_1, gtsam::Pose3& pose_k_1) -> PropogateType
+        {
             bool initalised_with_gt = false;
-            gtsam::Pose3 pose_k_1;
-
             //if gt packet exists for this frame, use that as the rotation
             if(gt_packet_map) {
                 if(gt_packet_map->exists(frame_id_k_1)) {
@@ -58,7 +53,6 @@ void propogateObjectPoses(
                     ObjectPoseGT object_pose_gt_k_1;
                     if(gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
                         pose_k_1 = object_pose_gt_k_1.L_world_;
-                        // pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), object_pose_gt_k_1.L_world_.translation());
                         initalised_with_gt = true;
                     }
                 }
@@ -68,11 +62,49 @@ void propogateObjectPoses(
                 //could not init with gt, use identity rotation and centroid
                 pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), centroid_k_1);
 
-                if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitCentroid);
+               return PropogateType::InitCentroid;
             }
             else {
-                if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitGT);
+                return PropogateType::InitGT;
             }
+        };
+
+    size_t i = 0; //used to index the object centroid vectors
+    for(const auto&[object_id, motion] : object_motions_k) {
+        const auto centroid_k = object_centroids_k.at(i);
+        const auto centroid_k_1 = object_centroids_k_1.at(i);
+        const gtsam::Pose3 prev_H_world_curr = motion;
+        //new object - so we need to add at k-1 and k
+        if(!object_poses.exists(object_id)) {
+            gtsam::Pose3 pose_k_1;
+            auto propgate_result = get_centroid(object_id, centroid_k_1, pose_k_1);
+            if(result) result->insert22(object_id, frame_id_k_1,propgate_result );
+
+            // bool initalised_with_gt = false;
+            // gtsam::Pose3 pose_k_1;
+
+            // //if gt packet exists for this frame, use that as the rotation
+            // if(gt_packet_map) {
+            //     if(gt_packet_map->exists(frame_id_k_1)) {
+            //         const GroundTruthInputPacket& gt_packet_k_1 = gt_packet_map->at(frame_id_k_1);
+
+            //         ObjectPoseGT object_pose_gt_k_1;
+            //         if(gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
+            //             pose_k_1 = object_pose_gt_k_1.L_world_;
+            //             initalised_with_gt = true;
+            //         }
+            //     }
+            // }
+
+            // if(!initalised_with_gt) {
+            //     //could not init with gt, use identity rotation and centroid
+            //     pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), centroid_k_1);
+
+            //     if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitCentroid);
+            // }
+            // else {
+            //     if(result) result->insert22(object_id, frame_id_k_1, PropogateType::InitGT);
+            // }
 
             object_poses.insert2(object_id , gtsam::FastMap<FrameId, gtsam::Pose3>{});
             object_poses.at(object_id).insert2(frame_id_k_1, pose_k_1);
@@ -115,22 +147,6 @@ void propogateObjectPoses(
                 for(size_t j = 0; j < N; j++) {
                     double t = (double)j/divisor;
 
-                    //interpolate with PCG(3)
-                    //X = last_recorded_pose
-                    //Y = current pose
-                    //SE(3) -> return traits<T>::Compose(X, traits<T>::Expmap(t * traits<T>::Logmap(traits<T>::Between(X, Y))));
-                    // gtsam::Pose3 between_local = traits<gtsam::Pose3>::Between(last_recorded_pose, current_pose); // X -> Y as seen in X
-                    // gtsam::Pose3 between_world = last_recorded_pose * between_local * last_recorded_pose.inverse(); // X -> Y as seen in W
-
-                    // gtsam::Rot3 R_bewtween_world = between_world.rotation();
-                    // gtsam::Point3 t_bewtween_world = between_world.translation();
-
-                    // gtsam::Vector3 t_interp_pcg = t * t_bewtween_world;
-                    // gtsam::Vector3 r_interp_pcg = t * gtsam::traits<gtsam::Rot3>::Logmap(R_bewtween_world);
-                    // gtsam::Vector6 tangent_interp_pcg;
-                    // tangent_interp_pcg.head<3>() = r_interp_pcg; //rotation first
-                    // tangent_interp_pcg.tail<3>() = t_interp_pcg; //translation second
-                    // gtsam::Pose3 interp_pcg = gtsam::Pose3::Expmap(tangent_interp_pcg);
                     gtsam::Pose3 interpolated_pose = last_recorded_pose.slerp(t, current_pose, boost::none, boost::none);
 
                     FrameId frame = last_frame + j;
@@ -142,8 +158,21 @@ void propogateObjectPoses(
 
             }
             else {
+                gtsam::Pose3 pose_k_1;
                 //last frame too far away - reinitalise with centroid!
                 VLOG(20) << "Frames too far away - current frame is " << frame_id_k << " previous frame is " << last_frame << " for object " << object_id;
+                auto propogate_result = get_centroid(object_id, centroid_k_1, pose_k_1);
+                object_poses.at(object_id).insert2(frame_id_k_1, pose_k_1);
+
+                if(result) result->insert22(object_id, frame_id_k_1, propogate_result);
+
+
+                gtsam::Pose3 object_pose_k = prev_H_world_curr * pose_k_1;
+                per_frame_poses.insert2(frame_id_k, object_pose_k);
+
+                //update result map
+                if(result) result->insert22(object_id, frame_id_k, PropogateType::Propogate);
+
             }
 
 

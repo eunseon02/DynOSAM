@@ -652,8 +652,8 @@ class EgoObjectMotionEvaluator(Evaluator):
 
 class MapPlotter3D(Evaluator):
 
-    SEQUENTIAL_COLOUR_MAPS = ['Purples', 'Blues', 'Greens', 'Oranges', 'Reds',
-                      'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',
+    SEQUENTIAL_COLOUR_MAPS = ['Greens', 'OrRd', 'Purples', 'Blues', 'Oranges',
+                      'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',  'Reds',
                       'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn']
 
     def __init__(self, map_points_csv_file_path: str, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator):
@@ -682,6 +682,7 @@ class MapPlotter3D(Evaluator):
         # trajectory_helper.append(camera_traj)
         trajectory_helper.append(object_trajs)
 
+        # do gross renamign
         all_traj = object_trajs
 
         import itertools
@@ -695,11 +696,16 @@ class MapPlotter3D(Evaluator):
         colour_map_names = itertools.cycle(MapPlotter3D.SEQUENTIAL_COLOUR_MAPS)
         for object_id, _ in all_traj.items():
             id = int(object_id)
-            self._object_eval.make_object_trajectory(object_id)
             # get colour map
             colour_map  = matplotlib.colormaps[next(colour_map_names)]
-            colour_list.append(colour_map(0.8))
+
+            trajectory_and_velocity_colour = colour_map(0.8)
+            colour_list.append(trajectory_and_velocity_colour)
             colour_generator_map[id] = colour_map
+            object_trajectory = self._object_eval.make_object_trajectory(object_id)
+            print(object_trajectory)
+            if object_trajectory:
+                tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
         # all_traj["Camera"] = camera_traj
 
@@ -708,8 +714,10 @@ class MapPlotter3D(Evaluator):
                                        colours=['blue'],
                                        plot_axis_est=True,
                                        plot_start_end_markers=True,
-                                       axis_marker_scale=0.4,
-                                       traj_zorder=30)
+                                       axis_marker_scale=2.0,
+                                       downscale=0.1,
+                                       traj_zorder=30,
+                                       traj_linewidth=3.0)
         # print(all_traj)
 
         x_points = []
@@ -772,7 +780,7 @@ class MapPlotter3D(Evaluator):
         ax.view_init(azim=0, elev=90)
         ax.patch.set_facecolor('white')
         ax.axis('off')
-        map_fig.tight_layout()
+        # map_fig.tight_layout()
 
         # static points
         ax.scatter(x_points, y_points, z_points, s=1.0, c='black',alpha=0.5, zorder=0, marker=".")
@@ -783,12 +791,19 @@ class MapPlotter3D(Evaluator):
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
                                     #    plot_axis_est=True,
-                                       plot_start_end_markers=True,
+                                       plot_start_end_markers=False,
                                        axis_marker_scale=1.5,
                                        traj_zorder=30,
-                                       traj_linewidth=1.0)
+                                       traj_linewidth=1.5)
+        # tools.plot_object_trajectories(map_fig, all_traj,
+        #                             plot_mode=evo_plot.PlotMode.xyz,
+        #                             colours=colour_list,
+        #                         #    plot_axis_est=True,
+        #                             plot_start_end_markers=False,
+        #                             axis_marker_scale=0.5,
+        #                             traj_zorder=30,
+        #                             traj_linewidth=1.0)
 
-        print(len(x_points))
         trajectory_helper.set_ax_limits(map_fig.gca())
 
         plot_collection.add_figure("Static map", map_fig)
