@@ -198,20 +198,20 @@ trans_axes_2.set_title("OMD (swinging 4 unconstrained)", loc="left")
 make_plot(trans_axes_1, rot_axes_1, "/root/results/Dynosam_tro2024/kitti_0000", "/root/results/Dynosam_tro2024/kitti_0000_sliding")
 make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare")
 
-rot_axes_1.legend(loc="upper right", fontsize=19)
-rot_axes_2.legend(loc="upper right", fontsize=19)
-trans_axes_1.legend(loc="upper right", fontsize=19)
-trans_axes_2.legend(loc="upper right", fontsize=19)
+rot_axes_1.legend(loc="upper right", fontsize=23)
+rot_axes_2.legend(loc="upper right", fontsize=23)
+trans_axes_1.legend(loc="upper right", fontsize=23)
+trans_axes_2.legend(loc="upper right", fontsize=23)
 
 
 
 
 
-rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=26)
-rot_fig.supxlabel("Frame Index [-]",fontsize=24)
+rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=30)
+rot_fig.supxlabel("Frame Index [-]",fontsize=27)
 
-trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=26)
-trans_fig.supxlabel("Frame Index [-]", fontsize=24)
+trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=30)
+trans_fig.supxlabel("Frame Index [-]", fontsize=27)
 
 rot_fig.tight_layout(pad=0.5)
 trans_fig.tight_layout(pad=0.5)

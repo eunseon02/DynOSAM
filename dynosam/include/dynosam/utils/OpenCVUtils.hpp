@@ -85,8 +85,18 @@ void getDisparityVis(cv::InputArray src,
                     cv::OutputArray dst,
                     int unknown_disparity = 16320);
 
-
-void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
+//TODO: uh, this was const cv::Mat& and things were still being modified... how...?
+/**
+ * @brief Draws a coloured bounding box and associated label onto a RGB image.
+ *
+ * Used to draw object bounding boxes and their labels.
+ *
+ * @param image cv::Mat& rgb image to modify
+ * @param label const std::string& label to draw in the top-right corner of the bounding box
+ * @param colour const cv::Scalar& colour to draw the bounding box with
+ * @param bounding_box const cv::Rect& bounding box to draw.
+ */
+void drawLabeledBoundingBox(cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box);
 
 
 /**

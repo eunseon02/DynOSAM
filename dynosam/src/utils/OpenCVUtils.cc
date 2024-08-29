@@ -233,22 +233,28 @@ void getDisparityVis(cv::InputArray src, cv::OutputArray dst, int unknown_dispar
   dstMat &= (srcMat != unknown_disparity);
 }
 
-void drawLabeledBoundingBox(const cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
-  constexpr static double kFontScale = 0.7;
+void drawLabeledBoundingBox(cv::Mat& image, const std::string& label, const cv::Scalar& colour, const cv::Rect& bounding_box) {
+  constexpr static double kFontScale = 0.6;
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
-  constexpr static int kThickness = 2;
+  constexpr static int kThickness = 1;
+
+  // Top left corner.
+  const cv::Point& tlc = bounding_box.tl();
+
   // Display the label at the top of the bounding box.
   int base_line;
   cv::Size label_size = cv::getTextSize(label, kFontFace, kFontScale, kThickness, &base_line);
-  // Top left corner.
-  const cv::Point& tlc = bounding_box.tl();
-  const auto left = tlc.x;
-  const auto top = tlc.y - label_size.height - base_line;
-  // Put the label on the black rectangle.
-  cv::putText(image, label, cv::Point(left, top + label_size.height), kFontFace, kFontScale, colour, kThickness);
 
+  //draw on filled black rectangle that the object label will then be drawn over to make it easier to see
+  constexpr static int pixel_buffer = 2; //pixel buffer around the rectangle
+  const cv::Point tlc_black_rectangle(tlc.x, tlc.y - label_size.height - pixel_buffer);
+  const cv::Point brc_black_rectangle(tlc.x + label_size.width + pixel_buffer, tlc.y);
+  cv::rectangle(image, tlc_black_rectangle, brc_black_rectangle, cv::Scalar(0,0,0), -1);
+  // Put the label on the black rectangle.
+  // Note: text origin starts from the bottom left corner of the text string in the image and we add a pixel buffer along y to make it look better
+  cv::putText(image, label, cv::Point(tlc.x, tlc.y - 2), kFontFace, kFontScale, cv::Scalar(255, 255, 255), kThickness);
   //draw bounding box with line thickness kThickness
-  cv::rectangle(image, bounding_box, colour, kThickness);
+  cv::rectangle(image, bounding_box, colour, 2);
 }
 
 

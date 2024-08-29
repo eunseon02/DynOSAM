@@ -115,8 +115,17 @@ void ImageType::Depth::validate(const cv::Mat& input){
     validateSingleImage(input, OpenCVType, name());
 }
 
+//TODO: should this use getDisparityVis?
+//depth is metric so we should actually just scale it!
 cv::Mat ImageType::Depth::toRGB(const ImageWrapper<Depth>& image) {
-   return image;
+    cv::Mat metric_depth_map = image;
+    // Normalize the depth map to the range [0, 1]
+    cv::Mat normalised_depth_map;
+    cv::normalize(metric_depth_map, normalised_depth_map, 0.0, 1.0, cv::NORM_MINMAX);
+    // Convert the normalized depth map to an 8-bit image [0, 255]
+    cv::Mat depth_map_8u;
+    normalised_depth_map.convertTo(depth_map_8u, CV_8U, 255);
+    return depth_map_8u;
 }
 
 

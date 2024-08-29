@@ -348,13 +348,14 @@ if __name__ == '__main__':
 
 
     ## cluster
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-L1/",
-    #     "carla_l1",
-    #     "--use_propogate_mask=false",
-    #     "--use_dynamic_track=false",
-    #     "--ending_frame=700"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-L1/",
+        "carla_l1_dense",
+        "--semantic_mask_step_size=2",
+        "--use_propogate_mask=false",
+        "--use_dynamic_track=false",
+        "--ending_frame=700"
+    )
 
     # prep_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L2/",
@@ -381,7 +382,7 @@ if __name__ == '__main__':
     run_both_backend(
         run_cluster_sequence,
         "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1",
+        "carla_l1_dense",
         "--use_full_batch_opt=false",
         "--opt_window_size=20",
         "--opt_window_overlap=5",

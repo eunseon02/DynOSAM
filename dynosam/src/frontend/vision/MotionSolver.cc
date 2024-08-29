@@ -270,7 +270,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
                             std::optional<gtsam::Rot3> R_curr_ref)
 {
 
-    utils::TimingStatsCollector timer("motion_sovler.solve_3d2d");
+    utils::TimingStatsCollector timer("motion_solver.solve_3d2d");
     Pose3SolverResult result;
     const size_t& n_matches = correspondences.size();
 

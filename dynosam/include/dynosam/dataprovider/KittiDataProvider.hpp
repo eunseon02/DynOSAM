@@ -339,7 +339,7 @@ class KittiDataLoader : public DynoDatasetProvider<cv::Mat, cv::Mat, gtsam::Pose
 public:
 
     struct Params {
-        MaskType mask_type;
+        MaskType mask_type = MaskType::MOTION;
 
         //needed for input dispartity to depth conversion
         //TODO: remove and hardocde per dataset!!

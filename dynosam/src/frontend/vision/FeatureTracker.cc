@@ -153,34 +153,23 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   // Add all keypoints in cur_frame with the tracks.
   for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint_;
+    const auto pc_cur = utils::gtsamPointToCv(px_cur);
     if (!feature->usable() && debug) {  // Untracked landmarks are red.
-      cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), static_point_thickness, red, 2);
+      cv::circle(img_rgb,  pc_cur, static_point_thickness, red, 2);
     } else {
 
       const Feature::Ptr& prev_feature = previous_frame.static_features_.getByTrackletId(feature->tracklet_id_);
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        const auto pc_cur = utils::gtsamPointToCv(px_cur);
-        if (debug) {
-          //if debug draw circle
-          cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), static_point_thickness, green, 1);
-        }
-        else {
-          //else draw rectangle around the center point
-          const cv::Point tl(pc_cur.x - static_point_thickness/2, pc_cur.y - static_point_thickness/2);
-          const cv::Point br(pc_cur.x + static_point_thickness/2, pc_cur.y + static_point_thickness/2);
-          cv::rectangle(img_rgb,  tl, br, green, static_point_thickness, 1);
-        }
+        cv::circle(img_rgb,  pc_cur, static_point_thickness, green, 1);
 
-        if(debug) {
-          //if debug draw the optical flow arrow
-          const Keypoint& px_prev = prev_feature->keypoint_;
-          cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), green, 1);
-        }
+          // draw the optical flow arrow
+        const auto pc_prev = utils::gtsamPointToCv(prev_feature->keypoint_);
+        cv::arrowedLine(img_rgb, pc_prev, pc_cur, green, 1);
 
       } else if(debug) {  // New feature tracks are blue.
-        cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 6, blue, 1);
+        cv::circle(img_rgb, pc_cur, 6, blue, 1);
       }
     }
   }
@@ -243,7 +232,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
       if(bb.empty()) { continue; }
 
       const cv::Scalar colour = Color::uniqueId(object_id).bgra();
-      const std::string label = "Obj " + std::to_string(object_id);
+      const std::string label = "object " + std::to_string(object_id);
       utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
 
   }

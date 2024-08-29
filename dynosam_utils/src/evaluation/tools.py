@@ -334,6 +334,7 @@ def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PoseP
     """
     from evo.tools.settings import SETTINGS
     x_idx, y_idx, z_idx = evo_plot.plot_mode_to_idx(plot_mode)
+
     x = traj.positions_xyz[:, x_idx]
     y = traj.positions_xyz[:, y_idx]
     if plot_mode == evo_plot.PlotMode.xyz:
@@ -372,11 +373,6 @@ def plot_velocities(
         ax: Axes,
         object_trajectory: ObjectMotionTrajectory,
         color = 'r'):
-
-    # Function to draw a custom arrow using FancyArrowPatch
-    # def draw_arrow(ax, start, end, color):
-    #     arrow = FancyArrowPatch(posA=start, posB=end, arrowstyle='-|>', color=color, mutation_scale=20, lw=1)
-    #     ax.add_artist(arrow)
 
     def draw_arrow(ax, xs, ys, zs, color):
         arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=15, lw=3)

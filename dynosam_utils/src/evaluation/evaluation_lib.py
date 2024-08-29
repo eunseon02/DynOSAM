@@ -673,6 +673,7 @@ class MapPlotter3D(Evaluator):
         map_fig = plt.figure(figsize=(8,8))
         # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
         ax = map_fig.add_subplot(111, projection="3d", proj_type = 'ortho')
+        # ax = map_fig.add_subplot(111, projection="3d")
 
 
         camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
@@ -694,7 +695,7 @@ class MapPlotter3D(Evaluator):
 
 
         colour_map_names = itertools.cycle(MapPlotter3D.SEQUENTIAL_COLOUR_MAPS)
-        for object_id, _ in all_traj.items():
+        for object_id, t in all_traj.items():
             id = int(object_id)
             # get colour map
             colour_map  = matplotlib.colormaps[next(colour_map_names)]
@@ -703,7 +704,7 @@ class MapPlotter3D(Evaluator):
             colour_list.append(trajectory_and_velocity_colour)
             colour_generator_map[id] = colour_map
             object_trajectory = self._object_eval.make_object_trajectory(object_id)
-            print(object_trajectory)
+
             if object_trajectory:
                 tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
@@ -780,7 +781,6 @@ class MapPlotter3D(Evaluator):
         ax.view_init(azim=0, elev=90)
         ax.patch.set_facecolor('white')
         ax.axis('off')
-        # map_fig.tight_layout()
 
         # static points
         ax.scatter(x_points, y_points, z_points, s=1.0, c='black',alpha=0.5, zorder=0, marker=".")
@@ -805,6 +805,8 @@ class MapPlotter3D(Evaluator):
         #                             traj_linewidth=1.0)
 
         trajectory_helper.set_ax_limits(map_fig.gca())
+        map_fig.tight_layout()
+        # plt.show()
 
         plot_collection.add_figure("Static map", map_fig)
 

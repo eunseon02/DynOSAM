@@ -7,6 +7,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
+plt.rcdefaults()
 
 def make_plot(results_folder_path, prefix):
     dataset_eval = eval.DatasetEvaluator(results_folder_path)
@@ -81,5 +82,5 @@ def make_plot(results_folder_path, prefix):
 
 # make_plot("/root/results/DynoSAM/acfr_1_moving_small", "rgbd_motion_world_backend")
 make_plot("/root/results/Dynosam_tro2024/kitti_0000", "rgbd_motion_world_backend")
-# make_plot("/root/results/Dynosam_tro2024/carla_l1", "rgbd_motion_world_backend")
-# make_plot("/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare", "rgbd_motion_world_backend")
+# make_plot("/root/results/Dynosam_tro2024/carla_l2", "rgbd_motion_world_backend")
+# make_plot("/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend")

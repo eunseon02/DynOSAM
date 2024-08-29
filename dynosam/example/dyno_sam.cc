@@ -217,7 +217,7 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 
 // }
 
-#include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
+#include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
 int main(int argc, char* argv[]) {
@@ -229,23 +229,64 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
-    ProjectARIADataLoader loader("/root/data/zed/acfr_3_moving_medium/");
+    KittiDataLoader::Params params;
+    KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0004/", params);
 
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+    auto camera = std::make_shared<Camera>(*loader.getCameraParams());
+    auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
+
+    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
 
         LOG(INFO) << frame_id << " " << timestamp;
 
+        cv::Mat of_viz, motion_viz, depth_viz;
+        of_viz = ImageType::OpticalFlow::toRGB(optical_flow);
+        motion_viz = ImageType::MotionMask::toRGB(motion);
+        depth_viz = ImageType::Depth::toRGB(depth);
+
+         ImageContainer::Ptr container = ImageContainer::Create(
+                    timestamp,
+                    frame_id,
+                    ImageWrapper<ImageType::RGBMono>(rgb),
+                    ImageWrapper<ImageType::Depth>(depth),
+                    ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+                    ImageWrapper<ImageType::MotionMask>(motion));
+
+
         cv::imshow("RGB", rgb);
-        cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
-        cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
-        cv::imshow("Depth", ImageType::Depth::toRGB(depth));
+        cv::imshow("OF", of_viz);
+        cv::imshow("Motion", motion_viz);
+        cv::imshow("Depth", depth_viz);
 
-        cv::Mat shrunk_mask;
-        vision_tools::shrinkMask(motion, shrunk_mask, 20);
-        cv::imshow("Shrunk Motion", ImageType::MotionMask::toRGB(shrunk_mask));
+        auto frame = tracker->track(frame_id, timestamp, *container);
+        Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
-        cv::waitKey(1);
+        cv::Mat tracking;
+        if(previous_frame) {
+            tracking = tracker->computeImageTracks(*previous_frame, *frame);
+
+        }
+        if(!tracking.empty())
+            cv::imshow("Tracking", tracking);
+
+
+        const std::string path = "/root/results/misc/";
+        if ((char)cv::waitKey(0) == 's') {
+            LOG(INFO) << "Saving...";
+            // cv::imwrite(path + "kitti_0004_rgb.png", rgb);
+            // cv::imwrite(path + "kitti_0004_of.png", of_viz);
+            // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
+            // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
+            cv::imwrite(path + "kitti_0004_tracking.png", tracking);
+
+
+
+
+        }
+
+
+
+
         return true;
     });
 
@@ -253,3 +294,41 @@ int main(int argc, char* argv[]) {
 
 
 }
+
+
+// #include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"
+// #include "dynosam/frontend/vision/VisionTools.hpp"
+
+// int main(int argc, char* argv[]) {
+
+//     using namespace dyno;
+//     google::ParseCommandLineFlags(&argc, &argv, true);
+//     google::InitGoogleLogging(argv[0]);
+//     FLAGS_logtostderr = 1;
+//     FLAGS_colorlogtostderr = 1;
+//     FLAGS_log_prefix = 1;
+
+//     // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-S1");
+//     ProjectARIADataLoader loader("/root/data/zed/acfr_3_moving_medium/");
+
+//     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion) -> bool {
+
+//         LOG(INFO) << frame_id << " " << timestamp;
+
+//         cv::imshow("RGB", rgb);
+//         cv::imshow("OF", ImageType::OpticalFlow::toRGB(optical_flow));
+//         cv::imshow("Motion", ImageType::MotionMask::toRGB(motion));
+//         cv::imshow("Depth", ImageType::Depth::toRGB(depth));
+
+//         cv::Mat shrunk_mask;
+//         vision_tools::shrinkMask(motion, shrunk_mask, 20);
+//         cv::imshow("Shrunk Motion", ImageType::MotionMask::toRGB(shrunk_mask));
+
+//         cv::waitKey(1);
+//         return true;
+//     });
+
+//     while(loader.spin()) {}
+
+
+// }
