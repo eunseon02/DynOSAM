@@ -107,8 +107,12 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/VisionTools.cc
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
+  src/frontend/vision/StaticFeatureTracker.cc
+  src/frontend/vision/FeatureTrackerBase.cc
   src/frontend/RGBDInstance-Definitions.cc
   src/frontend/Frontend-Definitions.cc
+  src/frontend/anms/NonMaximumSupression.cc
+  src/frontend/anms/anms.cc
 
   src/backend/BackendDefinitions.cc
   src/backend/BackendPipeline.cc

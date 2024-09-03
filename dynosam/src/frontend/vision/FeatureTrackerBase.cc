@@ -21,20 +21,31 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/BackendParams.hpp"
+#include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
 
-DEFINE_double(static_point_sigma, 2.0, "Isotropic pixel noise used on static points");
-DEFINE_double(dynamic_point_sigma, 2,"Isotropic pixel noise used on dynamic points");
+namespace dyno {
 
-DEFINE_double(constant_object_motion_rotation_sigma, 0.01, "Noise used on rotation componenent of smoothing factor");
-DEFINE_double(constant_object_motion_translation_sigma,  0.1, "Noise used on translation componenent of smoothing factor");
+decltype(TrackletIdManager::instance_) TrackletIdManager::instance_;
 
-DEFINE_double(motion_ternary_factor_noise_sigma,  0.01, "Noise used on motion ternary factor");
+FeatureTrackerBase::FeatureTrackerBase(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+  : params_(params),
+    img_size_(camera->getParams().imageSize()),
+    camera_(camera),
+    display_queue_(display_queue) {}
 
-DEFINE_double(odometry_rotation_sigma, 0.02, "Noise used on rotation component of odometry");
-DEFINE_double(odometry_translation_sigma, 0.01, "Noise used on translation component of odometry");
 
+bool FeatureTrackerBase::isWithinShrunkenImage(const Keypoint& kp) const {
+    const auto shrunken_row = params_.shrink_row;
+    const auto shrunken_col = params_.shrink_col;
 
-//TODO: need to make projection covariance!!
-DEFINE_double(static_point_noise_sigma, 0.06, "Isotropic noise used on PoseToPointFactor for static points");
-DEFINE_double(dynamic_point_noise_sigma, 0.0625, "Isotropic noise used on PoseToPointFactor for dynamic points");
+    const int predicted_col = functional_keypoint::u(kp);
+    const int predicted_row = functional_keypoint::v(kp);
+
+    const auto image_rows = img_size_.height;
+    const auto image_cols = img_size_.width;
+    return (predicted_row > shrunken_row && predicted_row < (image_rows - shrunken_row) &&
+        predicted_col > shrunken_col && predicted_col < (image_cols - shrunken_col));
+
+}
+
+}

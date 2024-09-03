@@ -21,20 +21,35 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/BackendParams.hpp"
-
-DEFINE_double(static_point_sigma, 2.0, "Isotropic pixel noise used on static points");
-DEFINE_double(dynamic_point_sigma, 2,"Isotropic pixel noise used on dynamic points");
-
-DEFINE_double(constant_object_motion_rotation_sigma, 0.01, "Noise used on rotation componenent of smoothing factor");
-DEFINE_double(constant_object_motion_translation_sigma,  0.1, "Noise used on translation componenent of smoothing factor");
-
-DEFINE_double(motion_ternary_factor_noise_sigma,  0.01, "Noise used on motion ternary factor");
-
-DEFINE_double(odometry_rotation_sigma, 0.02, "Noise used on rotation component of odometry");
-DEFINE_double(odometry_translation_sigma, 0.01, "Noise used on translation component of odometry");
+#pragma once
 
 
-//TODO: need to make projection covariance!!
-DEFINE_double(static_point_noise_sigma, 0.06, "Isotropic noise used on PoseToPointFactor for static points");
-DEFINE_double(dynamic_point_noise_sigma, 0.0625, "Isotropic noise used on PoseToPointFactor for dynamic points");
+#include "dynosam/utils/Macros.hpp"
+#include <opencv4/opencv2/opencv.hpp>
+
+//TODO: make params!!!
+
+namespace dyno {
+
+struct FunctionalDetector {
+
+
+};
+
+
+/**
+ * @brief Wrapper on classic sparse feature detection method
+ * and integrates the option for adaptive non-maxima supression and sub-pixel refinement
+ *
+ */
+class SparseFeatureDetector {
+
+public:
+    DYNO_POINTER_TYPEDEFS(SparseFeatureDetector)
+
+    SparseFeatureDetector() {}
+
+};
+
+
+} //namespace dyno

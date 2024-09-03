@@ -655,7 +655,9 @@ void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Po
     //     auto gt_packet_k = gt_packet_map->at(frame_id_k);
     //     auto gt_packet_k_1 = gt_packet_map->at(frame_id_k_1);
     //     odom = gt_packet_k_1.X_world_.inverse() * gt_packet_k.X_world_;
+    //     new_values.update(CameraPoseSymbol(frame_id_k),gt_packet_k.X_world_);
     // }
+
 
     // keep track of the new factors added in this function
     // these are then appended to the internal factors_ and new_factors

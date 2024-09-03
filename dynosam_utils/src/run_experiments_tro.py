@@ -62,6 +62,16 @@ def run_saved_sequence(path, name, data_loader_num, backend_type, *args):
         run_as_frontend,
         *args)
 
+# def run_pipeline(path, name, data_loader_num, backend_type, *args):
+#     run_as_frontend=False
+#     run_sequnce(
+#         path,
+#         name,
+#         data_loader_num,
+#         backend_type,
+#         run_as_frontend,
+#         *args)
+
 
 # kitti stuff
 def prep_kitti_sequence(path, name, *args):
@@ -348,14 +358,14 @@ if __name__ == '__main__':
 
 
     ## cluster
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1_dense",
-        "--semantic_mask_step_size=2",
-        "--use_propogate_mask=false",
-        "--use_dynamic_track=false",
-        "--ending_frame=700"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_dense",
+    #     "--semantic_mask_step_size=2",
+    #     "--use_propogate_mask=false",
+    #     "--use_dynamic_track=false",
+    #     "--ending_frame=700"
+    # )
 
     # prep_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L2/",
@@ -379,14 +389,14 @@ if __name__ == '__main__':
     # )
 
 
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1_dense",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5",
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_dense",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    # )
 
     # run_both_backend(
     #     run_cluster_sequence,

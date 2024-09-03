@@ -38,6 +38,9 @@ DECLARE_double(motion_ternary_factor_noise_sigma);
 DECLARE_double(odometry_rotation_sigma);
 DECLARE_double(odometry_translation_sigma);
 
+DECLARE_double(static_point_noise_sigma);
+DECLARE_double(dynamic_point_noise_sigma);
+
 namespace dyno {
 
 
@@ -49,9 +52,10 @@ struct BackendParams {
 
     //! RGBD/Stereo
     bool use_robust_kernals_ = true;
-    double k_huber_3d_points_ = 0.00001; //! Huber constant used for robust kernal on dynamic points
-    double static_point_noise_sigma_ = 0.06; //! Isotropic noise used on PoseToPointFactor for static points
-    double dynamic_point_noise_sigma_ = 0.0625; //! Isotropic noise used on PoseToPointFactor for dynamic points //0.0125
+    double k_huber_3d_points_ = 0.0001; //! Huber constant used for robust kernal on dynamic points
+    double static_point_noise_sigma_ = FLAGS_static_point_noise_sigma; //! Isotropic noise used on PoseToPointFactor for static points
+    //TODO: make param!!! and really should come from covariance on image plane and then projection!!!
+    double dynamic_point_noise_sigma_ = FLAGS_dynamic_point_noise_sigma; //! Isotropic noise used on PoseToPointFactor for dynamic points //0.0125
 
     double odometry_rotation_sigma_ = FLAGS_odometry_rotation_sigma; //! sigma used to construct the noise model on the rotation component of the odomety (between factor)
     double odometry_translation_sigma_ = FLAGS_odometry_translation_sigma; //! sigma used to construct the noise model on the translation component of the odomety (between factor)

@@ -122,7 +122,7 @@ public:
   inline void fillWithKeypoints(const Keypoints& keypoints)
   {
     // TODO(cfo): could be implemented using block operations.
-    for (int i = 0; i < keypoints.size(); ++i)
+    for (size_t i = 0; i < keypoints.size(); ++i)
     {
       const Keypoint& keypoint = keypoints.at(i);
       const int int_x = static_cast<int>(keypoint(0));

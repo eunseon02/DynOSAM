@@ -112,5 +112,22 @@ FeatureContainer::FilterIterator FeatureContainer::beginUsable() const {
     });
 }
 
+std::vector<cv::Point2f> FeatureContainer::toOpenCV(TrackletIds* tracklet_ids) const {
+    if(tracklet_ids) tracklet_ids->clear();
+
+    std::vector<cv::Point2f> keypoints_cv;
+    for(const auto& feature : *this) {
+        const Keypoint& kp = feature->keypoint_;
+
+        float x = static_cast<float>(kp(0));
+        float y = static_cast<float>(kp(1));
+
+        keypoints_cv.push_back(cv::Point2f(x, y));
+
+        if(tracklet_ids) tracklet_ids->push_back(feature->tracklet_id_);
+    }
+    return keypoints_cv;
+}
+
 
 } //dyno

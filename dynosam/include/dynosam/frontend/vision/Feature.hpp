@@ -260,7 +260,9 @@ public:
     TrackletIds collectTracklets(bool only_usable = true) const;
 
 
-
+    inline bool empty() const {
+        return size() == 0u;
+    }
 
     void markOutliers(const TrackletIds outliers);
 
@@ -284,6 +286,8 @@ public:
 
     FilterIterator beginUsable();
     FilterIterator beginUsable() const;
+
+    std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr) const;
 
 
 

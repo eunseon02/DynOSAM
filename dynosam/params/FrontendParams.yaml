@@ -1,7 +1,7 @@
 %YAML:1.0
 
 # max_nr_static_points: 800
-max_nr_static_points: 1200
+max_nr_static_points: 1200 #using the KLT tracking this is the same as max_features_per_frame_
 max_nr_object_points: 800
 # cell_size: 15 #kitti
 cell_size_static: 10
@@ -44,7 +44,7 @@ tracker:
 
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
-  ransac_threshold_pnp: 0.2
+  ransac_threshold_pnp: 1.0
   # ransac_threshold_pnp: 5.0
   # ransac_threshold_pnp: 0.1
   optimize_3d2d_pose_from_inliers: 0

@@ -486,7 +486,7 @@ void EgoMotionSolver::refineJointPoseOpticalFlow(
         CHECK_NOTNULL(feature_k);
 
         CHECK(feature_k_1->hasDepth());
-        CHECK(feature_k->hasDepth());
+        CHECK(feature_k->hasDepth()) << " with object id " << feature_k->instance_label_ << " and is valid " << feature_k->usable() << " and age " << feature_k->age_ << " previous age " << feature_k_1->age_ << " kp " << feature_k->keypoint_;
 
         const Keypoint kp_k_1 = feature_k_1->keypoint_;
         const Depth depth_k_1 = feature_k_1->depth_;

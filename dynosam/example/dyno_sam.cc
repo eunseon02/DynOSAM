@@ -253,6 +253,8 @@ int main(int argc, char* argv[]) {
                     ImageWrapper<ImageType::MotionMask>(motion));
 
 
+
+
         cv::imshow("RGB", rgb);
         cv::imshow("OF", of_viz);
         cv::imshow("Motion", motion_viz);
@@ -263,7 +265,7 @@ int main(int argc, char* argv[]) {
 
         cv::Mat tracking;
         if(previous_frame) {
-            tracking = tracker->computeImageTracks(*previous_frame, *frame);
+            tracking = tracker->computeImageTracks(*previous_frame, *frame, true);
 
         }
         if(!tracking.empty())

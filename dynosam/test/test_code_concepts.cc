@@ -26,6 +26,8 @@
 #include <exception>
 #include <opencv4/opencv2/opencv.hpp>
 
+#include <type_traits>
+
 #include "dynosam/visualizer/ColourMap.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/logger/Logger.hpp"
@@ -123,6 +125,218 @@ cv::Mat GetSquareImage( const cv::Mat& img, int target_width = 500 )
     cv::resize( img, square( roi ), roi.size() );
 
     return square;
+}
+
+//we need compose, inverse (and thats it?)
+
+template<typename T>
+struct indexed_transform_traits;
+
+//actually just want this for Pose operations, i guess? Do I both generalising?
+// this should happily cover all Eigen stuff as well :)
+template<typename T, class = typename  std::enable_if<is_gtsam_value_v<T>>>
+struct GtsamIndexedTransformTraits {
+
+    static T Inverse(const T& t) {
+        return gtsam::traits<T>::Inverse(t);
+    }
+
+    static T Compose(const T& g, const T& h) {
+        return gtsam::traits<T>::Compose(g, h);
+    }
+
+
+};
+template<typename T>
+struct indexed_transform_traits : GtsamIndexedTransformTraits<T> {};
+
+
+/**
+ * @brief Pose class that add the 3-indexed notation from the "Pose changes
+ * from a different point of view" paper
+ *
+ */
+template<typename T>
+class IndexedTransform {
+public:
+  using This = IndexedTransform<T>;
+
+  // Top left index representing observing frame
+  std::string tl;
+  // Bottom left index, representing from frame
+  std::string bl{};
+  // Bottom right index, representing to frame
+  std::string br{};
+  // Data
+  T transform;
+
+  IndexedTransform(
+    const std::string& top_left,
+    const std::string& bottom_left,
+    const std::string& bottom_right,
+    const T& t)
+    :   tl(top_left), bl(bottom_left), br(bottom_right), transform(t) {}
+
+  const std::string& Origin() const { return tl; }
+  const std::string& From() const { return bl; }
+  const std::string& To() const { return br; }
+
+  /**
+   * @brief Returns true if the captured data represents a pose or a motion.
+   * As per Equation 10 and 11 we can, if the top left and bottom left notation is the same,
+   * it can be re-written in the ususal two index form
+   *
+   * @return true
+   * @return false
+   */
+  inline bool isCoordinateTransform() const {
+    return tl == bl;
+  }
+
+  operator T() { return transform; }
+
+  This compose(const This& t) const {
+    // T new_transform = transform * t.transform;
+    T new_transform = indexed_transform_traits<T>::Compose(transform, t.transform);
+
+    //if this is relative (left hand side), both must be relative
+    if(isCoordinateTransform()) {
+        if (!t.isCoordinateTransform()) {
+            throw std::runtime_error("");
+        }
+        else {
+            //check that the coordinates match
+            if(br != t.tl) {
+                //throw exception
+                throw std::runtime_error("");
+            }
+
+            //transform is good, update the bottom right frame (to frame)
+            std::string new_br = t.br;
+            return IndexedTransform(
+                tl,
+                bl,
+                new_br,
+                new_transform
+            );
+        }
+    }
+    else {
+        //we are global motion
+        //if this is global (left hand side), the RHS (t) can be either relative
+        //or global as long as the transforms match up
+        //t's origin must match this (LHS) origin
+        //t's to frame must match this (LHS) from frame
+        if((t.Origin() != Origin()) || (t.To() != From())) {
+             throw std::runtime_error("");
+        }
+
+        if(t.isCoordinateTransform()) {
+            std::string new_bl = t.From();
+            //this should match the origin
+            assert(new_bl == Origin());
+            std::string new_br = t.To();
+            return IndexedTransform(
+                Origin(),
+                new_bl,
+                new_br,
+                new_transform
+            );
+        }
+        else {
+            std::string new_bl = t.From();
+            std::string new_br = From();
+            return IndexedTransform(
+                Origin(),
+                new_bl,
+                new_br,
+                new_transform
+            );
+
+        }
+    }
+
+
+  }
+
+  This operator*(const This& t) const {
+    return compose(t);
+  }
+
+  This decompose(const This& t) const {
+    return inverse().compose(t);
+  }
+
+  //update this one?
+  //maybe an invert and inverse (invert operates on this one)
+  This inverse() const {
+    This tmp = *this;
+    tmp.transform = indexed_transform_traits<T>::Inverse(transform);
+
+    //always swap bottom index's
+    std::swap(tmp.bl, tmp.br);
+
+    //coordinate transform, this we also update the top left with the new bottom left
+    if(isCoordinateTransform()) {
+        tmp.tl = tmp.bl;
+    }
+    return tmp;
+  }
+
+};
+
+TEST(CodeConcepts, threeIndexNotationRelativeInverse) {
+    gtsam::Pose3 A_B(gtsam::Rot3::Rodrigues(0.1,-0.2,0.01),gtsam::Point3(0.5,3,1));
+    IndexedTransform<gtsam::Pose3> a_b("a", "a", "b", A_B);
+    EXPECT_TRUE(a_b.isCoordinateTransform());
+
+    auto b_a = a_b.inverse();
+    EXPECT_EQ(b_a.Origin(), "b");
+    EXPECT_EQ(b_a.From(), "b");
+    EXPECT_EQ(b_a.To(), "a");
+
+    EXPECT_EQ(a_b.Origin(), "a");
+    EXPECT_EQ(a_b.From(), "a");
+    EXPECT_EQ(a_b.To(), "b");
+
+
+    EXPECT_TRUE(b_a.isCoordinateTransform());
+    EXPECT_TRUE(gtsam::assert_equal(A_B.inverse(), b_a.transform));
+
+}
+
+TEST(CodeConcepts, threeIndexNotationAbsoluteInverse) {
+    gtsam::Pose3 W_AB(gtsam::Rot3::Rodrigues(0.1,-0.2,0.01),gtsam::Point3(0.5,3,1));
+    IndexedTransform<gtsam::Pose3> w_ab("w", "a", "b", W_AB);
+    EXPECT_FALSE(w_ab.isCoordinateTransform());
+
+    auto w_ba = w_ab.inverse();
+    EXPECT_EQ(w_ba.Origin(), "w");
+    EXPECT_EQ(w_ba.From(), "b");
+    EXPECT_EQ(w_ba.To(), "a");
+
+    EXPECT_EQ(w_ab.Origin(), "w");
+    EXPECT_EQ(w_ab.From(), "a");
+    EXPECT_EQ(w_ab.To(), "b");
+
+
+    EXPECT_FALSE(w_ba.isCoordinateTransform());
+    EXPECT_TRUE(gtsam::assert_equal(W_AB.inverse(), w_ba.transform));
+
+}
+
+
+TEST(CodeConcepts, threeIndexNotationRelativeComposition) {
+    gtsam::Pose3 A(gtsam::Rot3::Rodrigues(0.3,2,3),gtsam::Point3(1,2,2));
+    gtsam::Pose3 A_B(gtsam::Rot3::Rodrigues(0.1,-0.2,0.01),gtsam::Point3(0.5,3,1));
+    IndexedTransform<gtsam::Pose3> a("w", "w", "a", A);
+    IndexedTransform<gtsam::Pose3> a_b("a", "a", "b", A_B);
+
+    auto result = a * a_b;
+    EXPECT_EQ(result.Origin(), "w");
+    EXPECT_EQ(result.From(), "w");
+    EXPECT_EQ(result.To(), "b");
+    EXPECT_TRUE(gtsam::assert_equal(A * A_B, result.transform));
 }
 
 

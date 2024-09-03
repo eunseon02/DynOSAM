@@ -23,8 +23,6 @@
 
 #pragma once
 
-#pragma once
-
 #include <memory>
 #include <optional>
 

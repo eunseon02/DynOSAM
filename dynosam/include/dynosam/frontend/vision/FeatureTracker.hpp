@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
+#include "dynosam/frontend/vision/StaticFeatureTracker.hpp"
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/ORBextractor.hpp"
@@ -36,7 +38,7 @@
 namespace dyno {
 
 
-class FeatureTracker
+class FeatureTracker : public FeatureTrackerBase
 {
 public:
     DYNO_POINTER_TYPEDEFS(FeatureTracker)
@@ -76,51 +78,28 @@ public:
 
 protected:
 
-    void trackStatic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& static_features, size_t& n_optical_flow,
-                   size_t& n_new_tracks);
+    // void trackStatic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& static_features, size_t& n_optical_flow,
+    //                size_t& n_new_tracks);
     void trackDynamic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& dynamic_features);
 
     void propogateMask(ImageContainer& image_container);
 
-    inline bool isWithinShrunkenImage(const Keypoint& kp) {
-        CHECK(!initial_computation_);
-        const auto shrunken_row = params_.shrink_row;
-        const auto shrunken_col = params_.shrink_col;
-
-        const int predicted_col = functional_keypoint::u(kp);
-        const int predicted_row = functional_keypoint::v(kp);
-
-        const auto image_rows = img_size_.height;
-        const auto image_cols = img_size_.width;
-        return (predicted_row > shrunken_row && predicted_row < (image_rows - shrunken_row) &&
-          predicted_col > shrunken_col && predicted_col < (image_cols - shrunken_col));
-
-    }
-
 private:
     void computeImageBounds(const cv::Size& size, int& min_x, int& max_x, int& min_y, int& max_y) const;
 
-    Feature::Ptr constructStaticFeature(const ImageContainer& image_container, const Keypoint& kp, size_t age, TrackletId tracklet_id,
-                                      FrameId frame_id) const;
+    // Feature::Ptr constructStaticFeature(const ImageContainer& image_container, const Keypoint& kp, size_t age, TrackletId tracklet_id,
+    //                                   FrameId frame_id) const;
 
-protected:
-    const FrontendParams params_;
-    const cv::Size img_size_;
-
-    Camera::Ptr camera_;
-    ImageDisplayQueue* display_queue_;
 
 private:
     Frame::Ptr previous_frame_{ nullptr }; //! The frame that will be used as the previous frame next time track is called. After track, this is actually the frame that track() returns
     Frame::Ptr previous_tracked_frame_{nullptr}; //! The frame that has just beed used to track on a new frame is created.
-    ORBextractor::UniquePtr feature_detector_{nullptr};
+    // ORBextractor::UniquePtr feature_detector_{nullptr};
+    StaticFeatureTracker::UniquePtr static_feature_tracker_;
 
     FeatureTrackerInfo info_;
 
-    OccupandyGrid2D static_grid_; //! Grid used to feature bin static features
-
-
-    size_t tracklet_count = 0;
+    // OccupandyGrid2D static_grid_; //! Grid used to feature bin static features
     bool initial_computation_{ true };
 
 
