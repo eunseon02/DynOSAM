@@ -285,6 +285,7 @@ class MotionErrorEvaluator(Evaluator):
             logger.warning(f"{object_id} not found for object pose ground truth. Skipping RME calculation")
             return None
 
+        # ground truth object poses
         object_poses = self._object_poses_traj_ref[object_id].poses_se3
 
 

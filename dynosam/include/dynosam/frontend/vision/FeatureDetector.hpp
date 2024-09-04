@@ -23,18 +23,46 @@
 
 #pragma once
 
-
+#include "dynosam/frontend/vision/TrackerParams.hpp"
+#include "dynosam/common/Types.hpp"
 #include "dynosam/utils/Macros.hpp"
 #include <opencv4/opencv2/opencv.hpp>
+
+#include <functional>
 
 //TODO: make params!!!
 
 namespace dyno {
 
-struct FunctionalDetector {
+
+
+class FunctionalDetector {
+public:
+    DYNO_POINTER_TYPEDEFS(FunctionalDetector)
+    // Function interface to extract keypoints from an image (arg0) with an optional keypoint mask (arg2)
+    using Func = std::function<void(const cv::Mat&, KeypointsCV&, const cv::Mat&)>;
+
+    //TODO: params
+    FunctionalDetector(const TrackerParams& tracker_params, const Func& detection_func)
+        : tracker_params_(tracker_params), detection_func_(detection_func) {}
+    virtual ~FunctionalDetector() = default;
+
+    inline void detect(const cv::Mat& image, KeypointsCV& keypoints, const cv::Mat& detection_mask = cv::Mat()) {
+        detection_func_(image, keypoints, detection_mask);
+    }
+
+    //Creation function that can be specalised for the detector to be created
+    template<typename DETECTOR>
+    static FunctionalDetector::Ptr Create(const TrackerParams& tracker_params);
+
+protected:
+    const TrackerParams tracker_params_;
+    Func detection_func_; //! Function that extracts keypoints from the implicit (sort of pimpled) detector
 
 
 };
+
+
 
 
 /**

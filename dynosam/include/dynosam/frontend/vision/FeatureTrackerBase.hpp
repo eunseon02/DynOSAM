@@ -21,13 +21,14 @@
  *   SOFTWARE.
  */
 
+
+#pragma once
+
 #include "dynosam/common/Types.hpp"
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
-
-#pragma once
 
 namespace dyno {
 

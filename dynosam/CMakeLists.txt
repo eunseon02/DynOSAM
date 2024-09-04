@@ -109,6 +109,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/StereoMatcher.cc
   src/frontend/vision/StaticFeatureTracker.cc
   src/frontend/vision/FeatureTrackerBase.cc
+  src/frontend/vision/FeatureDetector.cc
   src/frontend/RGBDInstance-Definitions.cc
   src/frontend/Frontend-Definitions.cc
   src/frontend/anms/NonMaximumSupression.cc

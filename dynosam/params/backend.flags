@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # good for omd
---constant_object_motion_rotation_sigma=0.1
---constant_object_motion_translation_sigma=0.5
+--constant_object_motion_rotation_sigma=1.0
+--constant_object_motion_translation_sigma=0.2
 
 # good for carla
 # --constant_object_motion_rotation_sigma=0.01

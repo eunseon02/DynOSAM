@@ -79,6 +79,9 @@ public:
     KltFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
     FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) override;
 
+
+private:
+
     /**
      * @brief Outputs a CLAHE equalized greyscale image from the input RGB, which will be used to detect and track features
      *

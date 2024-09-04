@@ -1,0 +1,101 @@
+/*
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   All rights reserved.
+
+ *   Permission is hereby granted, free of charge, to any person obtaining a copy
+ *   of this software and associated documentation files (the "Software"), to deal
+ *   in the Software without restriction, including without limitation the rights
+ *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *   copies of the Software, and to permit persons to whom the Software is
+ *   furnished to do so, subject to the following conditions:
+
+ *   The above copyright notice and this permission notice shall be included in all
+ *   copies or substantial portions of the Software.
+
+ *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   SOFTWARE.
+ */
+
+#pragma once
+
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
+
+#include <opencv4/opencv2/opencv.hpp>
+#include <eigen3/Eigen/Dense>
+
+
+
+namespace dyno {
+
+
+
+//TODO: put in frontend params and also tracker params
+
+/**
+ * @brief Params for the feature tracker but also the feature detector
+ *
+ */
+struct TrackerParams {
+
+    // GFTT is goodFeaturesToTrack detector.
+    // ORB_SLAM_ORB is the ORB implementation from OrbSLAM
+    enum class FeatureDetectorType { GFTT = 0, ORB_SLAM_ORB = 1};
+
+    struct AnmsParams {
+        AnmsAlgorithmType non_max_suppression_type = AnmsAlgorithmType::RangeTree;
+        //! Number of horizontal bins for feature binning
+        int nr_horizontal_bins_ = 5;
+        //! Number of vertical bins for feature binning
+        int nr_vertical_bins_ = 5;
+        //! Binary mask by the user to control which bins to use
+        Eigen::MatrixXd binning_mask;
+    };
+    struct SubPixelCornerRefinementParams {
+        cv::Size window_size = cv::Size( 5, 5 );
+        cv::Size zero_zone =  cv::Size( -1, -1 );
+        cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 40, 0.001 );
+    };
+
+    //! Good features to track params
+    //! See https://docs.opencv.org/4.x/df/d21/classcv_1_1GFTTDetector.html
+    struct GFFTParams {
+        double quality_level = 0.001;
+        int block_size = 3;
+        //! From my experience on the datasets we've tested on this should almost always be false...
+        bool use_harris_corner_detector = false;
+        double k = 0.04;
+    };
+
+    FeatureDetectorType feature_detector_type = FeatureDetectorType::GFTT;
+
+    //!To use adaptvie non-maximum supression in the feature detector
+    bool use_anms{true};
+    //! To use subpixel refinement on the static pixels
+    bool use_subpixel_corner_refinement{true};
+
+    AnmsParams anms_params = AnmsParams();
+    SubPixelCornerRefinementParams subpixel_corner_refinement_params = SubPixelCornerRefinementParams();
+
+    //! Number features to detect - may be used across many detectors
+    int max_nr_keypoints_before_anms = 2000;
+    //! Used to grid the newly detected features and also used for the detection mask
+    int min_distance_btw_tracked_and_detected_features = 8;
+    //! Threshold for the number of features to keep tracking - if num tracks drop
+    //! below this number, new features are detected
+    int max_features_per_frame = 400;
+    //! We relabel the track as a new track for any features longer that this
+    int max_feature_track_age = 25;
+
+    //! Good features to track params
+    GFFTParams gfft_params = GFFTParams();
+
+
+
+};
+
+}
