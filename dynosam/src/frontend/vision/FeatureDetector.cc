@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/frontend/vision/FeatureDetector.hpp"
+#include "dynosam/frontend/vision/ORBextractor.hpp"
 
 #include <opencv2/imgproc.hpp>
 #include <opencv2/features2d.hpp>
@@ -47,7 +48,114 @@ FunctionalDetector::Ptr FunctionalDetector::Create<cv::GFTTDetector>(const Track
         CHECK_NOTNULL(feature_detector_)->detect(img, keypoints, mask);
     };
 
-    return std::make_shared<FunctionalDetector>(tracker_params,functional_detector);
+    return std::make_shared<FunctionalDetector>(functional_detector);
 }
+
+template<>
+FunctionalDetector::Ptr FunctionalDetector::Create<ORBextractor>(const TrackerParams& tracker_params) {
+    LOG(INFO) << "Creating dyno::ORBextractor";
+
+    auto orb_detector_ = std::make_shared<ORBextractor>(
+        tracker_params.max_nr_keypoints_before_anms,
+        tracker_params.orb_params.scale_factor,
+        tracker_params.orb_params.n_levels,
+        tracker_params.orb_params.init_threshold_fast,
+        tracker_params.orb_params.min_threshold_fast);
+
+    //NOTE that the mask is not used in this implementation
+    auto functional_detector = [=](const cv::Mat& img, KeypointsCV& keypoints, const cv::Mat&) -> void {
+        CHECK_NOTNULL(orb_detector_);
+        //mask and descriptors are empty
+        orb_detector_->operator()(img, cv::Mat(), keypoints, cv::Mat());
+    };
+
+    return std::make_shared<FunctionalDetector>(functional_detector);
+}
+
+
+FunctionalDetector::Ptr FunctionalDetector::FactoryCreate(const TrackerParams& tracker_params) {
+    using FDT = TrackerParams::FeatureDetectorType;
+    switch (tracker_params.feature_detector_type)
+    {
+    case FDT::GFTT:
+        return FunctionalDetector::Create<cv::GFTTDetector>(tracker_params);
+    case FDT::ORB_SLAM_ORB:
+        return FunctionalDetector::Create<ORBextractor>(tracker_params);
+    default:
+        LOG(ERROR) << "Unknown Feature detection type!";
+        return nullptr;
+        break;
+    }
+}
+
+
+SparseFeatureDetector::SparseFeatureDetector(const TrackerParams& tracker_params, const FeatureDetector::Ptr& feature_detector)
+    : tracker_params_(tracker_params),
+      feature_detector_(CHECK_NOTNULL(feature_detector)),
+      clahe_(nullptr),
+      non_maximum_supression_(nullptr)
+{
+    if(tracker_params_.use_clahe_filter)
+        clahe_ = cv::createCLAHE(2.0, cv::Size(8, 8)); //TODO: make params
+
+    if(tracker_params.use_anms)
+        non_maximum_supression_ = std::make_unique<AdaptiveNonMaximumSuppression>(tracker_params.anms_params.non_max_suppression_type);
+}
+
+void SparseFeatureDetector::detect(const cv::Mat& image, KeypointsCV& keypoints, int number_tracked, const cv::Mat& detection_mask) {
+    cv::Mat processed_image = image.clone();
+
+    //pre-process image if required
+    if(clahe_) clahe_->apply(processed_image, processed_image);
+
+    //get keypoints
+    std::vector<cv::KeyPoint> raw_keypoints;
+    feature_detector_->detect(processed_image, raw_keypoints, detection_mask);
+
+    std::vector<cv::KeyPoint>& max_keypoints = raw_keypoints;
+    if(tracker_params_.use_anms) {
+
+        //calculate number of corners needed
+        int nr_corners_needed = std::max(
+            tracker_params_.max_features_per_frame - number_tracked, 0);
+
+        static constexpr float tolerance = 0.1;
+
+        const auto& anms_params = tracker_params_.anms_params;
+        Eigen::MatrixXd binning_mask = anms_params.binning_mask;
+
+        max_keypoints = non_maximum_supression_->suppressNonMax(
+            keypoints,
+            nr_corners_needed,
+            tolerance,
+            processed_image.cols,
+            processed_image.rows,
+            anms_params.nr_horizontal_bins,
+            anms_params.nr_vertical_bins,
+            binning_mask);
+
+    }
+
+    if(tracker_params_.use_subpixel_corner_refinement && max_keypoints.size() > 0u) {
+        // Convert keypoints to points
+        std::vector<cv::Point2f> points;
+        cv::KeyPoint::convert(max_keypoints, points);
+
+        const auto& subpixel_corner_refinement_params = tracker_params_.subpixel_corner_refinement_params;
+        cv::cornerSubPix(
+                processed_image,
+                points,
+                subpixel_corner_refinement_params.window_size,
+                subpixel_corner_refinement_params.zero_zone,
+                subpixel_corner_refinement_params.criteria);
+
+        cv::KeyPoint::convert(points, max_keypoints);
+    }
+
+    keypoints = max_keypoints;
+}
+
+
+
 
 } //namespace dyno

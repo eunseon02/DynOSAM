@@ -465,7 +465,7 @@ def plot_object_trajectories(
         provided_colours = itertools.cycle(provided_colours)
 
     # helper function
-    def draw_impl(t, style: str = '-',name="", alpha: float = 1.0, shift_color: bool = False):
+    def draw_impl(t, style: str = '-',name="", alpha: float = 1.0, shift_color: bool = False, **kwargs):
         if provided_colours is not None:
             color = next(provided_colours)
         elif cmap_colors is None:
@@ -500,6 +500,10 @@ def plot_object_trajectories(
                 # TODO: for now a hack ;)
                 if str(name).lower() != "camera":
                     name = "object " + str(name)
+
+                if "name_prefix" in kwargs:
+                    name = kwargs.get("name_prefix") + " " + name
+
                 draw_impl(t,name= name,**kwargs)
         else:
             for t in traj:
@@ -539,7 +543,7 @@ def plot_object_trajectories(
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
     if obj_trajectories_ref is not None:
-        draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False)
+        draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False, name_prefix="Ground Truth")
         if plot_axis_ref:
             plot_coordinate_axis(obj_trajectories_ref)
     return ax
@@ -602,7 +606,7 @@ def reconstruct_trajectory_from_relative(traj, traj_ref):
 
     assert len(poses) == len(traj_poses)
 
-    return evo_trajectory.PoseTrajectory3D(poses_se3=poses, timestamps=traj.timestamps)
+    return evo_trajectory.PoseTrajectory3D(poses_se3=np.array(poses), timestamps=traj.timestamps)
 
 
 

@@ -294,8 +294,8 @@ class MotionErrorEvaluator(Evaluator):
             object_motion_L_gt.append(lie_algebra.se3())
 
         # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
-        object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=object_motion_L, timestamps=object_motion_traj.timestamps[1:])
-        object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=object_motion_L_gt, timestamps=object_motion_traj.timestamps[1:])
+        object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L), timestamps=object_motion_traj.timestamps[1:])
+        object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L_gt), timestamps=object_motion_traj.timestamps[1:])
 
         # only interested in APE as this matches our error metrics
         ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
@@ -505,12 +505,12 @@ class MotionErrorEvaluator(Evaluator):
 
             if convert_to_world_coordinates:
                 object_poses_traj[object_id] = transform_camera_trajectory_to_world(
-                    trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps))
+                    trajectory.PoseTrajectory3D(poses_se3=np.array(poses_est), timestamps=timestamps))
                 object_poses_traj_ref[object_id] = transform_camera_trajectory_to_world(
-                    trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref))
+                    trajectory.PoseTrajectory3D(poses_se3=np.array(poses_ref), timestamps=timestamps_ref))
             else:
-                object_poses_traj[object_id] =  trajectory.PoseTrajectory3D(poses_se3=poses_est, timestamps=timestamps)
-                object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=poses_ref, timestamps=timestamps_ref)
+                object_poses_traj[object_id] =  trajectory.PoseTrajectory3D(poses_se3=np.array(poses_est), timestamps=timestamps)
+                object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=np.array(poses_ref), timestamps=timestamps_ref)
 
         return object_poses_traj, object_poses_traj_ref
 

@@ -49,7 +49,7 @@ public:
     StaticFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     virtual ~StaticFeatureTracker() {}
-    virtual FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) = 0;
+    virtual FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) = 0;
 
 };
 
@@ -58,7 +58,7 @@ class ExternalFlowFeatureTracker : public StaticFeatureTracker {
 
 public:
     ExternalFlowFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
-    FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) override;
+    FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) override;
 
 
 private:
@@ -77,7 +77,7 @@ class KltFeatureTracker : public StaticFeatureTracker {
 
 public:
     KltFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
-    FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) override;
+    FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) override;
 
 
 private:
@@ -110,7 +110,8 @@ private:
         const cv::Mat& processed_img,
         const ImageContainer& image_container,
         const FeatureContainer& current_features,
-        FeatureContainer& new_features);
+        FeatureContainer& new_features,
+        const cv::Mat& detection_mask);
 
 
     /**
@@ -130,6 +131,7 @@ private:
      * @param tracked_features
      * @param outlier_previous_features
      * @param tracker_info
+     * @param detection_mask
      * @return true
      * @return false
      */
@@ -140,7 +142,8 @@ private:
         const FeatureContainer& previous_features,
         FeatureContainer& tracked_features,
         TrackletIds& outlier_previous_features,
-        FeatureTrackerInfo& tracker_info);
+        FeatureTrackerInfo& tracker_info,
+        const cv::Mat& detection_mask);
 
     //use homography + ransac to mark inliers with tracking
     cv::Mat geometricVerification(const std::vector<cv::Point2f>& good_old, const std::vector<cv::Point2f>& good_new) const;

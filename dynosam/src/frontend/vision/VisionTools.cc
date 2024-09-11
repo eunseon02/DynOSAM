@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/frontend/vision/VisionTools.hpp"
+#include "dynosam/logger/Logger.hpp"
 
 #include <algorithm>  // std::set_difference, std::sort
 #include <vector>     // std::vector
@@ -57,6 +58,7 @@ void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterat
 
 
 ObjectIds getObjectLabels(const cv::Mat& image) {
+  //TODO: this could be optimised by mapping the data directly to a std::set?
   std::set<ObjectId> unique_labels;
   for (int i = 0; i < image.rows; i++) {
     for (int j = 0; j < image.cols; j++) {
@@ -275,23 +277,28 @@ object_observation.marked_as_moving_ = true;
 }
 
 
-bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect) {
-  cv::Mat obj_mask = (mask == object_id);
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& detected_rect, std::vector<std::vector<cv::Point>>& detected_contours) {
+  cv::Mat mask_copy = mask.clone();
+
+  cv::Mat obj_mask = (mask_copy == object_id);
   cv::Mat dilated_obj_mask;
+  // dilate to fill any small holes in the mask to get a more complete set of contours
   cv::Mat dilate_element = cv::getStructuringElement(cv::MORPH_RECT,
                                                       cv::Size(1, 11)); // a rectangle of 1*5
-  cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(0, 10)); // defining anchor point so it only erode down
+  cv::dilate(obj_mask, dilated_obj_mask, dilate_element, cv::Point(-1, -1));
 
   std::vector<std::vector<cv::Point>> contours;
   std::vector<cv::Vec4i> hierarchy;
   cv::findContours(dilated_obj_mask, contours,hierarchy, cv::RETR_TREE, cv::CHAIN_APPROX_NONE);
 
+  detected_contours = contours;
+
   if(contours.empty()) {
-      rect = cv::Rect();
+      detected_rect = cv::Rect();
       return false;
   }
   else if(contours.size() == 1u) {
-      rect = cv::boundingRect(contours.at(0));
+      detected_rect = cv::boundingRect(contours.at(0));
   }
   else {
       std::vector<cv::Rect> rectangles;
@@ -300,9 +307,23 @@ bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& re
       }
       cv::Rect merged_rect = rectangles[0];
       for(const auto& r : rectangles) { merged_rect |= r; }
-      rect = merged_rect;
+      detected_rect = merged_rect;
   }
   return true;
+}
+
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& detected_rect) {
+  std::vector<std::vector<cv::Point>> detected_contours;
+  auto result = findObjectBoundingBox(mask, object_id, detected_rect, detected_contours);
+  (void)detected_contours;
+  return result;
+}
+
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, std::vector<std::vector<cv::Point>>& detected_contours) {
+  cv::Rect detected_rect;
+  auto result = findObjectBoundingBox(mask, object_id, detected_rect, detected_contours);
+  (void)detected_rect;
+  return result;
 }
 
 
@@ -321,6 +342,33 @@ void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size) {
     cv::erode(obj_mask, eroded_mask, element);
     shrunk_mask = shrunk_mask.setTo(object_id, eroded_mask);
   }
+}
+
+void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask, int thickness, bool use_as_feature_detection_mask) {
+  cv::Mat thicc_boarder; // god im so funny
+  cv::Scalar fill_colour;
+
+
+  // background should be 255 as we're can detect in this region and boarder region should be zero
+  if (use_as_feature_detection_mask) {
+    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(255));
+    fill_colour = cv::Scalar(0);
+  }
+  else {
+    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
+    fill_colour = cv::Scalar(255);
+  }
+
+
+  const ObjectIds instance_labels = vision_tools::getObjectLabels(mask);
+  for(const auto object_id : instance_labels) {
+      std::vector<std::vector<cv::Point>> detected_contours;
+      vision_tools::findObjectBoundingBox(mask, object_id,detected_contours);
+
+      cv::drawContours(thicc_boarder, detected_contours, -1, fill_colour, thickness);
+  }
+
+  boundary_mask = thicc_boarder;
 }
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels) {
@@ -379,6 +427,79 @@ gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Pt
   return histograms;
 }
 
+cv::Mat depthTo3D(const ImageWrapper<ImageType::Depth>& depth_image, const cv::Mat& K) {
+  const cv::Mat& depth_map = depth_image;
+  int H = depth_map.rows;
+  int W = depth_map.cols;
+
+  // Camera intrinsic parameters
+  double fx = K.at<double>(0, 0);
+  double fy = K.at<double>(1, 1);
+  double cx = K.at<double>(0, 2);
+  double cy = K.at<double>(1, 2);
+
+  // Generate pixel grid
+  cv::Mat u_grid, v_grid;
+  cv::Mat u = cv::Mat::zeros(H, W, CV_64F);
+  cv::Mat v = cv::Mat::zeros(H, W, CV_64F);
+
+  for (int y = 0; y < H; ++y) {
+      for (int x = 0; x < W; ++x) {
+          u.at<double>(y, x) = static_cast<double>(x);
+          v.at<double>(y, x) = static_cast<double>(y);
+      }
+  }
+
+  // Normalize pixel coordinates by the intrinsic matrix
+  cv::Mat X_norm = (u - cx) / fx;
+  cv::Mat Y_norm = (v - cy) / fy;
+
+  // Depth map scaling for 3D coordinates
+  cv::Mat X_3D = X_norm.mul(depth_map);
+  cv::Mat Y_3D = Y_norm.mul(depth_map);
+
+
+  cv::Mat Z_3D = depth_map.clone();
+
+  std::vector<cv::Mat> channels = {X_3D, Y_3D, Z_3D};
+  cv::Mat point_cloud;
+  cv::merge(channels, point_cloud);
+
+  return point_cloud;  // 3-channel float matrix (H x W x 3)
+
+}
+
+
+void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_image, const ImageWrapper<ImageType::SemanticMask>& mask_image, const Camera& camera, FrameId frame_id) {
+  cv::Mat point_cloud = depthTo3D(depth_image, camera.getParams().getCameraMatrix());
+
+  const cv::Mat& mask = mask_image;
+
+  // new mask of double type to match the type of the output cloud
+  cv::Mat mask_double;
+  mask.copyTo(mask_double);
+  mask_double.convertTo(mask_double, CV_64F);
+
+  std::vector<cv::Mat> channels = {point_cloud, mask_double};
+
+  cv::Mat projected_cloud;
+  cv::merge(channels, projected_cloud);
+
+  static const auto folder_name = "project_mask";
+  const std::string output_folder = getOutputFilePath(folder_name);
+
+  //create write out directly if it does not exist
+  createDirectory(output_folder);
+
+  const std::string file_name = output_folder + "/" + std::to_string(frame_id) + ".yml";
+  cv::FileStorage file(file_name, cv::FileStorage::WRITE);
+  file << "matrix" << projected_cloud;
+  file.release();
+
+}
+// void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_image, const ImageWrapper<ImageType::MotionMask>& mask_image, const Camera& camera, FrameId frame_id) {
+//   writeOutProjectMaskAndDepthMap(depth_image, ImageWrapper<ImageType::SemanticMask>(static_cast<const cv::Mat&>(mask_image)), camera, frame_id);
+// }
 
 
 } //vision_tools

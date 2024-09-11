@@ -55,6 +55,30 @@ void writeStatisticsModuleSummariesToFile() {
   utils::Statistics::WritePerModuleSummariesToCsvFile(getOutputFilePath(""));
 }
 
+bool createDirectory(const std::string& path) {
+  std::filesystem::path dir_path(path);
+
+   // Check if directory already exists
+  if (std::filesystem::exists(dir_path)) {
+      if (std::filesystem::is_directory(dir_path)) {
+          VLOG(10) << "Directory already exists: " << path;
+          return true;
+      } else {
+          VLOG(10) << "Path exists but is not a directory: " << path;
+          return false;
+      }
+  }
+
+  // Create directory if it doesn't exist
+  if (std::filesystem::create_directories(dir_path)) {
+      VLOG(10) << "Directory created: " << path;
+      return true;
+  } else {
+      LOG(WARNING) << "Failed to create directory: " << path;
+      return false;
+  }
+}
+
 
 // This constructor will directly open the log file when called.
 OfstreamWrapper::OfstreamWrapper(const std::string& filename,
@@ -117,7 +141,8 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
     object_bbx_file_name_(module_name_ + "_object_bbx_log.csv"),
     // camera_pose_errors_file_name_(module_name_ + "_camera_pose_error_log.csv"),
     camera_pose_file_name_(module_name_ + "_camera_pose_log.csv"),
-    map_points_file_name_(module_name_ + "_map_points_log.csv")
+    map_points_file_name_(module_name_ + "_map_points_log.csv"),
+    frame_id_to_timestamp_file_name_("frame_id_timestamp.csv") //NOTE: not prefixed by module
 {
 
   camera_pose_csv_ = std::make_unique<CsvWriter>(CsvHeader(
@@ -157,18 +182,18 @@ EstimationModuleLogger::EstimationModuleLogger(const std::string& module_name)
             "px", "py", "pz",
             "qw", "qx", "qy", "qz"));
 
+  frame_id_timestamp_csv_ = std::make_unique<CsvWriter>(CsvHeader("frame_id", "timestamp [ns]"));
+
 }
 
 EstimationModuleLogger::~EstimationModuleLogger() {
   LOG(INFO) << "Writing out " << module_name_ << " logger...";
   OfstreamWrapper::WriteOutCsvWriter(*object_pose_csv_, object_pose_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*object_bbx_csv_, object_bbx_file_name_);
-
   OfstreamWrapper::WriteOutCsvWriter(*object_motion_csv_, object_motion_file_name_);
-
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
-
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
+  OfstreamWrapper::WriteOutCsvWriter(*frame_id_timestamp_csv_, frame_id_to_timestamp_file_name_);
 }
 
 std::optional<size_t> EstimationModuleLogger::logObjectMotion(FrameId frame_id, const MotionEstimateMap& motion_estimates, const std::optional<GroundTruthPacketMap>& gt_packets) {
@@ -213,25 +238,6 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(FrameId frame_id, 
         estimate.x() << estimate.y() << estimate.z() << quat.x() << quat.y() << quat.z() << quat.w() <<
         gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_quat.x() << gt_quat.y() << gt_quat.z() << gt_quat.w();
       number_logged++;
-
-      // ObjectPoseGT object_pose_gt;
-      // if(!gt_packet.getObject(object_id, object_pose_gt)) {
-      //     LOG(ERROR) << "Could not find gt object at frame " << frame_id << " for object Id" << object_id;
-      // }
-      // else {
-      //     const gtsam::Pose3& estimate = motions;
-      //     const gtsam::Pose3& gt_motion = *object_pose_gt.prev_H_current_world_;
-
-      //     const auto& quat = estimate.rotation().toQuaternion();
-      //     const auto& gt_quat = gt_motion.rotation().toQuaternion();
-
-      //     *object_motion_csv_ <<
-      //       frame_id << object_id <<
-      //       estimate.x() << estimate.y() << estimate.z() << quat.x() << quat.y() << quat.z() << quat.w() <<
-      //       gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_quat.x() << gt_quat.y() << gt_quat.z() << gt_quat.w();
-      //     number_logged++;
-
-      // }
 
   }
   return number_logged;
@@ -341,5 +347,11 @@ void EstimationModuleLogger::logObjectBbxes(FrameId frame_id, const BbxPerObject
                                               << q.w() << q.x() << q.y() << q.z();
   }
 }
+
+void EstimationModuleLogger::logFrameIdToTimestamp(FrameId frame_id, Timestamp timestamp) {
+  long int nano_seconds = timestamp * 1e+9;
+  *frame_id_timestamp_csv_ << frame_id << nano_seconds;
+}
+
 
 } //dyno

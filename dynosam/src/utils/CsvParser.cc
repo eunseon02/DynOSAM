@@ -23,10 +23,13 @@
 
 #include "dynosam/utils/CsvParser.hpp"
 
+#include <iostream>
+#include <iomanip>
 #include <boost/algorithm/string.hpp>
 #include <glog/logging.h>
 
 namespace dyno {
+
 
 CsvReader::Row::Row(const std::string& line, const CsvHeader& header, const char delimiter)
     : line_(line), header_(header), delimiter_(delimiter)
@@ -79,7 +82,6 @@ CsvWriter::CsvWriter(const CsvHeader& header, const std::string& seperator)
 
     checkAndThrow<InvalidCsvHeaderException>((column_number_ > 0u), "CsvHeader cannot be empty! (size of 0)");
 }
-
 
 
 CsvWriter::~CsvWriter() { resetContent();}

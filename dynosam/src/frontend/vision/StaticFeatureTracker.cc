@@ -50,7 +50,7 @@ ExternalFlowFeatureTracker::ExternalFlowFeatureTracker(const FrontendParams& par
 }
 
 //if previous frame is null, assume that it is the first frame... and that frames are always processed in order!
-FeatureContainer ExternalFlowFeatureTracker::trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) {
+FeatureContainer ExternalFlowFeatureTracker::trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat&) {
     const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.getImageWrapper<ImageType::RGBMono>();
     const cv::Mat& rgb = rgb_wrapper.toRGB();
     cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
@@ -230,7 +230,7 @@ KltFeatureTracker::KltFeatureTracker(const FrontendParams& params, Camera::Ptr c
 }
 
 
-FeatureContainer KltFeatureTracker::trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info) {
+FeatureContainer KltFeatureTracker::trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) {
 
     // tracked features and new features
     FeatureContainer new_tracks_and_detections;
@@ -240,7 +240,7 @@ FeatureContainer KltFeatureTracker::trackStatic(Frame::Ptr previous_frame, const
         equalizeImage(image_container, equialized_greyscale);
 
         FeatureContainer previous_inliers;
-        detectFeatures(equialized_greyscale, image_container, previous_inliers, new_tracks_and_detections);
+        detectFeatures(equialized_greyscale, image_container, previous_inliers, new_tracks_and_detections, detection_mask);
 
         tracker_info.static_track_detections = new_tracks_and_detections.size();
 
@@ -270,7 +270,8 @@ FeatureContainer KltFeatureTracker::trackStatic(Frame::Ptr previous_frame, const
             previous_inliers,
             new_tracks_and_detections,
             previous_outliers,
-            tracker_info
+            tracker_info,
+            detection_mask
         );
 
         // after tracking, mark features in the older frame as outliers
@@ -346,16 +347,26 @@ std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(const cv::Mat& pro
 
 }
 
-bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const ImageContainer& image_container, const FeatureContainer& current_features, FeatureContainer& new_features) {
+bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const ImageContainer& image_container, const FeatureContainer& current_features, FeatureContainer& new_features, const cv::Mat& detection_mask) {
    const FrameId frame_k = image_container.getFrameId();
 
-//    if(current_features.size() >= min_tracks) {
-//         return false;
-//    }
 
 
     const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
-    cv::Mat detection_mask = cv::Mat(motion_mask.size(), CV_8U, cv::Scalar(255));
+    //internal detection mask that is appended with new invalid pixels
+    //this builds the static detection mask over the existing input mask
+    cv::Mat detection_mask_impl;
+    //If we are provided with an external detection/feature mask, initalise the detection mask with this and add more invalid sections to it
+    if(!detection_mask.empty()) {
+        CHECK_EQ(motion_mask.rows, detection_mask.rows);
+        CHECK_EQ(motion_mask.cols, detection_mask.cols);
+        detection_mask_impl = detection_mask.clone();
+    }
+    else {
+        detection_mask_impl = cv::Mat(motion_mask.size(), CV_8U, cv::Scalar(255));
+    }
+    CHECK_EQ(detection_mask_impl.type(), CV_8U);
+
     //slow
     //add mask over objects detected in the scene
     for(int i = 0; i < motion_mask.rows; i++ ) {
@@ -363,7 +374,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
             const ObjectId label = motion_mask.at<ObjectId>(i, j);
 
             if(label != background_label) {
-                cv::circle(detection_mask,
+                cv::circle(detection_mask_impl,
                 cv::Point2f(j, i),
                 min_distance_btw_tracked_and_detected_features_,
                 cv::Scalar(0),
@@ -376,7 +387,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
     for(const auto& feature : current_features) {
         const Keypoint kp = feature->keypoint_;
         CHECK(feature->usable());
-        cv::circle(detection_mask,
+        cv::circle(detection_mask_impl,
             cv::Point2f(kp(0), kp(1)),
             min_distance_btw_tracked_and_detected_features_,
             cv::Scalar(0),
@@ -387,7 +398,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
     std::vector<cv::Point2f> detected_points = detectRawFeatures(
         processed_img,
         current_features.size(),
-        detection_mask
+        detection_mask_impl
     );
 
 
@@ -430,7 +441,8 @@ bool KltFeatureTracker::trackPoints(
     const FeatureContainer& previous_features,
     FeatureContainer& tracked_features,
     TrackletIds& outlier_previous_features,
-    FeatureTrackerInfo& tracker_info) {
+    FeatureTrackerInfo& tracker_info,
+    const cv::Mat& detection_mask) {
     if (current_processed_img.empty() ||
         previous_processed_img.empty() ||
         previous_features.empty()) {
@@ -545,7 +557,7 @@ bool KltFeatureTracker::trackPoints(
 
     if(tracked_features.size() < static_cast<size_t>(max_features_per_frame_)) {
         //if we do not have enough features, detect more on the current image
-        detectFeatures(current_processed_img, image_container, tracked_features, tracked_features);
+        detectFeatures(current_processed_img, image_container, tracked_features, tracked_features, detection_mask);
 
         const auto n_detected = tracked_features.size() - n_tracked;
         tracker_info.static_track_detections += n_detected;

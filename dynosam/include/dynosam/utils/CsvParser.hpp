@@ -256,9 +256,7 @@ class CsvWriter
 
 
         CsvWriter& add(const char *str);
-
         CsvWriter& add(char *str);
-
         CsvWriter& add(const std::string& str);
 
         template<typename T>
@@ -298,15 +296,10 @@ class CsvWriter
         bool write(const std::string& filename, bool append) const;
         bool write(std::ostream& stream) const;
 
-        // void enableAutoNewRow(int numberOfColumns){
-        //     this->column_number_ = numberOfColumns;
-        // }
-
-        // void disableAutoNewRow(){
-        //     this->column_number_ = -1;
-        // }
-       //you can use this reset method in destructor if you gonna use it in heap mem.
         void resetContent();
+
+
+
 
     protected:
         const CsvHeader header_;

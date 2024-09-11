@@ -93,6 +93,19 @@ void writeStatisticsSummaryToFile(const std::string& file_name = "statistics.csv
  */
 void writeStatisticsModuleSummariesToFile();
 
+
+/**
+ * @brief Create a directory at the given path.
+ *
+ * If the directory does not exist it will be created, otherwise nothing happens.
+ *
+ * @param path
+ * @return true
+ * @return false
+ */
+bool createDirectory(const std::string& path);
+
+
 // Open files with name output_filename, and checks that it is valid
 static inline void OpenFile(const std::string& output_filename,
                             std::ofstream* output_file,
@@ -256,6 +269,11 @@ public:
   //logs to object bounding boxes
   virtual void logObjectBbxes(FrameId frame_id, const BbxPerObject& object_bbxes);
 
+
+  //interum solution since we only log FrameIds to file and not Tiemstamps
+  //TODO: better is to log both (or actually just timestamp since our eval is designed to use Timestamps and we just have a hack ;)
+  void logFrameIdToTimestamp(FrameId frame_id, Timestamp timestamp);
+
   inline const std::string& moduleName() const { return module_name_; }
 
 protected:
@@ -265,20 +283,17 @@ protected:
   const std::string object_pose_file_name_;
   const std::string object_motion_file_name_;
   const std::string object_bbx_file_name_;
-
-  // const std::string camera_pose_errors_file_name_;
   const std::string camera_pose_file_name_;
-
   const std::string map_points_file_name_;
+  const std::string frame_id_to_timestamp_file_name_;
+
 
   CsvWriter::UniquePtr object_pose_csv_;
   CsvWriter::UniquePtr object_motion_csv_;
   CsvWriter::UniquePtr object_bbx_csv_;
-
-  // CsvWriter::UniquePtr camera_pose_errors_csv_;
   CsvWriter::UniquePtr camera_pose_csv_;
-
   CsvWriter::UniquePtr map_points_csv_;
+  CsvWriter::UniquePtr frame_id_timestamp_csv_;
 
 
 };

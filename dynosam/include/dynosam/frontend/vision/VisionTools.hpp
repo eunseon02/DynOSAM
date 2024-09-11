@@ -70,11 +70,57 @@ void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size);
  *
  * @param mask const cv::Mat&
  * @param object_id ObjectId
- * @param rect cv::Rect& The calcualted bounding box
+ * @param detected_rect cv::Rect& The calcualted bounding box
+ * @param detected_contours std::vector<std::vector<cv::Point>>& The calcualted contours used to find the bounding box
  * @return true
  * @return false
  */
-bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& rect);
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& detected_rect, std::vector<std::vector<cv::Point>>& detected_contours);
+
+/**
+ * @brief From a instance/semantic mask type img, construct the bounding box for the mask of object_id.
+ *
+ * Differes only in output variables.
+ *
+ * @param mask
+ * @param object_id
+ * @param detected_rect
+ * @return true
+ * @return false
+ */
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, cv::Rect& detected_rect);
+
+/**
+ * @brief From a instance/semantic mask type img, construct the bounding box for the mask of object_id.
+ *
+ * Differes only in output variables.
+ *
+ * @param mask
+ * @param object_id
+ * @param detected_contours
+ * @return true
+ * @return false
+ */
+bool findObjectBoundingBox(const cv::Mat& mask, ObjectId object_id, std::vector<std::vector<cv::Point>>& detected_contours);
+
+
+/**
+ * @brief From  an input instance/semantic mask type img construct a image mask (binary) that has True values around each
+ * object in the image, with a certain thickness.
+ *
+ * This is used to mark all points intside the mask as invalid and should not be tracked. Like any mask used for an feature detector
+ * the output mask is a 8-bit integer matrix with non-zero values in the region of interest.
+ *
+ * When use_as_feature_detection_mask is True, all pixels inside the thicc boarder are set to zero, and all other values are 255.
+ * If this argument is False, the opposite is true (pixels inside the boarder are 255 and others are set to 0)
+ *
+ * @param mask
+ * @param boundary_mask
+ * @param thickness
+ * @param use_as_feature_detection_mask. Default is true.
+ */
+void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask, int thickness, bool use_as_feature_detection_mask = true);
+
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds& old_labels, const ObjectIds& new_labels);
 
@@ -87,6 +133,42 @@ void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask, const ObjectIds
  * @return gtsam::FastMap<ObjectId, Histogram>
  */
 gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Ptr frame, const std::vector<size_t>& bins = {0, 1, 2, 3, 5, 7, 10, 15, 25, 40, 60, std::numeric_limits<size_t>::max()});
+
+
+/**
+ * @brief Projects a dense depth map to 3D coordinates in the local frame.
+ *
+ * Returns a (H x W x 3) image of type CV_64F
+ *
+ * @param depth_image
+ * @param K
+ * @return cv::Mat
+ */
+cv::Mat depthTo3D(const ImageWrapper<ImageType::Depth>& depth_image, const cv::Mat& K);
+
+/**
+ * @brief Saves a re-projected 3D point cloud with labelled points to file as a cv::Mat.
+ *
+ * The depth map is projected into the camera coordinate frame and each pixel is labelled with the tracking label
+ * from the mask.
+ *
+ * The final image is saved as a CV_64F (double) of W X H X 4 where channels [0:3] are the xyz values of the point
+ * and [3] is the tracking label (0=background, 1....N object track label).
+ *
+ * Used for reconstructing testing.
+ *
+ * Write to a folder called project_mask in the OutputFolder defined by getOutputFilePath.
+ *
+ * @param depth_image NOTE: can be any mask (motion, semantic...)
+ * @param mask_image
+ * @param frame_id
+ */
+void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_image, const ImageWrapper<ImageType::SemanticMask>& mask_image, const Camera& camera, FrameId frame_id);
+
+
+
+
+
 
 
 // /**

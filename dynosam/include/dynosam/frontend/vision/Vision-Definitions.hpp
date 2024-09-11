@@ -75,6 +75,7 @@ struct PerObjectStatus {
 
 struct FeatureTrackerInfo {
     FrameId frame_id;
+    Timestamp timestamp;
 
     //static track info
     size_t static_track_optical_flow;
@@ -97,6 +98,7 @@ inline std::string to_string(const FeatureTrackerInfo& info) {
     std::stringstream ss;
     ss << "FeatureTrackerInfo: \n"
        << " - frame id: " << info.frame_id << "\n"
+       << " - timestamp: " << std::setprecision(15) << info.timestamp << "\n"
        << "\t- # optical flow: " << info.static_track_optical_flow << "\n"
        << "\t- # detections: " << info.static_track_detections << "\n";
 

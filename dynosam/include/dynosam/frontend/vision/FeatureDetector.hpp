@@ -26,6 +26,10 @@
 #include "dynosam/frontend/vision/TrackerParams.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/Macros.hpp"
+
+
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
+
 #include <opencv4/opencv2/opencv.hpp>
 
 #include <functional>
@@ -34,32 +38,47 @@
 
 namespace dyno {
 
+/**
+ * @brief Base class for any feature detector
+ *
+ */
+class FeatureDetector {
+
+public:
+    DYNO_POINTER_TYPEDEFS(FeatureDetector)
+
+    FeatureDetector() = default;
+    virtual ~FeatureDetector() = default;
+    virtual void detect(const cv::Mat& image, KeypointsCV& keypoints, const cv::Mat& detection_mask) = 0;
+};
 
 
-class FunctionalDetector {
+class FunctionalDetector : public FeatureDetector {
 public:
     DYNO_POINTER_TYPEDEFS(FunctionalDetector)
     // Function interface to extract keypoints from an image (arg0) with an optional keypoint mask (arg2)
     using Func = std::function<void(const cv::Mat&, KeypointsCV&, const cv::Mat&)>;
 
-    //TODO: params
-    FunctionalDetector(const TrackerParams& tracker_params, const Func& detection_func)
-        : tracker_params_(tracker_params), detection_func_(detection_func) {}
+    FunctionalDetector(const Func& detection_func)
+        : detection_func_(detection_func) {}
     virtual ~FunctionalDetector() = default;
 
-    inline void detect(const cv::Mat& image, KeypointsCV& keypoints, const cv::Mat& detection_mask = cv::Mat()) {
+    inline void detect(const cv::Mat& image, KeypointsCV& keypoints, const cv::Mat& detection_mask = cv::Mat()) override {
         detection_func_(image, keypoints, detection_mask);
     }
+
+    /**
+     * @brief Factory method that uses the TrackerParams::feature_detector_type to determine the detector
+     *
+     */
+    static FunctionalDetector::Ptr FactoryCreate(const TrackerParams& tracker_params);
 
     //Creation function that can be specalised for the detector to be created
     template<typename DETECTOR>
     static FunctionalDetector::Ptr Create(const TrackerParams& tracker_params);
 
 protected:
-    const TrackerParams tracker_params_;
     Func detection_func_; //! Function that extracts keypoints from the implicit (sort of pimpled) detector
-
-
 };
 
 
@@ -75,7 +94,28 @@ class SparseFeatureDetector {
 public:
     DYNO_POINTER_TYPEDEFS(SparseFeatureDetector)
 
-    SparseFeatureDetector() {}
+    SparseFeatureDetector(const TrackerParams& tracker_params, const FeatureDetector::Ptr& feature_detector);
+
+    /**
+     * @brief Detects features on the input image using the feature detector.
+     *
+     * The features are then spaced out using adaptive non-maxima-supression and refined using subpixel refinement (via cornerSubPix), if enabled.
+     *
+     * The number of tracked points indicates how many currently tracked points we currently have; this is used to calculate how many more features
+     * we need to reach the minimum number features per frame.
+     *
+     * @param image
+     * @param keypoints
+     * @param number_tracked
+     * @param detection_mask
+     */
+    void detect(const cv::Mat& image, KeypointsCV& keypoints, int number_tracked, const cv::Mat& detection_mask = cv::Mat());
+
+private:
+    const TrackerParams tracker_params_;
+    FeatureDetector::Ptr feature_detector_;
+    cv::Ptr<cv::CLAHE> clahe_;
+    NonMaximumSuppression::UniquePtr non_maximum_supression_;
 
 };
 

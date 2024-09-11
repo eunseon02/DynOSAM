@@ -67,12 +67,6 @@ struct ImageWrapper {
     ImageWrapper() = default;
     ImageWrapper(const cv::Mat& img);
 
-    // ImageWrapper<Type>(const This& other) : image(other.image.clone()) {}
-    // This& operator=(const This& other) {
-    //     image = other.image;
-    //     return *this;
-    // }
-
     operator cv::Mat&() { return image; }
     operator const cv::Mat&() const { return image; }
 

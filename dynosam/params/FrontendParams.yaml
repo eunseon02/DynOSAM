@@ -44,7 +44,7 @@ tracker:
 
   # 3d-2d PnP
   # Equivalent to reprojection error in pixels
-  ransac_threshold_pnp: 1.0
+  ransac_threshold_pnp: 0.2
   # ransac_threshold_pnp: 5.0
   # ransac_threshold_pnp: 0.1
   optimize_3d2d_pose_from_inliers: 0

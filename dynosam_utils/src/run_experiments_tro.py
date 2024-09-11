@@ -195,10 +195,11 @@ if __name__ == '__main__':
     #     "kitti_0005"
     # )
 
-    # prep_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000"
-    # )
+    prep_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0000/",
+        "kitti_0000",
+        "--v=20"
+    )
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0003/",

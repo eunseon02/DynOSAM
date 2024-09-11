@@ -37,7 +37,10 @@
 
 namespace dyno {
 
-
+/**
+ * @brief Feature detector that combines sparse static feature detection and tracking with dense feature detection and tracking on dynamic objects.
+ *
+ */
 class FeatureTracker : public FeatureTrackerBase
 {
 public:
@@ -77,10 +80,8 @@ public:
 
 
 protected:
-
-    // void trackStatic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& static_features, size_t& n_optical_flow,
-    //                size_t& n_new_tracks);
-    void trackDynamic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& dynamic_features);
+    //detection mask is additional mask It must be a 8-bit integer matrix with non-zero values in the region of interest, indicating what featues to not track
+    void trackDynamic(FrameId frame_id, const ImageContainer& image_container, FeatureContainer& dynamic_features, const cv::Mat& detection_mask = cv::Mat());
 
     void propogateMask(ImageContainer& image_container);
 

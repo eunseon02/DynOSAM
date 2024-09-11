@@ -156,7 +156,7 @@ void ImageType::MotionMask::validate(const cv::Mat& input) {
 }
 
 cv::Mat ImageType::MotionMask::toRGB(const ImageWrapper<MotionMask>& image) {
-    const cv::Mat& motion_mask = image;
+    const cv::Mat motion_mask = image.clone();
     return utils::labelMaskToRGB(motion_mask, background_label);
 }
 

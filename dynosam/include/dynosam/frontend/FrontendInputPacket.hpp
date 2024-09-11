@@ -66,7 +66,7 @@ struct FrontendInputPacketBase {
         return CHECK_NOTNULL(image_container_)->getFrameId();
     }
 
-    inline FrameId getTimestamp() const {
+    inline Timestamp getTimestamp() const {
         return CHECK_NOTNULL(image_container_)->getTimestamp();
     }
 

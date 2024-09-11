@@ -214,6 +214,7 @@ public:
     }
 
     const GroundTruthInputPacket& getGtPacket(size_t idx) const {
+        CHECK(ground_truth_packets_.exists(idx)) << " Idx not contained in gt packet: " << idx;
         return ground_truth_packets_.at(idx);
     }
 
@@ -238,8 +239,8 @@ private:
         }
    }
 
-   inline Timestamp toTimestamp(double time_sec, double time_nsec) const {
-    return (Timestamp)time_sec + (Timestamp)time_nsec / 1e+9;
+   inline Timestamp toTimestamp(int time_sec, int time_nsec) const {
+    return static_cast<Timestamp>(time_sec) + static_cast<Timestamp>(time_nsec) / 1e+9;
    }
 
    void loadRGBDImagesAndTime() {
@@ -336,12 +337,13 @@ private:
         for(; it != csv_reader.end(); it++) {
             const auto row = *it;
             int frame_num = row.at<int>(0);
-            double time_sec = row.at<double>(1);
-            double time_nsec = row.at<double>(2);
+            int time_sec = row.at<int>(1);
+            int time_nsec = row.at<int>(2);
 
             Timestamp time = toTimestamp(time_sec, time_nsec);
+
             times_.push_back(time);
-            timestamp_frame_map_.insert({time, frame_num});
+            timestamp_frame_map_.insert({frame_num, time});
 
             //want one less than the number of flow images
             if(times_.size() + 1 >= dataset_size_) {
@@ -367,9 +369,11 @@ private:
         //skip header
         ++it;
 
-        using ObjectIdPosePair = std::pair<ObjectId, gtsam::Pose3>;
         std::vector<ViconPoseData> vicon_pose_data;
         gtsam::FastMap<FrameId, std::vector<ObjectPoseGT>> temp_object_poses;
+        //vicon timestamps that will replace the internal variable times_ (which are initally camera timestamps)
+        //should have the same length
+        std::vector<Timestamp> vicon_timestamps;
 
         //  np.array([[1, 0, 0, 0],
         // [0, 0, -1, 0],
@@ -390,8 +394,8 @@ private:
             //Though the stereo camera, RGB-D camera, and IMU were recorded on the same machine,
             //they are not hardware synchronized. The Vicon was recorded on a separate system with an unknown temporal offset
             //and clock drift.
-            double time_sec = row.at<double>(0);
-            double time_nsec = row.at<double>(1);
+            int time_sec = row.at<int>(0);
+            int time_nsec = row.at<int>(1);
             Timestamp vicon_time = toTimestamp(time_sec, time_nsec);
             //object is in the form boxX or sensor payload (the camera)
             std::string object = row.at<std::string>(2);
@@ -450,19 +454,21 @@ private:
 
         }
 
-        //convert camera times to map for lookup
+        // //convert camera times to map for lookup
         ThreadsafeTemporalBuffer<FrameId> camera_timestamp_buffer;
-        for(Timestamp camera_times : times_) {
-            CHECK(timestamp_frame_map_.exists(camera_times));
-            camera_timestamp_buffer.addValue(camera_times, timestamp_frame_map_.at(camera_times));
+        for(const auto& [frame_id, timestamp] : timestamp_frame_map_) {
+            camera_timestamp_buffer.addValue(timestamp, frame_id);
         }
         //dataset size is number of optical flow images - we want one less camera image!!
         CHECK_EQ(camera_timestamp_buffer.size(), dataset_size_ - 1);
         const auto earliest_camera_timestamp = camera_timestamp_buffer.getOldestTimestamp();
         const auto latest_camera_timestamp = camera_timestamp_buffer.getNewestTimestamp();
 
+
         //this is very slow!!!
-        for(const auto& vicon_data : vicon_pose_data) {
+        for(size_t i = 0; i  < vicon_pose_data.size(); i++) {
+            const auto vicon_data = vicon_pose_data.at(i);
+        // for(const auto& vicon_data : vicon_pose_data) {
             const ObjectId object_id = vicon_data.object_id;
             const gtsam::Pose3& T_world_object = vicon_data.T_world_object;
             const Timestamp& vicon_timestamp = vicon_data.timestamp;
@@ -472,7 +478,7 @@ private:
                 continue;
             }
 
-
+            //get associated
             //get closest camera timestamp to the vicon timestamp - this is the value we want to interpolate
             //to as as this will be the timestamp of the frame we actually use
             //the min delta should really be the delta between camera frames. According to the associated RA-L
@@ -486,9 +492,13 @@ private:
                 //TODO: throw warning?
             }
 
+            // LOG(INFO) << std::setprecision(15) <<  camera_timestamp;
+
+            //get associated camera timestamp
+
+
+
             if (fpEqual(camera_timestamp, vicon_timestamp)) {
-                //TODO: found exact match!!!!
-                // DLOG(INFO) << "Exact mattch found for frame " << frame_id << " " << camera_timestamp << " " << vicon_timestamp << " object id: " << object_id;
 
                 if(!ground_truth_packets.exists(frame_id)) {
                     GroundTruthInputPacket gt_packet;
@@ -558,46 +568,16 @@ private:
 
             //it seems that everything is very fast so (maybe a hack?) we'll just take the cloestst timestamp
 
-
-            // //get closest timestamp before and after
-            // //there will be an edge case on the first and last valid vicon timestamp
-            // //ie. the first one that is > earliest_camera_timestamp and the last one that is
-            // //smaller than latest_camera_timestamp as there will bot be a camera timestamp
-            // //either side of this one!
-            // Timestamp camera_timestamp_before, camera_timestamp_after; //before and after the queried vicon value
-            // FrameId frame_id_before, frame_id_after;
-            // bool has_camera_value_before = camera_timestamp_buffer.getValueAtOrBeforeTime(
-            //     vicon_timestamp,
-            //     &camera_timestamp_before,
-            //     &frame_id_before
-            // );
-
-            // bool has_camera_value_after = camera_timestamp_buffer.getValueAtOrBeforeTime(
-            //     vicon_timestamp,
-            //     &camera_timestamp_after,
-            //     &frame_id_after
-            // );
-
-            // if(has_camera_value_before) {
-            //     CHECK_LT(camera_timestamp_before, vicon_timestamp);
-            //     CHECK_LT(camera_timestamp_before, camera_timestamp);
-            // }
-
-            // if(has_camera_value_after) {
-            //     CHECK_GT(camera_timestamp_after, vicon_timestamp);
-            //     CHECK_GT(camera_timestamp_after, camera_timestamp);
-            // }
-
-
-
-
         }
+
+        CHECK_EQ(ground_truth_packets.size(), times_.size());
 
         //assumes we get one for every frame!!!!?
         gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
         bool set_initial_pose = false;
         FrameId previous_frame = 0;
         for(auto& [frame_id, gt_packet] : ground_truth_packets) {
+            vicon_timestamps.push_back(gt_packet.timestamp_);
 
             if(!set_initial_pose) {
                 initial_pose = gt_packet.X_world_;
@@ -643,6 +623,10 @@ private:
         }
 
         CHECK_EQ(ground_truth_packets.size(), times_.size());
+        CHECK_EQ(vicon_timestamps.size(), times_.size());
+
+        //update times with vicon timestamps as this is what is used externally by the dataprovider
+        times_ = vicon_timestamps;
     }
 
     void setIntrisicsAndTransforms() {
@@ -816,7 +800,7 @@ private:
         Eigen::VectorXi assignment;
         internal::HungarianAlgorithm().solve(cost, assignment);
 
-        LOG(INFO) << " With " << n << " original ids and " << m << " gt ids";
+        // LOG(INFO) << " With " << n << " original ids and " << m << " gt ids";
 
         ObjectIds old_labels = instance_ids;
         ObjectIds new_labels;
@@ -835,6 +819,7 @@ private:
         }
 
         vision_tools::relabelMasks(instance_mask, relabelled_mask, old_labels, new_labels);
+        // LOG(INFO) << "Done";
 
     }
 
@@ -852,7 +837,8 @@ private:
     std::vector<std::string> aligned_depth_image_paths_;
     std::vector<Timestamp> times_; //loaded from rgbd.csv file and associated with rgbd images. Should be the same length as rgb/aligned depth files
     //timestamps between vicon (gt) and camera (from rgbd) are not synchronized!!
-    gtsam::FastMap<Timestamp, FrameId> timestamp_frame_map_;
+    //camera frame ids to vicon frame ids
+    gtsam::FastMap<FrameId, Timestamp> timestamp_frame_map_;
 
     std::vector<std::string> optical_flow_image_paths_;
     std::vector<std::string> instance_masks_image_paths_;
@@ -965,7 +951,8 @@ OMDDataLoader::OMDDataLoader(const fs::path& dataset_path) : OMDDatasetProvider(
 
     this->setCallback(callback);
 
-    // setStartingFrame(1u); ///have to start at at least 1 so we can index backwards with optical flow
+    //first valid frame is 1
+    // setStartingFrame(1u);
 }
 
 } //dyno

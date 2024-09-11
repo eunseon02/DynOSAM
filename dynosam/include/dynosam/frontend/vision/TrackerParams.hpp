@@ -49,9 +49,9 @@ struct TrackerParams {
     struct AnmsParams {
         AnmsAlgorithmType non_max_suppression_type = AnmsAlgorithmType::RangeTree;
         //! Number of horizontal bins for feature binning
-        int nr_horizontal_bins_ = 5;
+        int nr_horizontal_bins = 5;
         //! Number of vertical bins for feature binning
-        int nr_vertical_bins_ = 5;
+        int nr_vertical_bins = 5;
         //! Binary mask by the user to control which bins to use
         Eigen::MatrixXd binning_mask;
     };
@@ -71,12 +71,25 @@ struct TrackerParams {
         double k = 0.04;
     };
 
+    //! Orb features to track params
+    //! Used for both cv::ORB and dyno::ORBextractor
+    //! See https://docs.opencv.org/4.x/db/d95/classcv_1_1ORB.html for details
+    //TODO: right now just copy-pasted from FrontendParams and only includes  dyno::ORBextractor
+    struct OrbParams {
+        float scale_factor = 1.2;
+        int n_levels = 8;
+        int init_threshold_fast = 20;
+        int min_threshold_fast = 7;
+    };
+
     FeatureDetectorType feature_detector_type = FeatureDetectorType::GFTT;
 
     //!To use adaptvie non-maximum supression in the feature detector
     bool use_anms{true};
     //! To use subpixel refinement on the static pixels
     bool use_subpixel_corner_refinement{true};
+    //! To use CLAHE filter on the imput image before processing
+    bool use_clahe_filter{true};
 
     AnmsParams anms_params = AnmsParams();
     SubPixelCornerRefinementParams subpixel_corner_refinement_params = SubPixelCornerRefinementParams();
@@ -93,6 +106,7 @@ struct TrackerParams {
 
     //! Good features to track params
     GFFTParams gfft_params = GFFTParams();
+    OrbParams orb_params = OrbParams();
 
 
 

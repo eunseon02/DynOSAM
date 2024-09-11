@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # good for omd
---constant_object_motion_rotation_sigma=1.0
---constant_object_motion_translation_sigma=0.2
+# --constant_object_motion_rotation_sigma=1.0
+# --constant_object_motion_translation_sigma=0.2
 
 # good for carla
-# --constant_object_motion_rotation_sigma=0.01
-# --constant_object_motion_translation_sigma=0.01
+--constant_object_motion_rotation_sigma=0.01
+--constant_object_motion_translation_sigma=0.01
 
 
 --motion_ternary_factor_noise_sigma=0.001
@@ -15,6 +15,7 @@
 # --odometry_translation_sigma=0.3
 --odometry_rotation_sigma=0.05
 --odometry_translation_sigma=0.1
+
 
 
 --static_point_noise_sigma=0.06

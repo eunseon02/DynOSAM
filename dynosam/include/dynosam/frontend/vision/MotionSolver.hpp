@@ -28,6 +28,9 @@
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 
+#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
+#include "dynosam/factors/Pose3FlowProjectionFactor.h"
+
 
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
 #include <opengv/sac_problems/relative_pose/CentralRelativePoseSacProblem.hpp>
@@ -142,15 +145,152 @@ class EssentialDecompositionResult; //forward declare
 
 template<typename T>
 struct SolverResult {
-    T best_pose; //TODO: rename as not always pose!!
+    T best_result; //TODO: rename as not always pose!!
     TrackletIds inliers;
     TrackletIds outliers;
     TrackingStatus status;
-    double iterations; //current iterations
-    double probability; // current probability
 };
 
 using Pose3SolverResult = SolverResult<gtsam::Pose3>;
+
+
+struct OpticalFlowAndPoseOptimizerParams {
+    double flow_sigma{10.0};
+    double flow_prior_sigma{3.33};
+    double k_huber{0.001};
+    bool outlier_reject{true};
+    //When true, this indicates that the optical flow images go from k to k+1 (rather than k-1 to k, when false)
+    //this left over from some original implementations.
+    //This param is used when updated the frames after optimization
+    bool flow_is_future{true};
+
+    //thresholds to use when updating the depth
+    //TODO: we should not actually need to update the depth like this,
+    //better for the frame to cache itself and we just clear the depth cache
+    double max_background_depth_threshold{40};
+    double max_object_depth_threshold{25};
+};
+
+
+/**
+ * @brief Joinly refines optical flow with with the given pose
+ * using the error term:
+ * e = [u,v]_{k_1} + f_{k-1, k} - \pi(X^{-1} \: m_k)
+ * where f is flow, [u,v]_{k-1} is the observed keypoint at k-1, X is the pose
+ * and m_k is the back-projected keypoint at k.
+ *
+ * The parsed tracklets are the set of correspondances with which to build the optimisation problem
+ * and the refined inliers will be a subset of these tracklets. THe number of refined flows
+ * should be the number of refined inliers and be a 1-to-1 match
+ *
+ */
+class OpticalFlowAndPoseOptimizer {
+
+public:
+    struct ResultType {
+        gtsam::Pose3 refined_pose;
+        gtsam::Point2Vector refined_flows;
+        ObjectId object_id;
+    };
+    using Result =  SolverResult<ResultType>;
+
+    OpticalFlowAndPoseOptimizer(const OpticalFlowAndPoseOptimizerParams& params) : params_(params) {}
+
+    /**
+     * @brief Builds the factor-graph problem using the set of specificed correspondences (tracklets)
+     * in frame k-1 and k and the initial pose.
+     *
+     * The optimisation joinly refines optical flow with with the given pose
+     * using the error term:
+     * e = [u,v]_{k_1} + f_{k-1, k} - \pi(X^{-1} \: m_k)
+     * where f is flow, [u,v]_{k-1} is the observed keypoint at k-1, X is the pose
+     * and m_k is the back-projected keypoint at k.
+     *
+     * The parsed tracklets are the set of correspondances with which to build the optimisation problem
+     * and the refined inliers will be a subset of these tracklets. THe number of refined flows
+     * should be the number of refined inliers and be a 1-to-1 match
+     *
+     * This is agnostic to if the problem is solving for a motion or a pose so the user must make sure the initial pose
+     * is in the right form.
+     *
+     * @tparam CALIBRATION
+     * @param frame_k_1
+     * @param frame_k
+     * @param tracklets
+     * @param initial_pose
+     * @return Result
+     */
+    template<typename CALIBRATION>
+    Result optimize(
+        const Frame::Ptr frame_k_1,
+        const Frame::Ptr frame_k,
+        const TrackletIds& tracklets,
+        const gtsam::Pose3& initial_pose) const;
+
+    /**
+     * @brief Builds the factor-graph problem using the set of specificed correspondences (tracklets)
+     * in frame k-1 and k and the initial pose.
+     * Unlike the optimize only version this also update the features within the frames as outliers
+     * after optimisation. It will also update the feature data (depth keypoint etc...) with the refined flows.
+     *
+     * It will NOT update the frame with the result pose as this could be any pose.
+     *
+     * @tparam CALIBRATION
+     * @param frame_k_1
+     * @param frame_k
+     * @param tracklets
+     * @param initial_pose
+     * @return Result
+     */
+    template<typename CALIBRATION>
+    Result optimizeAndUpdate(
+        Frame::Ptr frame_k_1,
+        Frame::Ptr frame_k,
+        const TrackletIds& tracklets,
+        const gtsam::Pose3& initial_pose) const;
+
+private:
+    void updateFrameOutliersWithResult(const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k);
+
+private:
+    OpticalFlowAndPoseOptimizerParams params_;
+
+};
+
+struct MotionOnlyRefinementOptimizerParams {
+    double landmark_motion_sigma{0.001};
+    double projection_sigma{2.0};
+    double k_huber{0.0001};
+};
+
+class MotionOnlyRefinementOptimizer {
+
+public:
+    MotionOnlyRefinementOptimizer(const MotionOnlyRefinementOptimizerParams& params) : params_(params) {}
+
+    // template<typename CALIBRATION>
+    // Pose3SolverResult optimize(
+    //     const Frame::Ptr frame_k_1,
+    //     const Frame::Ptr frame_k,
+    //     const TrackletIds& tracklets,
+    //     const ObjectId object_id,
+    //     const gtsam::Pose3& initial_motion,
+    //     const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
+
+    // template<typename CALIBRATION>
+    // Pose3SolverResult optimizeAndUpdate(
+    //     Frame::Ptr frame_k_1,
+    //     Frame::Ptr frame_k,
+    //     const TrackletIds& tracklets,
+    //     const ObjectId object_id
+    //     const gtsam::Pose3& initial_motion,
+    //     const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
+
+private:
+    MotionOnlyRefinementOptimizerParams params_;
+
+};
+
 
 
 //TODO: eventually when we have a map, should we look up these values from there (the optimized versions, not the tracked ones?)
@@ -199,6 +339,7 @@ public:
                             const PointCloudCorrespondences& correspondences,
                             std::optional<gtsam::Rot3> R_curr_ref = {});
 
+
     //TODO: refactor API using the result struct
     void refineJointPoseOpticalFlow(
         Pose3SolverResult& solver_result,
@@ -208,6 +349,38 @@ public:
         gtsam::Point2Vector& refined_flows,
         TrackletIds& inliers //inlier set from the inliers in result
     );
+
+    // /**
+    //  * @brief Joinly refines optical flow with with the given pose
+    //  * using the error term:
+    //  * e = [u,v]_{k_1} + f_{k-1, k} - \pi(X^{-1} \: m_k)
+    //  * where f is flow, [u,v]_{k-1} is the observed keypoint at k-1, X is the pose
+    //  * and m_k is the back-projected keypoint at k.
+    //  *
+    //  * The parsed tracklets are the set of correspondances with which to build the optimisation problem
+    //  * and the refined inliers will be a subset of these tracklets. THe number of refined flows
+    //  * should be the number of refined inliers and be a 1-to-1 match
+    //  *
+    //  *
+    //  * @param frame_k_1
+    //  * @param frame_k
+    //  * @param tracklets
+    //  * @param initial_pose
+    //  * @param refined_pose
+    //  * @param refined_flows
+    //  * @param refined_inliers
+    //  * @param refined_outliers
+    //  */
+    // static void jointRefinePoseOpticalFlow(
+    //     const Frame::Ptr frame_k_1,
+    //     const Frame::Ptr frame_k,
+    //     const TrackletIds& tracklets,
+    //     const gtsam::Pose3& initial_pose,
+    //     gtsam::Pose3& refined_pose,
+    //     gtsam::Point2Vector& refined_flows,
+    //     TrackletIds& refined_inliers,
+    //     TrackletIds* refined_outliers = nullptr;
+    // );
 
 
 
@@ -285,3 +458,6 @@ protected:
 
 
 } //dyno
+
+
+#include "dynosam/frontend/vision/MotionSolver-inl.hpp"

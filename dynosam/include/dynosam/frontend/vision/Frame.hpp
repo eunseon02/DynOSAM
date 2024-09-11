@@ -75,6 +75,7 @@ public:
 
     inline FrameId getFrameId() const { return frame_id_; }
     inline Timestamp getTimestamp() const { return timestamp_; }
+    inline const Camera::Ptr& getCamera() const { return camera_; }
 
     /**
      * @brief Returns the pose of the sensor at this frame w.r.t the world frame

@@ -34,6 +34,8 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/ImageContainer.hpp"
 
+#include "dynosam/visualizer/ColourMap.hpp"
+
 #include <Eigen/Dense>
 
 #include <glog/logging.h>
@@ -166,7 +168,7 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 
 
 // #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
-// #include "dynosam/dataprovider/OMDDataProvider.hpp"
+#include "dynosam/dataprovider/OMDDataProvider.hpp"
 
 // int main(int argc, char* argv[]) {
 
@@ -230,11 +232,13 @@ int main(int argc, char* argv[]) {
     FLAGS_log_prefix = 1;
 
     KittiDataLoader::Params params;
-    KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0004/", params);
+    KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+    // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
 
     auto camera = std::make_shared<Camera>(*loader.getCameraParams());
     auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
 
+    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, GroundTruthInputPacket) -> bool {
     loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
 
         LOG(INFO) << frame_id << " " << timestamp;
@@ -253,23 +257,43 @@ int main(int argc, char* argv[]) {
                     ImageWrapper<ImageType::MotionMask>(motion));
 
 
+        // cv::Mat boarder_mask;
+        // vision_tools::computeObjectMaskBoundaryMask(
+        //     motion,
+        //     boarder_mask,
+        //     8
+        // );
 
+        // cv::Scalar red = dyno::Color::red();
 
-        cv::imshow("RGB", rgb);
-        cv::imshow("OF", of_viz);
+        // const ObjectIds instance_labels = vision_tools::getObjectLabels(motion);
+        // for(const auto object_id : instance_labels) {
+        //     std::vector<std::vector<cv::Point>> detected_contours;
+        //     vision_tools::findObjectBoundingBox(motion, object_id,detected_contours);
+
+        //     cv::drawContours(boarder_mask, detected_contours, -1, red, 8);
+        // }
+
+        // cv::imshow("Mask with boarder", boarder_mask);
+
+        // cv::imshow("RGB", rgb);
+        // cv::imshow("OF", of_viz);
         cv::imshow("Motion", motion_viz);
-        cv::imshow("Depth", depth_viz);
+        // cv::imshow("Depth", depth_viz);
 
-        auto frame = tracker->track(frame_id, timestamp, *container);
-        Frame::Ptr previous_frame = tracker->getPreviousFrame();
+        // auto frame = tracker->track(frame_id, timestamp, *container);
+        // Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
-        cv::Mat tracking;
-        if(previous_frame) {
-            tracking = tracker->computeImageTracks(*previous_frame, *frame, true);
+        // // motion_viz = ImageType::MotionMask::toRGB(frame->image_container_.get<ImageType::MotionMask>());
+        // // // cv::imshow("Motion", motion_viz);
 
-        }
-        if(!tracking.empty())
-            cv::imshow("Tracking", tracking);
+        // cv::Mat tracking;
+        // if(previous_frame) {
+        //     tracking = tracker->computeImageTracks(*previous_frame, *frame, false);
+
+        // }
+        // if(!tracking.empty())
+        //     cv::imshow("Tracking", tracking);
 
 
         const std::string path = "/root/results/misc/";
@@ -279,7 +303,7 @@ int main(int argc, char* argv[]) {
             // cv::imwrite(path + "kitti_0004_of.png", of_viz);
             // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
             // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
-            cv::imwrite(path + "kitti_0004_tracking.png", tracking);
+            // cv::imwrite(path + "kitti_0004_tracking.png", tracking);
 
 
 

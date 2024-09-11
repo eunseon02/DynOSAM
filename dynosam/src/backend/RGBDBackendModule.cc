@@ -42,6 +42,9 @@
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 
+// #include <gtsam/nonlinear/GncOptimizer.h>
+// #include <gtsam/nonlinear/GncParams.h>
+
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
