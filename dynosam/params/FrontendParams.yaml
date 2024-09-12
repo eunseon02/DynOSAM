@@ -1,7 +1,7 @@
 %YAML:1.0
 
 # max_nr_static_points: 800
-max_nr_static_points: 1200 #using the KLT tracking this is the same as max_features_per_frame_
+max_nr_static_points: 800 #using the KLT tracking this is the same as max_features_per_frame_
 max_nr_object_points: 800
 # cell_size: 15 #kitti
 cell_size_static: 10

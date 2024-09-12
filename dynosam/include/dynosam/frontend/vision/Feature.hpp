@@ -108,20 +108,20 @@ public:
     //should have metadata stored as substruct so we can just call copy over the data
     //and not the mutex
     //will requre refactoring all the fields to be setters/getters which they should be anyway
-    Feature(const Feature& other) {
-        std::lock_guard<std::mutex> lk(other.mutex_);
-        keypoint_ = other.keypoint_;
-        measured_flow_ = other.measured_flow_;
-        predicted_keypoint_ = other.predicted_keypoint_;
-        age_ = other.age_;
-        type_ = other.type_;
-        tracklet_id_ = other.tracklet_id_;
-        frame_id_ = other.frame_id_;
-        inlier_ = other.inlier_;
-        instance_label_ = other.instance_label_;
-        tracking_label_ = other.tracking_label_;
-        depth_ = other.depth_;
-    }
+    // Feature(const Feature& other) {
+    //     std::lock_guard<std::mutex> lk(other.mutex_);
+    //     keypoint_ = other.keypoint_;
+    //     measured_flow_ = other.measured_flow_;
+    //     predicted_keypoint_ = other.predicted_keypoint_;
+    //     age_ = other.age_;
+    //     type_ = other.type_;
+    //     tracklet_id_ = other.tracklet_id_;
+    //     frame_id_ = other.frame_id_;
+    //     inlier_ = other.inlier_;
+    //     instance_label_ = other.instance_label_;
+    //     tracking_label_ = other.tracking_label_;
+    //     depth_ = other.depth_;
+    // }
 
 
     bool operator==(const Feature& other) const {
@@ -151,7 +151,7 @@ public:
      * @param measured_flow
      */
     void setPredictedKeypoint(const OpticalFlow& measured_flow) {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         measured_flow_ = measured_flow;
         predicted_keypoint_ = CalculatePredictedKeypoint(keypoint_, measured_flow_);
     }
@@ -167,32 +167,32 @@ public:
      * @return false
      */
     inline bool usable() const {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         return inlier_ && tracklet_id_ != invalid_id;
     }
 
     inline bool isStatic() const {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         return type_ == KeyPointType::STATIC;
     }
 
     void markOutlier() {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         inlier_ = false;
     }
 
     void markInlier() {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         inlier_ = true;
     }
 
     inline void markInvalid() {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         tracklet_id_ = invalid_id;
     }
 
     inline bool hasDepth() const {
-        std::lock_guard<std::mutex> lk(mutex_);
+        // std::lock_guard<std::mutex> lk(mutex_);
         return !std::isnan(depth_);
     }
 
@@ -205,7 +205,7 @@ public:
     }
 
 private:
-    mutable std::mutex mutex_;
+    // mutable std::mutex mutex_;
 
 };
 

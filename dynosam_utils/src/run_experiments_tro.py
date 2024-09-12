@@ -78,6 +78,7 @@ def prep_kitti_sequence(path, name, *args):
     args_list = list(args)
     args_list.append("--shrink_row=25")
     args_list.append("--shrink_col=50")
+    args_list.append("--use_propogate_mask=true")
     prep_dataset(path, name, kitti_dataset, *args_list)
 
 def run_kitti_sequence(path, name, backend_type, *args):
@@ -195,11 +196,11 @@ if __name__ == '__main__':
     #     "kitti_0005"
     # )
 
-    prep_kitti_sequence(
-        "/root/data/vdo_slam/kitti/kitti/0000/",
-        "kitti_0000",
-        "--v=20"
-    )
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     "--v=20"
+    # )
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0003/",
@@ -284,11 +285,11 @@ if __name__ == '__main__':
     #     "--use_full_batch_opt=false"
     # )
 
-    # run_both_backend(
-    #     run_kitti_sequence,
-    #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000",
-    # )
+    run_both_backend(
+        run_kitti_sequence,
+        "/root/data/vdo_slam/kitti/kitti/0000/",
+        "kitti_0000",
+    )
 
     # run_both_backend(
     #     run_kitti_sequence,

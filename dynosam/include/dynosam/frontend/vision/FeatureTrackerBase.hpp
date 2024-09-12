@@ -42,7 +42,7 @@ public:
 
     static TrackletIdManager& instance() {
         if (!instance_) {
-        instance_.reset(new TrackletIdManager());
+            instance_.reset(new TrackletIdManager());
         }
         return *instance_;
     }

@@ -279,6 +279,7 @@ int main(int argc, char* argv[]) {
         // cv::imshow("RGB", rgb);
         // cv::imshow("OF", of_viz);
         cv::imshow("Motion", motion_viz);
+        cv::waitKey(1);
         // cv::imshow("Depth", depth_viz);
 
         // auto frame = tracker->track(frame_id, timestamp, *container);
@@ -297,18 +298,18 @@ int main(int argc, char* argv[]) {
 
 
         const std::string path = "/root/results/misc/";
-        if ((char)cv::waitKey(0) == 's') {
-            LOG(INFO) << "Saving...";
-            // cv::imwrite(path + "kitti_0004_rgb.png", rgb);
-            // cv::imwrite(path + "kitti_0004_of.png", of_viz);
-            // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
-            // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
-            // cv::imwrite(path + "kitti_0004_tracking.png", tracking);
+        // if ((char)cv::waitKey(0) == 's') {
+        //     LOG(INFO) << "Saving...";
+        //     // cv::imwrite(path + "kitti_0004_rgb.png", rgb);
+        //     // cv::imwrite(path + "kitti_0004_of.png", of_viz);
+        //     // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
+        //     // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
+        //     // cv::imwrite(path + "kitti_0004_tracking.png", tracking);
 
 
 
 
-        }
+        // }
 
 
 

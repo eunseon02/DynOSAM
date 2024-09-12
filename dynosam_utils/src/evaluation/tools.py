@@ -208,6 +208,18 @@ class TrajectoryHelper:
         self.min_y = np.inf
         self.min_z = np.inf
 
+    @property
+    def x_limits(self):
+        return [self.min_x, self.max_x]
+
+    @property
+    def y_limits(self):
+        return [self.min_y, self.max_y]
+
+    @property
+    def z_limits(self):
+        return [self.min_z, self.max_z]
+
     def append(self, trajectories: typing.Union[
             evo_trajectory.PosePath3D, typing.Sequence[evo_trajectory.PosePath3D],
             typing.Dict[str, evo_trajectory.PosePath3D]]):
@@ -474,10 +486,11 @@ def plot_object_trajectories(
             color = next(cmap_colors)
 
         if shift_color:
+            shift_color = float(shift_color)
             import colorsys
             hsv_color = colorsys.rgb_to_hsv(color[0], color[1], color[1])
             # shift slightly
-            h = hsv_color[0] + 0.1
+            h = hsv_color[0] + shift_color
             color = colorsys.hsv_to_rgb(h, hsv_color[1], hsv_color[2])
 
         if evo_plot.SETTINGS.plot_usetex:
@@ -498,8 +511,8 @@ def plot_object_trajectories(
             for name, t in traj.items():
                 # if dictionary, we alrady know the name we prepend with object
                 # TODO: for now a hack ;)
-                if str(name).lower() != "camera":
-                    name = "object " + str(name)
+                # if str(name).lower() != "camera":
+                #     name = "object " + str(name)
 
                 if "name_prefix" in kwargs:
                     name = kwargs.get("name_prefix") + " " + name
@@ -536,14 +549,26 @@ def plot_object_trajectories(
                 kwargs.get("axis_marker_scale", 0.1))
 
     # draw trajectories
-    draw(obj_trajectories, style='-')
+    draw(
+        obj_trajectories,
+        style=kwargs.get("est_style", '-'),
+        shift_color=kwargs.get("shift_est_colour", None),
+        name_prefix=kwargs.get("est_name_prefix", ""))
     if plot_axis_est:
         plot_coordinate_axis(obj_trajectories)
 
     # reset colours
     color_palette = itertools.cycle(sns.color_palette())
+    if provided_colours:
+        provided_colours = itertools.cycle(provided_colours)
+
+
     if obj_trajectories_ref is not None:
-        draw(obj_trajectories_ref, style='+', alpha=0.8, shift_color=False, name_prefix="Ground Truth")
+        draw(
+            obj_trajectories_ref,
+            style='--', alpha=0.8,
+            shift_color=kwargs.get("shift_ref_colour", None),
+            name_prefix=kwargs.get("ref_name_prefix", ""))
         if plot_axis_ref:
             plot_coordinate_axis(obj_trajectories_ref)
     return ax

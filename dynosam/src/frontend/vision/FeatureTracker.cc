@@ -82,7 +82,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
 
     //TODO: figure out some better way of scaling this as it scales with the size of the image...
     //TODO: and make parameter...
-    static constexpr auto kDetectionBoaderThickness = 20;
+    static constexpr auto kDetectionBoaderThickness = 20; //in pixels
     //create detection mask around the boarder of each dynamic object with some thickness
     //this prevents static and dynamic points being detected around the edge of the dynamic object
     //as there are lots of inconsistencies here
@@ -131,7 +131,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
 
 }
 
-
+//doesnt make any sense for this function to be here?
+//Debug could be part of a global config singleton?
 cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug) const {
   cv::Mat img_rgb;
 
@@ -148,6 +149,7 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   constexpr static int kFeatureThickness = 4;
   int static_point_thickness = debug ? kFeatureThicknessDebug : kFeatureThickness;
 
+  int num_static_tracks = 0;
   // Add all keypoints in cur_frame with the tracks.
   for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint_;
@@ -165,6 +167,8 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
           // draw the optical flow arrow
         const auto pc_prev = utils::gtsamPointToCv(prev_feature->keypoint_);
         cv::arrowedLine(img_rgb, pc_prev, pc_cur, green, 1);
+
+        num_static_tracks++;
 
       } else if(debug) {  // New feature tracks are blue.
         cv::circle(img_rgb, pc_cur, 6, blue, 1);
@@ -221,7 +225,9 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
     }
   }
 
-  for(auto& object_observation_pair : current_frame.object_observations_) {
+
+  std::vector<ObjectId> objects_to_print;
+  for(const auto& object_observation_pair : current_frame.object_observations_) {
       const ObjectId object_id = object_observation_pair.first;
       const cv::Rect& bb = object_observation_pair.second.bounding_box_;
 
@@ -229,6 +235,8 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
 
       if(bb.empty()) { continue; }
 
+
+      objects_to_print.push_back(object_id);
       const cv::Scalar colour = Color::uniqueId(object_id).bgra();
       const std::string label = "object " + std::to_string(object_id);
       utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
@@ -236,16 +244,41 @@ cv::Mat FeatureTracker::computeImageTracks(const Frame& previous_frame, const Fr
   }
 
   //draw text info
-  // std::stringstream ss;
-  // ss << "Frame: " << current_frame.getFrameId() << ", ";
+  std::stringstream ss;
+  ss << "Frame ID: " << current_frame.getFrameId() << " | ";
+  ss << "VO tracks: " << num_static_tracks << " | ";
+  ss << "Objects: ";
 
-  // auto optional_tracking_info = current_frame.getTrackingInfo();
-  // if(optional_tracking_info) {
-  //   ss  << "VO matches: " << optional_tracking_info->static_track_optical_flow
-  // }
+  if(objects_to_print.empty()) {
+    ss << "None";
+  }
+  else {
+    ss << "[";
+    for (size_t i = 0; i < objects_to_print.size(); ++i) {
+        ss << objects_to_print[i];
+        if (i != objects_to_print.size() - 1) {
+            ss << ", "; // Add comma between elements
+        }
+    }
+    ss << "]";
+  }
+
+  constexpr static double kFontScale = 0.6;
+  constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
+  constexpr static int kThickness = 1;
 
 
-  return img_rgb;
+  //taken from ORB-SLAM2 ;)
+  int base_line;
+  cv::Size text_size = cv::getTextSize(ss.str(),kFontFace, kFontScale, kThickness, &base_line);
+  cv::Mat image_text = cv::Mat(img_rgb.rows+text_size.height+10,img_rgb.cols,img_rgb.type());
+  img_rgb.copyTo(image_text.rowRange(0,img_rgb.rows).colRange(0,img_rgb.cols));
+  image_text.rowRange(img_rgb.rows,image_text.rows) = cv::Mat::zeros(text_size.height+10,img_rgb.cols,img_rgb.type());
+  cv::putText(image_text, ss.str(), cv::Point(5,image_text.rows-5), kFontFace, kFontScale, cv::Scalar(255, 255, 255), kThickness);
+
+
+
+  return image_text;
 
 }
 
@@ -258,6 +291,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
   //flow is going to take us from THIS frame to the next frame (which does not make sense for a realtime system)
   const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
   const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
@@ -486,11 +520,12 @@ void FeatureTracker::propogateMask(ImageContainer& image_container) {
       }
     }
 
-    if (temp_label.size() < 150)
+    //this is a lovely magic number inherited from some old code :)
+    if (temp_label.size() < 30)
     {
       LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
-      //TODO:mark has static!!
+      //TODO:mark has static!!???
       continue;
     }
 

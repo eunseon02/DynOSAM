@@ -10,6 +10,16 @@ from cycler import cycler
 
 import math
 
+nice_colours={
+    "black": [0, 0, 0],
+    "orange": [230, 159, 0],
+    "sky_blue": [86, 180, 233],
+    "bluish_green": [0, 158, 115],
+    "yellow": [240, 228, 66],
+    "blue": [0, 114, 178],
+    "vermillion": [213, 94, 0],
+    "reddish_purple": [204, 121, 167]}
+
 # Nic Barbara
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
