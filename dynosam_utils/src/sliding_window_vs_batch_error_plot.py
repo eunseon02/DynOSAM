@@ -216,7 +216,7 @@ trans_fig.supxlabel("Frame Index [-]", fontsize=27)
 rot_fig.tight_layout(pad=0.5)
 trans_fig.tight_layout(pad=0.5)
 
-# plt.show()
+plt.show()
 
-rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
-trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")
+# rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
+# trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")

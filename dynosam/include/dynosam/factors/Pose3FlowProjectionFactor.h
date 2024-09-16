@@ -74,8 +74,14 @@ public:
 
         auto I = gtsam::traits<gtsam::Pose3>::Identity();
         gtsam::PinholeCamera<Calibration> previous_camera(I, calibration_);
+
+        const double fx = calibration_.fx();
+        const double fy = calibration_.fy();
+        const double cx = calibration_.px();
+        const double cy = calibration_.py();
         //project the ref keypoint into the world frame given the camera at k-1
         gtsam::Point3 P_W = pose_previous_ * previous_camera.backproject(keypoint_previous_, depth_);
+
         //camera at k using the same calibration
         gtsam::PinholeCamera<Calibration> camera_current(I, calibration_);
 
@@ -97,9 +103,6 @@ public:
                 const double y = P_curr(1);
                 const double z = P_curr(2);
                 const double z_2 = z*z;
-
-                const double fx = calibration_.fx();
-                const double fy = calibration_.fy();
 
                 gtsam::Matrix26 H;
                 H(0,0) =  x*y/z_2 *fx;
