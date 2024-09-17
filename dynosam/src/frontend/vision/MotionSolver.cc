@@ -531,14 +531,7 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
     const size_t& n_matches = dynamic_correspondences.size();
 
     Pose3SolverResult geometric_result = EgoMotionSolver::geometricOutlierRejection3d2d(dynamic_correspondences);
-
     Pose3SolverResult result = geometric_result;
-    TrackletIds refined_inlier_tracklets = result.inliers;
-
-    //construct all tracklets (TODO: why do we not get this from the getDynamicCorrespondences?)
-    TrackletIds all_tracklets = refined_inlier_tracklets;
-    all_tracklets.insert(all_tracklets.end(), result.outliers.begin(), result.outliers.end());
-    CHECK_EQ(all_tracklets.size(), n_matches);
 
 
     // if(geometric_result.status == TrackingStatus::VALID && motion_model_result.status == TrackingStatus::VALID) {
@@ -557,6 +550,12 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
     // }
 
     if(result.status == TrackingStatus::VALID) {
+        TrackletIds refined_inlier_tracklets = result.inliers;
+        //construct all tracklets (TODO: why do we not get this from the getDynamicCorrespondences?)
+        TrackletIds all_tracklets = refined_inlier_tracklets;
+        all_tracklets.insert(all_tracklets.end(), result.outliers.begin(), result.outliers.end());
+        CHECK_EQ(all_tracklets.size(), n_matches);
+
 
         gtsam::Pose3 G_w = result.best_result.inverse();
         if(FLAGS_refine_with_optical_flow) {
