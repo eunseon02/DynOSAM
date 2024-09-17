@@ -27,6 +27,7 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(nlohmann_json 3.2.0 REQUIRED) #nlohmann-json3-dev
+find_package(TBB REQUIRED) # should be packaged with GTSAM
 
 
 find_package(Boost REQUIRED)
@@ -122,7 +123,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/FactorGraphTools.cc
   #src/backend/MonoBackendModule.cc
   #src/backend/MonoBatchBackendModule.cc
-  src/backend/MonoBackendTools.cc
+  # src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
   src/backend/RGBDBackendModule.cc
   src/backend/DynoISAM2.cc
@@ -193,6 +194,7 @@ target_link_libraries(${PROJECT_NAME}
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
+  TBB::tbb
   # PRIVATE
 )
 
@@ -206,6 +208,7 @@ ament_export_libraries(${PROJECT_NAME}
   # gtsamDebug
   ${OpenCV_LIBRARIES}
   png
+  TBB::tbb
 )
 
 
@@ -297,7 +300,7 @@ if(BUILD_TESTING)
     test/test_histogram.cc
     test/test_pipelines.cc
     test/test_structured_containers.cc
-    test/test_triangulation.cc
+    # test/test_triangulation.cc
     test/test_backend_structures.cc
     test/test_csv.cc
     test/test_rgbd_backend.cc

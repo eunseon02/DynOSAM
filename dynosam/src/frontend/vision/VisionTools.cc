@@ -43,8 +43,8 @@ void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterat
 
   for(const auto& curr_feature : current_features) {
     //check if previous feature and is valid
-    if(previous_feature_container.exists(curr_feature->tracklet_id_)) {
-      const auto prev_feature = previous_feature_container.getByTrackletId(curr_feature->tracklet_id_);
+    if(previous_feature_container.exists(curr_feature->trackletId())) {
+      const auto prev_feature = previous_feature_container.getByTrackletId(curr_feature->trackletId());
       CHECK(prev_feature);
 
       //having checked that feature is in the previous set, also check that it ahderes to the filter
@@ -205,7 +205,7 @@ object_observation.marked_as_moving_ = true;
         //TODO: inliers outliers!@!
 
         Feature::Ptr previous_feature = previous_dynamic_feature_container.getByTrackletId(tracklet_id);
-        instance_labels_prev.push_back(previous_feature->instance_label_);
+        instance_labels_prev.push_back(previous_feature->objectId());
       }
     }
 
@@ -410,7 +410,7 @@ gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Pt
       const Feature::Ptr feature = frame->at(tracklet_id);
       CHECK(feature);
       if(feature->usable()) {
-        hist.histogram_(feature->age_);
+        hist.histogram_(feature->age());
       }
     }
 
@@ -421,7 +421,7 @@ gtsam::FastMap<ObjectId, Histogram> makeTrackletLengthHistorgram(const Frame::Pt
   Histogram static_hist(bh::make_histogram(bh::axis::variable<>(bins)));
   static_hist.name_ = "tacklet-length-0";
   for(const auto& static_feature : frame->static_features_.beginUsable()) {
-    static_hist.histogram_(static_feature->age_);
+    static_hist.histogram_(static_feature->age());
   }
   histograms.insert2(background_label, static_hist);
   return histograms;

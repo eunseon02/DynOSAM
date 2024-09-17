@@ -30,6 +30,7 @@
 #include "dynosam/logger/Logger.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>
+#include <tbb/tbb.h>
 #include <glog/logging.h>
 
 #include "dynosam/common/Flags.hpp" //for common flags
@@ -177,22 +178,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
 
     MotionEstimateMap motion_estimates;
-    ObjectIds failed_object_tracks;
-    for(const auto& [object_id, observations] : frame->object_observations_) {
-
-        if(!solveObjectMotion(frame, previous_frame, object_id, motion_estimates)) {
-            VLOG(5) << "Could not solve motion for object " << object_id <<
-                " from frame " << previous_frame->frame_id_ << " -> " << frame->frame_id_;
-            failed_object_tracks.push_back(object_id);
-        }
-    }
-
-    ///remove objects from the object observations list
-    //does not remove the features etc but stops the object being propogated to the backend
-    //as we loop over the object observations in the constructOutput function
-    for(auto object_id : failed_object_tracks) {
-        frame->object_observations_.erase(object_id);
-    }
+    solveObjectMotions(frame, previous_frame, motion_estimates);
 
     //update the object_poses trajectory map which will be send to the viz
     propogateObjectPoses(motion_estimates, frame->getFrameId());
@@ -266,86 +252,21 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
     if(result.status == TrackingStatus::VALID) {
 
         frame_k->T_world_camera_ = result.best_result;
-
-        if(FLAGS_refine_with_optical_flow) {
-            gtsam::Pose3 refined_pose;
-            gtsam::Point2Vector refined_flows;
-            TrackletIds refined_inliers;
-            motion_solver_.refineJointPoseOpticalFlow(
-                result,
-                frame_k_1,
-                frame_k,
-                refined_pose,
-                refined_flows,
-                refined_inliers
-            );
-
-            // //original flow image that goes from k to k+1 (gross, im sorry!)
-            const cv::Mat flow_image = frame_k->image_container_.get<ImageType::OpticalFlow>();
-            const cv::Mat& motion_mask = frame_k->image_container_.get<ImageType::MotionMask>();
-
-            auto camera = frame_k->camera_;
-
-            //HACK: internally just mark as outlier if it is so!!
-            //update flow and depth
-            for(size_t i = 0; i < refined_inliers.size(); i++) {
-                TrackletId tracklet_id = refined_inliers.at(i);
-                gtsam::Point2 refined_flow = refined_flows.at(i);
-
-                const Feature::Ptr feature_k_1 = frame_k_1->at(tracklet_id);
-                Feature::Ptr feature_k = frame_k->at(tracklet_id);
-
-                CHECK_EQ(feature_k->instance_label_, background_label);
-
-                const Keypoint kp_k_1 = feature_k_1->keypoint_;
-                Keypoint refined_keypoint = kp_k_1 + refined_flow;
-
-                //check boundaries?
-                if(!camera->isKeypointContained(refined_keypoint)) {
-                    feature_k->inlier_ = false;
-                    continue;
-                }
-
-                //update keypoint!!
-                feature_k->keypoint_ = refined_keypoint;
-                ObjectId predicted_label = functional_keypoint::at<ObjectId>(refined_keypoint, motion_mask);
-                if(predicted_label != background_label) {
-                    feature_k->inlier_ = false;
-                    //TODO: other fields of the feature does not get updated? Inconsistencies as measured flow, predicted kp
-                    //etc are no longer correct!!?
-                    continue;
-                }
-
-                //we now have to update the prediced keypoint using the original flow!!
-                //TODO: code copied from feature tracker
-                const int x = functional_keypoint::u(refined_keypoint);
-                const int y = functional_keypoint::v(refined_keypoint);
-                double flow_xe = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[0]);
-                double flow_ye = static_cast<double>(flow_image.at<cv::Vec2f>(y, x)[1]);
-                //the measured flow after the origin has been updated
-                OpticalFlow new_measured_flow(flow_xe, flow_ye);
-                feature_k->measured_flow_ = new_measured_flow;
-                // TODO: check predicted flow is within image
-                Keypoint predicted_kp = Feature::CalculatePredictedKeypoint(refined_keypoint, new_measured_flow);
-                feature_k->predicted_keypoint_ = predicted_kp;
-
-
-                //woudl need to update the measured flow in frame_k_1 since, right now, flow is k-1 to k
-                //TODO:update depth
-            }
-
-            frame_k->T_world_camera_ = refined_pose;
-
-        }
         TrackletIds tracklets = frame_k->static_features_.collectTracklets();
         CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
-        frame_k->static_features_.markOutliers(result.outliers); //do we need to mark innliers? Should start as inliers
+        frame_k->static_features_.markOutliers(result.outliers);
 
-        // update depths after fetures marked as outliers?
-        auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-        frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+        if(FLAGS_refine_with_optical_flow) {
+            OpticalFlowAndPoseOptimizer flow_optimizer(OpticalFlowAndPoseOptimizerParams{});
+            auto flow_opt_result = flow_optimizer.optimizeAndUpdate<CalibrationType>(
+                frame_k_1,
+                frame_k,
+                result.inliers,
+                result.best_result
+            );
+            frame_k->T_world_camera_ = flow_opt_result.best_result.refined_pose;
 
-
+        }
         return true;
     }
     else {
@@ -355,7 +276,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
 
 }
 
-bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
+bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,  ObjectId object_id, MotionEstimateMap& motion_estimates) {
 
     Pose3SolverResult result;
     if(base_params_.use_object_motion_pnp) {
@@ -377,14 +298,6 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
     //if valid, remove outliers and add to motion estimation
     if(result.status == TrackingStatus::VALID) {
         frame_k->dynamic_features_.markOutliers(result.outliers);
-
-         //TODO: we update depths here becuase in the geometricOutlierRejection3d2d the optical flow opt will move the
-//         //keypoints and so we need to upadte the z values
-//         //TODO: should not be separate from the optimisation so refactor API!!!
-        // auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-        // frame_k->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
-
-
         ReferenceFrameValue<Motion3> estimate(result.best_result, ReferenceFrame::GLOBAL);
         motion_estimates.insert({object_id, estimate});
         return true;
@@ -393,6 +306,47 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(Frame::Ptr frame_k, const Fra
         return false;
     }
 }
+
+void RGBDInstanceFrontendModule::solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1, MotionEstimateMap& motion_estimates) {
+    ObjectIds failed_object_tracks;
+
+    //if only 1 object, no point parallelising
+    if(motion_estimates.size() <= 1) {
+        for(const auto& [object_id, observations] : frame_k->object_observations_) {
+
+            if(!solveObjectMotion(frame_k, frame_k_1, object_id, motion_estimates)) {
+                VLOG(5) << "Could not solve motion for object " << object_id <<
+                    " from frame " << frame_k_1->getFrameId() << " -> " << frame_k->getFrameId();
+                failed_object_tracks.push_back(object_id);
+            }
+        }
+    }
+    else {
+        std::mutex mutex;
+        //paralleilise the process of each function call.
+        tbb::parallel_for_each(frame_k->object_observations_.begin(), frame_k->object_observations_.end(),
+            [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) {
+                const auto object_id = pair.first;
+                if(!solveObjectMotion(frame_k, frame_k_1, object_id, motion_estimates)) {
+                    VLOG(5) << "Could not solve motion for object " << object_id <<
+                        " from frame " << frame_k_1->getFrameId() << " -> " << frame_k->getFrameId();
+
+                    std::lock_guard<std::mutex> lk(mutex);
+                    failed_object_tracks.push_back(object_id);
+                }
+            }
+        );
+    }
+
+    ///remove objects from the object observations list
+    //does not remove the features etc but stops the object being propogated to the backend
+    //as we loop over the object observations in the constructOutput function
+    for(auto object_id : failed_object_tracks) {
+        frame_k->object_observations_.erase(object_id);
+    }
+
+}
+
 
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
@@ -405,15 +359,15 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     StatusKeypointMeasurements static_keypoint_measurements;
     StatusLandmarkEstimates static_landmarks;
     for(const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
-        const TrackletId tracklet_id = f->tracklet_id_;
-        const Keypoint kp = f->keypoint_;
+        const TrackletId tracklet_id = f->trackletId();
+        const Keypoint kp = f->keypoint();
         Landmark lmk_camera;
-        camera_->backProject(kp, f->depth_, &lmk_camera);
+        camera_->backProject(kp, f->depth(), &lmk_camera);
         CHECK(f->isStatic());
         CHECK(Feature::IsUsable(f));
 
         //dont include features that have only been seen once as we havent had a chance to validate it yet
-        if(f->age_ < 1) {
+        if(f->age() < 1) {
             continue;
         }
 
@@ -421,7 +375,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         static_keypoint_measurements.push_back(
             KeypointStatus::Static(
                 kp,
-                frame.frame_id_,
+                frame.getFrameId(),
                 tracklet_id
             )
         );
@@ -429,7 +383,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         static_landmarks.push_back(
             LandmarkStatus::StaticInLocal(
                 lmk_camera,
-                frame.frame_id_,
+                frame.getFrameId(),
                 tracklet_id,
                 LandmarkStatus::Method::MEASURED
             )
@@ -448,17 +402,17 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
             if(frame.isFeatureUsable(tracklet)) {
                 const Feature::Ptr f = frame.at(tracklet);
                 CHECK(!f->isStatic());
-                CHECK_EQ(f->instance_label_, object_id);
+                CHECK_EQ(f->objectId(), object_id);
 
                 //dont include features that have only been seen once as we havent had a chance to validate it yet
-                if(f->age_ < 1) {
+                if(f->age() < 1) {
                     continue;
                 }
 
-                const TrackletId tracklet_id = f->tracklet_id_;
-                const Keypoint kp = f->keypoint_;
+                const TrackletId tracklet_id = f->trackletId();
+                const Keypoint kp = f->keypoint();
                 Landmark lmk_camera;
-                camera_->backProject(kp, f->depth_, &lmk_camera);
+                camera_->backProject(kp, f->depth(), &lmk_camera);
 
                 dynamic_keypoint_measurements.push_back(
                     KeypointStatus::Dynamic(
@@ -584,18 +538,18 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(const MotionEstimateMap& m
         auto object_points = FeatureFilterIterator(
             const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
             [object_id, &frame_k](const Feature::Ptr& f) -> bool {
-                return Feature::IsUsable(f) && f->instance_label_ == object_id &&
-                    frame_k->exists(f->tracklet_id_) && frame_k->isFeatureUsable(f->tracklet_id_);
+                return Feature::IsUsable(f) && f->objectId() == object_id &&
+                    frame_k->exists(f->trackletId()) && frame_k->isFeatureUsable(f->trackletId());
             });
 
         gtsam::Point3 centroid_k_1(0, 0, 0);
         gtsam::Point3 centroid_k(0, 0, 0);
         size_t count = 0;
         for(const auto& feature : object_points) {
-            gtsam::Point3 lmk_k_1 = frame_k_1->backProjectToCamera(feature->tracklet_id_);
+            gtsam::Point3 lmk_k_1 = frame_k_1->backProjectToCamera(feature->trackletId());
             centroid_k_1 += lmk_k_1;
 
-            gtsam::Point3 lmk_k = frame_k->backProjectToCamera(feature->tracklet_id_);
+            gtsam::Point3 lmk_k = frame_k->backProjectToCamera(feature->trackletId());
             centroid_k += lmk_k;
 
             count++;

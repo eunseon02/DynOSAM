@@ -250,7 +250,7 @@ public:
         const gtsam::Pose3& initial_pose) const;
 
 private:
-    void updateFrameOutliersWithResult(const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k);
+    void updateFrameOutliersWithResult(const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k) const;
 
 private:
     OpticalFlowAndPoseOptimizerParams params_;
@@ -261,30 +261,32 @@ struct MotionOnlyRefinementOptimizerParams {
     double landmark_motion_sigma{0.001};
     double projection_sigma{2.0};
     double k_huber{0.0001};
+    bool outlier_reject{true};
 };
 
 class MotionOnlyRefinementOptimizer {
 
 public:
     MotionOnlyRefinementOptimizer(const MotionOnlyRefinementOptimizerParams& params) : params_(params) {}
+    enum RefinementSolver { ProjectionError, PointError };
 
-    // template<typename CALIBRATION>
-    // Pose3SolverResult optimize(
-    //     const Frame::Ptr frame_k_1,
-    //     const Frame::Ptr frame_k,
-    //     const TrackletIds& tracklets,
-    //     const ObjectId object_id,
-    //     const gtsam::Pose3& initial_motion,
-    //     const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
+    template<typename CALIBRATION>
+    Pose3SolverResult optimize(
+        const Frame::Ptr frame_k_1,
+        const Frame::Ptr frame_k,
+        const TrackletIds& tracklets,
+        const ObjectId object_id,
+        const gtsam::Pose3& initial_motion,
+        const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
 
-    // template<typename CALIBRATION>
-    // Pose3SolverResult optimizeAndUpdate(
-    //     Frame::Ptr frame_k_1,
-    //     Frame::Ptr frame_k,
-    //     const TrackletIds& tracklets,
-    //     const ObjectId object_id
-    //     const gtsam::Pose3& initial_motion,
-    //     const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
+    template<typename CALIBRATION>
+    Pose3SolverResult optimizeAndUpdate(
+        Frame::Ptr frame_k_1,
+        Frame::Ptr frame_k,
+        const TrackletIds& tracklets,
+        const ObjectId object_id,
+        const gtsam::Pose3& initial_motion,
+        const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
 
 private:
     MotionOnlyRefinementOptimizerParams params_;
@@ -340,15 +342,15 @@ public:
                             std::optional<gtsam::Rot3> R_curr_ref = {});
 
 
-    //TODO: refactor API using the result struct
-    void refineJointPoseOpticalFlow(
-        Pose3SolverResult& solver_result,
-        const Frame::Ptr frame_k_1,
-        const Frame::Ptr frame_k,
-        gtsam::Pose3& refined_pose,
-        gtsam::Point2Vector& refined_flows,
-        TrackletIds& inliers //inlier set from the inliers in result
-    );
+    // //TODO: refactor API using the result struct
+    // void refineJointPoseOpticalFlow(
+    //     Pose3SolverResult& solver_result,
+    //     const Frame::Ptr frame_k_1,
+    //     const Frame::Ptr frame_k,
+    //     gtsam::Pose3& refined_pose,
+    //     gtsam::Point2Vector& refined_flows,
+    //     TrackletIds& inliers //inlier set from the inliers in result
+    // );
 
     // /**
     //  * @brief Joinly refines optical flow with with the given pose
@@ -435,18 +437,18 @@ public:
                             ObjectId object_id);
 
 protected:
-    enum RefinementSolver { ProjectionError, PointError };
 
 
 
-    //assumes we have updated frames with latest pose (camera) and the result is from the geometricOutlierReject function
-    //only works with stereo
-    void refineLocalObjectMotionEstimate(
-                            Pose3SolverResult& solver_result,
-                            Frame::Ptr frame_k_1,
-                            Frame::Ptr frame_k,
-                            ObjectId object_id,
-                            const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
+
+    // //assumes we have updated frames with latest pose (camera) and the result is from the geometricOutlierReject function
+    // //only works with stereo
+    // void refineLocalObjectMotionEstimate(
+    //                         Pose3SolverResult& solver_result,
+    //                         Frame::Ptr frame_k_1,
+    //                         Frame::Ptr frame_k,
+    //                         ObjectId object_id,
+    //                         const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
 
 
 

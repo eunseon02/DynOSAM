@@ -77,66 +77,70 @@ public:
 
     constexpr static auto invalid_depth = NaN; //! nan is used to indicate the absense of a depth value (since we have double)
 
-    Keypoint keypoint_; //! u,v keypoint at this frame (frame_id)
-    OpticalFlow measured_flow_; //! Observed optical flow that. The predicted keypoint is calculated as keypoint + flow
-    Keypoint predicted_keypoint_; //from optical flow
-    size_t age_;
-    KeyPointType type_; //! starts STATIC
-    TrackletId tracklet_id_; //starts invalid
-    FrameId frame_id_;
-    bool inlier_; //! Starts as inlier
-    ObjectId instance_label_; //! instance label as provided by the input mask
-    ObjectId tracking_label_; //! object tracking label that should indicate the same tracked object between frames
+    Feature() : data_() {}
 
-    Depth depth_; //! Depth as provided by a depth image (not Z). Initalised as invalid_depth (NaN)
-
-    Feature() :
-        keypoint_(),
-        measured_flow_(),
-        predicted_keypoint_(),
-        age_(0u),
-        type_(KeyPointType::STATIC),
-        tracklet_id_(invalid_id),
-        frame_id_(0u),
-        inlier_(true),
-        instance_label_(invalid_id),
-        tracking_label_(invalid_id),
-        depth_(invalid_depth) {}
-
-    //copy construcor needed for mutex
-    //TODO: this is pretty gross
-    //should have metadata stored as substruct so we can just call copy over the data
-    //and not the mutex
-    //will requre refactoring all the fields to be setters/getters which they should be anyway
-    // Feature(const Feature& other) {
-    //     std::lock_guard<std::mutex> lk(other.mutex_);
-    //     keypoint_ = other.keypoint_;
-    //     measured_flow_ = other.measured_flow_;
-    //     predicted_keypoint_ = other.predicted_keypoint_;
-    //     age_ = other.age_;
-    //     type_ = other.type_;
-    //     tracklet_id_ = other.tracklet_id_;
-    //     frame_id_ = other.frame_id_;
-    //     inlier_ = other.inlier_;
-    //     instance_label_ = other.instance_label_;
-    //     tracking_label_ = other.tracking_label_;
-    //     depth_ = other.depth_;
-    // }
+    Feature(const Feature& other) {
+        //TODO: use both mutexs?
+        std::lock_guard<std::mutex> lk(other.mutex_);
+        data_ = other.data_;
+    }
 
 
     bool operator==(const Feature& other) const {
-        return gtsam::equal_with_abs_tol(keypoint_, other.keypoint_) &&
-               gtsam::equal_with_abs_tol(measured_flow_, other.measured_flow_) &&
-               gtsam::equal_with_abs_tol(predicted_keypoint_, other.predicted_keypoint_) &&
-               age_ == other.age_ &&
-               type_ == other.type_ &&
-               tracklet_id_ == other.tracklet_id_ &&
-               frame_id_ == other.frame_id_ &&
-               inlier_ == other.inlier_ &&
-               instance_label_ == other.instance_label_ &&
-               tracking_label_ == other.tracking_label_ &&
-               fpEqual(depth_, other.depth_);
+        return data_ == other.data_;
     }
+
+    Keypoint keypoint() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.keypoint;
+    }
+
+    OpticalFlow measuredFlow() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.measured_flow;
+    }
+
+    Keypoint predictedKeypoint() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.predicted_keypoint;
+    }
+
+    size_t age() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.age;
+    }
+
+    KeyPointType keypointType() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.type;
+    }
+
+    TrackletId trackletId() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.tracklet_id;
+    }
+
+    FrameId frameId() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.frame_id;
+    }
+
+    bool inlier() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.inlier;
+    }
+
+    //tracking label, j...
+    ObjectId objectId() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.tracking_label;
+    }
+
+    Depth depth() const {
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.depth;
+    }
+
 
     static Keypoint CalculatePredictedKeypoint(const Keypoint& keypoint, const OpticalFlow& measured_flow) {
         return keypoint + measured_flow;
@@ -151,9 +155,63 @@ public:
      * @param measured_flow
      */
     void setPredictedKeypoint(const OpticalFlow& measured_flow) {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        measured_flow_ = measured_flow;
-        predicted_keypoint_ = CalculatePredictedKeypoint(keypoint_, measured_flow_);
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.measured_flow = measured_flow;
+        data_.predicted_keypoint = CalculatePredictedKeypoint(data_.keypoint, measured_flow);
+    }
+
+    Feature& keypoint(const Keypoint& kp) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.keypoint = kp;
+        return *this;
+    }
+
+    Feature& measuredFlow(const OpticalFlow& measured_flow) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.measured_flow = measured_flow;
+        return *this;
+    }
+
+    Feature& predictedKeypoint(const Keypoint& predicted_kp) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.predicted_keypoint = predicted_kp;
+        return *this;
+    }
+
+    Feature& age(const size_t& a) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.age = a;
+        return *this;
+    }
+
+    Feature& keypointType(const KeyPointType& kp_type) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.type = kp_type;
+        return *this;
+    }
+
+    Feature& trackletId(const TrackletId& tracklet_id) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.tracklet_id = tracklet_id;
+        return *this;
+    }
+
+    Feature& frameId(const FrameId& frame_id) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.frame_id = frame_id;
+        return *this;
+    }
+
+    Feature& objectId(ObjectId id){
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.tracking_label = id;
+        return *this;
+    }
+
+    Feature& depth(Depth d){
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.depth = d;
+        return *this;
     }
 
 
@@ -167,33 +225,36 @@ public:
      * @return false
      */
     inline bool usable() const {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        return inlier_ && tracklet_id_ != invalid_id;
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.inlier && data_.tracklet_id != invalid_id;
     }
 
     inline bool isStatic() const {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        return type_ == KeyPointType::STATIC;
+        std::lock_guard<std::mutex> lk(mutex_);
+        return data_.type == KeyPointType::STATIC;
     }
 
-    void markOutlier() {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        inlier_ = false;
+    Feature& markOutlier() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.inlier = false;
+        return *this;
     }
 
-    void markInlier() {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        inlier_ = true;
+    Feature& markInlier() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.inlier = true;
+        return *this;
     }
 
-    inline void markInvalid() {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        tracklet_id_ = invalid_id;
+    Feature& markInvalid() {
+        std::lock_guard<std::mutex> lk(mutex_);
+        data_.tracklet_id = invalid_id;
+        return *this;
     }
 
     inline bool hasDepth() const {
-        // std::lock_guard<std::mutex> lk(mutex_);
-        return !std::isnan(depth_);
+        std::lock_guard<std::mutex> lk(mutex_);
+        return !std::isnan(data_.depth);
     }
 
     inline static bool IsUsable(const Feature::Ptr& f) {
@@ -205,7 +266,38 @@ public:
     }
 
 private:
-    // mutable std::mutex mutex_;
+    struct impl {
+        Keypoint keypoint; //! u,v keypoint at this frame (frame_id)
+        OpticalFlow measured_flow; //! Observed optical flow that. The predicted keypoint is calculated as keypoint + flow
+        Keypoint predicted_keypoint; //from optical flow
+        size_t age {0u};
+        KeyPointType type{KeyPointType::STATIC}; //! starts STATIC
+        TrackletId tracklet_id{invalid_id}; //starts invalid
+        FrameId frame_id{0u};
+        bool inlier{true}; //! Starts as inlier
+        ObjectId instance_label{invalid_id}; //! instance label as provided by the input mask
+        ObjectId tracking_label{invalid_id}; //! object tracking label that should indicate the same tracked object between frames
+        Depth depth{invalid_depth}; //! Depth as provided by a depth image (not Z). Initalised as invalid_depth (NaN)
+
+        bool operator==(const impl& other) const {
+            //TODO: lock?
+            return gtsam::equal_with_abs_tol(keypoint, other.keypoint) &&
+                gtsam::equal_with_abs_tol(measured_flow, other.measured_flow) &&
+                gtsam::equal_with_abs_tol(predicted_keypoint, other.predicted_keypoint) &&
+                age == other.age &&
+                type == other.type &&
+                tracklet_id == other.tracklet_id &&
+                frame_id == other.frame_id &&
+                inlier == other.inlier &&
+                instance_label == other.instance_label &&
+                tracking_label == other.tracking_label &&
+                fpEqual(depth, other.depth);
+        }
+
+    };
+
+    impl data_;
+    mutable std::mutex mutex_;
 
 };
 

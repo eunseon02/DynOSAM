@@ -49,9 +49,9 @@ bool Frame::getCorrespondences(
         CHECK(prev_feature);
         CHECK(curr_feature);
 
-        CHECK_EQ(prev_feature->tracklet_id_, curr_feature->tracklet_id_);
-        CHECK_EQ(prev_feature->frame_id_, previous_frame.frame_id_);
-        CHECK_EQ(curr_feature->frame_id_, frame_id_);
+        CHECK_EQ(prev_feature->trackletId(), curr_feature->trackletId());
+        CHECK_EQ(prev_feature->frameId(), previous_frame.getFrameId());
+        CHECK_EQ(curr_feature->frameId(), getFrameId());
 
         correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
     }
@@ -76,13 +76,13 @@ bool Frame::getDynamicCorrespondences(
         const Feature::Ptr& prev_feature = feature_pairs.first;
         const Feature::Ptr& curr_feature = feature_pairs.second;
 
-        CHECK_EQ(feature_pairs.first->instance_label_, object_id);
+        CHECK_EQ(feature_pairs.first->objectId(), object_id);
         CHECK(feature_pairs.first->usable());
 
-        CHECK_EQ(feature_pairs.second->instance_label_, object_id);
+        CHECK_EQ(feature_pairs.second->objectId(), object_id);
         CHECK(feature_pairs.second->usable());
 
-        CHECK_EQ(feature_pairs.second->tracklet_id_, feature_pairs.first->tracklet_id_);
+        CHECK_EQ(feature_pairs.second->trackletId(), feature_pairs.first->trackletId());
 
         correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
     }

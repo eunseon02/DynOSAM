@@ -41,8 +41,8 @@ void FeatureContainer::add(const Feature& feature) {
 }
 
 void FeatureContainer::add(Feature::Ptr feature) {
-    CHECK(!exists(feature->tracklet_id_)) << "Feailure in FeatureContainer::add - Tracklet Id " << feature->tracklet_id_ << " already exists";
-    feature_map_[feature->tracklet_id_] = feature;
+    CHECK(!exists(feature->trackletId())) << "Feailure in FeatureContainer::add - Tracklet Id " << feature->trackletId() << " already exists";
+    feature_map_[feature->trackletId()] = feature;
 }
 
  //TODO: test
@@ -64,10 +64,10 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     TrackletIds tracklets;
     for(const auto& feature : *this) {
         if(only_usable && feature->usable()) {
-            tracklets.push_back(feature->tracklet_id_);
+            tracklets.push_back(feature->trackletId());
         }
         else {
-            tracklets.push_back(feature->tracklet_id_);
+            tracklets.push_back(feature->trackletId());
         }
     }
 
@@ -79,7 +79,7 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
     for(TrackletId tracklet_id : outliers) {
         CHECK(exists(tracklet_id));
 
-        getByTrackletId(tracklet_id)->inlier_ = false;
+        getByTrackletId(tracklet_id)->markOutlier();
     }
  }
 
@@ -117,14 +117,14 @@ std::vector<cv::Point2f> FeatureContainer::toOpenCV(TrackletIds* tracklet_ids) c
 
     std::vector<cv::Point2f> keypoints_cv;
     for(const auto& feature : *this) {
-        const Keypoint& kp = feature->keypoint_;
+        const Keypoint& kp = feature->keypoint();
 
         float x = static_cast<float>(kp(0));
         float y = static_cast<float>(kp(1));
 
         keypoints_cv.push_back(cv::Point2f(x, y));
 
-        if(tracklet_ids) tracklet_ids->push_back(feature->tracklet_id_);
+        if(tracklet_ids) tracklet_ids->push_back(feature->trackletId());
     }
     return keypoints_cv;
 }

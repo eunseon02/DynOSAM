@@ -358,7 +358,7 @@ TEST(FeatureContainer, basicAdd) {
     EXPECT_FALSE(fc.exists(1));
 
     Feature f;
-    f.tracklet_id_ = 1;
+    f.trackletId(1);
 
     fc.add(f);
     EXPECT_EQ(fc.size(), 1u);
@@ -375,7 +375,7 @@ TEST(FeatureContainer, basicRemove) {
     EXPECT_EQ(fc.size(), 0u);
 
     Feature f;
-    f.tracklet_id_ = 1;
+    f.trackletId(1);
 
     fc.add(f);
     EXPECT_EQ(fc.size(), 1u);
@@ -393,7 +393,7 @@ TEST(FeatureContainer, testVectorLikeIteration) {
 
     for(size_t i = 0; i < 10u; i++) {
         Feature f;
-        f.tracklet_id_ = i;
+        f.trackletId(i);
         fc.add(f);
     }
 
@@ -411,7 +411,7 @@ TEST(FeatureContainer, testVectorLikeIteration) {
 
     for(const auto& i : fc) {
         EXPECT_TRUE(i != nullptr);
-        EXPECT_TRUE(i->tracklet_id_ != 0 || i->tracklet_id_ != 1);
+        EXPECT_TRUE(i->trackletId() != 0 || i->trackletId() != 1);
         count++;
     }
 
@@ -424,7 +424,7 @@ TEST(FeatureContainer, testusableIterator) {
 
     for(size_t i = 0; i < 10u; i++) {
         Feature f;
-        f.tracklet_id_ = i;
+        f.trackletId(i);
         fc.add(f);
         EXPECT_TRUE(f.usable());
     }
@@ -442,7 +442,7 @@ TEST(FeatureContainer, testusableIterator) {
         EXPECT_EQ(std::distance(usable_iterator.begin(), usable_iterator.end()), 8);
 
         for(const auto& i : usable_iterator) {
-            EXPECT_TRUE(i->tracklet_id_ != 3 || i->tracklet_id_ != 4);
+            EXPECT_TRUE(i->trackletId() != 3 || i->trackletId() != 4);
         }
     }
 }
@@ -452,19 +452,19 @@ TEST(FeatureContainer, testusableIterator) {
 TEST(Feature, checkInvalidState) {
 
     Feature f;
-    EXPECT_TRUE(f.inlier_);
+    EXPECT_TRUE(f.inlier());
     EXPECT_FALSE(f.usable()); //inlier initally but invalid tracking label
 
-    f.tracklet_id_ = 10;
+    f.trackletId(10);
     EXPECT_TRUE(f.usable());
 
     f.markInvalid();
     EXPECT_FALSE(f.usable());
 
-    f.tracklet_id_ = 10u;
+    f.trackletId(10u);
     EXPECT_TRUE(f.usable());
 
-    f.inlier_ = false;
+    f.markOutlier();
     EXPECT_FALSE(f.usable());
 
 }
@@ -474,7 +474,7 @@ TEST(Feature, checkDepth) {
     Feature f;
     EXPECT_FALSE(f.hasDepth());
 
-    f.depth_ = 12.0;
+    f.depth(12.0);
     EXPECT_TRUE(f.hasDepth());
 
 }

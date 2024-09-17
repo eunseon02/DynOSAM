@@ -77,8 +77,6 @@ public:
 
         const double fx = calibration_.fx();
         const double fy = calibration_.fy();
-        const double cx = calibration_.px();
-        const double cy = calibration_.py();
         //project the ref keypoint into the world frame given the camera at k-1
         gtsam::Point3 P_W = pose_previous_ * previous_camera.backproject(keypoint_previous_, depth_);
 

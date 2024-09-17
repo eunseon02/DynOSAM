@@ -81,9 +81,9 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(Frame::Ptr previous_fra
 
         for (Feature::Ptr previous_feature : previous_frame->static_features_)
         {
-        const size_t tracklet_id = previous_feature->tracklet_id_;
-        const size_t age = previous_feature->age_;
-        const Keypoint kp = previous_feature->predicted_keypoint_;
+        const size_t tracklet_id = previous_feature->trackletId();
+        const size_t age = previous_feature->age();
+        const Keypoint kp = previous_feature->predictedKeypoint();
 
         //check kp contained before we do a static grid look up to ensure we don't go out of bounds
         if(!camera_->isKeypointContained(kp)) {
@@ -195,18 +195,31 @@ Feature::Ptr ExternalFlowFeatureTracker::constructStaticFeature(const ImageConta
         return nullptr;
     }
 
+    // Feature::Ptr feature = std::make_shared<Feature>();
+    // feature->keypoint_ = kp;
+    // feature->measured_flow_ = flow;
+    // feature->predicted_keypoint_ = predicted_kp;
+    // feature->age_ = age;
+    // feature->tracklet_id_ = tracklet_id;
+    // feature->frame_id_ = frame_id;
+    // feature->type_ = KeyPointType::STATIC;
+    // feature->inlier_ = true;
+    // feature->instance_label_ = background_label;
+    // feature->tracking_label_ = background_label;
+    // return feature;
+
     Feature::Ptr feature = std::make_shared<Feature>();
-    feature->keypoint_ = kp;
-    feature->measured_flow_ = flow;
-    feature->predicted_keypoint_ = predicted_kp;
-    feature->age_ = age;
-    feature->tracklet_id_ = tracklet_id;
-    feature->frame_id_ = frame_id;
-    feature->type_ = KeyPointType::STATIC;
-    feature->inlier_ = true;
-    feature->instance_label_ = background_label;
-    feature->tracking_label_ = background_label;
+        (*feature)
+          .objectId(background_label)
+          .frameId(frame_id)
+          .keypointType(KeyPointType::STATIC)
+          .age(age)
+          .trackletId(tracklet_id)
+          .keypoint(kp)
+          .measuredFlow(flow)
+          .predictedKeypoint(predicted_kp);
     return feature;
+
 }
 
 
@@ -385,7 +398,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
 
     //add mask over current static features
     for(const auto& feature : current_features) {
-        const Keypoint kp = feature->keypoint_;
+        const Keypoint kp = feature->keypoint();
         CHECK(feature->usable());
         cv::circle(detection_mask_impl,
             cv::Point2f(kp(0), kp(1)),
@@ -581,9 +594,9 @@ cv::Mat KltFeatureTracker::geometricVerification(const std::vector<cv::Point2f>&
 
 Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(const Keypoint& kp_current, Feature::Ptr previous_feature,  const TrackletId tracklet_id, const FrameId frame_id) const {
     CHECK(previous_feature);
-    CHECK_EQ(previous_feature->tracklet_id_, tracklet_id);
+    CHECK_EQ(previous_feature->trackletId(), tracklet_id);
 
-    size_t age = previous_feature->age_;
+    size_t age = previous_feature->age();
     age++;
 
     TrackletId tracklet_to_use = tracklet_id;
@@ -596,22 +609,34 @@ Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(const Keypoin
     }
 
     //update previous keypoint
-    previous_feature->measured_flow_ = kp_current - previous_feature->keypoint_;
+    previous_feature->measuredFlow(kp_current - previous_feature->keypoint());
     //This is so awful, but happens becuase the way the code was originally written, we expect flow from k to k+1 (grrrr)
-    previous_feature->predicted_keypoint_ = kp_current;
+    previous_feature->predictedKeypoint(kp_current);
 
 
     Feature::Ptr feature = std::make_shared<Feature>();
-    feature->keypoint_ = kp_current;
-    // feature->measured_flow_ = flow;
-    // feature->predicted_keypoint_ = predicted_kp;
-    feature->age_ = age;
-    feature->tracklet_id_ = tracklet_to_use;
-    feature->frame_id_ = frame_id;
-    feature->type_ = KeyPointType::STATIC;
-    feature->inlier_ = true;
-    feature->instance_label_ = background_label;
-    feature->tracking_label_ = background_label;
+    (*feature)
+        .objectId(background_label)
+        .frameId(frame_id)
+        .keypointType(KeyPointType::STATIC)
+        .age(age)
+        .markInlier()
+        .trackletId(tracklet_to_use)
+        .keypoint(kp_current);
+        //   .measuredFlow(flow);
+        //   .predictedKeypoint(predicted_kp);
+
+
+    // feature->keypoint_ = kp_current;
+    // // feature->measured_flow_ = flow;
+    // // feature->predicted_keypoint_ = predicted_kp;
+    // feature->age_ = age;
+    // feature->tracklet_id_ = tracklet_to_use;
+    // feature->frame_id_ = frame_id;
+    // feature->type_ = KeyPointType::STATIC;
+    // feature->inlier_ = true;
+    // feature->instance_label_ = background_label;
+    // feature->tracking_label_ = background_label;
     return feature;
 
 }
@@ -624,16 +649,24 @@ Feature::Ptr KltFeatureTracker::constructNewStaticFeature(const Keypoint& kp_cur
     tracked_id_manager.incrementTrackletIdCount();
 
     Feature::Ptr feature = std::make_shared<Feature>();
-    feature->keypoint_ = kp_current;
-    // feature->measured_flow_ = flow;
-    // feature->predicted_keypoint_ = predicted_kp;
-    feature->age_ = kAge;
-    feature->tracklet_id_ = tracklet_to_use;
-    feature->frame_id_ = frame_id;
-    feature->type_ = KeyPointType::STATIC;
-    feature->inlier_ = true;
-    feature->instance_label_ = background_label;
-    feature->tracking_label_ = background_label;
+        (*feature)
+          .objectId(background_label)
+          .frameId(frame_id)
+          .keypointType(KeyPointType::STATIC)
+          .age(kAge)
+          .markInlier()
+          .trackletId(tracklet_to_use)
+          .keypoint(kp_current);
+    // feature->keypoint_ = kp_current;
+    // // feature->measured_flow_ = flow;
+    // // feature->predicted_keypoint_ = predicted_kp;
+    // feature->age_ = kAge;
+    // feature->tracklet_id_ = tracklet_to_use;
+    // feature->frame_id_ = frame_id;
+    // feature->type_ = KeyPointType::STATIC;
+    // feature->inlier_ = true;
+    // feature->instance_label_ = background_label;
+    // feature->tracking_label_ = background_label;
     return feature;
 }
 
