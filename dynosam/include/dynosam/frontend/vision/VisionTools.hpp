@@ -168,6 +168,7 @@ void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_
 
 
 
+// std::pair<gtsam::Vector3, gtsam::Matrix3> backProjectAndCovariance()
 
 
 
