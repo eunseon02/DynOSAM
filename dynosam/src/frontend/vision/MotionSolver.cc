@@ -419,12 +419,7 @@ void OpticalFlowAndPoseOptimizer::updateFrameOutliersWithResult(const Result& re
         feature_k_1->markOutlier();
     }
 
-    //TODO: remove the caching in the frame!!
-    auto depth_image_wrapper = frame_k->image_container_.getImageWrapper<ImageType::Depth>();
-    //TODO: we should not actually need to update the depth like this,
-    //better for the frame to cache itself and we just clear the depth cache
-    //and then the frame knows to take the depth dirctly from the depth iamge
-    frame_k->updateDepths(depth_image_wrapper, params_.max_background_depth_threshold, params_.max_object_depth_threshold);
+    CHECK(frame_k->updateDepths(params_.max_background_depth_threshold, params_.max_object_depth_threshold));
 }
 
 

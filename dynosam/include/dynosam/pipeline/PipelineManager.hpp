@@ -118,7 +118,7 @@ private:
 
 };
 
-
+//TODO: refactor!!
 template<typename Measurement>
 typename Optimizer<Measurement>::Ptr DynoPipelineManager::createOptimizer(OptimizerType optimizer_type) const {
     if(optimizer_type == OptimizerType::kIncremental) {

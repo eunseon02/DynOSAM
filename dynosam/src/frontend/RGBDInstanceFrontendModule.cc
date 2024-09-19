@@ -97,17 +97,12 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
         tracking_images = image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow, ImageType::MotionMask>();
     }
 
-    //shrinnk motion mask image
-    //TODO: fix
-    // vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), image_container->get<ImageType::MotionMask>(), 1);
 
     Frame::Ptr frame =  tracker_->track(input->getFrameId(), input->getTimestamp(), *image_container);
     if(gt_packet_map_.find(frame->getFrameId()) != gt_packet_map_.end()) {
         frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
     }
-
-    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-    frame->updateDepths(image_container->getImageWrapper<ImageType::Depth>(), base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+    CHECK(frame->updateDepths(base_params_.depth_background_thresh, base_params_.depth_obj_thresh));
 
     return {State::Nominal, nullptr};
 }
@@ -137,14 +132,6 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
     }
 
 
-    //TODO: remove this as we now do the boarder checks in the feature tracking
-    //shrinnk motion mask image
-    // cv::Mat shrink_mask;
-    // //this value is super dependant per dataset
-    // //for zed (indoors) = 6
-    // vision_tools::shrinkMask(image_container->get<ImageType::MotionMask>(), shrink_mask, 8);
-    // image_container->get<ImageType::MotionMask>() = shrink_mask;
-
     Frame::Ptr frame = nullptr;
     {
         utils::TimingStatsCollector tracking_timer("tracking_timer");
@@ -158,11 +145,9 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
     LOG(INFO) << to_string(tracker_->getTrackerInfo());
 
-    auto depth_image_wrapper = image_container->getImageWrapper<ImageType::Depth>();
-
     {
         utils::TimingStatsCollector update_depths_timer("depth_updater");
-        frame->updateDepths(depth_image_wrapper, base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+        frame->updateDepths(base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
 
     }
     //updates frame->T_world_camera_

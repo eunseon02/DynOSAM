@@ -158,6 +158,8 @@ public:
    */
   bool isLandmarkContained(const Landmark& lmk, Keypoint* keypoint = nullptr) const;
 
+  CameraImpl* getImplCamera() const { return camera_impl_.get(); }
+
   const CameraParams& getParams() const {
     return camera_params_;
   }

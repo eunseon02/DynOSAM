@@ -167,8 +167,21 @@ void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_
 
 
 
-
-// std::pair<gtsam::Vector3, gtsam::Matrix3> backProjectAndCovariance()
+/**
+ * @brief From a feature with valid depth, backproject to a 3D point in the camera frame with the associated covariance (3x3) matrix.
+ *
+ * The measurement covariance matrix for the pixel measurement is obtanied directly as a 2x2 diagonal matrix from the pixel sigma and the
+ * measurement covariance for the depth is modelled as a quadratic cost where sigma = depth * depth_sgima^2.
+ *
+ * The final covariance matrix is in the diagonal form [x,y,z]
+ *
+ * @param feature
+ * @param camera
+ * @param pixel_sigma
+ * @param depth_sigma
+ * @return std::pair<gtsam::Vector3, gtsam::Matrix3>
+ */
+std::pair<gtsam::Vector3, gtsam::Matrix3> backProjectAndCovariance(const Feature& feature, const Camera& camera, double pixel_sigma, double depth_sigma);
 
 
 

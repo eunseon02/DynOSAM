@@ -207,7 +207,18 @@ public:
         return object_ids;
     }
 
-    void updateDepths(const ImageWrapper<ImageType::Depth>& depth, double max_static_depth, double max_dynamic_depth);
+    /**
+     * @brief Update the depth values on all contained features.
+     * Clips the static and dynamic features (marking them invalid) accordingly.
+     *
+     * Returns false if the internal image container does not have a depth mat.
+     *
+     * @param max_static_depth
+     * @param max_dynamic_depth
+     * @return true
+     * @return false
+     */
+    bool updateDepths(double max_static_depth, double max_dynamic_depth);
 
     /**
      * @brief From the detected list of objects (in Frame::object_observations_) draw the object masks

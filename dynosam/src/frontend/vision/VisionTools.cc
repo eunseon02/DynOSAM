@@ -24,6 +24,7 @@
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/logger/Logger.hpp"
 
+#include <cmath>
 #include <algorithm>  // std::set_difference, std::sort
 #include <vector>     // std::vector
 
@@ -497,6 +498,35 @@ void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_
   file.release();
 
 }
+
+
+std::pair<gtsam::Vector3, gtsam::Matrix3> backProjectAndCovariance(
+    const Feature& feature, const Camera& camera,
+    double pixel_sigma, double depth_sigma) {
+  const auto gtsam_camera = camera.getImplCamera();
+  const auto keypoint = feature.keypoint();
+
+  CHECK(feature.hasDepth());
+  const auto depth = feature.depth();
+
+  gtsam::Matrix32 J_keypoint;
+  gtsam::Matrix31 J_depth;
+  gtsam::Point3 landmark = gtsam_camera->backproject(keypoint, depth, boost::none, J_keypoint, J_depth, boost::none);
+
+  //form measurement covariance matrices
+  gtsam::Matrix22 pixel_covariance_matrix;
+  pixel_covariance_matrix << pixel_sigma, 0.0,
+                             0.0,  pixel_sigma;
+
+  //for depth uncertainty, we model it as a quadratic increase with distnace
+  double depth_covariance = depth_sigma * std::pow(depth, 2);
+
+  //calcualte 3x3 covairance matrix
+  gtsam::Matrix33 covariance = J_keypoint * pixel_covariance_matrix * J_keypoint.transpose() + J_depth * depth_covariance * J_depth.transpose();
+  return { landmark,  covariance};
+}
+
+
 // void writeOutProjectMaskAndDepthMap(const ImageWrapper<ImageType::Depth>& depth_image, const ImageWrapper<ImageType::MotionMask>& mask_image, const Camera& camera, FrameId frame_id) {
 //   writeOutProjectMaskAndDepthMap(depth_image, ImageWrapper<ImageType::SemanticMask>(static_cast<const cv::Mat&>(mask_image)), camera, frame_id);
 // }
