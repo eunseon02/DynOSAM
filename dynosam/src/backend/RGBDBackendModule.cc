@@ -126,8 +126,8 @@ RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     {
         utils::TimingStatsCollector timer("map.update_observations");
-        map_->updateObservations(input->collectStaticMeasurements());
-        map_->updateObservations(input->collectDynamicMeasurements());
+        map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
+        map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
     }
 
     gtsam::Values new_values;
@@ -151,8 +151,8 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
     initial_object_motions_.insert2(frame_k, input->estimated_motions_);
     {
         utils::TimingStatsCollector timer("map.update_observations");
-        map_->updateObservations(input->collectStaticMeasurements());
-        map_->updateObservations(input->collectDynamicMeasurements());
+        map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
+        map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
     }
 
     gtsam::Values new_values;

@@ -96,6 +96,20 @@ struct LandmarkKeypoint {
 };
 
 /**
+ * @brief Keypoint with depth
+ *
+ */
+struct KeypointDepth {
+ public:
+  KeypointDepth() = default;
+  KeypointDepth(const Keypoint& p, const Depth& d) : keypoint(p), depth(d) {}
+
+ public:
+  Keypoint keypoint;
+  Depth depth;
+};
+
+/**
  * @brief Get demangled class name
  *
  * @param name
@@ -327,6 +341,9 @@ struct LandmarkStatus : public TrackedValueStatus<Landmark> {
 
 };
 
+
+//TODO: change so that all info is contained in the templated type (so we dont need to have each derived)
+//Status type have its own constructors etc... this is soooooooo messy ;)
 /**
  * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
  *
@@ -413,6 +430,11 @@ using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
 using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
 /// @brief A vector of StatusKeypointMeasurements
 using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
+
+
+//TODO: refactor to all be simpler like this one ;)
+using KeypointDepthStatus = TrackedValueStatus<KeypointDepth>;
+
 
 
 /**

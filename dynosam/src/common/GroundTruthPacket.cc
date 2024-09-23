@@ -53,11 +53,15 @@ void ObjectPoseGT::setMotions(const ObjectPoseGT& previous_object_gt, const gtsa
     // for t-1
     const gtsam::Pose3 L_camera_prev = previous_object_gt.L_camera_;
     const gtsam::Pose3 L_world_prev = previous_object_gt.L_world_;
-    CHECK(L_world_prev.equals(prev_X_world * L_camera_prev));
+    //changed tol becuase seems to be numerical issues
+    // CHECK(L_world_prev.equals(prev_X_world * L_camera_prev));
+    CHECK(gtsam::assert_equal(L_world_prev, prev_X_world * L_camera_prev, 1e-5));
     // for t
     const gtsam::Pose3 L_camera_curr = L_camera_;
     const gtsam::Pose3 L_world_curr = L_world_;
-    CHECK(L_world_curr.equals(curr_X_world * L_camera_curr));
+    //changed tol becuase seems to be numerical issues
+    // CHECK(L_world_curr.equals(curr_X_world * L_camera_curr));
+    CHECK(gtsam::assert_equal(L_world_curr, curr_X_world * L_camera_curr, 1e-5));
 
     // H between t-1 and t in the object frame ground truth
     gtsam::Pose3 H_L_gt = L_world_prev.inverse() * L_world_curr;

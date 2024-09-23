@@ -111,6 +111,36 @@ void loadMask(const std::string& image_path, cv::Mat& mask) {
     mask.convertTo(mask, CV_32SC1);
 }
 
+
+std::vector<std::filesystem::path> getAllFilesInDir(const std::string& folder_path) {
+    std::vector<std::filesystem::path> files_in_directory;
+    std::copy(std::filesystem::directory_iterator(folder_path), std::filesystem::directory_iterator(), std::back_inserter(files_in_directory));
+    std::sort(files_in_directory.begin(), files_in_directory.end());
+    return files_in_directory;
+
+}
+
+
+void loadPathsInDirectory(std::vector<std::string>& file_paths, const std::string& folder_path, const std::function<bool(const std::string&)>& condition) {
+    std::function<bool(const std::string&)> impl_condition;
+    if(condition) {
+        impl_condition = condition;
+    }
+    else {
+        //if no condition is provided, set condition to always return true; adding all the files found
+        impl_condition = [](const std::string&) -> bool { return true; };
+    }
+
+    auto files_in_directory = getAllFilesInDir(folder_path);
+    for (const std::string file_path : files_in_directory) {
+        throwExceptionIfPathInvalid(file_path);
+
+        //if condition is true, add
+        if(impl_condition(file_path)) file_paths.push_back(file_path);
+    }
+}
+
+
 void removeStaticObjectFromMask(const cv::Mat& instance_mask, cv::Mat& motion_mask, const GroundTruthInputPacket& gt_packet) {
     try {
         ImageType::SemanticMask::validate(instance_mask);

@@ -265,6 +265,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
     return geometricOutlierRejection3d2d(correspondences, R_curr_ref);
 }
 
+
 Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
                             const AbsolutePoseCorrespondences& correspondences,
                             std::optional<gtsam::Rot3> R_curr_ref)
@@ -317,7 +318,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
 
     bool success = runRansac<AbsolutePoseProblem>(
         std::make_shared<AbsolutePoseProblem>(
-            adapter, AbsolutePoseProblem::KNEIP
+            adapter, AbsolutePoseProblem::EPNP
         ),
         threshold,
         params_.ransac_iterations,

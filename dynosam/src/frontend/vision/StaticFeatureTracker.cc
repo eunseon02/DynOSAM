@@ -239,7 +239,6 @@ KltFeatureTracker::KltFeatureTracker(const FrontendParams& params, Camera::Ptr c
           block_size_,
           use_harris_corner_detector_,
           k_);
-
 }
 
 

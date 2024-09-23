@@ -98,8 +98,11 @@ public:
         }
     }
 
-    GenericTrackedStatusVector<LandmarkKeypointStatus> collectStaticMeasurements() const;
-    GenericTrackedStatusVector<LandmarkKeypointStatus> collectDynamicMeasurements() const;
+    GenericTrackedStatusVector<LandmarkKeypointStatus> collectStaticLandmarkKeypointMeasurements() const;
+    GenericTrackedStatusVector<LandmarkKeypointStatus> collectDynamicLandmarkKeypointMeasurements() const;
+
+    // GenericTrackedStatusVector<KeypointDepthStatus> collectStaticKeypointDepthMeasurements() const;
+    // GenericTrackedStatusVector<KeypointDepthStatus> collectDynamicKeypointDepthMeasurements() const;
 
 
     /**

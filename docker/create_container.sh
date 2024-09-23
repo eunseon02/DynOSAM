@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-CONTAINER_NAME=dyno_sam
+CONTAINER_NAME=dyno_sam_testing
 CONTAINER_IMAGE_NAME=acfr-rpg/dyno_sam
 
 ### EDIT THIS TO WHEREVER YOU'RE STORING YOU DATA ###

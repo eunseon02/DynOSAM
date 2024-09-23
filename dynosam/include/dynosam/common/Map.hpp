@@ -460,6 +460,12 @@ private:
     FrameId last_estimate_update_{0};
 };
 
+using Map2dDepth = Map<KeypointDepth>;
+using ObjectNode2dDepth = Map2dDepth::ObjectNodeM;
+using LandmarkNode2dDepth = Map2dDepth::LandmarkNodeM;
+using FrameNode2dDepth = Map2dDepth::FrameNodeM;
+
+
 using Map3d2d = Map<LandmarkKeypoint>;
 using ObjectNode3d2d = Map3d2d::ObjectNodeM;
 using LandmarkNode3d2d = Map3d2d::LandmarkNodeM;

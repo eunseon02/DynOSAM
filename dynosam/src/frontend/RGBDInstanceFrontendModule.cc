@@ -155,6 +155,8 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
         LOG(ERROR) << "Could not solve for camera";
     }
 
+    // if(gt_packet_map_.exists(frame->getFrameId())) frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
+
     if(FLAGS_use_dynamic_track) {
         //TODO: bring back byte tracker??
         utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
@@ -223,6 +225,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
     }
     else {
         //TODO: untested
+        LOG(FATAL) << "Not tested";
         result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
     }
 

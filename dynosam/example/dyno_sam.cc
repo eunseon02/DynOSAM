@@ -167,7 +167,7 @@ DEFINE_string(params_folder_path, "dynosam/params", "Path to the folder containi
 // }
 
 
-// #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
+#include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
 
 // int main(int argc, char* argv[]) {
@@ -231,15 +231,16 @@ int main(int argc, char* argv[]) {
     FLAGS_colorlogtostderr = 1;
     FLAGS_log_prefix = 1;
 
-    KittiDataLoader::Params params;
-    KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+    // KittiDataLoader::Params params;
+    // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+    ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
     // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
 
     auto camera = std::make_shared<Camera>(*loader.getCameraParams());
     auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
 
-    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, GroundTruthInputPacket) -> bool {
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
+    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, GroundTruthInputPacket) -> bool {
+    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
 
         LOG(INFO) << frame_id << " " << timestamp;
 
@@ -278,38 +279,38 @@ int main(int argc, char* argv[]) {
 
         // cv::imshow("RGB", rgb);
         // cv::imshow("OF", of_viz);
-        cv::imshow("Motion", motion_viz);
-        cv::waitKey(1);
+        // cv::imshow("Motion", motion_viz);
+        // cv::waitKey(1);
         // cv::imshow("Depth", depth_viz);
 
-        // auto frame = tracker->track(frame_id, timestamp, *container);
-        // Frame::Ptr previous_frame = tracker->getPreviousFrame();
+        auto frame = tracker->track(frame_id, timestamp, *container);
+        Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
         // // motion_viz = ImageType::MotionMask::toRGB(frame->image_container_.get<ImageType::MotionMask>());
         // // // cv::imshow("Motion", motion_viz);
 
-        // cv::Mat tracking;
-        // if(previous_frame) {
-        //     tracking = tracker->computeImageTracks(*previous_frame, *frame, false);
+        cv::Mat tracking;
+        if(previous_frame) {
+            tracking = tracker->computeImageTracks(*previous_frame, *frame, false);
 
-        // }
-        // if(!tracking.empty())
-        //     cv::imshow("Tracking", tracking);
+        }
+        if(!tracking.empty())
+            cv::imshow("Tracking", tracking);
 
 
         const std::string path = "/root/results/misc/";
-        // if ((char)cv::waitKey(0) == 's') {
-        //     LOG(INFO) << "Saving...";
-        //     // cv::imwrite(path + "kitti_0004_rgb.png", rgb);
-        //     // cv::imwrite(path + "kitti_0004_of.png", of_viz);
-        //     // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
-        //     // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
-        //     // cv::imwrite(path + "kitti_0004_tracking.png", tracking);
+        if ((char)cv::waitKey(0) == 's') {
+            LOG(INFO) << "Saving...";
+            cv::imwrite(path + "carla_l1_rgb.png", rgb);
+            // cv::imwrite(path + "kitti_0004_of.png", of_viz);
+            // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
+            // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
+            cv::imwrite(path + "carla_l1_tracking.png", tracking);
 
 
 
 
-        // }
+        }
 
 
 
