@@ -526,6 +526,13 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
     const size_t& n_matches = dynamic_correspondences.size();
 
+    TrackletIds all_tracklets;
+    std::transform(dynamic_correspondences.begin(), dynamic_correspondences.end(), std::back_inserter(dynamic_correspondences),
+                [](const AbsolutePoseCorrespondence& corres) {
+                    return corres.tracklet_id_;
+                });
+    CHECK_EQ(all_tracklets.size(), n_matches);
+
     Pose3SolverResult geometric_result = EgoMotionSolver::geometricOutlierRejection3d2d(dynamic_correspondences);
     Pose3SolverResult result = geometric_result;
 
@@ -547,10 +554,13 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
     if(result.status == TrackingStatus::VALID) {
         TrackletIds refined_inlier_tracklets = result.inliers;
-        //construct all tracklets (TODO: why do we not get this from the getDynamicCorrespondences?)
-        TrackletIds all_tracklets = refined_inlier_tracklets;
-        all_tracklets.insert(all_tracklets.end(), result.outliers.begin(), result.outliers.end());
-        CHECK_EQ(all_tracklets.size(), n_matches);
+
+        {
+            //debug only (just checking that the inlier/outliers we get from the geometric rejection match the original one)
+            TrackletIds extracted_all_tracklets  = refined_inlier_tracklets;
+            extracted_all_tracklets.insert(extracted_all_tracklets.end(), result.outliers.begin(), result.outliers.end());
+            CHECK_EQ(all_tracklets.size(), extracted_all_tracklets.size());
+        }
 
 
         gtsam::Pose3 G_w = result.best_result.inverse();
@@ -588,6 +598,7 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                 H_w
             );
 
+            //should be further subset
             refined_inlier_tracklets = motion_refinement_result.inliers;
             H_w = motion_refinement_result.best_result;
 

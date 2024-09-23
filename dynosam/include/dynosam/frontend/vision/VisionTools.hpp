@@ -220,6 +220,20 @@ std::pair<gtsam::Vector3, gtsam::Matrix3> backProjectAndCovariance(const Feature
 } //vision_tools
 
 
+/**
+ * @brief From a set a tracklets and a subset (of the tracklet) inliers, calculate the remaining subset of outliers.
+ *
+ * In set notation this is:
+ * inliers \cap outliers = \empty (indicating that inliers and outliers are disjoint)
+ * inliers \cup outliers = tracklets (indicating that every element in tracklets is either in inliers or outliers)
+ *
+ * Inliers must be a complete subset of tracklets for this function to work and inliers.size() < tracklets.size(); if
+ * these cases do not hold the behaviour is undefined!
+ *
+ * @param inliers const TrackletIds&
+ * @param tracklets  const TrackletIds&
+ * @param outliers TrackletIds&
+ */
 void determineOutlierIds(const TrackletIds& inliers, const TrackletIds& tracklets, TrackletIds& outliers);
 
 

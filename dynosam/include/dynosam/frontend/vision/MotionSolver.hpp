@@ -145,7 +145,7 @@ class EssentialDecompositionResult; //forward declare
 
 template<typename T>
 struct SolverResult {
-    T best_result; //TODO: rename as not always pose!!
+    T best_result;
     TrackletIds inliers;
     TrackletIds outliers;
     TrackingStatus status;
@@ -264,6 +264,11 @@ struct MotionOnlyRefinementOptimizerParams {
     bool outlier_reject{true};
 };
 
+
+/**
+ * @brief Jointly refined the motion of an object using the 3D-motion-residual.
+ *
+ */
 class MotionOnlyRefinementOptimizer {
 
 public:
@@ -340,50 +345,6 @@ public:
     Pose3SolverResult geometricOutlierRejection3d3d(
                             const PointCloudCorrespondences& correspondences,
                             std::optional<gtsam::Rot3> R_curr_ref = {});
-
-
-    // //TODO: refactor API using the result struct
-    // void refineJointPoseOpticalFlow(
-    //     Pose3SolverResult& solver_result,
-    //     const Frame::Ptr frame_k_1,
-    //     const Frame::Ptr frame_k,
-    //     gtsam::Pose3& refined_pose,
-    //     gtsam::Point2Vector& refined_flows,
-    //     TrackletIds& inliers //inlier set from the inliers in result
-    // );
-
-    // /**
-    //  * @brief Joinly refines optical flow with with the given pose
-    //  * using the error term:
-    //  * e = [u,v]_{k_1} + f_{k-1, k} - \pi(X^{-1} \: m_k)
-    //  * where f is flow, [u,v]_{k-1} is the observed keypoint at k-1, X is the pose
-    //  * and m_k is the back-projected keypoint at k.
-    //  *
-    //  * The parsed tracklets are the set of correspondances with which to build the optimisation problem
-    //  * and the refined inliers will be a subset of these tracklets. THe number of refined flows
-    //  * should be the number of refined inliers and be a 1-to-1 match
-    //  *
-    //  *
-    //  * @param frame_k_1
-    //  * @param frame_k
-    //  * @param tracklets
-    //  * @param initial_pose
-    //  * @param refined_pose
-    //  * @param refined_flows
-    //  * @param refined_inliers
-    //  * @param refined_outliers
-    //  */
-    // static void jointRefinePoseOpticalFlow(
-    //     const Frame::Ptr frame_k_1,
-    //     const Frame::Ptr frame_k,
-    //     const TrackletIds& tracklets,
-    //     const gtsam::Pose3& initial_pose,
-    //     gtsam::Pose3& refined_pose,
-    //     gtsam::Point2Vector& refined_flows,
-    //     TrackletIds& refined_inliers,
-    //     TrackletIds* refined_outliers = nullptr;
-    // );
-
 
 
 protected:
