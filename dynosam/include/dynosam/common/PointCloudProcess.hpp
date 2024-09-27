@@ -35,6 +35,7 @@
 
 namespace dyno {
 
+//Map of ObjectId's to XYZRGB Point Clouds
 using CloudPerObject = gtsam::FastMap<ObjectId, pcl::PointCloud<pcl::PointXYZRGB>>;
 
 /**

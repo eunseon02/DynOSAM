@@ -357,9 +357,7 @@ MotionOnlyRefinementOptimizer::optimize(
     }
 
     double error_before = graph.error(values);
-     std::vector<double> post_errors;
-    // std::set<TrackletId> outlier_tracks;
-
+    std::vector<double> post_errors;
 
     gtsam::NonlinearFactorGraph mutable_graph = graph;
     gtsam::Values optimised_values = values;
@@ -376,71 +374,82 @@ MotionOnlyRefinementOptimizer::optimize(
     double error_after = mutable_graph.error(optimised_values);
     // post_errors.push_back(error_after);
 
-    // gtsam::FactorIndices outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
-    //     mutable_graph,
-    //     optimised_values
-    // );
+    gtsam::FactorIndices outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
+        mutable_graph,
+        optimised_values
+    );
 
-    // //if we have outliers, enter iteration loop
-    // if(outlier_factors.size() > 0u) {
-    //     for(size_t itr = 0; itr < 4; itr++) {
-
-
-    //         //currently removing factors from graph makes them nullptr
-    //         gtsam::NonlinearFactorGraph mutable_graph_with_null = mutable_graph;
-    //         for(auto outlier_idx : outlier_factors) {
-    //             auto factor = mutable_graph_with_null.at(outlier_idx);
-    //             DynamicPointSymbol point_symbol = factor->keys()[0];
-    //             outlier_tracks.insert(point_symbol.trackletId());
-    //             mutable_graph_with_null.remove(outlier_idx);
-    //         }
-    //         //now iterate over graph and add factors that are not null to ensure all factors are ok
-    //         mutable_graph.resize(0);
-    //         for (size_t i = 0; i < mutable_graph_with_null.size(); i++) {
-
-    //             auto factor = mutable_graph_with_null.at(i);
-    //             if(factor) {
-    //                 mutable_graph.add(factor);
-    //             }
-    //         }
-    //         // LOG(INFO) << "Removed " << outlier_factors.size() << " factors on iteration: " << itr;
-
-    //         values.insert(object_motion_key, solver_result.best_result);
-    //         //do we use values or optimised values here?
-    //         optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
-    //         error_after = mutable_graph.error(optimised_values);
-    //         post_errors.push_back(error_after);
-
-    //         outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
-    //             mutable_graph,
-    //             optimised_values
-    //         );
-
-    //         if(outlier_factors.size() == 0) {
-    //             break;
-    //         }
-    //     }
-    // }
+    std::set<TrackletId> outlier_tracks;
+    //if we have outliers, enter iteration loop
+    if(outlier_factors.size() > 0u && params_.outlier_reject) {
+        for(size_t itr = 0; itr < 4; itr++) {
 
 
-    // size_t initial_size = graph.size();
-    // size_t inlier_size = mutable_graph.size();
-    // error_after = mutable_graph.error(optimised_values);
-    LOG(INFO) << "Object Motion refinement - error before: "
-        << error_before << " error after: " << error_after;
-    //     << " with initial size " << initial_size << " inlier size " << inlier_size;
+            //currently removing factors from graph makes them nullptr
+            gtsam::NonlinearFactorGraph mutable_graph_with_null = mutable_graph;
+            for(auto outlier_idx : outlier_factors) {
+                auto factor = mutable_graph_with_null.at(outlier_idx);
+                DynamicPointSymbol point_symbol = factor->keys()[0];
+                outlier_tracks.insert(point_symbol.trackletId());
+                mutable_graph_with_null.remove(outlier_idx);
+            }
+            //now iterate over graph and add factors that are not null to ensure all factors are ok
+            mutable_graph.resize(0);
+            for (size_t i = 0; i < mutable_graph_with_null.size(); i++) {
 
-    //recover values!
+                auto factor = mutable_graph_with_null.at(i);
+                if(factor) {
+                    mutable_graph.add(factor);
+                }
+            }
+
+            values.insert(object_motion_key, initial_motion);
+            //do we use values or optimised values here?
+            optimised_values = gtsam::LevenbergMarquardtOptimizer(mutable_graph, optimised_values, opt_params).optimize();
+            error_after = mutable_graph.error(optimised_values);
+            post_errors.push_back(error_after);
+
+            outlier_factors = factor_graph_tools::determineFactorOutliers<LandmarkMotionTernaryFactor>(
+                mutable_graph,
+                optimised_values
+            );
+
+            if(outlier_factors.size() == 0) {
+                break;
+            }
+        }
+    }
+
+    const size_t initial_size = graph.size();
+    const size_t inlier_size = mutable_graph.size();
+    error_after = mutable_graph.error(optimised_values);
+
     Pose3SolverResult result;
     result.best_result = optimised_values.at<gtsam::Pose3>(object_motion_key);
-    result.inliers = tracklets;
+    result.outliers = TrackletIds(outlier_tracks.begin(), outlier_tracks.end());
+
+    //naming is confusing, but we already have the outliers but we can use the same function
+    //to find the inliers
+    determineOutlierIds(result.outliers, tracklets, result.inliers);
+
+    for (auto outlier_tracklet : outlier_tracks) {
+        Feature::Ptr feature_k_1 = frame_k_1->at(outlier_tracklet);
+        Feature::Ptr feature_k = frame_k->at(outlier_tracklet);
+
+        CHECK(feature_k_1->usable());
+        CHECK(feature_k->usable());
+
+        feature_k->markOutlier();
+        feature_k_1->markOutlier();
+    }
+
+
+    LOG(INFO) << "Object Motion refinement - error before: "
+        << error_before << " error after: " << error_after
+        << " with initial size " << initial_size << " inlier size " << inlier_size;
+
     return result;
 
-    //for each outlier edge, update the set of inliers
-    // for(const auto tracklet_id : outlier_tracks) {
-    //     frame_k->at(tracklet_id)->inlier_ = false;
-
-    // }
 
 }
 

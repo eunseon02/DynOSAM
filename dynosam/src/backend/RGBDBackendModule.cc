@@ -57,6 +57,8 @@ DEFINE_bool(use_identity_rot_L_for_init, false, "For experiments: set the inital
 DEFINE_bool(corrupt_L_for_init, false, "For experiments: corrupt the initalisation point for L with gaussian noise");
 DEFINE_double(corrupt_L_for_init_sigma, 0.2, "For experiments: sigma value to correupt initalisation point for L. When corrupt_L_for_init is true");
 
+DEFINE_bool(init_LL_with_identity, false,"For experiments");
+
 namespace dyno {
 
 RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2d::Ptr map, Camera::Ptr camera, const UpdaterType& updater_type, ImageDisplayQueue* display_queue)
@@ -85,6 +87,9 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
         CHECK_NOTNULL(dynamic_pixel_noise_);
         dynamic_pixel_noise_ = gtsam::noiseModel::Robust::Create(
             gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), dynamic_pixel_noise_);
+
+        // object_smoothing_noise_ = gtsam::noiseModel::Robust::Create(
+        //     gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), object_smoothing_noise_);
 
     }
 
@@ -162,7 +167,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     UpdateObservationParams update_params;
     update_params.enable_debug_info = true;
-    update_params.do_backtrack = false; //apparently this is v important for making the results == ICRA
+    update_params.do_backtrack = true; //apparently this is v important for making the results == ICRA
 
     {
         LOG(INFO) << "Starting updateStaticObservations";
@@ -1266,12 +1271,21 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
             context.getObjectId()
         );
 
+        //first frame the object is seen in
+        const FrameId first_seen_frame = context.object_node->getFirstSeenFrame();
+
         //takes me from k-1 to k
         Motion3 motion;
         gtsam::Pose3 object_pose_k;
         //we have a motion from k-1 to k and a pose at k
         if(parent_->hasFrontendMotionEstimate(context.getFrameId(), context.getObjectId(), &motion) && pose_k_1_query) {
             object_pose_k = motion * pose_k_1_query.get();
+            CHECK_NE(first_seen_frame, context.getFrameId());
+
+            //for experiments and testing
+            if(FLAGS_init_LL_with_identity) {
+                object_pose_k = pose_k_1_query.get();
+            }
         }
         else {
             //no motion or previous pose, so initalise with centroid translation and identity rotation
@@ -1294,6 +1308,8 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
         if(FLAGS_corrupt_L_for_init) {
             object_pose_k = utils::perturbWithNoise<gtsam::Pose3>(object_pose_k, FLAGS_corrupt_L_for_init_sigma);
         }
+
+        LOG(INFO) << "Adding object pose " << object_pose_k << " object id " << context.getObjectId();
 
         new_values.insert(object_pose_key_k, object_pose_k);
         is_other_values_in_map.insert2(object_pose_key_k, true);

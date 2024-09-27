@@ -389,6 +389,8 @@ public:
     void remove(TrackletId tracklet_id);
     void clear();
 
+    void removeByObjectId(ObjectId object_id);
+
     TrackletIds collectTracklets(bool only_usable = true) const;
 
 

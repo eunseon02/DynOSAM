@@ -233,8 +233,8 @@ int main(int argc, char* argv[]) {
 
     // KittiDataLoader::Params params;
     // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
-    ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
-    // OMDDataLoader loader("/root/data/omm/swinging_4_unconstrained");
+    // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
+    OMDDataLoader loader("/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
 
     auto camera = std::make_shared<Camera>(*loader.getCameraParams());
     auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
@@ -301,11 +301,11 @@ int main(int argc, char* argv[]) {
         const std::string path = "/root/results/misc/";
         if ((char)cv::waitKey(0) == 's') {
             LOG(INFO) << "Saving...";
-            cv::imwrite(path + "carla_l1_rgb.png", rgb);
+            // cv::imwrite(path + "carla_l1_rgb.png", rgb);
             // cv::imwrite(path + "kitti_0004_of.png", of_viz);
             // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
             // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
-            cv::imwrite(path + "carla_l1_tracking.png", tracking);
+            cv::imwrite(path + "omd_tracking.png", tracking);
 
 
 

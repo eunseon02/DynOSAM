@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import matplotlib.pyplot as plt
 
 from pylatex import Document, Section, Subsection, Tabular, Math, TikZ, Axis, \
@@ -7,6 +7,10 @@ from pylatex.utils import italic
 
 import evo.tools.plot as evo_plot
 from cycler import cycler
+from matplotlib.axes import Axes
+from matplotlib.legend import Legend
+from matplotlib.transforms import BboxBase
+
 
 import math
 
@@ -20,6 +24,16 @@ nice_colours={
     "vermillion": [213, 94, 0],
     "reddish_purple": [204, 121, 167]}
 
+def get_nice_blue():
+    return np.array(nice_colours["blue"]) / 255.0 # for plt range
+
+def get_nice_green():
+    return np.array(nice_colours["bluish_green"]) / 255.0 # for plt range
+
+def get_nice_red():
+    # this is not super red (like a purple orange I guess?)
+    return np.array(nice_colours["vermillion"]) / 255.0 # for plt range
+
 # Nic Barbara
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
@@ -31,7 +45,7 @@ def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=T
                     "text.usetex": True,
                     "font.family": "serif",
                     "font.serif": ["Computer Modern Roman"],
-                        })
+                    })
         except:
             print("WARNING: LaTeX backend not configured properly. Not using.")
             plt.rcParams.update({"font.family": "serif",
@@ -69,6 +83,84 @@ def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=T
     plt.rc('ytick', labelsize=0.8*font_size)
     plt.rc('legend', fontsize=0.8*font_size)
 
+# Currently does not work with this error:
+# File "/usr/lib/python3/dist-packages/matplotlib/offsetbox.py", line 427, in get_extent_offsets
+#     dpicor = renderer.points_to_pixels(1.)
+# AttributeError: 'NoneType' object has no attribute 'points_to_pixels'
+
+# def smart_legend(
+#         ax:Axes,
+#         preferred_positions: List[str] = ['upper right', 'upper left', 'lower right', 'lower left'],
+#         avoid_positions: List[str] =['right', 'center right', 'center left', 'lower center', 'upper center', 'center']):
+#     if avoid_positions is None:
+#         avoid_positions = []
+
+#     # Helper to check if legend overlaps with the plotted data
+#     # returns area of overlapping area
+#     def legend_overlap(ax:Axes, legend: Legend):
+#         legend_bbox = legend.get_window_extent()
+
+
+
+#         # ax_bbox = ax.get_window_extent()
+
+#         # intersection_box = BboxBase.intersection(ax_bbox, legend_bbox)
+
+#         # if intersection_box is None:
+#         #     return 0.0
+#         # else:
+#         #     return intersection_box.width * intersection_box.height
+#         # Check if the legend is within the axis area
+#         # overlap = ax_bbox.contains(legend_bbox)
+#         # overlap = ax_bbox.overlaps(legend_bbox)
+
+#     # list of tuples (area, position)
+#     area_for_position = []
+#     # Try placing the legend in the preferred positions
+#     for loc in preferred_positions:
+#         if loc in avoid_positions:
+#             continue
+#         # Create the legend in the current location
+#         legend = ax.legend(loc=loc)
+
+#         # # Check for overlap
+#         # if not legend_overlap(ax, legend):
+#         #     return legend
+#         # Check for overlap
+#         area = legend_overlap(ax, legend)
+#         print(area)
+#         #if no overlap use this legend!
+#         if area == 0.0:
+#             print(f"Selecting loc {loc} with area {area}")
+#             return legend
+
+#         area_for_position.append((area, loc))
+
+#     # sort positions by area
+#     area_for_position.sort()
+
+#     smallest_area = area_for_position[0][0]
+#     best_preferred_location = area_for_position[0][1]
+
+
+#     # Default fallback if no good position is found (optional)
+#     # best is actually specified in the matplotlib documentaton (who knew!! https://matplotlib.org/3.1.1/api/_as_gen/matplotlib.pyplot.legend.html)
+#     best_legend = ax.legend(loc='best')
+#     best_area = legend_overlap(ax, best_legend)
+
+#     print(f"best area {best_area}")
+#     print(f"Selecting best preferred {best_preferred_location} area {best_area}")
+
+#     # #pick preferred or best with smallest area
+#     # if best_area < smallest_area:
+#     #     print("Selecting best loc")
+#     #     return best_legend
+#     # else:
+#     #     print(f"Selecting best preferred {best_preferred_location} area {best_area}")
+#     #     return ax.legend(loc=best_preferred_location)
+
+
+
 def format_round_4(value: float) -> float:
     return round(value, 4)
 
@@ -82,6 +174,14 @@ def calc_angular_average(values):
     # x_mean = x_sum / float(len(values))
     # y_mean = y_sum / float(len(values))
     return math.atan2(x_sum, y_sum)
+
+
+def set_clean_background(ax:Axes):
+    ax.patch.set_facecolor('white')
+    # Set the color and width of the border (spines)
+    for spine in ax.spines.values():
+        spine.set_edgecolor('black')  # Set the color to black
+        spine.set_linewidth(1)        # S
 
 class LatexTableFormatter(object):
 

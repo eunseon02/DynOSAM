@@ -384,8 +384,11 @@ public:
             return is_dynamic_tracklet_in_map_.exists(tracklet_id);
         }
 
+        // std::string loggerPrefix() const override {
+        //     return "rgbd_LL_world";
+        // }
         std::string loggerPrefix() const override {
-            return "rgbd_LL_world";
+            return "rgbd_LL_world_identity";
         }
 
     protected:

@@ -53,6 +53,23 @@ void FeatureContainer::remove(TrackletId tracklet_id) {
     }
 
     feature_map_.erase(tracklet_id);
+}
+
+void FeatureContainer::removeByObjectId(ObjectId object_id) {
+    //collect all tracklets
+    auto itr = FilterIterator(*this, [object_id](const Feature::Ptr& f) -> bool {
+        return f->objectId() == object_id;
+    });
+
+    TrackletIds tracklets_to_remove;
+    for (const auto& feature : itr) {
+        CHECK_EQ(feature->objectId(), object_id);
+        tracklets_to_remove.push_back(feature->trackletId());
+    }
+
+    for(const auto tracklet_id : tracklets_to_remove) {
+        this->remove(tracklet_id);
+    }
 
 }
 

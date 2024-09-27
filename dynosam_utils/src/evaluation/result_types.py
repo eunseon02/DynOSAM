@@ -16,7 +16,8 @@ ObjectTrajDict: TypeAlias = Dict[int, trajectory.PoseTrajectory3D]
 
 def sync_and_align_trajectories(traj_est: Union[trajectory.PosePath3D, trajectory.PoseTrajectory3D],
                                 traj_ref: Union[trajectory.PosePath3D, trajectory.PoseTrajectory3D],
-                                discard_n_end_poses=-1) -> Union[trajectory.PosePath3D, trajectory.PoseTrajectory3D]:
+                                discard_n_end_poses=-1,
+                                max_diff=0.01) -> Union[trajectory.PosePath3D, trajectory.PoseTrajectory3D]:
     import copy
     # We copy to distinguish another version that may be created
     traj_ref = copy.deepcopy(traj_ref)
@@ -24,7 +25,7 @@ def sync_and_align_trajectories(traj_est: Union[trajectory.PosePath3D, trajector
 
     # assume synched and in order!
     if isinstance(traj_est, trajectory.PoseTrajectory3D) and isinstance(traj_ref, trajectory.PoseTrajectory3D):
-        traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est)
+        traj_ref, traj_est = sync.associate_trajectories(traj_ref, traj_est,max_diff=max_diff)
     traj_est = align_trajectory(traj_est, traj_ref, correct_scale = False,
                                                    n=discard_n_end_poses)
     return traj_est, traj_ref

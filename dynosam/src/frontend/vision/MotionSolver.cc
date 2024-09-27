@@ -318,7 +318,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
 
     bool success = runRansac<AbsolutePoseProblem>(
         std::make_shared<AbsolutePoseProblem>(
-            adapter, AbsolutePoseProblem::EPNP
+            adapter, AbsolutePoseProblem::KNEIP
         ),
         threshold,
         params_.ransac_iterations,
@@ -527,7 +527,7 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
     const size_t& n_matches = dynamic_correspondences.size();
 
     TrackletIds all_tracklets;
-    std::transform(dynamic_correspondences.begin(), dynamic_correspondences.end(), std::back_inserter(dynamic_correspondences),
+    std::transform(dynamic_correspondences.begin(), dynamic_correspondences.end(), std::back_inserter(all_tracklets),
                 [](const AbsolutePoseCorrespondence& corres) {
                     return corres.tracklet_id_;
                 });

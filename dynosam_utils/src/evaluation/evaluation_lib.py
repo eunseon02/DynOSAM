@@ -15,6 +15,8 @@ import copy
 
 from .filesystem_utils import DataFiles, read_csv
 
+import evaluation.core.plotting as plotting
+
 from .tools import (
     so3_from_euler,
     common_entries,
@@ -217,6 +219,11 @@ class MotionErrorEvaluator(Evaluator):
             return tools.ObjectMotionTrajectory(self.object_poses_traj[object_id], self.object_motion_traj[object_id])
         return None
 
+    def make_object_ref_trajectory(self, object_id: int) -> Optional[tools.ObjectMotionTrajectory]:
+        if object_id in self.object_poses_traj_ref and object_id in self.object_motion_traj_ref:
+            return tools.ObjectMotionTrajectory(self.object_poses_traj_ref[object_id], self.object_motion_traj_ref[object_id])
+        return None
+
 
 
     def process(self, plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -230,6 +237,8 @@ class MotionErrorEvaluator(Evaluator):
 
         self._process_motion_traj(plot_collection, results)
         self._process_pose_traj(plot_collection, results)
+
+        # self._process_velocity(plot_collection, results)
 
 
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -273,6 +282,17 @@ class MotionErrorEvaluator(Evaluator):
                 f"Object_Motion_W_rotation_{object_id}",
                 plot_metric(ape_rot, f"AME Rotation Error: {object_id}", x_axis=object_motion_traj.timestamps)
             )
+
+            fig = plt.figure(figsize=(11,8))
+            tools.plot_trajectory_error(
+                fig,
+                object_motion_traj,
+                object_motion_traj_ref,
+                f"Object {object_id}"
+            )
+            plots.add_figure(
+                f"Object Motion Error{object_id}",
+                fig)
 
         return results_per_object
 
@@ -340,8 +360,6 @@ class MotionErrorEvaluator(Evaluator):
             object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
             data = (object_traj_ref, object_traj)
 
-            # add reference edges
-            # TODO: doesnt seem to work?
             object_traj.check()
 
             # evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
@@ -433,6 +451,25 @@ class MotionErrorEvaluator(Evaluator):
         plot_collection.add_figure(
             "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
         )
+
+    # def _process_velocity(self,plot_collection: evo_plot.PlotCollection, results: Dict):
+    #     for object_id, _, _ in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
+    #         object_trajectory_est = self.make_object_trajectory(object_id)
+    #         object_trajectory_ref = self.make_object_ref_trajectory(object_id)
+
+    #         if object_trajectory_est and object_trajectory_ref:
+    #             est_velocity = object_trajectory_est.calculate_velocity()
+    #             ref_velocity = object_trajectory_ref.calculate_velocity()
+
+
+    #             fig_velocity =plt.figure(figsize=(8,8))
+    #             ax = fig_velocity.gca()
+    #             tools.plot_velocity_error(ax,est_velocity, ref_velocity, plot_xyz=True)
+    #             plot_collection.add_figure(
+    #                 f"Obj Velocity {object_id}", fig_velocity
+    #             )
+
+
 
     @staticmethod
     def _construct_object_se3_trajectories(object_poses_log_file: csv.DictReader, convert_to_world_coordinates: bool) -> Tuple[ObjectTrajDict, ObjectTrajDict]:
@@ -671,9 +708,9 @@ class MapPlotter3D(Evaluator):
         self.plot_3d_map_points(plot_collection)
 
     def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection):
-        map_fig = plt.figure(figsize=(8,8))
+        map_fig = plt.figure(figsize=(8,14))
         # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
-        ax = map_fig.add_subplot(111, projection="3d", proj_type = 'ortho')
+        ax = map_fig.add_subplot(111, projection="3d")
         # ax = map_fig.add_subplot(111, projection="3d")
 
 
@@ -706,21 +743,21 @@ class MapPlotter3D(Evaluator):
             colour_generator_map[id] = colour_map
             object_trajectory = self._object_eval.make_object_trajectory(object_id)
 
-            if object_trajectory:
-                tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
+            # if object_trajectory:
+            #     tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
         # all_traj["Camera"] = camera_traj
 
-        tools.plot_object_trajectories(map_fig, {"camera":camera_traj},
+        tools.plot_object_trajectories(map_fig, {"Camera":camera_traj},
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,
-                                       plot_start_end_markers=True,
-                                       axis_marker_scale=2.0,
+                                       plot_start_end_markers=False,
+                                       axis_marker_scale=0.1,
                                        downscale=0.1,
                                        traj_zorder=30,
-                                       traj_linewidth=3.0)
-        # print(all_traj)
+                                       traj_linewidth=1.0)
+
 
         x_points = []
         y_points = []
@@ -734,6 +771,10 @@ class MapPlotter3D(Evaluator):
             frame_id = float(row["frame_id"])
             object_id = int(row["object_id"])
             tracklet_id = int(row["tracklet_id"])
+
+            # # since this takes AGES just skip every 10 frames
+            # if int(frame_id) % 50 != 0:
+            #     continue
 
             if tracklet_id in tracklet_set:
                 continue
@@ -754,29 +795,56 @@ class MapPlotter3D(Evaluator):
 
                 tracklet_set.add(tracklet_id)
             else:
-                pass
+                # just draw last object
+
                 # # this might happen becuase we log ALL the points, even on objects we only see a few number of times
-                # if object_id not in object_trajs:
+                if object_id not in object_trajs:
+                    continue
+
+                # # # since this takes AGES just skip every 10 frames
+                # if int(frame_id) % 10 != 0:
                 #     continue
-                # object_trajectory_frames = object_trajs[object_id].timestamps
 
-                # # get normalised timestamp in range 0-1
-                # normalised_frame_id = (frame_id - np.min(object_trajectory_frames))/(np.max(object_trajectory_frames) - np.min(object_trajectory_frames))
-                # # print(frame_id)
-                # # print(normalised_frame_id)
-                # time_dependant_colour = colour_generator_map[object_id](normalised_frame_id)
+                object_trajectory = self._object_eval.make_object_trajectory(object_id)
+                #this worls for when the code output the frame id as the timestamp (which may change in future?)
+                object_trajectory_frames = object_trajs[object_id].timestamps
 
-                # if object_id not in object_points:
-                #     # x,y,z,colour
-                #     object_points[object_id] = [[], [], [],[]]
+                last_frame = object_trajectory_frames[-1]
 
-                # object_points[object_id][0].append(t_robot_convention[0])
-                # object_points[object_id][1].append(t_robot_convention[1])
-                # object_points[object_id][2].append(t_robot_convention[2])
-                # object_points[object_id][3].append(time_dependant_colour)
+                print(f"frame {frame_id} last frame {last_frame}")
+
+                # if frame_id < last_frame:
+                #     k_H_last = lie_algebra.se3()
+
+                #     # calculate motion that takes us from current frame to last frame
+                #     for i in range(int(frame_id+1), last_frame):
+                #         # motions need to be in robot convention!!
+                #         _, motion = object_trajectory.get_motion_with_pose_current(i)
+                #         assert motion is not None
+                #         k_H_last = motion @ k_H_last
 
 
-            # else:
+                #     # put points from frame K to last frame
+                #     t_robot_convention = k_H_last @ t_robot_convention
+
+
+                if int(frame_id) == int(last_frame):
+                    # get normalised timestamp in range 0-1
+                    # normalised_frame_id = (frame_id - np.min(object_trajectory_frames))/(np.max(object_trajectory_frames) - np.min(object_trajectory_frames))
+                    # print(frame_id)
+                    # print(normalised_frame_id)
+                    # time_dependant_colour = colour_generator_map[object_id](normalised_frame_id)
+
+                    if object_id not in object_points:
+                        # x,y,z,colour
+                        object_points[object_id] = [[], [], []]
+
+                    object_points[object_id][0].append(t_robot_convention[0])
+                    object_points[object_id][1].append(t_robot_convention[1])
+                    object_points[object_id][2].append(t_robot_convention[2])
+
+                    print(f"Adding object point {t_robot_convention}: {object_id}")
+
 
 
         ax.view_init(azim=0, elev=90)
@@ -784,9 +852,10 @@ class MapPlotter3D(Evaluator):
         ax.axis('off')
 
         # static points
+        # some of these params are after handtuning on particular datasets for pretty figures ;)
         ax.scatter(x_points, y_points, z_points, s=1.0, c='black',alpha=0.5, zorder=0, marker=".")
-        for _, data in object_points.items():
-            ax.scatter(data[0], data[1], data[2], s=1, c=data[3])
+        for (_, data), object_colour in zip(object_points.items(), colour_list):
+            ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
         tools.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
@@ -795,6 +864,7 @@ class MapPlotter3D(Evaluator):
                                        plot_start_end_markers=False,
                                        axis_marker_scale=1.5,
                                        traj_zorder=30,
+                                       est_name_prefix="Object",
                                        traj_linewidth=1.5)
         # tools.plot_object_trajectories(map_fig, all_traj,
         #                             plot_mode=evo_plot.PlotMode.xyz,

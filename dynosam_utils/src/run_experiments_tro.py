@@ -158,7 +158,7 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        # run_sequence_func(path, name, ll_backend, *args)
+        run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
@@ -239,11 +239,11 @@ if __name__ == '__main__':
     #     "kitti_0004"
     # )
 
-    # run_both_backend(
-    #     run_kitti_sequence,
-    #     "/root/data/vdo_slam/kitti/kitti/0001/",
-    #     "kitti_0001"
-    # )
+    run_both_backend(
+        run_kitti_sequence,
+        "/root/data/vdo_slam/kitti/kitti/0001/",
+        "kitti_0001"
+    )
 
     # run_both_backend(
     #     run_kitti_sequence,
@@ -265,11 +265,11 @@ if __name__ == '__main__':
     #     "kitti_0004"
     # )
 
-    # run_both_backend(
-    #     run_kitti_sequence,
-    #     "/root/data/vdo_slam/kitti/kitti/0005/",
-    #     "kitti_0005"
-    # )
+    run_both_backend(
+        run_kitti_sequence,
+        "/root/data/vdo_slam/kitti/kitti/0005/",
+        "kitti_0005"
+    )
 
     # run_both_backend(
     #     run_kitti_sequence,
@@ -291,12 +291,12 @@ if __name__ == '__main__':
         "kitti_0000",
     )
 
-    # run_both_backend(
-    #     run_kitti_sequence,
-    #     "/root/data/vdo_slam/kitti/kitti/0003/",
-    #     "kitti_0003",
-    #     "--use_full_batch_opt=true"
-    # )
+    run_both_backend(
+        run_kitti_sequence,
+        "/root/data/vdo_slam/kitti/kitti/0003/",
+        "kitti_0003",
+        "--use_full_batch_opt=true"
+    )
 
     # run_both_backend(
     #     run_kitti_sequence,

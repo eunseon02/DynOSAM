@@ -85,4 +85,7 @@ def make_plot(results_folder_path, prefix):
 # make_plot("/root/results/Dynosam_tro2024/carla_l2", "rgbd_motion_world_backend")
 # make_plot("/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend")
 # make_plot("/root/results/DynoSAM/test_carla_l1/", "rgbd_motion_world_backend")
-make_plot("/root/results/DynoSAM/test_omd/", "rgbd_motion_world_backend")
+# make_plot("/root/results/DynoSAM/test_kitti_main/", "rgbd_motion_world_backend")
+# make_plot("/root/results/DynoSAM/test_kitti_vo_0004/", "rgbd_motion_world_backend")
+make_plot("/root/results/DynoSAM/omd_vo_test/", "rgbd_motion_world_backend")
+# make_plot("/root/results/DynoSAM/test_kitti_main/", "rgbd_motion_world_backend")

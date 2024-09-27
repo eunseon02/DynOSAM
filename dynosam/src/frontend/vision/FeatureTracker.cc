@@ -82,7 +82,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
 
     //TODO: figure out some better way of scaling this as it scales with the size of the image...
     //TODO: and make parameter...
-    static constexpr auto kDetectionBoaderThickness = 20; //in pixels
+    static constexpr auto kDetectionBoaderThickness = 10; //in pixels
     //create detection mask around the boarder of each dynamic object with some thickness
     //this prevents static and dynamic points being detected around the edge of the dynamic object
     //as there are lots of inconsistencies here
@@ -95,6 +95,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
         kDetectionBoaderThickness,
         true
     );
+
 
     FeatureContainer static_features;
     {
@@ -318,7 +319,14 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
 
-      const Keypoint previous_kp = previous_dynamic_feature->keypoint();
+      if(!detection_mask.empty()) {
+        const unsigned char valid_detection = detection_mask.at<unsigned char>(y,x);
+        if(valid_detection == 0) {
+          continue;
+        }
+      }
+
+      // const Keypoint previous_kp = previous_dynamic_feature->keypoint();
       // ObjectId previous_label = functional_keypoint::at<ObjectId>(previous_kp, previous_motion_mask);
       ObjectId previous_label = previous_dynamic_feature->objectId();
       CHECK_NE(previous_label, background_label);
@@ -475,6 +483,28 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
     }
   }
 
+  //bit of a hack -> make sure we have enough features on each object (around 100)
+  //for no reason other than there is weird behaviour when a car disappears (or is disappearing)
+  //usually becuase the depth is so bad and so the object jumps
+  //of course this number depends on the size of the frame etc etc
+  //this is just a tempory fix!!
+  // ObjectIds objects_removed;
+  // for(const auto& [object_id, status ]:info_.dynamic_track) {
+  //   //cannot jus use the num tracked as on the first frame this will be zero
+  //   //should track object age??
+  //   if(status.num_track + status.num_sampled < 100) {
+  //     VLOG(15) << "Removing object id " << object_id << " from tracks as not enough features! (" << (status.num_track + status.num_sampled) << " < 100)";
+  //     dynamic_features.removeByObjectId(object_id);
+  //     objects_removed.push_back(object_id);
+  //   }
+  // }
+
+  // //remove from info?
+  // for (auto object_id : objects_removed) {
+  //   info_.dynamic_track.erase(object_id);
+  // }
+
+
 }
 
 
@@ -543,7 +573,7 @@ void FeatureTracker::propogateMask(ImageContainer& image_container) {
     }
 
     //this is a lovely magic number inherited from some old code :)
-    if (temp_label.size() < 30)
+    if (temp_label.size() < 150)
     {
       LOG(WARNING) << "not enoug points to track object " << instance_labels[i] << " points size - "
                    << temp_label.size();
