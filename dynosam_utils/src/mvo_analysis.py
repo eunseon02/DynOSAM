@@ -142,6 +142,13 @@ def rpe(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
     mvo_errors[label] = { "rot": [], "translation": [] }
     dynosam_errors[label] = { "rot": [], "translation": [] }
 
+    # for RPE average
+    mean_label = "mean RPE"
+    if mean_label not in mvo_errors:
+        mvo_errors[mean_label] = { "rot": [], "translation": [] }
+    if mean_label not in dynosam_errors:
+        dynosam_errors[mean_label] = { "rot": [], "translation": [] }
+
 
     for gt_pose_k_1, gt_pose_k, object_pose_k_1, object_pose_k in zip(gt_traj.poses_se3[:-1], gt_traj.poses_se3[1:], mvo_traj.poses_se3[:-1], mvo_traj.poses_se3[1:]):
         gt_error = lie_algebra.se3_inverse(gt_pose_k_1) @ gt_pose_k
@@ -154,6 +161,9 @@ def rpe(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
         mvo_errors[label]["rot"].append(rot_error)
         mvo_errors[label]["translation"].append(t_error)
 
+        mvo_errors[mean_label]["rot"].append(rot_error)
+        mvo_errors[mean_label]["translation"].append(t_error)
+
     for gt_pose_k_1, gt_pose_k, object_pose_k_1, object_pose_k in zip(gt_traj.poses_se3[:-1], gt_traj.poses_se3[1:], dynosam_traj.poses_se3[:-1], dynosam_traj.poses_se3[1:]):
         gt_error = lie_algebra.se3_inverse(gt_pose_k_1) @ gt_pose_k
         est_error = lie_algebra.se3_inverse(object_pose_k_1) @ object_pose_k
@@ -165,11 +175,20 @@ def rpe(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
         dynosam_errors[label]["rot"].append(rot_error)
         dynosam_errors[label]["translation"].append(t_error)
 
+        dynosam_errors[mean_label]["rot"].append(rot_error)
+        dynosam_errors[mean_label]["translation"].append(t_error)
+
 
 def ape(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors):
     label = f"APE {dyno_label}"
     mvo_errors[label] = { "rot": [], "translation": [] }
     dynosam_errors[label] = { "rot": [], "translation": [] }
+
+    mean_label = "mean APE"
+    if mean_label not in mvo_errors:
+        mvo_errors[mean_label] = { "rot": [], "translation": [] }
+    if mean_label not in dynosam_errors:
+        dynosam_errors[mean_label] = { "rot": [], "translation": [] }
 
 
     for gt_pose_k, object_pose_k in zip(gt_traj.poses_se3, mvo_traj.poses_se3):
@@ -181,6 +200,9 @@ def ape(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
         mvo_errors[label]["rot"].append(rot_error)
         mvo_errors[label]["translation"].append(t_error)
 
+        mvo_errors[mean_label]["rot"].append(rot_error)
+        mvo_errors[mean_label]["translation"].append(t_error)
+
     for gt_pose_k, object_pose_k in zip(gt_traj.poses_se3, dynosam_traj.poses_se3):
         error =  lie_algebra.se3_inverse(gt_pose_k) @ object_pose_k
 
@@ -190,6 +212,9 @@ def ape(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
         dynosam_errors[label]["rot"].append(rot_error)
         dynosam_errors[label]["translation"].append(t_error)
 
+        dynosam_errors[mean_label]["rot"].append(rot_error)
+        dynosam_errors[mean_label]["translation"].append(t_error)
+
 
 
 def rme(gt_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, dynosam_errors):
@@ -197,26 +222,29 @@ def rme(gt_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, d
     mvo_errors[label] = { "rot": [], "translation": [] }
     dynosam_errors[label] = { "rot": [], "translation": [] }
 
+    mean_label = "mean RME"
+    if mean_label not in mvo_errors:
+        mvo_errors[mean_label] = { "rot": [], "translation": [] }
+    if mean_label not in dynosam_errors:
+        dynosam_errors[mean_label] = { "rot": [], "translation": [] }
+
     for object_pose_k_1, object_pose_k, object_motion_k in zip(gt_traj.poses_se3[:-1], gt_traj.poses_se3[1:], mvo_motion_traj.poses_se3[1:]):
         error_in_L = lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1
         error_in_L = lie_algebra.se3_inverse(error_in_L)
 
-        # print(f"MVo error r {(so3_log(error_in_L[:3, :3], return_skew=False))}")
-
         rot_error = abs(so3_log_angle(error_in_L[:3, :3], True))
         t_error = np.linalg.norm(error_in_L[:3, 3])
-        # print(f"MVO error {rot_error}")
 
         mvo_errors[label]["rot"].append(rot_error)
         mvo_errors[label]["translation"].append(t_error)
+
+        mvo_errors[mean_label]["rot"].append(rot_error)
+        mvo_errors[mean_label]["translation"].append(t_error)
 
     # rme for dynosam
     for object_pose_k_1, object_pose_k, object_motion_k in zip(gt_traj.poses_se3[:-1], gt_traj.poses_se3[1:], dynosam_motion_traj.poses_se3[1:]):
         error_in_L = lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1
         error_in_L = lie_algebra.se3_inverse(error_in_L)
-
-
-        # print(f"Dyno error r {np.linalg.norm(so3_log(error_in_L[:3, :3], return_skew=False))}")
 
         rot_error = abs(so3_log_angle(error_in_L[:3, :3], True))
         t_error = np.linalg.norm(error_in_L[:3, 3])
@@ -224,11 +252,20 @@ def rme(gt_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, d
         dynosam_errors[label]["rot"].append(rot_error)
         dynosam_errors[label]["translation"].append(t_error)
 
+        dynosam_errors[mean_label]["rot"].append(rot_error)
+        dynosam_errors[mean_label]["translation"].append(t_error)
+
 
 def ame(gt_motion_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, dynosam_errors):
     label = f"AME {dyno_label}"
     mvo_errors[label] = { "rot": [], "translation": [] }
     dynosam_errors[label] = { "rot": [], "translation": [] }
+
+    mean_label = "mean AME"
+    if mean_label not in mvo_errors:
+        mvo_errors[mean_label] = { "rot": [], "translation": [] }
+    if mean_label not in dynosam_errors:
+        dynosam_errors[mean_label] = { "rot": [], "translation": [] }
 
     for gt_pose_k, object_pose_k in zip(gt_motion_traj.poses_se3, mvo_motion_traj.poses_se3):
         error =  lie_algebra.se3_inverse(gt_pose_k) @ object_pose_k
@@ -239,6 +276,9 @@ def ame(gt_motion_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_er
         mvo_errors[label]["rot"].append(rot_error)
         mvo_errors[label]["translation"].append(t_error)
 
+        mvo_errors[mean_label]["rot"].append(rot_error)
+        mvo_errors[mean_label]["translation"].append(t_error)
+
     for gt_pose_k, object_pose_k in zip(gt_motion_traj.poses_se3, dynosam_motion_traj.poses_se3):
         error =  lie_algebra.se3_inverse(gt_pose_k) @ object_pose_k
 
@@ -247,6 +287,9 @@ def ame(gt_motion_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_er
 
         dynosam_errors[label]["rot"].append(rot_error)
         dynosam_errors[label]["translation"].append(t_error)
+
+        dynosam_errors[mean_label]["rot"].append(rot_error)
+        dynosam_errors[mean_label]["translation"].append(t_error)
 
 
 
@@ -344,18 +387,11 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
             trajectory_T = trajectory[i][0]
             T = T_camera_to_ori @ trajectory_T @ motion['T_l_1_C_1'] @ invT(T_camera_to_ori)
-
-            # if not lie_algebra.is_se3(T):
-            #     T[:3, :3] = closest_rotation_matrix(T[:3, :3])
-
-            # assert lie_algebra.is_se3(T)
-
-            # print(T.dtype)
-            # T_inv = invT(T)
             t_world = get_r_j_from_i_in_i_FROM_T_ji(T)
-            # R_world = np.linalg.inv(-T[:3, :3].transpose())
             C_ji = T[:3, :3]
-            R_world = C_ji
+
+            # VERY IMPORTANT to transpose
+            R_world = C_ji.T
             pts[:, i] = t_world
 
             T_se3 = lie_algebra.se3(R_world, t_world[:3])
@@ -808,13 +844,8 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         rme(gt_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, dynosam_errors)
         ame(gt_motion_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_errors, dynosam_errors)
         rpe(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
-        # ape(gt_traj, mvo_traj, dynosam_traj, dyno_label, mvo_errors, dynosam_errors)
 
 
-            # all_mvo_traj[dyno_label] = propogated_mvo_traj
-        # all_mvo_traj[dyno_label] = mvo_traj
-        # all_gt_traj[dyno_label] = gt_traj
-        # all_dyno_traj[dyno_label] = dynosam_traj
 
         all_mvo_traj["MVO"] = mvo_traj
         all_gt_traj["Ground Truth"] = gt_traj
@@ -907,16 +938,11 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
         plt.show()
 
-        # plot_collection.show()
-
     import math
     for object_id, error in mvo_errors.items():
         rot_error = np.array(error["rot"])
         t_error = np.array(error["translation"])
 
-        # print(rot_error)
-        # rmse_rot =np.mean(rot_error)
-        # rmse_t = np.mean(t_error)
         rmse_rot = math.sqrt(np.mean(np.power(rot_error, 2)))
         rmse_t = math.sqrt(np.mean(np.power(t_error, 2)))
 
@@ -926,8 +952,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         rot_error = np.array(error["rot"])
         t_error = np.array(error["translation"])
 
-        # rmse_rot =np.mean(rot_error)
-        # rmse_t = np.mean(t_error)
         rmse_rot = math.sqrt(np.mean(np.power(rot_error, 2)))
         rmse_t = math.sqrt(np.mean(np.power(t_error, 2)))
 
@@ -935,56 +959,8 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
 
 
-        # eval.tools.plot_object_trajectories(
-        #     evo_figure, all_mvo_traj,
-        #     all_gt_traj,
-        #     # None,
-        #     plot_mode = evo_plot.PlotMode.xyz,
-        #     plot_axis_est=False, plot_axis_ref=False,
-        #     downscale=0.5,
-        #     ref_name_prefix="Ground Truth",
-        #     shift_ref_colour=100,
-        #     shift_est_colour=300
-        #     # axis_marker_scale=1.0
-        # )
-
-        # # eval.tools.plot_object_trajectories(
-        # #     evo_figure, {"mvo camera" : mvo_camera_traj, "dynosam camera": dynosam_camera_pose_traj},
-        # #     plot_mode = evo_plot.PlotMode.xyz,
-        # #     plot_axis_est=True, plot_axis_ref=True,
-        # #     downscale=0.005,
-        # #     # axis_marker_scale=1.0
-        # # )
-
-        # eval.tools.plot_object_trajectories(
-        #     evo_figure, all_dyno_traj, #all_gt_traj,
-        #     plot_mode = evo_plot.PlotMode.xyz,
-        #     plot_axis_est=False, plot_axis_ref=True,
-        #     downscale=0.5
-        #     # axis_marker_scale=1.0
-        # )
 
 
-    # eval.tools.plot_object_trajectories(
-    #     evo_figure, all_gt_traj, plot_mode = evo_plot.PlotMode.xyz
-    # )
-
-
-    # mvo_motion_eval._object_motions_traj = all_mvo_motion_traj
-    # mvo_motion_eval._object_motions_traj_ref = all_gt_motion_traj
-    # # mvo_motion_eval._object_poses_traj = all_mvo_traj
-    # # mvo_motion_eval._object_poses_traj_ref = all_gt_traj
-
-    # mvo_results_dict = {}
-    # mvo_motion_eval.process(plot_collection, mvo_results_dict)
-
-    # print(mvo_results_dict)
-
-    # plot_collection.show()
-    # table_formatter = formatting_utils.LatexTableFormatter()
-    # table_formatter.add_results("MVO analysis", mvo_results_dict)
-    # print(f"Writing output results to file {output_results_file}")
-    # table_formatter.save_pdf(output_results_file)
 
 
 
@@ -994,24 +970,24 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
 
 if __name__ == '__main__':##
-    mvo_to_dyno_labels_swinging_dynamic = {
-        1 : 1,
-        2:  2,
-        3 : 3,
-        4 : 4
-    }
-    process_mvo_data(
-        "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
-        # "/root/results/DynoSAM/test_omd_long",
-        "/root/results/DynoSAM/omd_vo_test",
-        4,
-        mvo_to_dyno_labels_swinging_dynamic,
-        "omd",
-        "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
+    # mvo_to_dyno_labels_swinging_dynamic = {
+    #     1 : 1,
+    #     2:  2,
+    #     3 : 3,
+    #     4 : 4
+    # }
+    # process_mvo_data(
+    #     "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
+    #     # "/root/results/DynoSAM/test_omd_long",
+    #     "/root/results/DynoSAM/omd_vo_test",
+    #     4,
+    #     mvo_to_dyno_labels_swinging_dynamic,
+    #     "omd",
+    #     "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
 
     # for this sequence object id 0 is the camera
-    # mvo_to_dyno_labels_kitti = {
-    #     2 : 1,
-    #     3:  2,
-    # }
-    # process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")
+    mvo_to_dyno_labels_kitti = {
+        2 : 1,
+        3:  2,
+    }
+    process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")

@@ -1298,6 +1298,8 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
                 theta_accessor->query<gtsam::Pose3>(object_pose_key_k),
                 initial_object_pose
             );
+
+            CHECK_EQ(first_seen_frame, context.getFrameId());
         }
 
         //for experiments and testing
