@@ -39,4 +39,4 @@
 --use_identity_rot_L_for_init=false
 --corrupt_L_for_init=false
 --corrupt_L_for_init_sigma=0.2
---init_LL_with_identity=true
+--init_LL_with_identity=false

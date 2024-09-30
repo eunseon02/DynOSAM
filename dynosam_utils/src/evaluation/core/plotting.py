@@ -193,7 +193,7 @@ class ObjectTrajectoryPlotter(object):
         for _, obj_traj in reduced_trajectories.items():
             obj_traj = ObjectTrajectoryPlotter.reduce_trajectory(downscale_percentage, obj_traj)
             evo_plot.draw_coordinate_axes(
-                ax, obj_traj, plot_mode,axis_marker_scale)
+                ax, obj_traj, plot_mode,marker_scale=axis_marker_scale)
 
     def _draw_trajectory(self,
                          ax: Axes,

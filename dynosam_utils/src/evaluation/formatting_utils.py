@@ -318,7 +318,7 @@ class LatexTableFormatter(object):
                     with self._doc.create(Tabular('|c|cc|')) as table:
                         table.add_hline()
 
-                        header_row = ("", MultiColumn(2, align='c', data='RPE'))
+                        header_row = ("", MultiColumn(2, align='c|', data='RPE'))
                         table.add_row(header_row)
                         table.add_row((
                             "obj",
@@ -365,7 +365,7 @@ class LatexTableFormatter(object):
                 with self._doc.create(Subsection(r"AME (Absolute motion errors) ($E(^wH)$)")):
                     with self._doc.create(Tabular('|c|cc|')) as table:
                         table.add_hline()
-                        header_row = ("", MultiColumn(2, align='c', data='AME'))
+                        header_row = ("", MultiColumn(2, align='c|', data='AME'))
                         table.add_row(header_row)
                         table.add_row((
                             "obj",
@@ -409,7 +409,7 @@ class LatexTableFormatter(object):
                 with self._doc.create(Subsection(r'RME (Relative motion errors) ($E(^LH)$)')):
                     with self._doc.create(Tabular('|c|cc|')) as table:
                         table.add_hline()
-                        header_row = ("", MultiColumn(2, align='c', data='AME'))
+                        header_row = ("", MultiColumn(2, align='c|', data='AME'))
                         table.add_row(header_row)
                         table.add_row((
                             "obj",
