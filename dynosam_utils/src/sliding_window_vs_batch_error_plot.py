@@ -22,6 +22,13 @@ import matplotlib.pyplot as plt
 # Reset all rcParams to their default values
 plt.rcdefaults()
 
+plt.rcParams.update({
+                    "text.usetex": True,
+                    "font.family": "serif",
+                    "font.serif": ["Computer Modern Roman"],
+                    })
+
+
 
 
 def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_path):
@@ -47,6 +54,8 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
         sliding_object_traj_ref = sliding_motion_eval.object_motion_traj_ref[object_id]
 
         common_timestamps = np.intersect1d(sliding_object_traj.timestamps, batch_object_traj.timestamps)
+
+        common_timestamps = common_timestamps[:-10]
 
         batch_ids = []
         sliding_ids = []
@@ -130,15 +139,12 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
     # trans_axes.set_title("Batch vs. Sliding Window: AME$_t$ Error Comparison", fontweight='heavy', fontsize=23)
     trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding")
     trans_axes.patch.set_facecolor('white')
+    trans_axes.margins(x=0)
     # Set the color and width of the border (spines)
     for spine in trans_axes.spines.values():
         spine.set_edgecolor('black')  # Set the color to black
         spine.set_linewidth(1)        # Set the border width (adjust as needed)
-    # trans_fig.tight_layout()
 
-
-    # rot_fig = plt.figure(figsize=(10,4))
-    # ax = rot_fig.gca()
 
     rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=19)
     # rot_axes.set_xlabel("Frame Index [-]")
@@ -146,22 +152,20 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
     rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Batch")
     rot_axes.plot(batch_errors_timestamp, sliding_errors_r, label="Sliding")
     rot_axes.patch.set_facecolor('white')
+    rot_axes.margins(x=0)
     # Set the color and width of the border (spines)
     for spine in rot_axes.spines.values():
         spine.set_edgecolor('black')  # Set the color to black
         spine.set_linewidth(1)        # Set the border width (adjust as needed)
 
-    # plt.show()
 
-    # rot_fig.savefig("/root/results/misc/swinging_unconstrained_4_batch_vs_sliding_rot.pdf", format="pdf")
-    # trans_fig.savefig("/root/results/misc/swinging_unconstrained_4_batch_vs_sliding_trans.pdf", format="pdf")
+    # print average errors
+    print(f"Batch average t: {np.mean(batch_errors_t)}")
+    print(f"Batch average r: {np.mean(batch_errors_r)}")
+    print(f"Sliding average t: {np.mean(sliding_errors_t)}")
+    print(f"Sliding average r: {np.mean(sliding_errors_r)}")
 
-    # rot_fig.savefig("/root/results/misc/kitti_0004_batch_vs_sliding_rot.pdf", format="pdf")
-    # trans_fig.savefig("/root/results/misc/kitti_0004_batch_vs_sliding_trans.pdf", format="pdf")
 
-
-    # rot_fig.savefig("/root/results/misc/kitti_0000_batch_vs_sliding_rot.pdf", format="pdf")
-    # trans_fig.savefig("/root/results/misc/kitti_0000_batch_vs_sliding_trans.pdf", format="pdf")
 
 
 
@@ -184,19 +188,21 @@ rot_fig = plt.figure(figsize=(20,8))
 trans_fig = plt.figure(figsize=(20,8))
 
 rot_axes_1 = rot_fig.add_subplot(211)
-rot_axes_1.set_title("KITTI 0000", loc="left")
+rot_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
 
 rot_axes_2 = rot_fig.add_subplot(212)
-rot_axes_2.set_title("OMD (swinging 4 unconstrained)", loc="left")
+rot_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
 
 trans_axes_1 = trans_fig.add_subplot(211)
-trans_axes_1.set_title("KITTI 0000", loc="left")
+trans_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
 
 trans_axes_2 = trans_fig.add_subplot(212)
-trans_axes_2.set_title("OMD (swinging 4 unconstrained)", loc="left")
+trans_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
 
 make_plot(trans_axes_1, rot_axes_1, "/root/results/Dynosam_tro2024/kitti_0000", "/root/results/Dynosam_tro2024/kitti_0000_sliding")
-make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare")
+make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_batch", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding")
+# make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_vo_test", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare")
+
 
 rot_axes_1.legend(loc="upper right", fontsize=23)
 rot_axes_2.legend(loc="upper right", fontsize=23)
@@ -213,10 +219,10 @@ rot_fig.supxlabel("Frame Index [-]",fontsize=27)
 trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=30)
 trans_fig.supxlabel("Frame Index [-]", fontsize=27)
 
-rot_fig.tight_layout(pad=0.5)
-trans_fig.tight_layout(pad=0.5)
+rot_fig.tight_layout()
+trans_fig.tight_layout()
 
-plt.show()
+# plt.show()
 
 # rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
 # trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")

@@ -407,10 +407,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         colorOrder = plt.rcParams["axes.prop_cycle"].by_key()["color"]
         for i in range(1, len(invalidities)):
             if i % 2 == 0:
-                # axes.plot(pts[0, invalidities[i-1]:invalidities[i]],
-                #          pts[1, invalidities[i-1]:invalidities[i]],
-                #          pts[2, invalidities[i-1]:invalidities[i]],
-                #          '-', color=colorOrder[motion['id'][0][0] % len(colorOrder)], label=motion['id'][0][0])
                 trajs = pose_in_world[invalidities[i-1]:invalidities[i]]
                 times = timestamps[0][invalidities[i-1]:invalidities[i]]
 
@@ -419,16 +415,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
                     trajectories[motion['id'][0][0]]["motions"].append(traj)
                     trajectories[motion['id'][0][0]]["times"].append(time)
 
-                # for t in trajs:
-                #     trajectories[motion['id'][0][0]]["motions"].append(t)
-                # trajectories[motion['id'][0][0]]["times"].extend(times)
-
             else:
-                # axes.plot(pts[0, invalidities[i-1]:invalidities[i]],
-                #          pts[1, invalidities[i-1]:invalidities[i]],
-                #          pts[2, invalidities[i-1]:invalidities[i]],
-                #          '--', color=colorOrder[motion['id'][0][0] % len(colorOrder)], label=motion['id'][0][0]
-
                 trajs = pose_in_world[invalidities[i-1]:invalidities[i]]
                 times = timestamps[0][invalidities[i-1]:invalidities[i]]
 
@@ -445,7 +432,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
     # and also process
     for motion in motions[0]:
         label = motion['id'][0][0]
-        print(f"Adding motion {label}")
         trajectories[label] = {}
         trajectories[label]["motions"] = []
         trajectories[label]["times"] = []
@@ -970,24 +956,24 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
 
 if __name__ == '__main__':##
-    # mvo_to_dyno_labels_swinging_dynamic = {
-    #     1 : 1,
-    #     2:  2,
-    #     3 : 3,
-    #     4 : 4
-    # }
-    # process_mvo_data(
-    #     "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
-    #     # "/root/results/DynoSAM/test_omd_long",
-    #     "/root/results/DynoSAM/omd_vo_test",
-    #     4,
-    #     mvo_to_dyno_labels_swinging_dynamic,
-    #     "omd",
-    #     "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
+    mvo_to_dyno_labels_swinging_dynamic = {
+        1 : 1,
+        2:  2,
+        3 : 3,
+        4 : 4
+    }
+    process_mvo_data(
+        "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
+        # "/root/results/DynoSAM/test_omd_long",
+        "/root/results/DynoSAM/omd_vo_test",
+        4,
+        mvo_to_dyno_labels_swinging_dynamic,
+        "omd",
+        "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
 
     # for this sequence object id 0 is the camera
-    mvo_to_dyno_labels_kitti = {
-        2 : 1,
-        3:  2,
-    }
-    process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")
+    # mvo_to_dyno_labels_kitti = {
+    #     2 : 1,
+    #     3:  2,
+    # }
+    # process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")

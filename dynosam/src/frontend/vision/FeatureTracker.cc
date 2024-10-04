@@ -314,10 +314,11 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
       const size_t age = previous_dynamic_feature->age();
 
       const Keypoint kp = previous_dynamic_feature->predictedKeypoint();
-      ObjectId predicted_label = functional_keypoint::at<ObjectId>(kp, motion_mask);
-      // CHECK_NE(predicted_label, background_label);
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
+      // ObjectId predicted_label = functional_keypoint::at<ObjectId>(kp, motion_mask);
+      const ObjectId predicted_label = motion_mask.at<ObjectId>(y,x);
+
 
       if(!detection_mask.empty()) {
         const unsigned char valid_detection = detection_mask.at<unsigned char>(y,x);
@@ -330,6 +331,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
       // ObjectId previous_label = functional_keypoint::at<ObjectId>(previous_kp, previous_motion_mask);
       ObjectId previous_label = previous_dynamic_feature->objectId();
       CHECK_NE(previous_label, background_label);
+      CHECK_GT(previous_label, 0);
 
 
       PerObjectStatus& object_tracking_info = info_.getObjectStatus(predicted_label);
@@ -383,15 +385,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
           .keypoint(kp)
           .measuredFlow(flow)
           .predictedKeypoint(predicted_kp);
-        // feature->instance_label_ = predicted_label;
-        // feature->tracking_label_ = predicted_label;
-        // feature->frame_id_ = frame_id;
-        // feature->type_ = KeyPointType::DYNAMIC;
-        // feature->age_ = new_age;
-        // feature->tracklet_id_ = tracklet_to_use;
-        // feature->keypoint_ = kp;
-        // feature->measured_flow_ = flow;
-        // feature->predicted_keypoint_ = predicted_kp;
+
 
         dynamic_features.add(feature);
         instance_labels.push_back(feature->objectId());
@@ -419,12 +413,15 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
       }
 
       const ObjectId label = motion_mask.at<ObjectId>(i, j);
-      PerObjectStatus& object_tracking_info = info_.getObjectStatus(label);
 
       if (label == background_label)
       {
         continue;
       }
+
+
+      PerObjectStatus& object_tracking_info = info_.getObjectStatus(label);
+
 
       double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
       double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
@@ -459,18 +456,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
           .keypoint(keypoint)
           .measuredFlow(flow)
           .predictedKeypoint(predicted_kp);
-        // Feature::Ptr feature = std::make_shared<Feature>();
 
-        // feature->instance_label_ = label;
-        // feature->tracking_label_ = label;
-        // feature->frame_id_ = frame_id;
-        // feature->type_ = KeyPointType::DYNAMIC;
-        // feature->age_ = 0;
-        // feature->tracklet_id_ = tracked_id_manager.getTrackletIdCount();
-        // tracked_id_manager.incrementTrackletIdCount();
-        // feature->predicted_keypoint_ = predicted_kp;
-        // feature->measured_flow_ = flow;
-        // feature->keypoint_ = keypoint;
 
         dynamic_features.add(feature);
         instance_labels.push_back(feature->objectId());

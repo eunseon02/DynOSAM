@@ -145,11 +145,11 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
 
     # run_prep_sequence_func(path, name_P, *args_list_P)
     # run_prep_sequence_func(path, name_PO, *args_list_PO)
-    # run_prep_sequence_func(path, name_POM, *args_list_POM)
+    run_prep_sequence_func(path, name_POM, *args_list_POM)
 
-    run_analysis(name_P)
-    run_analysis(name_PO)
-    run_analysis(name_POM)
+    # run_analysis(name_P)
+    # run_analysis(name_PO)
+    # run_analysis(name_POM)
 
 if __name__ == '__main__':
     # make input dictionary
@@ -158,11 +158,16 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        run_sequence_func(path, name, ll_backend, *args)
+        # run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
+    # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001")
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0000/", "kitti_0000")
+    # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0002/", "kitti_0002")
+    # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0003/", "kitti_0003")
+    # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0005/", "kitti_0005")
+    # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0018/", "kitti_0018")
 
     # run_POM_tests(prep_cluster_sequence, "/root/data/cluster_slam/CARLA-L1/", "carla_l1", "--use_propogate_mask=false", "--use_dynamic_track=false", "--ending_frame=300")
 
@@ -239,11 +244,11 @@ if __name__ == '__main__':
     #     "kitti_0004"
     # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0001/",
-        "kitti_0001"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0001/",
+    #     "kitti_0001"
+    # )
 
     # run_both_backend(
     #     run_kitti_sequence,
@@ -265,11 +270,11 @@ if __name__ == '__main__':
     #     "kitti_0004"
     # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0005/",
-        "kitti_0005"
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0005/",
+    #     "kitti_0005"
+    # )
 
     # run_both_backend(
     #     run_kitti_sequence,
@@ -285,18 +290,175 @@ if __name__ == '__main__':
     #     "--use_full_batch_opt=false"
     # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0000/",
-        "kitti_0000",
-    )
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
 
-    run_both_backend(
-        run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0003/",
-        "kitti_0003",
-        "--use_full_batch_opt=true"
-    )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0001/",
+    #     "kitti_0001",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0002/",
+    #     "kitti_0002",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true",
+    #     "--use_vo_factor=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true",
+    #     "--use_vo_factor=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0005/",
+    #     "kitti_0005",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true",
+    #     "--use_vo_factor=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0006/",
+    #     "kitti_0006",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true",
+    #     "--use_vo_factor=false"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0018/",
+    #     "kitti_0018",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true",
+    #     "--use_vo_factor=false"
+    # )
+
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_vo_test",
+    #     "--use_full_batch_opt=false",
+    #     "--ending_frame=500",
+    #     "--semantic_mask_step_size=15",
+    #     "--constant_object_motion_rotation_sigma=1.0",
+    #     "--constant_object_motion_translation_sigma=0.2",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend")
+
+
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_dense",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend"
+    # )
+
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "carla_l2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend"
+    # )
+
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "carla_s2",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend"
+    # )
+
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "carla_s1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend"
+    # )
+
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0018/",
+    #     "kitti_0018",
+    #     "--init_H_with_identity=false",
+    #     "--updater_suffix=init_frontend",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003",
+    #     "--use_full_batch_opt=true"
+    # )
 
     # run_both_backend(
     #     run_kitti_sequence,
@@ -358,6 +520,38 @@ if __name__ == '__main__':
     #     "--odometry_translation_sigma=0.001",
     #     "--odometry_rotation_sigma=0.001")
 
+    # prep_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_vo_test",
+    #     "--use_dynamic_track=false",
+    #     "--semantic_mask_step_size=15",
+    #     "--ending_frame=500")
+
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_batch",
+    #     "--use_full_batch_opt=true",
+    #     "--ending_frame=300",
+    #     "--semantic_mask_step_size=15",
+    #     "--constant_object_motion_rotation_sigma=1.0",
+    #     "--constant_object_motion_translation_sigma=0.2",
+    #     "--init_H_with_identity=true")
+
+
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_sliding",
+    #     "--use_full_batch_opt=false",
+    #     "--ending_frame=300",
+    #     "--semantic_mask_step_size=15",
+    #     "--constant_object_motion_rotation_sigma=1.0",
+    #     "--constant_object_motion_translation_sigma=0.2",
+    #     "--init_H_with_identity=true")
+
+
+
 
     ## cluster
     # prep_cluster_sequence(
@@ -398,6 +592,7 @@ if __name__ == '__main__':
     #     "--use_full_batch_opt=false",
     #     "--opt_window_size=20",
     #     "--opt_window_overlap=5",
+    #     "--init_LL_with_identity=true"
     # )
 
     # run_both_backend(
@@ -406,7 +601,8 @@ if __name__ == '__main__':
     #     "carla_l2",
     #     "--use_full_batch_opt=false",
     #     "--opt_window_size=20",
-    #     "--opt_window_overlap=5"
+    #     "--opt_window_overlap=5",
+    #     "--init_LL_with_identity=true"
     # )
 
     # run_both_backend(

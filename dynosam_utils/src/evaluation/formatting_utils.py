@@ -34,6 +34,10 @@ def get_nice_red():
     # this is not super red (like a purple orange I guess?)
     return np.array(nice_colours["vermillion"]) / 255.0 # for plt range
 
+def prop_cycle() -> List[str]:
+    return ["#0072B2", "#E69F00", "#009E73", "#CC79A7",
+            "#56B4E9", "#D55E00", "#F0E442", "#000000"]
+
 # Nic Barbara
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
@@ -59,9 +63,7 @@ def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=T
         "axes.grid" : True,
         "axes.grid.which": "major",
         "axes.linewidth": 0.5,
-        "axes.prop_cycle": cycler("color", [
-            "#0072B2", "#E69F00", "#009E73", "#CC79A7",
-            "#56B4E9", "#D55E00", "#F0E442", "#000000"]),
+        "axes.prop_cycle": cycler("color", prop_cycle()),
 
         "errorbar.capsize": 2.5,
 

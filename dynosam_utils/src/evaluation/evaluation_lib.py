@@ -31,12 +31,6 @@ from .tools import (
 
 import evaluation.tools as tools
 
-from .result_types import (
-    ObjectPoseDict,
-    ObjectTrajDict,
-    plot_metric,
-    sync_and_align_trajectories
-)
 
 logger = logging.getLogger("dynosam_eval")
 # ----> console info messages require these lines <----
@@ -49,7 +43,10 @@ _ch.setFormatter(logging.Formatter(
 logger.addHandler(_ch)
 
 
-
+## {object_id: { frame_id: homogenous_matrix }}
+ObjectPoseDict: TypeAlias = Dict[int, Dict[int, np.ndarray]]
+## {object_id: trajectory.PosePath3D}
+ObjectTrajDict: TypeAlias = Dict[int, trajectory.PoseTrajectory3D]
 
 
 class Evaluator(ABC):
@@ -187,7 +184,6 @@ class MotionErrorEvaluator(Evaluator):
                                             "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
 
-        # TODO: dont need dynosam to do the error metrics for us - let evo do it all, just record all the se3 things
         # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
         # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
         self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file, convert_to_world_coordinates=True)
@@ -275,12 +271,12 @@ class MotionErrorEvaluator(Evaluator):
         if plots:
             plots.add_figure(
                 f"Object_Motion_W_translation_{object_id}",
-                plot_metric(ape_trans, f"AME Translation Error: {object_id}", x_axis=object_motion_traj.timestamps)
+                plotting.plot_metric(ape_trans, f"AME Translation Error: {object_id}", x_axis=object_motion_traj.timestamps)
             )
 
             plots.add_figure(
                 f"Object_Motion_W_rotation_{object_id}",
-                plot_metric(ape_rot, f"AME Rotation Error: {object_id}", x_axis=object_motion_traj.timestamps)
+                plotting.plot_metric(ape_rot, f"AME Rotation Error: {object_id}", x_axis=object_motion_traj.timestamps)
             )
 
             fig = plt.figure(figsize=(11,8))
@@ -306,8 +302,9 @@ class MotionErrorEvaluator(Evaluator):
             return None
 
         # ground truth object poses
-        object_poses = self._object_poses_traj_ref[object_id].poses_se3
+        object_poses_ref_traj = self._object_poses_traj_ref[object_id]
 
+        object_poses = object_poses_ref_traj.poses_se3
 
         for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_motion_traj.poses_se3[1:]):
             object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
@@ -332,12 +329,12 @@ class MotionErrorEvaluator(Evaluator):
         if plots is not None:
             plots.add_figure(
                 f"Object_Motion_L_translation_{object_id}",
-                plot_metric(ape_trans, f"RME Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+                plotting.plot_metric(ape_trans, f"RME Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
             )
 
             plots.add_figure(
                 f"Object_Motion_L_rotation_{object_id}",
-                plot_metric(ape_rot, f"RME Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+                plotting.plot_metric(ape_rot, f"RME Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
             )
 
         return results_per_object
@@ -356,8 +353,7 @@ class MotionErrorEvaluator(Evaluator):
 
 
         for object_id, object_traj, object_traj_ref in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
-
-            object_traj, object_traj_ref = sync_and_align_trajectories(object_traj, object_traj_ref)
+            object_traj, object_traj_ref = tools.sync_and_align_trajectories(object_traj, object_traj_ref)
             data = (object_traj_ref, object_traj)
 
             object_traj.check()
@@ -397,12 +393,12 @@ class MotionErrorEvaluator(Evaluator):
 
             plot_collection.add_figure(
                     f"Object_Pose_RPE_translation_{object_id}",
-                    plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}", x_axis=object_traj.timestamps[1:])
+                    plotting.plot_metric(rpe_trans, f"Object Pose RPE Translation: {object_id}", x_axis=object_traj.timestamps[1:])
                 )
 
             plot_collection.add_figure(
                 f"Object_Pose_APE_rotation_{object_id}",
-                plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}", x_axis=object_traj.timestamps[1:])
+                plotting.plot_metric(rpe_rot, f"Object Pose RPE Rotation: {object_id}", x_axis=object_traj.timestamps[1:])
             )
 
 
@@ -426,8 +422,20 @@ class MotionErrorEvaluator(Evaluator):
             results["objects"][object_id]["poses"] = results_per_object
 
         # plot object poses
-        plot_mode = evo_plot.PlotMode.xy
-        tools.plot_object_trajectories(fig_all_object_traj, object_trajectories, object_trajectories_ref, plot_mode=plot_mode, plot_start_end_markers=True)
+        plot_mode = evo_plot.PlotMode.xyz
+        ax = fig_all_object_traj.add_subplot(111, projection="3d")
+        tools.plot_object_trajectories(
+            fig_all_object_traj,
+            object_trajectories,
+            object_trajectories_ref,
+            plot_mode=plot_mode,
+            plot_start_end_markers=True,
+            plot_axis_est=True,
+            plot_axis_ref=True,
+            # axis_marker_scale=1.0,
+            downscale=0.1)
+
+
         fig_all_object_traj.suptitle(r"Estimated \& Ground Truth Object Trajectories")
         ax = fig_all_object_traj.gca()
         # trajectory_helper.set_ax_limits(ax, plot_mode)
@@ -537,8 +545,23 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(poses_est) < 3:
+            if len(timestamps) < 3:
                 continue
+
+            # #hack for now to handle trajectories that jump
+            # for index, (prev_t, curr_t) in enumerate(zip(timestamps[:-1], timestamps[1:])):
+            #     if prev_t != curr_t - 1:
+            #         break
+
+            # print(f"{index} -> {len(timestamps)}")
+            # timestamps = timestamps[:index-1]
+            # timestamps_ref = timestamps_ref[:index-1]
+            # poses_ref = poses_ref[:index-1]
+            # poses_est = poses_est[:index-1]
+            # print(len(poses_est))
+            # if len(poses_est) < 2:
+            #     continue
+
 
             if convert_to_world_coordinates:
                 object_poses_traj[object_id] = transform_camera_trajectory_to_world(
@@ -597,7 +620,7 @@ class CameraPoseEvaluator(Evaluator):
         traj_est_vo = self.camera_pose_traj
         traj_ref_vo = self.camera_pose_traj_ref
 
-        traj_est_vo, traj_ref_vo = sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
+        traj_est_vo, traj_ref_vo = tools.sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
 
         # used to draw trajectories for plot collection
         trajectories = {}
@@ -634,22 +657,22 @@ class CameraPoseEvaluator(Evaluator):
 
         plot_collection.add_figure(
                     "VO_APE_translation",
-                    plot_metric(ape_trans, f"VO APE Translation", x_axis=traj_est_vo.timestamps)
+                    plotting.plot_metric(ape_trans, f"VO APE Translation", x_axis=traj_est_vo.timestamps)
                 )
 
         plot_collection.add_figure(
                     "VO_APE_rotation",
-                    plot_metric(ape_rot, f"VO APE Rotation", x_axis=traj_est_vo.timestamps)
+                    plotting.plot_metric(ape_rot, f"VO APE Rotation", x_axis=traj_est_vo.timestamps)
                 )
 
         plot_collection.add_figure(
                     "VO_RPE_translation",
-                    plot_metric(rpe_trans, f"VO RPE Translation", x_axis=traj_est_vo.timestamps[1:])
+                    plotting.plot_metric(rpe_trans, f"VO RPE Translation", x_axis=traj_est_vo.timestamps[1:])
                 )
 
         plot_collection.add_figure(
                     "VO_RPE_rotation",
-                    plot_metric(rpe_rot, f"VO RPE Rotation", x_axis=traj_est_vo.timestamps[1:])
+                    plotting.plot_metric(rpe_rot, f"VO RPE Rotation", x_axis=traj_est_vo.timestamps[1:])
                 )
 
         # update results dict that will be saved to file

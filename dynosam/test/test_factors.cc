@@ -23,6 +23,7 @@
 
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
 #include "dynosam/factors/Pose3FlowProjectionFactor.h"
+#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
 #include "internal/helpers.hpp"
@@ -134,6 +135,69 @@ TEST(Pose3FlowProjectionFactor, testJacobians) {
     EXPECT_TRUE(gtsam::assert_equal(H1, numerical_H1, 1e-4));
     EXPECT_TRUE(gtsam::assert_equal(H2, numerical_H2, 1e-4));
 
+
+
+}
+
+
+TEST(LandmarkMotionTernaryFactor, testJacobians) {
+
+    gtsam::Pose3 H(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                            gtsam::Point3(0.05, -0.10, 0.20));
+    gtsam::Pose3 HPerturbed = utils::perturbWithNoise<gtsam::Pose3>(H, 0.3);
+
+
+   gtsam::Point3 P1(0.4, 1.0, 0.8);
+   gtsam::Point3 P2 = H * P1;
+
+    auto noise = gtsam::noiseModel::Isotropic::Sigma(3u, 0.1);
+
+    LandmarkMotionTernaryFactor factor(0, 1, 2,noise);
+
+    gtsam::Matrix H1, H2, H3;
+    gtsam::Vector error = factor.evaluateError(P1, P2, HPerturbed, H1, H2, H3);
+
+    //now do numerical jacobians
+    gtsam::Matrix numerical_H1 =
+            gtsam::numericalDerivative31<gtsam::Vector3, gtsam::Point3, gtsam::Point3, gtsam::Pose3>(
+                std::bind(&LandmarkMotionTernaryFactor::evaluateError, &factor,
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, boost::none, boost::none, boost::none),
+            P1, P2, HPerturbed);
+
+   gtsam::Matrix numerical_H2 =
+            gtsam::numericalDerivative32<gtsam::Vector3, gtsam::Point3, gtsam::Point3, gtsam::Pose3>(
+                std::bind(&LandmarkMotionTernaryFactor::evaluateError, &factor,
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, boost::none, boost::none, boost::none),
+            P1, P2, HPerturbed);
+
+    gtsam::Matrix numerical_H3 =
+            gtsam::numericalDerivative33<gtsam::Vector3, gtsam::Point3, gtsam::Point3, gtsam::Pose3>(
+                std::bind(&LandmarkMotionTernaryFactor::evaluateError, &factor,
+                std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, boost::none, boost::none, boost::none),
+            P1, P2, HPerturbed);
+
+    EXPECT_TRUE(gtsam::assert_equal(H1, numerical_H1));
+    EXPECT_TRUE(gtsam::assert_equal(H2, numerical_H2));
+    EXPECT_TRUE(gtsam::assert_equal(H3, numerical_H3));
+
+}
+
+TEST(LandmarkMotionTernaryFactor, testZeroError) {
+
+    gtsam::Pose3 H(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                            gtsam::Point3(0.05, -0.10, 0.20));
+
+
+   gtsam::Point3 P1(0.4, 1.0, 0.8);
+   gtsam::Point3 P2 = H * P1;
+
+    auto noise = gtsam::noiseModel::Isotropic::Sigma(3u, 0.1);
+
+    LandmarkMotionTernaryFactor factor(0, 1, 2,noise);
+
+    gtsam::Matrix H1, H2, H3;
+    gtsam::Vector error = factor.evaluateError(P1, P2, H, H1, H2, H3);
+    EXPECT_TRUE(gtsam::assert_equal(gtsam::Point3(0, 0, 0), error, 1e-4));
 
 
 }

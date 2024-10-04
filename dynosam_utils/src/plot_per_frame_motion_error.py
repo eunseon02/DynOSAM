@@ -1,4 +1,5 @@
 import evaluation.evaluation_lib as eval
+import evaluation.core.metrics as eval_metrics
 from evaluation.formatting_utils import * #for nice colours
 
 
@@ -14,11 +15,29 @@ import matplotlib.pyplot as plt
 # Reset all rcParams to their default values
 plt.rcdefaults()
 
-plt.rcParams['axes.titlesize'] = 25    # Title font size
-plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
-plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
-plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
-plt.rcParams['legend.fontsize']=18
+
+plt.rcParams.update({
+                    "text.usetex": True,
+                    "font.family": "serif",
+                    "font.serif": ["Computer Modern Roman"],
+                    })
+
+
+font_size=27
+
+# Change default font sizes.
+plt.rc('font', size=font_size)
+plt.rc('axes', titlesize=font_size)
+plt.rc('axes', labelsize=font_size)
+plt.rc('xtick', labelsize=0.6*font_size)
+plt.rc('ytick', labelsize=0.6*font_size)
+plt.rc('legend', fontsize=0.7*font_size)
+
+# plt.rcParams['axes.titlesize'] = 25    # Title font size
+# plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
+# plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
+# plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
+# plt.rcParams['legend.fontsize']=14
 
 
 def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objects:List[int], suptitle:bool = True, **kwargs):
@@ -31,8 +50,9 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
     motion_eval = dataset_evaluator.create_motion_error_evaluator(data_files)
 
-    for object_id, object_traj, object_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
-        if object_traj.num_poses < 5:
+    for object_id, object_motion_traj_est, object_motion_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
+    # for object_id, object_motion_traj_est, object_pose_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_poses_traj_ref):
+        if object_motion_traj_est.num_poses < 5:
             continue
 
         #if objects list provided, check if the object id is in the list, otherwise skip
@@ -42,31 +62,38 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
         fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True)
 
-        fig.set_size_inches(13, 8)
+        fig.set_size_inches(16, 6) # for KITTI
+        # fig.set_size_inches(18, 7)  # for OMD
 
         if suptitle:
             fig.suptitle(f"Object {object_id}", fontweight="bold", fontsize=25)
         rot_error_axes.margins(0.001)
         set_clean_background(rot_error_axes)
-        rot_error_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=19)
+        rot_error_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
 
         set_clean_background(trans_error_axes)
         trans_error_axes.margins(0.001)
-        trans_error_axes.set_ylabel("$E_t$(m)", fontsize=19)
+        trans_error_axes.set_ylabel("$E_t$(m)", fontsize=23)
         trans_error_axes.set_xlabel("Frame Index [-]")
 
         fig.tight_layout(pad=0.5)
 
+        rme_E = eval_metrics.RME(eval_metrics.PoseRelation.full_transformation)
 
-        # copied from tools.plot_trajectory_error
-        import evo.core.metrics as metrics
+        # print(object_motion_traj_est.timestamps)
+        # print(object_pose_traj_ref.timestamps)
+        # # copied from tools.plot_trajectory_error
+        # import evo.core.metrics as metrics
         ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
-        data = (object_traj, object_traj_ref)
+        # data = (object_pose_traj_ref,object_motion_traj_est)
+
+        data = (object_motion_traj_ref,object_motion_traj_est)
+        # eval_metrics.RME.sync_object_motion_and_pose(data)
         ape_E.process_data(data)
 
         rot_error = []
         trans_error = []
-        for E in ape_E.E:
+        for E in ape_E.E[:-5]:
             E_se3 = gtsam.Pose3(E)
             E_trans = E_se3.translation()
             E_rot = E_se3.rotation()
@@ -90,29 +117,56 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
         # smart_legend(rot_error_axes)
         # smart_legend(trans_error_axes)
-        rot_error_axes.legend(loc='best')
+        rot_error_axes.legend(loc='upper left',ncol=3)
         # rot_error_axes.legend(loc='upper right')
-        trans_error_axes.legend(loc='best')
+        trans_error_axes.legend(loc='upper left',ncol=3)
         # rot_error_axes.legend()
         # trans_error_axes.legend()
+        return fig, rot_error_axes, trans_error_axes
 
 
 
 def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, objects=None,suptitle:bool = True):
     dataset_eval = eval.DatasetEvaluator(results_folder_path)
 
+    frontend_fig_axes = None
+    backend_fig_axes = None
     if plot_frontend:
-       make_plot_all_objects("frontend", dataset_eval, objects, suptitle,linestyle="-")
+       frontend_fig_axes = make_plot_all_objects("frontend", dataset_eval, objects, suptitle,linestyle="-")
 
     if plot_backend:
-       make_plot_all_objects("rgbd_motion_world_backend", dataset_eval, objects, suptitle,linestyle="-")
+       backend_fig_axes = make_plot_all_objects("rgbd_motion_world_backend", dataset_eval, objects, suptitle,linestyle="-")
+
+    if frontend_fig_axes and backend_fig_axes:
+        _, frontend_rot_axes, frontend_trans_axes = frontend_fig_axes
+        _, backend_rot_axes, backend_trans_axes = backend_fig_axes
+
+        def set_axes_equal(ax1: Axes, ax2: Axes):
+            y1_min = min(ax1.get_ylim())
+            y1_max = max(ax1.get_ylim())
+
+            y2_min = min(ax2.get_ylim())
+            y2_max = max(ax2.get_ylim())
+
+            # Get the min and max values for both plots
+            y_min = min(y1_min, y2_min)
+            y_max = max(y1_max, y2_max)
+
+            ax2.set_ylim(y_min, y_max)
+            ax1.set_ylim(y_min, y_max)
+
+        set_axes_equal(frontend_rot_axes, backend_rot_axes)
+        set_axes_equal(frontend_trans_axes, backend_trans_axes)
+
 
 
 
 # make_plot("/root/results/DynoSAM/omd_vo_test", plot_frontend=False, plot_backend=True, objects=[4], suptitle=False)
-make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=False, plot_backend=True, objects=[1], suptitle=True)
-make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=False, objects=[1], suptitle=True)
+# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=False, objects=[2], suptitle=True)
+# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+# make_plot("/root/results/DynoSAM/test_kitti_vo_0003", plot_frontend=True, plot_backend=True, objects=[1], suptitle=True)
 
+make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
 # make_plot("/root/results/DynoSAM/test_kitti_vo_0004", plot_frontend=True, plot_backend=False)
 
 

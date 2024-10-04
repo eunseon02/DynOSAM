@@ -139,7 +139,7 @@ struct StatisticsMapValue {
   double MaxDeltaTime() const { return time_deltas_.max(); }
   double MinDeltaTime() const { return time_deltas_.min(); }
   double LazyVarianceDeltaTime() const { return time_deltas_.LazyVariance(); }
-  std::vector<double> GetAllValues() const { return values_.GetAllSamples(); }
+  const std::vector<double>& GetAllValues() const { return values_.GetAllSamples(); }
 
 private:
   // Create an accumulator with specified window size.

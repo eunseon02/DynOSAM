@@ -28,6 +28,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
 import evo.core.lie_algebra as evo_lie_algebra
+from evo.core.metrics import PE
 
 import evo
 
@@ -36,6 +37,38 @@ from typing import Tuple, Optional, List, Any, Iterable
 from copy import deepcopy
 import typing
 import math
+
+def plot_metric(metric: PE, plot_title="", figsize=(8,8), fig = None, x_axis=None):
+    """ Adds a metric plot to a plot collection.
+
+        Args:
+            plot_collection: a PlotCollection containing plots.
+            metric: an evo.core.metric object with statistics and information.
+            plot_title: a string representing the title of the plot.
+            figsize: a 2-tuple representing the figure size.
+
+        Returns:
+            A plt figure.
+    """
+    if not fig:
+        fig = plt.figure(figsize=figsize)
+    stats = metric.get_all_statistics()
+
+    ax = fig.gca()
+
+    # remove from stats
+    del stats["rmse"]
+    del stats["sse"]
+
+    from evo.tools import plot
+    plot.error_array(ax, metric.error,
+                        x_array=x_axis,
+                        statistics=stats,
+                        title=plot_title,
+                        xlabel="Frame Index [-]",
+                        ylabel=plot_title + " " + metric.unit.value)
+
+    return fig
 
 
 def plot_traj(ax: Axes, plot_mode: evo_plot.PlotMode, traj: evo_trajectory.PosePath3D,

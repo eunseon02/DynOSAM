@@ -191,8 +191,6 @@ OpticalFlowAndPoseOptimizer::optimize(
 
     //recover values
     result.best_result.refined_pose = optimised_values.at<gtsam::Pose3>(pose_key);
-    //number of variables after outlier removal
-    utils::StatsCollector("motion_solver.joint_of_pose_num_vars_inliers").AddSample(optimised_values.size());
 
     //for each outlier edge, update the set of inliers
     for(TrackletId tracklet_id : tracklets) {
@@ -210,6 +208,8 @@ OpticalFlowAndPoseOptimizer::optimize(
         }
 
     }
+    //number of variables after outlier removal
+    utils::StatsCollector("motion_solver.joint_of_pose_num_vars_inliers").AddSample(result.inliers.size());
 
     CHECK_EQ(tracklets.size(), result.inliers.size() + result.outliers.size());
     return result;
@@ -442,6 +442,9 @@ MotionOnlyRefinementOptimizer::optimize(
         feature_k->markOutlier();
         feature_k_1->markOutlier();
     }
+
+    //number of variables after outlier removal
+    utils::StatsCollector("motion_solver.object_nlo_refinement_num_vars_inliers").AddSample(result.inliers.size());
 
 
     LOG(INFO) << "Object Motion refinement - error before: "

@@ -42,9 +42,6 @@
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 
-// #include <gtsam/nonlinear/GncOptimizer.h>
-// #include <gtsam/nonlinear/GncParams.h>
-
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
@@ -52,12 +49,16 @@ DEFINE_int32(opt_window_size,  10, "Sliding window size for optimisation");
 DEFINE_int32(opt_window_overlap,  4, "Overlap for window size optimisation");
 
 DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if true, else sliding window");
+DEFINE_bool(use_vo_factor, true, "If true, use visual odometry measurement as factor from the frontend");
 
 DEFINE_bool(use_identity_rot_L_for_init, false, "For experiments: set the initalisation point of L with identity rotation");
 DEFINE_bool(corrupt_L_for_init, false, "For experiments: corrupt the initalisation point for L with gaussian noise");
 DEFINE_double(corrupt_L_for_init_sigma, 0.2, "For experiments: sigma value to correupt initalisation point for L. When corrupt_L_for_init is true");
 
 DEFINE_bool(init_LL_with_identity, false,"For experiments");
+DEFINE_bool(init_H_with_identity, true,"For experiments");
+
+DEFINE_string(updater_suffix, "", "Suffix for updater to denote specific experiments");
 
 namespace dyno {
 
@@ -71,7 +72,7 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
     static_point_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.static_point_noise_sigma_);
     dynamic_point_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.dynamic_point_noise_sigma_);
     //set in base!
-    // landmark_motion_noise_ =  gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
+    landmark_motion_noise_ =  gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
 
     if(backend_params.use_robust_kernals_) {
         static_point_noise_ = gtsam::noiseModel::Robust::Create(
@@ -96,6 +97,10 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2
     CHECK_NOTNULL(static_point_noise_);
     CHECK_NOTNULL(dynamic_point_noise_);
     CHECK_NOTNULL(landmark_motion_noise_);
+
+    dynamic_point_noise_->print("Dynamic Point Noise");
+    landmark_motion_noise_->print("Landmark motion noise");
+    // CHECK(false);
 
     new_updater_ = std::move(makeUpdater());
     sliding_window_condition_ = std::make_unique<SlidingWindow>(
@@ -167,7 +172,7 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
     UpdateObservationParams update_params;
     update_params.enable_debug_info = true;
-    update_params.do_backtrack = true; //apparently this is v important for making the results == ICRA
+    update_params.do_backtrack = false; //apparently this is v important for making the results == ICRA
 
     {
         LOG(INFO) << "Starting updateStaticObservations";
@@ -199,8 +204,23 @@ RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
 
             double error_before = graph.error(theta);
             utils::TimingStatsCollector timer(new_updater_->loggerPrefix() + ".full_batch_opt");
-            gtsam::Values optimised_values = gtsam::LevenbergMarquardtOptimizer(graph,theta, opt_params).optimize();
+
+            gtsam::LevenbergMarquardtOptimizer problem(graph,theta, opt_params);
+            // gtsam::Values optimised_values = problem.optimize();
+            // double error_after = graph.error(optimised_values);
+            // gtsam::GncParams<LevenbergMarquardtParams> gncParams(opt_params);
+            // gncParams.setLossType(gtsam::GncLossType::TLS);
+            // // Optimize the graph and print results
+            // gtsam::GncOptimizer<gtsam::GncParams<gtsam::LevenbergMarquardtParams>> problem(graph,theta, gncParams);
+            // gtsam::NonlinearOptimizerParams nlo_params;
+            // nlo_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+            // gtsam::NonlinearConjugateGradientOptimizer problem(graph, theta, nlo_params);
+            gtsam::Values optimised_values = problem.optimize();
             double error_after = graph.error(optimised_values);
+
+            utils::StatsCollector(new_updater_->loggerPrefix() + ".inner_iterations").AddSample(problem.getInnerIterations());
+            utils::StatsCollector(new_updater_->loggerPrefix() + ".iterations").AddSample(problem.iterations());
+
             new_updater_->updateTheta(optimised_values);
             LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
 
@@ -669,12 +689,15 @@ void RGBDBackendModule::Updater::addOdometry(FrameId frame_id_k, const gtsam::Po
 
     // keep track of the new factors added in this function
     // these are then appended to the internal factors_ and new_factors
-    gtsam::NonlinearFactorGraph internal_new_factors;
 
-    factor_graph_tools::addBetweenFactor(frame_id_k_1, frame_id_k, odom, odometry_noise, internal_new_factors);
-    factors_ += internal_new_factors;
-    new_factors += internal_new_factors;
-    LOG(INFO) << "Finished adding odom";
+    if(FLAGS_use_vo_factor) {
+        gtsam::NonlinearFactorGraph internal_new_factors;
+
+        factor_graph_tools::addBetweenFactor(frame_id_k_1, frame_id_k, odom, odometry_noise, internal_new_factors);
+        factors_ += internal_new_factors;
+        new_factors += internal_new_factors;
+        LOG(INFO) << "Finished adding odom";
+    }
 }
 
 RGBDBackendModule::UpdateObservationResult
@@ -1050,7 +1073,14 @@ RGBDBackendModule::Updater::updateDynamicObservations(
 }
 
 void RGBDBackendModule::Updater::logBackendFromMap() {
-    BackendLogger logger(loggerPrefix());
+    std::string logger_prefix = loggerPrefix();
+    const std::string updater_suffix = FLAGS_updater_suffix;
+
+    if(!updater_suffix.empty()) {
+        logger_prefix += ("_" + updater_suffix);
+    }
+
+    BackendLogger logger(logger_prefix);
 
     //will be std::nullopt if empty!
     const auto& gt_packet_map = parent_->getGroundTruthPackets();
@@ -1282,10 +1312,6 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
             object_pose_k = motion * pose_k_1_query.get();
             CHECK_NE(first_seen_frame, context.getFrameId());
 
-            //for experiments and testing
-            if(FLAGS_init_LL_with_identity) {
-                object_pose_k = pose_k_1_query.get();
-            }
         }
         else {
             //no motion or previous pose, so initalise with centroid translation and identity rotation
@@ -1299,10 +1325,14 @@ void RGBDBackendModule::LLUpdater::objectUpdateContext(
                 initial_object_pose
             );
 
-            CHECK_EQ(first_seen_frame, context.getFrameId());
+            // CHECK_EQ(first_seen_frame, context.getFrameId());
         }
 
+
         //for experiments and testing
+        if(FLAGS_init_LL_with_identity && pose_k_1_query) {
+            object_pose_k = pose_k_1_query.get();
+        }
         if(FLAGS_use_identity_rot_L_for_init) {
             auto tmp_pose = gtsam::Pose3(gtsam::Rot3::Identity(), object_pose_k.translation());
             object_pose_k = tmp_pose;
@@ -1605,9 +1635,14 @@ void RGBDBackendModule::MotionWorldUpdater::objectUpdateContext(
 
     if(!is_other_values_in_map.exists(object_motion_key_k)) {
 
-        //when we have an initial motion - it seems ways better to use 2D reprojection error?
+        //when we have an initial motion
         Motion3 initial_motion = Motion3::Identity();
-        // parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
+        if(!FLAGS_init_H_with_identity) {
+            parent_->hasFrontendMotionEstimate(frame_id, object_id, &initial_motion);
+            LOG(INFO) << "Using motion from frontend " << initial_motion;
+            initial_motion = gtsam::Pose3(gtsam::Rot3::Identity(), initial_motion.translation());
+        }
+
         new_values.insert(object_motion_key_k, initial_motion);
         is_other_values_in_map.insert2(object_motion_key_k, true);
     }
@@ -1671,7 +1706,7 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::V
         gtsam::Values values;
         gtsam::NonlinearFactorGraph graph;
         {
-        utils::TimingStatsCollector timer("backend.sliding_window_construction");
+        utils::TimingStatsCollector timer(new_updater_->loggerPrefix() + ".sliding_window_construction");
         std::tie(values, graph) = constructGraph(start_frame, end_frame, true, new_updater_->getTheta());
         LOG(INFO) << " Finished graph construction";
         }

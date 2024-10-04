@@ -54,8 +54,8 @@ struct functional_keypoint {
 
     template<typename AccessType>
     static AccessType at(const Keypoint& kp, const cv::Mat& img) {
-        const int x = functional_keypoint::u(kp);
-        const int y = functional_keypoint::v(kp);
+        const int x = functional_keypoint::u<int>(kp);
+        const int y = functional_keypoint::v<int>(kp);
         return img.at<AccessType>(y, x);
     }
 };

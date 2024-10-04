@@ -26,10 +26,11 @@ from matplotlib.patches import FancyArrowPatch
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
 import evo.core.lie_algebra as evo_lie_algebra
+import evo.core.sync as evo_sync
 
 import evo
 
-from typing import Tuple, Optional
+from typing import Tuple, Optional,Union
 
 from copy import deepcopy
 import typing
@@ -483,6 +484,26 @@ def plot_trajectory_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory
 #     ax.legend()
 
 
+def sync_and_align_trajectories(traj_est: Union[evo_trajectory.PosePath3D, evo_trajectory.PoseTrajectory3D],
+                                traj_ref: Union[evo_trajectory.PosePath3D, evo_trajectory.PoseTrajectory3D],
+                                discard_n_end_poses=-1,
+                                max_diff=0.01) -> Union[evo_trajectory.PosePath3D, evo_trajectory.PoseTrajectory3D]:
+    import copy
+    from .tools import align_trajectory
+    # We copy to distinguish another version that may be created
+    traj_ref = copy.deepcopy(traj_ref)
+    traj_est = copy.deepcopy(traj_est)
+
+    # assume synched and in order!
+    if isinstance(traj_est, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D):
+        traj_ref, traj_est = evo_sync.associate_trajectories(traj_ref, traj_est,max_diff=max_diff)
+    traj_est = align_trajectory(traj_est, traj_ref, correct_scale = False,
+                                                   n=discard_n_end_poses)
+    return traj_est, traj_ref
+
+
+
+
 #TODO: plotmode?
 # TODO: outdoor vs indoor presets
 # or just the ObjectMotionTrajectory
@@ -553,144 +574,6 @@ def plot_object_trajectories(
         length_unit,
         **kwargs)
 
-    # if obj_trajectories_ref is not None and len(obj_trajectories) != len(obj_trajectories_ref):
-    #     raise evo_plot.PlotException(f"Expected trajectories and ref trajectories to have the same length {len(obj_trajectories)} != {len(obj_trajectories_ref)}")
-
-    # ax = None
-    # if len(fig.axes) == 0:
-    #     ax = evo_plot.prepare_axis(fig, plot_mode, subplot_arg, length_unit)
-    # else:
-    #     # use existing axis TODO: check 3d?
-    #     ax = fig.gca()
-    # if title:
-    #     ax.set_title(title)
-
-    # plot_axis_est = kwargs.get("plot_axis_est", False)
-    # plot_axis_ref = kwargs.get("plot_axis_ref", False)
-    # # downscale as a percentage - how many poses to use when plotting anything over the top of the tajectories
-    # downscale = kwargs.get("downscale", 0.1)
-
-
-    # cmap_colors = None
-    # provided_colours = None
-    # import collections
-    # import matplotlib.cm as cm
-    # import itertools
-    # import seaborn as sns
-
-    # # use provided colour map
-    # if kwargs.get("colours") is not None:
-    #     # should be list of colours, one for each obj traj
-    #     provided_colours = kwargs.get("colours")
-    #     if len(provided_colours) != len(obj_trajectories):
-    #         raise evo_plot.PlotException(f"Expected trajectories and provided colours to have the same length {len(obj_trajectories)} != {len(provided_colours)}")
-    # elif evo_plot.SETTINGS.plot_multi_cmap.lower() != "none" and isinstance(
-    #         obj_trajectories, collections.abc.Iterable):
-    #     cmap = getattr(cm, evo_plot.SETTINGS.plot_multi_cmap)
-    #     cmap_colors = iter(cmap(np.linspace(0, 1, len(obj_trajectories))))
-
-    # color_palette = itertools.cycle(sns.color_palette())
-
-    # if provided_colours:
-    #     provided_colours = itertools.cycle(provided_colours)
-
-    # # helper function
-    # def draw_impl(t, style: str = '-',name="", alpha: float = 1.0, shift_color: bool = False, **kwargs):
-    #     if provided_colours is not None:
-    #         color = next(provided_colours)
-    #     elif cmap_colors is None:
-    #         color = next(color_palette)
-    #     else:
-    #         color = next(cmap_colors)
-
-    #     if shift_color:
-    #         shift_color = float(shift_color)
-    #         import colorsys
-    #         hsv_color = colorsys.rgb_to_hsv(color[0], color[1], color[1])
-    #         # shift slightly
-    #         h = hsv_color[0] + shift_color
-    #         color = colorsys.hsv_to_rgb(h, hsv_color[1], hsv_color[2])
-
-    #     if evo_plot.SETTINGS.plot_usetex:
-    #         name = name.replace("_", "\\_")
-    #     # evo_plot.traj(ax, plot_mode, t, style, color, name,
-    #     #      plot_start_end_markers=plot_start_end_markers,
-    #     #      alpha=alpha)
-    #     plot_traj(ax, plot_mode, t, style, color, name,
-    #          plot_start_end_markers=plot_start_end_markers,
-    #          alpha=alpha,
-    #          zorder=kwargs.get("traj_zorder", 1),
-    #          linewidth=kwargs.get("traj_linewidth", plt.rcParams["lines.linewidth"]))
-
-    # def draw(traj: typing.Any, **draw_kwargs):
-    #     if isinstance(traj, evo_trajectory.PosePath3D):
-    #         draw_impl(traj, **kwargs)
-    #     elif isinstance(traj, dict):
-    #         for name, t in traj.items():
-    #             # if dictionary, we alrady know the name we prepend with object
-    #             # TODO: for now a hack ;)
-    #             # if str(name).lower() != "camera":
-    #             #     name = "object " + str(name)
-
-    #             if "name_prefix" in draw_kwargs:
-    #                 name = draw_kwargs.get("name_prefix") + " " + str(name)
-
-    #             draw_impl(t,name= name,**kwargs)
-    #     else:
-    #         for t in traj:
-    #             draw_impl(t, **kwargs)
-
-    # # duplicated in ObjectTrajectory
-    # def reduce_trajectory(downscale_percentage: float, traj:evo_trajectory.PosePath3D):
-    #     assert downscale_percentage >= 0.0 and downscale_percentage <= 1.0
-    #     reduced_pose_num = downscale_percentage * traj.num_poses
-    #     # round UP to the nearest int (so we at least get 1 pose
-    #     reduced_pose_num = int(math.ceil(reduced_pose_num))
-    #     if reduced_pose_num >= 2:
-    #         traj.downsample(reduced_pose_num)
-    #     return traj
-
-    # def plot_coordinate_axis(trajectories: typing.Dict[str, evo_trajectory.PosePath3D]):
-    #     """
-    #     Plot coordinate axes on a map of object trajectories.
-    #     This is down by downscaling the numner of poses over which the coordiante axes will
-    #     be drawn for visability.
-
-    #     Args:
-    #         trajectories (typing.Dict[str, evo_trajectory.PosePath3D]): _description_
-    #     """
-    #     reduced_trajectories = deepcopy(trajectories)
-    #     for _, obj_traj in reduced_trajectories.items():
-    #         obj_traj = reduce_trajectory(downscale, obj_traj)
-    #         evo_plot.draw_coordinate_axes(
-    #             ax, obj_traj, plot_mode,
-    #             kwargs.get("axis_marker_scale", 0.1))
-
-    # # draw trajectories
-    # draw(
-    #     obj_trajectories,
-    #     style=kwargs.get("est_style", '-'),
-    #     shift_color=kwargs.get("shift_est_colour", None),
-    #     name_prefix=kwargs.get("est_name_prefix", ""))
-    # if plot_axis_est:
-    #     plot_coordinate_axis(obj_trajectories)
-
-    # # reset colours
-    # color_palette = itertools.cycle(sns.color_palette())
-    # if provided_colours:
-    #     provided_colours = itertools.cycle(provided_colours)
-
-
-    # if obj_trajectories_ref is not None:
-    #     draw(
-    #         obj_trajectories_ref,
-    #         style='--', alpha=0.8,
-    #         shift_color=kwargs.get("shift_ref_colour", None),
-    #         name_prefix=kwargs.get("ref_name_prefix", ""))
-    #     if plot_axis_ref:
-    #         plot_coordinate_axis(obj_trajectories_ref)
-    # return ax
-
 
 def calculate_omd_errors(traj, traj_ref, object_id):
     assert isinstance(traj, evo_trajectory.PoseTrajectory3D) and isinstance(traj_ref, evo_trajectory.PoseTrajectory3D)
@@ -732,21 +615,21 @@ def calculate_omd_errors(traj, traj_ref, object_id):
         t_errors.append(err_t)
 
     t_errors = np.array(t_errors)
-    print(f"xyz largest error is {t_errors.max()} for {object_id}")
-    print(f"xyz avg error is {np.mean(t_errors)} for {object_id}")
+    # print(f"xyz largest error is {t_errors.max()} for {object_id}")
+    # print(f"xyz avg error is {np.mean(t_errors)} for {object_id}")
 
     rx_errors = np.array(rx_errors) * 180.0/math.pi
     ry_errors = np.array(ry_errors) * 180.0/math.pi
     rz_errors = np.array(rz_errors) * 180.0/math.pi
 
-    print(f"rx largest error is {rx_errors.max()} for {object_id}")
-    print(f"rx avg error is {np.mean(rx_errors)} for {object_id}")
+    # print(f"rx largest error is {rx_errors.max()} for {object_id}")
+    # print(f"rx avg error is {np.mean(rx_errors)} for {object_id}")
 
-    print(f"ry largest error is {ry_errors.max()} for {object_id}")
-    print(f"ry avg error is {np.mean(ry_errors)} for {object_id}")
+    # print(f"ry largest error is {ry_errors.max()} for {object_id}")
+    # print(f"ry avg error is {np.mean(ry_errors)} for {object_id}")
 
-    print(f"rz largest error is {rz_errors.max()} for {object_id}")
-    print(f"rz avg error is {np.mean(rz_errors)} for {object_id}")
+    # print(f"rz largest error is {rz_errors.max()} for {object_id}")
+    # print(f"rz avg error is {np.mean(rz_errors)} for {object_id}")
 
 
 
