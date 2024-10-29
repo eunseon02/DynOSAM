@@ -10,8 +10,8 @@
 
 
 
---motion_ternary_factor_noise_sigma=0.00000000001
-# --motion_ternary_factor_noise_sigma=0.01
+# --motion_ternary_factor_noise_sigma=0.00000000001
+--motion_ternary_factor_noise_sigma=0.001
 
 # --odometry_rotation_sigma=0.2
 # --odometry_translation_sigma=0.3

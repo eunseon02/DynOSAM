@@ -290,14 +290,12 @@ if __name__ == '__main__':
     #     "--use_full_batch_opt=false"
     # )
 
-    # run_both_backend(
-    #     run_kitti_sequence,
-    #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000",
-    #     "--init_H_with_identity=false",
-    #     "--updater_suffix=init_frontend",
-    #     "--use_full_batch_opt=true"
-    # )
+    run_both_backend(
+        run_kitti_sequence,
+        "/root/data/vdo_slam/kitti/kitti/0000/",
+        "kitti_0000",
+        "--use_full_batch_opt=true"
+    )
 
 
     # run_both_backend(

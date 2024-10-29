@@ -717,9 +717,10 @@ class MapPlotter3D(Evaluator):
                       'YlOrBr', 'YlOrRd', 'OrRd', 'PuRd', 'RdPu', 'BuPu',  'Reds',
                       'GnBu', 'PuBu', 'YlGnBu', 'PuBuGn', 'BuGn', 'YlGn']
 
-    def __init__(self, map_points_csv_file_path: str, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator):
+    def __init__(self, map_points_csv_file_path: str, camera_eval: CameraPoseEvaluator, object_eval: MotionErrorEvaluator, **kwargs):
         self._camera_eval = camera_eval
         self._object_eval = object_eval
+        self.kwargs = kwargs
 
         self._map_points_file = read_csv(
             map_points_csv_file_path,
@@ -754,6 +755,7 @@ class MapPlotter3D(Evaluator):
         # map for the point cloud plot per object id
         colour_generator_map = {}
 
+        plot_velocities = self.kwargs.get("plot_velocities", False)
 
         colour_map_names = itertools.cycle(MapPlotter3D.SEQUENTIAL_COLOUR_MAPS)
         for object_id, t in all_traj.items():
@@ -766,8 +768,8 @@ class MapPlotter3D(Evaluator):
             colour_generator_map[id] = colour_map
             object_trajectory = self._object_eval.make_object_trajectory(object_id)
 
-            # if object_trajectory:
-            #     tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
+            if object_trajectory and plot_velocities:
+                tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
         # all_traj["Camera"] = camera_traj
 
@@ -776,10 +778,10 @@ class MapPlotter3D(Evaluator):
                                        colours=['blue'],
                                        plot_axis_est=True,
                                        plot_start_end_markers=False,
-                                       axis_marker_scale=0.1,
+                                       axis_marker_scale=1.0,
                                        downscale=0.1,
                                        traj_zorder=30,
-                                       traj_linewidth=1.0)
+                                       traj_linewidth=3.0)
 
 
         x_points = []
@@ -795,9 +797,6 @@ class MapPlotter3D(Evaluator):
             object_id = int(row["object_id"])
             tracklet_id = int(row["tracklet_id"])
 
-            # # since this takes AGES just skip every 10 frames
-            # if int(frame_id) % 50 != 0:
-            #     continue
 
             if tracklet_id in tracklet_set:
                 continue
@@ -876,9 +875,9 @@ class MapPlotter3D(Evaluator):
 
         # static points
         # some of these params are after handtuning on particular datasets for pretty figures ;)
-        ax.scatter(x_points, y_points, z_points, s=1.0, c='black',alpha=0.5, zorder=0, marker=".")
-        for (_, data), object_colour in zip(object_points.items(), colour_list):
-            ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
+        ax.scatter(x_points, y_points, z_points, s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
+        # for (_, data), object_colour in zip(object_points.items(), colour_list):
+        #     ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
         tools.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
@@ -888,15 +887,7 @@ class MapPlotter3D(Evaluator):
                                        axis_marker_scale=1.5,
                                        traj_zorder=30,
                                        est_name_prefix="Object",
-                                       traj_linewidth=1.5)
-        # tools.plot_object_trajectories(map_fig, all_traj,
-        #                             plot_mode=evo_plot.PlotMode.xyz,
-        #                             colours=colour_list,
-        #                         #    plot_axis_est=True,
-        #                             plot_start_end_markers=False,
-        #                             axis_marker_scale=0.5,
-        #                             traj_zorder=30,
-        #                             traj_linewidth=1.0)
+                                       traj_linewidth=3.0)
 
         trajectory_helper.set_ax_limits(map_fig.gca())
         map_fig.tight_layout()
@@ -962,7 +953,16 @@ class DatasetEvaluator:
         run_misc_analysis()
 
 
-    def make_data_files(self, prefix) -> DataFiles:
+    def make_data_files(self, prefix:str) -> DataFiles:
+        """
+        Make a DataFiles object using the specified output folder path and the given prefix string
+
+        Args:
+            prefix (str): Datafile string prefix
+
+        Returns:
+            DataFiles: _description_
+        """
         return DataFiles(prefix, self._output_folder_path)
 
     def create_motion_error_evaluator(self, data_files: DataFiles) -> MotionErrorEvaluator:

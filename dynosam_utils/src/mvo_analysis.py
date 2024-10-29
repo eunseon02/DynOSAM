@@ -13,16 +13,16 @@ import evaluation.formatting_utils as formatting_utils
 import sys
 import copy
 
-plt.rcdefaults()
+# plt.rcdefaults()
 
-plt.rcParams['axes.titlesize'] = 25    # Title font size
-plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
-plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
-plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
-plt.rcParams['legend.fontsize']=14
+# plt.rcParams['axes.titlesize'] = 25    # Title font size
+# plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
+# plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
+# plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
+# plt.rcParams['legend.fontsize']=14
 
 
-# formatting_utils.startup_plotting(22)
+formatting_utils.startup_plotting(22)
 
 """
 Script to process the results provided by the authors of
@@ -576,15 +576,17 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
     from evaluation.formatting_utils import nice_colours
 
-    # mvo_camera_traj, gt_camera_pose = evo_sync.associate_trajectories(
-    #     copy.deepcopy(mvo_camera_traj),
-    #     copy.deepcopy(gt_camera_pose),
-    #     max_diff=0.05)
+    mvo_camera_traj, gt_camera_pose = evo_sync.associate_trajectories(
+        copy.deepcopy(mvo_camera_traj),
+        copy.deepcopy(gt_camera_pose),
+        max_diff=0.05)
 
-    # dynosam_camera_pose_traj, gt_camera_pose = evo_sync.associate_trajectories(
-    #     copy.deepcopy(dynosam_camera_pose_traj),
-    #     copy.deepcopy(gt_camera_pose),
-    #     max_diff=0.05)
+    dynosam_camera_pose_traj, gt_camera_pose = evo_sync.associate_trajectories(
+        copy.deepcopy(dynosam_camera_pose_traj),
+        copy.deepcopy(gt_camera_pose),
+        max_diff=0.05)
+
+
     mvo_camera_traj_original = copy.deepcopy(mvo_camera_traj)
     mvo_camera_traj.align_origin(gt_camera_pose)
     dynosam_camera_pose_traj.align_origin(gt_camera_pose)
@@ -667,21 +669,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
         print(f"GT traj {gt_traj}")
 
-        mvo_traj_orginal = copy.deepcopy(mvo_traj)
-
-        #at least in the omd case
-        # mvo_to_gt_rotation = (lie_algebra.se3(
-        #     np.array([[0.0, 0.0, 1.0],
-        #               [1.0, 0.0, 0.0],
-        #               [0.0, 1.0, 0.0]]),
-        #     np.array([0.0, 0.0, 0.0])))
-
-        mvo_to_gt_rotation = (lie_algebra.se3(
-            np.array([[0.0, 1.0, 0.0],
-                      [1.0, 0.0, 0.0],
-                      [0.0, 0.0, 1.0]]),
-            np.array([0.0, 0.0, 0.0])))
-
 
         if dataset == "omd":
             aligned_mvo_poses = []
@@ -700,47 +687,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
         # return
         mvo_traj.align_origin(dynosam_traj)
-
-        # print(mvo_traj.poses_se3[0])
-        # print(dynosam_traj.poses_se3[0])
-        # import sys
-        # sys.exit(0)
-
-        # mvo_camera_traj_aligned, mvo_traj = eval.sync_and_align_trajectories(mvo_camera_traj_aligned, mvo_traj)
-        # # mvo_camera_traj_aligned, mvo_traj = evo_sync.associate_trajectories(mvo_camera_traj_aligned, mvo_traj)
-        # mvo_camera_traj_aligned = copy.deepcopy(mvo_camera_traj)
-        # mvo_camera_traj_aligned.align_origin(gt_camera_pose)
-
-        # first_gt_pose = gt_traj.poses_se3[0]
-        # first_mvo_pose = mvo_traj.poses_se3[0]
-
-
-
-        # diff = first_mvo_pose @ np.linalg.inv(first_gt_pose)
-        # # # align mvo camera traj with dynosam camera traj to set the world frame
-        # aligned_mvo_poses = [first_gt_pose]
-        # for pose_k_1, pose_k in zip(mvo_traj.poses_se3[:-1], mvo_traj.poses_se3[1:]):
-        #     # relative_pose = np.linalg.inv(pose_k_1) @ pose_k
-        #     # relative_pose_in_gt = diff @ relative_pose @ np.linalg.inv(diff)
-        #     absolute_pose =  pose_k @ np.linalg.inv(pose_k_1)
-        #     absolute_pose_in_gt = diff @ absolute_pose @ np.linalg.inv(diff)
-        #     new_pose = absolute_pose_in_gt @ aligned_mvo_poses[-1]
-        #     aligned_mvo_poses.append(new_pose)
-
-        # print(f"Mvo traj {mvo_traj}")
-        # print(f"MVO camera traj {mvo_camera_traj}")
-        # # mvo_traj, mvo_camera_traj = evo_sync.associate_trajectories(mvo_traj, mvo_camera_traj)
-        # print(f"Mvo traj {mvo_traj}")
-        # print(f"MVO camera traj {mvo_camera_traj}")
-
-        # aligned_mvo_poses = [first_gt_pose]
-        # diff_origin = np.linalg.inv(first_gt_pose) @ first_mvo_pose
-        # aligned_mvo_poses = []
-        # for pose_k in mvo_traj.poses_se3:
-        #     relative_pose_from_L0 = np.linalg.inv(first_mvo_pose) @ pose_k
-        #     rekative_pose_from_gt = diff_origin @ relative_pose_from_L0 @ np.linalg.inv(diff_origin)
-        #     new_pose_from_gt = first_gt_pose @ rekative_pose_from_gt
-        #     aligned_mvo_poses.append(new_pose_from_gt)
 
         if dataset == "kitti":
             mvo_traj, gt_traj = evo_sync.associate_trajectories(
@@ -962,18 +908,18 @@ if __name__ == '__main__':##
         3 : 3,
         4 : 4
     }
-    process_mvo_data(
-        "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
-        # "/root/results/DynoSAM/test_omd_long",
-        "/root/results/DynoSAM/omd_vo_test",
-        4,
-        mvo_to_dyno_labels_swinging_dynamic,
-        "omd",
-        "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
+    # process_mvo_data(
+    #     "/root/data/mvo_data_scripts_IJRR/swinging_dynamic_wnoa.mat",
+    #     # "/root/results/DynoSAM/test_omd_long",
+    #     "/root/results/DynoSAM/omd_vo_test",
+    #     4,
+    #     mvo_to_dyno_labels_swinging_dynamic,
+    #     "omd",
+    #     "/root/results/Dynosam_tro2024/mvo_analysis_swinging_dynamic_wnoa")
 
     # for this sequence object id 0 is the camera
-    # mvo_to_dyno_labels_kitti = {
-    #     2 : 1,
-    #     3:  2,
-    # }
-    # process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")
+    mvo_to_dyno_labels_kitti = {
+        2 : 1,
+        3:  2,
+    }
+    process_mvo_data("/root/data/mvo_data_scripts_IJRR/kitti_0005_wnoa.mat", "/root/results/DynoSAM/test_kitti_main/", 0, mvo_to_dyno_labels_kitti, "kitti", "/root/results/Dynosam_tro2024/mvo_analysis_kitti_0000")

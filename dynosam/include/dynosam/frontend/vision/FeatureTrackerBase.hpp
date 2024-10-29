@@ -65,6 +65,8 @@ class FeatureTrackerBase {
 public:
     FeatureTrackerBase(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
+    cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug = false) const;
+
 
 protected:
     /**

@@ -56,8 +56,6 @@ public:
     // Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const TrackingInputImages& tracking_images);
     Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const ImageContainer& image_container);
 
-    cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug = false) const;
-
     /**
      * @brief Get the previous frame.
      *

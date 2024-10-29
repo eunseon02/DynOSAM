@@ -232,15 +232,15 @@ int main(int argc, char* argv[]) {
     FLAGS_log_prefix = 1;
 
     KittiDataLoader::Params params;
-    KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0005/", params);
+    // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
     // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
-    // OMDDataLoader loader("/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
+    OMDDataLoader loader("/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
 
     auto camera = std::make_shared<Camera>(*loader.getCameraParams());
     auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
 
-    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, GroundTruthInputPacket) -> bool {
-    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
+    loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, GroundTruthInputPacket) -> bool {
+    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp, cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion, gtsam::Pose3, GroundTruthInputPacket) -> bool {
 
         LOG(INFO) << frame_id << " " << timestamp;
 
@@ -300,19 +300,19 @@ int main(int argc, char* argv[]) {
 
 
         LOG(INFO) << to_string(tracker->getTrackerInfo());
-        // const std::string path = "/root/results/misc/";
-        // if ((char)cv::waitKey(0) == 's') {
-        //     LOG(INFO) << "Saving...";
-        //     // cv::imwrite(path + "carla_l1_rgb.png", rgb);
-        //     // cv::imwrite(path + "kitti_0004_of.png", of_viz);
-        //     // cv::imwrite(path + "kitti_0004_motion.png", motion_viz);
-        //     // cv::imwrite(path + "kitti_0004_depth.png", depth_viz);
-        //     cv::imwrite(path + "omd_tracking.png", tracking);
+        const std::string path = "/root/results/misc/";
+        if ((char)cv::waitKey(0) == 's') {
+            LOG(INFO) << "Saving...";
+            // cv::imwrite(path + "omd_su4_rgb.png", rgb);
+            // cv::imwrite(path + "omd_su4_of.png", of_viz);
+            // cv::imwrite(path + "omd_su4_motion.png", motion_viz);
+            // cv::imwrite(path + "omd_su4_depth.png", depth_viz);
+            cv::imwrite(path + "omd_tracking.png", tracking);
 
 
 
 
-        // }
+        }
         cv::waitKey(1);
 
 
