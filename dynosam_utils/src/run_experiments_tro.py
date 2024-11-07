@@ -62,16 +62,6 @@ def run_saved_sequence(path, name, data_loader_num, backend_type, *args):
         run_as_frontend,
         *args)
 
-# def run_pipeline(path, name, data_loader_num, backend_type, *args):
-#     run_as_frontend=False
-#     run_sequnce(
-#         path,
-#         name,
-#         data_loader_num,
-#         backend_type,
-#         run_as_frontend,
-#         *args)
-
 
 # kitti stuff
 def prep_kitti_sequence(path, name, *args):

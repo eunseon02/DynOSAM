@@ -53,11 +53,29 @@ namespace vision_tools {
 void getCorrespondences(FeaturePairs& correspondences, const FeatureFilterIterator& previous_features, const FeatureFilterIterator& current_features);
 
 //unique object labels as present in a semantic/motion segmented image -> does not include background label
+
+/**
+ * @brief Finds the unique object labels (j) as present in the instance segmentation image. Does not include the background label.
+ *
+ * @param image const cv::Mat&
+ * @return ObjectIds
+ */
 ObjectIds getObjectLabels(const cv::Mat& image);
 
+/// @brief Depricate ;)
+/// @param params
+/// @param previous_frame
+/// @param current_frame
+/// @return
 std::vector<std::vector<int> > trackDynamic(const FrontendParams& params, const Frame& previous_frame, Frame::Ptr current_frame);
 
-
+/**
+ * @brief Shrinks all found object masks by a given ammount.
+ *
+ * @param mask const cv::Mat& input object mask with pixel values 0, 1... j
+ * @param shrunk_mask cv::Mat& output object mask with shrink masks.
+ * @param erosion_size int erosion size
+ */
 void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size);
 
 /**

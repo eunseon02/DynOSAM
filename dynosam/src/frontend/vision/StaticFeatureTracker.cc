@@ -195,18 +195,6 @@ Feature::Ptr ExternalFlowFeatureTracker::constructStaticFeature(const ImageConta
         return nullptr;
     }
 
-    // Feature::Ptr feature = std::make_shared<Feature>();
-    // feature->keypoint_ = kp;
-    // feature->measured_flow_ = flow;
-    // feature->predicted_keypoint_ = predicted_kp;
-    // feature->age_ = age;
-    // feature->tracklet_id_ = tracklet_id;
-    // feature->frame_id_ = frame_id;
-    // feature->type_ = KeyPointType::STATIC;
-    // feature->inlier_ = true;
-    // feature->instance_label_ = background_label;
-    // feature->tracking_label_ = background_label;
-    // return feature;
 
     Feature::Ptr feature = std::make_shared<Feature>();
         (*feature)

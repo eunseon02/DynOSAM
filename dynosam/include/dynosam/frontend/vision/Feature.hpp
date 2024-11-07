@@ -323,12 +323,27 @@ using enable_if_feature_ptr_iterator = typename std::enable_if<is_feature_ptr_it
 } //internal
 
 
-//contains a set of features (usually per frame) that can be quickly accessed by tracklet id or iteterated over
+/**
+ * @brief Basic container mapping tracklet id's to a feature (pointer).
+ *
+ * Unlike a regular std::map, this container allows direct iteration over the feature's and
+ * modification of inliers/outliers etc.
+ *
+ * Used regular in frames and other data-structures to add and maintain features in different stages of their
+ * construction.
+ *
+ */
 class FeatureContainer {
 public:
     using TrackletToFeatureMap = std::map<TrackletId, Feature::Ptr>;
 
-    //this should satisfy the constraints for a filter_iterator_base
+    /**
+     * @brief Internal iterator type allowing iteration over the features directly e.g for(Feature::Ptr : container).
+     * This type satisfies constraints for a filter_iterator_base as well as an std::iterator
+     *
+     * @tparam MapIterator The internal iterator to use
+     * @tparam MappedType The type we are iterating over (either Feature::Ptr or const Feature::Ptr )
+     */
     template<typename MapIterator, typename MappedType>
     struct vector_iterator_base {
         using iterator_type = MapIterator;
@@ -360,22 +375,25 @@ public:
 
     };
 
+    /// @brief Vector-style iterator definition
     using vector_iterator = vector_iterator_base<TrackletToFeatureMap::iterator, Feature::Ptr>;
+    /// @brief Vector-style const iterator definition
     using const_vector_iterator = vector_iterator_base<TrackletToFeatureMap::const_iterator, const Feature::Ptr>;
 
-    //! need to define iterator, value_type and reference to satisfy iterator traits
+    /// @brief Internal typedefs to allow FeatureContainer to satisfy the definitions of a std::iterator
+    /// See: https://en.cppreference.com/w/cpp/iterator/iterator_traits
     using iterator = vector_iterator;
     using pointer = iterator::pointer;
-
     using const_iterator = const_vector_iterator;
     using const_pointer = const_iterator::pointer;
-
     using value_type = Feature::Ptr;
     using reference = Feature::Ptr&;
     using const_reference = const Feature::Ptr&;
     using difference_type = std::ptrdiff_t;
 
-    //MUST be defined after the iterator typedefs (using for FeatureContainer), e.g interator, pointer etc... for the filter_iterator definition to work
+    /// @brief Typedefs for Filter iteratorss for the FeatureContainer allowing conditional iterators to be defined.
+    /// Must be defined after the internal iterator, pointer.... typedefs as internal::filter_iterator<> expects the type
+    /// defined to have a valid iterator.
     using FilterIterator = internal::filter_iterator<FeatureContainer>;
     using ConstFilterIterator = internal::filter_const_iterator<FeatureContainer>;
 
@@ -383,30 +401,104 @@ public:
     FeatureContainer();
     FeatureContainer(const FeaturePtrs feature_vector);
 
-    //take copy of the feature
+    /**
+     * @brief Adds a new feature to the container.
+     * Uses feature.trackletId() to set the tracklet key.
+     *
+     * Takes a copy of the feature.
+     *
+     * @param feature const Feature&
+     */
     void add(const Feature& feature);
+
+    /**
+     * @brief Adds a new feature to the container.
+     * Uses feature->trackletId() to set the tracklet key.
+     *
+     * @param feature Feature::Ptr feature
+     */
     void add(Feature::Ptr feature);
+
+    /**
+     * @brief Removes a feature by tracklet id by using std::map::erase.
+     *
+     * NOTE: This will directly modify the internal map, messing up any iterator that currently has a reference to this container (so any of the FilterIterator)!!
+     *
+     *
+     * @param tracklet_id TrackletId
+     */
     void remove(TrackletId tracklet_id);
+
+    /**
+     * @brief Clears the entire container
+     *
+     */
     void clear();
 
+
+    /**
+     * @brief Removes all features with a particular object id.
+     *
+     * @param object_id ObjectId
+     */
     void removeByObjectId(ObjectId object_id);
 
+
+    /**
+     * @brief Collects all feature tracklets.
+     * If only_usable is True, only features with Feature::usable() == true will be included.
+     * This is a short-hand way of collecting only inlier tracklets!
+     * Else, all features in the container will be included.
+     *
+     * @param only_usable bool. Defaults to true.
+     * @return TrackletIds
+     */
     TrackletIds collectTracklets(bool only_usable = true) const;
 
-
+    /**
+     * @brief If the container is empty.
+     *
+     * @return true
+     * @return false
+     */
     inline bool empty() const {
         return size() == 0u;
     }
 
-    void markOutliers(const TrackletIds outliers);
+    /**
+     * @brief Mark all features with the provided tracklet ids as outliers.
+     * If the present feature is already an outlier or does not exist, nothing happens ;)!
+     *
+     * @param outliers const TrackletIds&
+     */
+    void markOutliers(const TrackletIds& outliers);
 
+    /**
+     * @brief Returns the number of features in the container.
+     *
+     * @return size_t
+     */
     size_t size() const;
 
+    /**
+     * @brief Gets a feature given its tracklet id.
+     * If the feature does not exist, nullptr is returned.
+     *
+     * @param tracklet_id TrackletId
+     * @return Feature::Ptr
+     */
     Feature::Ptr getByTrackletId(TrackletId tracklet_id) const;
 
     // //this can totally give us nullptr's if we have removed this index
     // Feature::Ptr at(size_t i) const;
 
+    /**
+     * @brief Returns true if a feature with the given tracklet id exists.
+     *
+     * @param tracklet_id TrackletId
+     * @return true
+     * @return false
+     */
     bool exists(TrackletId tracklet_id) const;
 
 
@@ -421,6 +513,17 @@ public:
     FilterIterator beginUsable();
     FilterIterator beginUsable() const;
 
+    /**
+     * @brief Converts the keypoints of all features in the container to cv::Point2f representation.
+     * This makes them compatible with OpenCV functions.
+     *
+     * If the argument TrackletIds* is provided (ie, tracklet_ids != nullptr), the vector will be filled with the associated tracklet'id
+     * of each feature. This will be a 1-to-1 match with the output vector, allowing the keypoints to be associated with their
+     * tracklet id.
+     *
+     * @param tracklet_ids TrackletIds*. Defaults to nullptr
+     * @return std::vector<cv::Point2f>
+     */
     std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr) const;
 
 

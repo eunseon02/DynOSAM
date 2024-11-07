@@ -92,7 +92,7 @@ TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
 }
 
 
- void FeatureContainer::markOutliers(const TrackletIds outliers) {
+ void FeatureContainer::markOutliers(const TrackletIds& outliers) {
     for(TrackletId tracklet_id : outliers) {
         CHECK(exists(tracklet_id));
 

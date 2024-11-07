@@ -49,6 +49,23 @@ public:
     StaticFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     virtual ~StaticFeatureTracker() {}
+
+    /**
+     * @brief Base function to perform feature tracking on static points.
+     *
+     * Is not intended to be state-ful (ie. contains a reference to the last frame) and instead
+     * we pass in the previous frame everytime.
+     *
+     * If the previous frame is null this should indicate that this is the first frame to be tracked!
+     *
+     *
+     * @param previous_frame Frame::Ptr. Previous frame (k-1) with filled-out features to be tracked.
+     * @param image_container const ImageContainer&. Contains current (k) images which will be tracked from the previous frame.
+     * @param tracker_info FeatureTrackerInfo&. Tracking metadata to be filled out.
+     * @param detection_mask const cv::Mat& A detection mask in the opencv feature tracking form: CV_8UC1 where white pixels (255) are valid
+     *  and black pixels (0) should not be detected on
+     * @return FeatureContainer Contains all successsfully tracked features.
+     */
     virtual FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) = 0;
 
 };
@@ -72,11 +89,44 @@ private:
 };
 
 
-
+/**
+ * @brief Static feature tracking that tracjs sparse feature set using the iterative Lucas-Kanade method with pyramids.
+ *
+ */
 class KltFeatureTracker : public StaticFeatureTracker {
 
 public:
     KltFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+
+    /**
+     * @brief Track features between frames k-1 and the current set of images (at k).
+     *
+     * General algorithm is:
+     * If not previous frame (ie. is null)
+     *  - preprocess input images (equalizeImage)
+     *  - detect feature in image container (detectFeatures)
+     * Else
+     *  - preprocess input images (equalizeImage)
+     *  - Collect inlier Features from the previous frame
+     *  - Track points (trackPoints)
+     *      - apply KLT tracking algorithm
+     *      - apply geometric verification to all features
+     *      - add tracks and check all features are valid (e.g lie on static points etc..)
+     *      - if number of tracks < threshold (max_features_per_frame_)
+     *          - reapply feature detection NOTE: in a perfect world we would detect on the previous image
+     *            and then re-track on the current image, but I didnt implement it like this and, in reality,
+     *            we we will only drop below the threshold for one frame. As long as we're tracking a good number of features
+     *            this does not effect the accuracy that much :)
+     *
+     *
+     *
+     * @param previous_frame Frame::Ptr. Previous frame (k-1) with filled-out features to be tracked.
+     * @param image_container const ImageContainer&. Contains current (k) images which will be tracked from the previous frame.
+     * @param tracker_info FeatureTrackerInfo&. Tracking metadata to be filled out.
+     * @param detection_mask const cv::Mat& A detection mask in the opencv feature tracking form: CV_8UC1 where white pixels (255) are valid
+     *  and black pixels (0) should not be detected on
+     * @return FeatureContainer Contains all successsfully tracked features.
+     */
     FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) override;
 
 
@@ -145,7 +195,15 @@ private:
         FeatureTrackerInfo& tracker_info,
         const cv::Mat& detection_mask);
 
-    //use homography + ransac to mark inliers with tracking
+    /**
+     * @brief Geometric verification using homograph + RANSAC.
+     * Input vectors have the same size and are a 1-to-1 of feature correspondences between old (k-1) and new (k)
+     * featurs.
+     *
+     * @param good_old const std::vector<cv::Point2f>&
+     * @param good_new const std::vector<cv::Point2f>&
+     * @return cv::Mat
+     */
     cv::Mat geometricVerification(const std::vector<cv::Point2f>& good_old, const std::vector<cv::Point2f>& good_new) const;
 
     /**
