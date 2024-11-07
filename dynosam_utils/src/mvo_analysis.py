@@ -22,7 +22,7 @@ import copy
 # plt.rcParams['legend.fontsize']=14
 
 
-formatting_utils.startup_plotting(22)
+formatting_utils.startup_plotting(38)
 
 """
 Script to process the results provided by the authors of
@@ -294,21 +294,6 @@ def ame(gt_motion_traj, mvo_motion_traj, dynosam_motion_traj, dyno_label, mvo_er
 
 
 
-# frame_id_to_timestamp_csv = eval.read_csv(
-#     "/root/results/DynoSAM/test_omd/frame_id_timestamp.csv",
-#     ["frame_id", "timestamp [ns]"]
-# )
-# frame_id_to_timestamp_csv = eval.read_csv(
-#     "/root/results/DynoSAM/test_kitti/frame_id_timestamp.csv",
-#     ["frame_id", "timestamp [ns]"]
-# )
-
-rgbd_timesetamp_csv = eval.read_csv(
-    "/root/data/omm/swinging_4_unconstrained/rgbd/rgbd.csv",[
-        "frame_num", "time_sec", "time_nsec"
-    ]
-)
-
 #hack do icp alignment
 def do_icp_trajectory_alignment(traj_est: evo_traj.PoseTrajectory3D, traj_ref: evo_traj.PoseTrajectory3D):
     import open3d as o3d
@@ -354,7 +339,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         sys.exit(0)
 
 
-    print(f"Loading MVO dataresults from {path_to_mvo_mat}")
+    print(f"Loading MVO data results from {path_to_mvo_mat}")
 
     # for OMD, we know we both use the same timestamps so just update later with the ones from MVO
     frame_id_timestamp_dict = {}
@@ -443,6 +428,9 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
     start_frame = (motion["start_frame"])[0]
     end_frame = (motion["end_frame"])[0]
 
+    print(start_frame)
+    print(end_frame)
+
     for key, m in trajectories.items():
         traj = m["motions"]
         times = m["times"]
@@ -468,7 +456,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         # times from MVO are offset and are 0.1 seconds apart leading to a total time of 15 seconds
         # our dataset is 0.05 seconds apart per frame leading to a total time of 7 seconds
             mvo_times = (times - times[0])/2
-            print(mvo_times)
             # the first timestamp also starts at 0, which we throw out
             mvo_times = mvo_times[1:]
             traj = traj[1:]
@@ -476,12 +463,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         #FOR mvo
         # mvo_times = times
         else:
-            mvo_times = np.linspace(start_frame, end_frame,1)
-
-            # starting_time = mvo_times[0]
-            # mvo_times = (times - times[0])/2
-            # mvo_times = starting_time + mvo_times
-
+            mvo_times = np.arange(start_frame, end_frame,1, dtype=np.float64)
 
 
 
@@ -591,16 +573,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
     mvo_camera_traj.align_origin(gt_camera_pose)
     dynosam_camera_pose_traj.align_origin(gt_camera_pose)
 
-    # mvo_camera_traj, gt_camera_pose = eval.sync_and_align_trajectories(
-    #     copy.deepcopy(mvo_camera_traj),
-    #     copy.deepcopy(gt_camera_pose),
-    #     max_diff=0.05)
-
-    # dynosam_camera_pose_traj, gt_camera_pose = eval.sync_and_align_trajectories(
-    #     copy.deepcopy(dynosam_camera_pose_traj),
-    #     copy.deepcopy(gt_camera_pose),
-    #     max_diff=0.05)
-
 
 
     rpe(gt_camera_pose, mvo_camera_traj, dynosam_camera_pose_traj, "camera", mvo_errors, dynosam_errors)
@@ -610,7 +582,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
     num_objects = len(mvo_to_dyno_labels) + 1
 
 
-    evo_figure = plt.figure(figsize=(16,8))
+    evo_figure = plt.figure(figsize=(8,8))
 
     if dataset == "kitti":
         axis_marker_scale=1.0
@@ -618,8 +590,9 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         axis_marker_scale=0.1
 
     # camera_traj_figure = plt.figure(figsize=(8,8))
-    ax = evo_figure.add_subplot(111, projection="3d")
-    # ax = evo_figure.add_subplot(1,num_objects,1)
+    # ax = evo_figure.add_subplot(111, projection="3d")
+    ax = evo_figure.add_subplot(111)
+
     ax.set_ylabel(r"Y(m)")
     ax.set_xlabel(r"X(m)")
     ax.set_title(f"Camera Trajectory")
@@ -628,35 +601,36 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
     # ax.set_facecolor('white')
     eval.tools.set_clean_background(ax)
     eval.tools.plot_object_trajectories(
-        evo_figure, {"MVO" : mvo_camera_traj, "Dynosam": dynosam_camera_pose_traj},
-        plot_mode = evo_plot.PlotMode.xyz,
+        evo_figure, {"MVO" : mvo_camera_traj, "DynoSAM": dynosam_camera_pose_traj},
+        plot_mode = evo_plot.PlotMode.xy,
         plot_axis_est=False, plot_axis_ref=False,
         axis_marker_scale=axis_marker_scale,
-        plot_start_end_markers=True,
+        plot_start_end_markers=False,
         colours=[
             np.array(nice_colours["blue"]) / 255.0,
             np.array(nice_colours["bluish_green"]) / 255.0
         ],
+        traj_linewidth=4.0
         # downscale=0.005,
         # axis_marker_scale=1.0
     )
     eval.tools.plot_object_trajectories(
         evo_figure,
         {"Ground Truth": gt_camera_pose},
-        plot_mode = evo_plot.PlotMode.xyz,
-        plot_start_end_markers=True,
-        plot_axis_est=True, plot_axis_ref=False,
+        plot_mode = evo_plot.PlotMode.xy,
+        plot_start_end_markers=False,
+        plot_axis_est=False, plot_axis_ref=False,
         colours=[np.array(nice_colours["vermillion"]) / 255.0],
         est_style="--",
         # downscale=0.005,
-        axis_marker_scale=axis_marker_scale
+        axis_marker_scale=axis_marker_scale,
+        traj_linewidth=6.0
     )
     # ax.set_aspect(0.8)
+    ax.set_box_aspect(1)
     ax.set_axisbelow(True)
-    evo_figure.tight_layout()
+    evo_figure.tight_layout(pad=0.05)
     ax.grid(which='major', color='#DDDDDD', linewidth=1.0)
-
-    # plt.show()
 
 
     for idx, (mvo_label, dyno_label) in enumerate(mvo_to_dyno_labels.items()):
@@ -669,7 +643,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
         print(f"GT traj {gt_traj}")
 
-
+        print(f"MVO traj {mvo_traj}")
         if dataset == "omd":
             aligned_mvo_poses = []
             for aligned_camera, original_camera, mvo_pose in zip(mvo_camera_traj.poses_se3, mvo_camera_traj_original.poses_se3, mvo_traj.poses_se3):
@@ -685,8 +659,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         all_gt_motion_traj = {}
         all_dyno_traj = {}
 
-        # return
-        mvo_traj.align_origin(dynosam_traj)
+        print(f"MVO traj {mvo_traj}")
 
         if dataset == "kitti":
             mvo_traj, gt_traj = evo_sync.associate_trajectories(
@@ -698,6 +671,11 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
                 dynosam_traj,
                 gt_traj,
                 max_diff=0.05)
+        else:
+            mvo_traj = eval.tools.align_trajectory(mvo_traj, gt_traj)
+            dynosam_traj = eval.tools.align_trajectory(dynosam_traj, gt_traj)
+
+
 
 
         # calculate motion for mvo in world
@@ -706,36 +684,15 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         motion_gt = []
         #
         motions_dynosam = []
-        # # calculate the motion in world
-        # print(gt_traj.num_poses)
-        # print(mvo_traj.num_poses)
-        # return
-
         aligned_mvo_poses = []
 
         mvo_poses = mvo_traj.poses_se3
         for index, (gt_pose_k_1, gt_pose_k, pose_k_1, pose_k) in enumerate(zip(gt_traj.poses_se3[:-1], gt_traj.poses_se3[1:], mvo_poses[:-1], mvo_poses[1:])):
-            # pose_k_1 = invT(pose_k_1)
-            # pose_k = invT(pose_k)
-
-            # pose_k_1_in_gt = lie_algebra.se3_inverse(gt_pose_k_1) @ pose_k_1
-            # pose_k_in_gt = lie_algebra.se3_inverse(gt_pose_k) @ pose_k
-
             #this world is the mvo world
             H_world = pose_k @ (lie_algebra.se3_inverse(pose_k_1))
-            # H_world_gt = gt_pose_k_1 @ H_world @ lie_algebra.se3_inverse(gt_pose_k_1)
-
-            # if not lie_algebra.is_se3(H_world):
-            #     H_world[:3, :3] = closest_rotation_matrix(H_world[:3, :3])
 
             assert is_se3(H_world), f"{H_world} at index {index}: {pose_k_1} {pose_k}"
             mvo_motions.append(H_world)
-
-
-        # mvo_traj_aligned = []
-        # for motion in mvo_motions:
-        #     new_pose = motion @ np.array(mvo_traj_aligned[-1])
-        #     mvo_traj_aligned.append(new_pose)
 
 
         dynosam_poses = dynosam_traj.poses_se3
@@ -743,9 +700,6 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
             assert lie_algebra.is_se3(pose_k_1)
             assert lie_algebra.is_se3(pose_k)
             H_world = pose_k @ (lie_algebra.se3_inverse(pose_k_1))
-
-            # if not lie_algebra.is_se3(H_world):
-            #     H_world[:3, :3] = closest_rotation_matrix(H_world[:3, :3])
 
             assert is_se3(H_world), f"{H_world} at index {index}: {pose_k_1} {pose_k}"
             motions_dynosam.append(H_world)
@@ -756,18 +710,13 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
             assert lie_algebra.is_se3(pose_k)
             H_world = pose_k @ (lie_algebra.se3_inverse(pose_k_1))
 
-            # if not lie_algebra.is_se3(H_world):
-            #     H_world[:3, :3] = closest_rotation_matrix(H_world[:3, :3])
-
             assert is_se3(H_world), f"{H_world} at index {index}: {pose_k_1} {pose_k}"
             motion_gt.append(H_world)
 
         print(f"GT traj {gt_traj}")
 
-        # eval.calculate_omd_errors(mvo_traj, gt_traj, mvo_label)
 
         mvo_motion_traj = evo_traj.PoseTrajectory3D(poses_se3=np.array(mvo_motions), timestamps=mvo_traj.timestamps[1:])
-        # gt_motion_traj = evo_traj.PoseTrajectory3D(poses_se3=motion_gt, timestamps=gt_traj.timestamps[1:])
         dynosam_motion_traj = evo_traj.PoseTrajectory3D(poses_se3=np.array(motions_dynosam), timestamps=dynosam_traj.timestamps[1:])
 
         # print(motions)
@@ -781,7 +730,7 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
 
         all_mvo_traj["MVO"] = mvo_traj
         all_gt_traj["Ground Truth"] = gt_traj
-        all_dyno_traj["Dynosam"] = dynosam_traj
+        all_dyno_traj["DynoSAM"] = dynosam_traj
 
         evo_figure = plt.figure(figsize=(8,8))
         plot_collection = evo_plot.PlotCollection()
@@ -790,9 +739,9 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         plot_collection.add_figure("MVO trjactories", evo_figure)
         # plot_collection.add_figure("Dynosam trjactories", dynosam_fig)
 
-        ax = evo_figure.add_subplot(111, projection="3d")
-        # ax = evo_figure.add_subplot(111)
-        # ax = evo_figure.add_subplot(1,num_objects,idx+1)
+        # ax = evo_figure.add_subplot(111, projection="3d")
+        ax = evo_figure.add_subplot(111)
+
         ax.set_ylabel(r"Y(m)")
         ax.set_xlabel(r"X(m)")
         ax.set_title(f"Object {dyno_label}")
@@ -803,12 +752,13 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         eval.tools.plot_object_trajectories(
             evo_figure, all_mvo_traj,
             # None,
-            plot_mode = evo_plot.PlotMode.xyz,
+            plot_mode = evo_plot.PlotMode.xy,
             plot_axis_est=False,
-            plot_start_end_markers=True,
+            plot_start_end_markers=False,
             downscale=0.1,
             # est_name_prefix="MVO",
             colours=[np.array(nice_colours["blue"]) / 255.0],
+            traj_linewidth=6.0
             # shift_ref_colour=100,
             # shift_est_colour=300
             # axis_marker_scale=1.0
@@ -818,55 +768,41 @@ def process_mvo_data(path_to_mvo_mat, path_to_dyno_results, camera_id, mvo_to_dy
         # trajectory_helper.append(camera_traj)
         trajectory_helper.append(mvo_traj)
         trajectory_helper.append(dynosam_traj)
+        # trajectory_helper.set_ax_limits(ax, evo_plot.PlotMode.xy, buffer=2)
 
-        eval.tools.plot_object_trajectories(
+        ax = eval.tools.plot_object_trajectories(
             evo_figure,all_gt_traj,
             # None,
-            plot_mode = evo_plot.PlotMode.xyz,
+            plot_mode = evo_plot.PlotMode.xy,
             plot_axis_est=False,
-            plot_start_end_markers=True,
+            plot_start_end_markers=False,
             downscale=0.1,
             # est_name_prefix="Ground Truth",
             # shift_ref_colour=100,
             colours=[np.array(nice_colours["vermillion"]) / 255.0],
-            est_style="--"
+            est_style="--",
+            traj_linewidth=6.0
             # shift_est_colour=300
             # axis_marker_scale=1.0
         )
-        # first_gt_pose = gt_traj.positions_xyz[0]
-        # evo_figure.gca().plot(first_gt_pose[0], first_gt_pose[1], first_gt_pose[2], 'ro',  markersize=15)
-
-        # print(first_gt_pose)
-        # print(gt_traj.poses_se3[0])
-        # first_gt_pose = gt_traj.poses_se3[0]
-        # evo_figure.gca().plot(first_gt_pose[0, 3], first_gt_pose[1, 3], first_gt_pose[2, 3], 'ro',  markersize=15)
-        # evo_figure.gca().plot(gt_traj.positions_xyz[:,0] , gt_traj.positions_xyz[:,1], gt_traj.positions_xyz[:,2], 'bo',  markersize=15)
-        # evo_figure.gca().plot(first_mvo_pose[0, 3], first_mvo_pose[1, 3], first_mvo_pose[2, 3], 'go',  markersize=15)
-
-
-        # eval.tools.plot_object_trajectories(
-        #     evo_figure, {"mvo camera" : mvo_camera_traj, "dynosam camera": dynosam_camera_pose_traj},
-        #     plot_mode = evo_plot.PlotMode.xyz,
-        #     plot_axis_est=True, plot_axis_ref=True,
-        #     downscale=0.005,
-        #     # axis_marker_scale=1.0
-        # )
-
-        eval.tools.plot_object_trajectories(
+        ax = eval.tools.plot_object_trajectories(
             evo_figure, all_dyno_traj, #all_gt_traj,
-            plot_mode = evo_plot.PlotMode.xyz,
+            plot_mode = evo_plot.PlotMode.xy,
             plot_axis_est=False, plot_axis_ref=True,
-            plot_start_end_markers=True,
+            plot_start_end_markers=False,
             colours=[np.array(nice_colours["bluish_green"]) / 255.0],
+            traj_linewidth=6.0
             # downscale=0.5
             # axis_marker_scale=1.0
         )
-
+        ax.set_box_aspect(1)
+        # ax.se/t_aspect('equal')
+        # ax.set_aspect('equal', adjustable='box')
         # ax.set_aspect('equal', 'box')
         # ax.set_aspect(0.8)
         ax.set_axisbelow(True)
-        # evo_figure.tight_layout(pad=2.0)
         ax.grid(which='major', color='#DDDDDD', linewidth=1.0)
+        evo_figure.tight_layout(pad=0.05)
 
         plt.show()
 

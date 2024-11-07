@@ -24,6 +24,8 @@ import matplotlib
 
 import matplotlib.pyplot as plt
 
+from typing import Optional
+
 # https://cduvallet.github.io/posts/2018/03/boxplots-in-python
 plt.rcdefaults()
 
@@ -54,7 +56,7 @@ def get_stats(results_path, stats_keys):
     stats_dict = {stats_key : {"mean": [], "stddev": []} for stats_key in stats_keys.keys()}
 
     keys = list(stats_keys.keys())
-    print(f"Statis dict {stats_dict}")
+    # print(f"Statis dict {stats_dict}")
 
     for folder in sub_folders:
         if eval_files.check_if_results_folder(folder):
@@ -69,34 +71,50 @@ def get_stats(results_path, stats_keys):
 
     return stats_dict
 
-def main(results_path, details):
+
+def plot(results_path, details_list):
+
+    num_details = len(details_list)
+    fig, axes = plt.subplots(nrows=num_details, ncols=1, constrained_layout=True)
+
+    from string import ascii_lowercase
+
+    alphabet = iter(ascii_lowercase)
+
+    for ax, details in zip(axes, details_list):
+        letter = next(alphabet)
+        title = f"({letter})"
+
+        detail_name = details.get("name", None)
+        if detail_name is not None:
+            title += f" {detail_name}"
+
+        main(results_path, ax, details, title=title)
+
+    fig.tight_layout()
+    plt.show()
+
+def main(results_path:str, ax: plt.Axes, details: dict, title: Optional[str] = None):
     stats_keys = details["keys"]
     log_scale= details.get("log_scale", False)
     stats_dict = get_stats(results_path, stats_keys)
     means = {}
-    stddev = {}
-    print(log_scale)
     for key, stats in stats_dict.items():
 
         label = stats_keys[key]["label"]
-
         data = stats["mean"]
 
         # label could be in twice if we want to map a stats key to the same label
         if label in means:
-            means[label].extends(data)
+            means[label].extend(data)
         else:
             means[label] = data
-        # stddev[label] = stats["stddev"]
 
-    # df = pd.DataFrame({k: pd.Series(v) for k, v in means.items()})
     # Convert the dictionary into a DataFrame with varying lengths (introducing NaNs)
     df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in means.items()]))
+    for series_name, series in df.items():
+        print(f"{series_name}: max {series.mean()} min {series.min()} max {series.max()}")
 
-    # Prepare the data as a list of arrays (each array can have different length)
-    data_for_boxplot = [df[col].dropna().values for col in df.columns]
-    fig = plt.figure(figsize=(13,5))
-    ax = fig.gca()
 
 
     boxprops = { 'linewidth': 2, 'facecolor': 'w'}
@@ -111,7 +129,14 @@ def main(results_path, details):
 
     # boxplot = ax.boxplot(data_for_boxplot, labels=df.columns,patch_artist=True)
     # ax.set_yscale("log")
-    sns.boxplot(data=df,ax=ax,fliersize=0, saturation=0.6,log_scale=log_scale,patch_artist=True)
+    sns.boxplot(
+        data=df,
+        ax=ax,
+        fliersize=0,
+        saturation=0.6,
+        log_scale=log_scale,
+        patch_artist=True,
+        width=0.8)
 
     colour_iter = itertools.cycle(formatting.prop_cycle())
     sns.stripplot(data=df,
@@ -141,24 +166,21 @@ def main(results_path, details):
     ax.grid(True, alpha=0.5)
     ax.yaxis.grid(True)
     ax.xaxis.grid(False) # Show the vertical gridlines
-    # ax.grid(True)
-    # # ax.set_yscale("log")
-    fig.tight_layout()
+
+    if title is not None:
+        ax.set_title(title, loc="left", pad=10)
 
 
-
-    plt.show()
 
 def get_all_stats(results_folder, stats_dict, stats_key):
 
-    print(f"Starting results folder {results_folder}")
-    print(f"Stats keys {stats_key}")
+    # print(f"Starting results folder {results_folder}")
+    # print(f"Stats keys {stats_key}")
 
     sub_files = [os.path.join(results_folder, name) for name in os.listdir(results_folder)]
     # from all the logging files in the results folder, get those prefixed by stats
     stats_files = list(filter(lambda file: Path(file).name.startswith("stats_") and  Path(file).name.endswith("csv"), sub_files))
 
-    print(stats_key)
     for stats_file in stats_files:
 
 
@@ -171,98 +193,28 @@ def get_all_stats(results_folder, stats_dict, stats_key):
                 stats_dict["stddev"].append(float(row["stddev"]))
 
 
-# def make_batch_plots()
 
 
-# def make_POM_plots(results_path):
-#     print(f"Iterating over parent results path {results_path}")
-#     sub_folders = [os.path.join(results_path, name) for name in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, name))]
-
-#     timing_results = {}
-
-#     for folder in sub_folders:
-#         if not eval_files.check_if_results_folder(folder):
-#             continue
-
-#          # ignore the frontend-testing ones
-#         if not "_POM" in Path(folder).name:
-#             continue
-
-#         print(f"Processing POM for {folder}")
-
-#         folder = Path(folder)
-#         stats_file = folder / "statistics_samples.csv"
-#         if not os.path.exists(stats_file):
-#             continue
-
-#         reader = eval_files.read_csv(stats_file, ["label", "samples"])
-
-#         for row in reader:
-#             label = row["label"]
-#             samples = list(row["samples"])
-#             samples = [float(i) for i in samples if i !=' ']
-
-
-
-#             if "joint_of_pose" in label:
-#                 if "joint_of_pose" not in timing_results:
-#                     timing_results["joint_of_pose"] = {"ms": [], "all": [], "inliers":[]}
-
-#             elif "object_nlo_refinement" in label:
-#                 if "object_nlo_refinement" not in timing_results:
-#                     timing_results["object_nlo_refinement"] = {"ms": [], "all": [], "inliers":[]}
-#             else:
-#                 continue
-
-#             print(label)
-#             print(len(samples))
-
-#             if label.endswith("joint_of_pose [ms]"):
-#                 timing_results["joint_of_pose"]["ms"].extend(samples)
-#             elif label.endswith("joint_of_pose_num_vars_all"):
-#                 timing_results["joint_of_pose"]["all"].extend(samples)
-#             elif label.endswith("joint_of_pose_num_vars_inliers"):
-#                 timing_results["joint_of_pose"]["inliers"].extend(samples)
-#             # elif label.endswith("object_nlo_refinement [ms]"):
-#             #     timing_results["object_nlo_refinement"]["ms"].extend(samples)
-#             # elif label.endswith("object_nlo_refinement_num_vars_all"):
-#             #     timing_results["object_nlo_refinement"]["all"].extend(samples)
-#             # elif label.endswith("object_nlo_refinement_num_vars_inliers"):
-#             #     timing_results["object_nlo_refinement"]["inliers"].extend(samples)
-#             # else:
-#             #     continue
-
-#     fig = plt.figure(figsize=(8,8))
-#     joint_of_ax = fig.add_subplot(211)
-
-#     def plot_result(ax, result, label):
-#         timing = result["ms"]
-#         all = result["all"]
-
-#         ax.plot(timing, all, label=label)
-#         ax.set_ylabel(r"Num Vars")
-#         ax.set_xlabel(r"[ms]")
-
-#     plot_result(joint_of_ax, timing_results["joint_of_pose"], "joint_of_pose")
-
-#     plt.show()
-
-
-# KEYS = [{"frontend.feature_tracker"}]
-
-
-TRACKING_STATS_KEYS = {"name": "Tracking",
+TRACKING_STATS_KEYS = {"name": "Feature Tracking",
                        "log_scale":False,
                        "keys":{"frontend.feature_tracker": {"label":"Feature Tracker"},
+                               "tracking_timer": {"label":"Feature Tracker"},
                                "static_feature": {"label": "Static Features"},
                                "dynamic_feature": {"label": "Dynamic Features"}}
                       }
 
-REFINEMENT_STATS_KEYS = {"name": "Refinement",
+
+BACKEND_STATS_KEYS = {"name": "Back-end",
+                       "log_scale":False,
+                       "keys":{
+                               "full_batch_opt": {"label":"Feature Tracker"}}
+                      }
+
+REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
                          "log_scale":True,
                        "keys":{"motion_solver.solve_3d2d": {"label":"PnP Solve"},
-                               "joint_of_pose [ms]": {"label": "Joint Optical Flow"},
-                               "object_nlo_refinement [ms]": {"label": "3D Motion Refinement"}}
+                               "joint_of_pose [ms]": {"label": "Optical Flow Refinement"},
+                               "object_nlo_refinement [ms]": {"label": "Motion Refinement"}}
                       }
 
 # hardcoded key to search for
@@ -271,20 +223,14 @@ REFINEMENT_STATS_KEYS = {"name": "Refinement",
 # OPT_STATS_KEYS=["batch_opt [ms]", "sliding_window_optimise [ms]"]
 # OPT_STATS_KEYS=["batch_opt_num_vars", "sliding_window_optimise_num_vars"]
 
-STATS_KEYS = TRACKING_STATS_KEYS
+STATS_KEYS = REFINEMENT_STATS_KEYS
 
 
 if __name__ == "__main__":
     parser = parser()
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-    if main(args.dynosam_results_path, STATS_KEYS):
+    if plot(args.dynosam_results_path, [TRACKING_STATS_KEYS,REFINEMENT_STATS_KEYS,BACKEND_STATS_KEYS]):
         sys.exit(os.EX_OK)
     else:
         sys.exit(os.EX_IOERR)
-
-
-    # if make_POM_plots(args.dynosam_results_path):
-    #     sys.exit(os.EX_OK)
-    # else:
-    #     sys.exit(os.EX_IOERR)

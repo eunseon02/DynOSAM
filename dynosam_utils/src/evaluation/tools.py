@@ -250,18 +250,18 @@ class TrajectoryHelper:
             for t in trajectories:
                 calc_min_max(t)
 
-    def set_ax_limits(self, ax: plt.Axes, plot_mode: evo_plot.PlotMode = evo_plot.PlotMode.xyz):
+    def set_ax_limits(self, ax: plt.Axes, plot_mode: evo_plot.PlotMode = evo_plot.PlotMode.xyz, buffer = 0):
         from mpl_toolkits.mplot3d import Axes3D
 
         if  plot_mode == evo_plot.PlotMode.xyz and isinstance(ax, Axes3D):
-            ax.set_xlim3d([self.min_x, self.max_x])
-            ax.set_ylim3d([self.min_y, self.max_y])
-            ax.set_zlim3d([self.min_z, self.max_z])
+            ax.set_xlim3d([self.min_x - buffer, self.max_x + buffer])
+            ax.set_ylim3d([self.min_y - buffer, self.max_y + buffer])
+            ax.set_zlim3d([self.min_z - buffer, self.max_z + buffer])
             set_axes_equal(ax)
 
         elif plot_mode == evo_plot.PlotMode.xy:
-            ax.set_xlim([self.min_x, self.max_x])
-            ax.set_ylim([self.min_y, self.max_y])
+            ax.set_xlim([self.min_x - buffer , self.max_x + buffer])
+            ax.set_ylim([self.min_y - buffer , self.max_y + buffer])
 
 
 class ObjectMotionTrajectory(object):
@@ -559,7 +559,7 @@ def plot_object_trajectories(
         subplot_arg: int = 111,
         plot_start_end_markers: bool = False,
         length_unit: evo_plot.Unit = evo_plot.Unit.meters,
-        **kwargs) -> None:
+        **kwargs) -> Axes:
 
     from .core.plotting import ObjectTrajectoryPlotter
 

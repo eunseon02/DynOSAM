@@ -147,6 +147,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, cons
 
       objects_to_print.push_back(object_id);
       const cv::Scalar colour = Color::uniqueId(object_id).bgra();
+
       const std::string label = "object " + std::to_string(object_id);
       utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
 

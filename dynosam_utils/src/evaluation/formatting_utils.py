@@ -42,13 +42,13 @@ def prop_cycle() -> List[str]:
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
     """
-
     if tex_backend:
         try:
             plt.rcParams.update({
                     "text.usetex": True,
                     "font.family": "serif",
                     "font.serif": ["Computer Modern Roman"],
+                    "text.latex.unicode": True
                     })
         except:
             print("WARNING: LaTeX backend not configured properly. Not using.")

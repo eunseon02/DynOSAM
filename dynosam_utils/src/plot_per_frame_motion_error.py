@@ -13,25 +13,35 @@ import gtsam
 import matplotlib.pyplot as plt
 
 # Reset all rcParams to their default values
-plt.rcdefaults()
+# plt.rcdefaults()
+startup_plotting(65)
 
 
-plt.rcParams.update({
-                    "text.usetex": True,
-                    "font.family": "serif",
-                    "font.serif": ["Computer Modern Roman"],
-                    })
+plt.rcParams["lines.linewidth"] = 4.0
+# plt.rcParams.update({
+#                     "text.usetex": True,
+#                     "font.family": "serif",
+#                     "font.serif": ["Computer Modern Roman"],
+#                     })
 
 
-font_size=27
+# font_size=40
 
-# Change default font sizes.
-plt.rc('font', size=font_size)
-plt.rc('axes', titlesize=font_size)
-plt.rc('axes', labelsize=font_size)
-plt.rc('xtick', labelsize=0.6*font_size)
-plt.rc('ytick', labelsize=0.6*font_size)
-plt.rc('legend', fontsize=0.7*font_size)
+# # # Change default font sizes.
+# plt.rc('font', size=font_size)
+# plt.rc('axes', titlesize=font_size)
+# plt.rc('axes', labelsize=font_size)
+# plt.rc('xtick', labelsize=0.6*font_size)
+# plt.rc('ytick', labelsize=0.6*font_size)
+# plt.rc('legend', fontsize=0.7*font_size)
+
+# plt.rcParams['axes.titlesize'] = 29    # Title font size
+# plt.rcParams['axes.labelsize'] = 37    # X/Y label font size
+# plt.rcParams['figure.titlesize'] = 25    # Title font size
+# plt.rcParams['xtick.labelsize'] = 33   # X tick label font size
+# plt.rcParams['ytick.labelsize'] = 33   # Y tick label font size
+# plt.rcParams['legend.fontsize']= 29
+
 
 # plt.rcParams['axes.titlesize'] = 25    # Title font size
 # plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
@@ -62,21 +72,20 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
         fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True)
 
-        fig.set_size_inches(16, 6) # for KITTI
-        # fig.set_size_inches(18, 7)  # for OMD
+        # fig.set_size_inches(15, 15) # for KITTI
+        fig.set_size_inches(15, 11)  # for OMD
 
         if suptitle:
-            fig.suptitle(f"Object {object_id}", fontweight="bold", fontsize=25)
+            fig.suptitle(f"Object {object_id}", fontweight="bold")
         rot_error_axes.margins(0.001)
         set_clean_background(rot_error_axes)
-        rot_error_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
+        rot_error_axes.set_ylabel("$E_r$(\N{degree sign})")
 
         set_clean_background(trans_error_axes)
         trans_error_axes.margins(0.001)
-        trans_error_axes.set_ylabel("$E_t$(m)", fontsize=23)
+        trans_error_axes.set_ylabel("$E_t$(m)")
         trans_error_axes.set_xlabel("Frame Index [-]")
 
-        fig.tight_layout(pad=0.5)
 
         rme_E = eval_metrics.RME(eval_metrics.PoseRelation.full_transformation)
 
@@ -122,6 +131,8 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         trans_error_axes.legend(loc='upper left',ncol=3)
         # rot_error_axes.legend()
         # trans_error_axes.legend()
+        fig.tight_layout()
+
         return fig, rot_error_axes, trans_error_axes
 
 
@@ -138,8 +149,8 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
        backend_fig_axes = make_plot_all_objects("rgbd_motion_world_backend", dataset_eval, objects, suptitle,linestyle="-")
 
     if frontend_fig_axes and backend_fig_axes:
-        _, frontend_rot_axes, frontend_trans_axes = frontend_fig_axes
-        _, backend_rot_axes, backend_trans_axes = backend_fig_axes
+        fig_frontend, frontend_rot_axes, frontend_trans_axes = frontend_fig_axes
+        fig_backend, backend_rot_axes, backend_trans_axes = backend_fig_axes
 
         def set_axes_equal(ax1: Axes, ax2: Axes):
             y1_min = min(ax1.get_ylim())
@@ -158,16 +169,23 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
         set_axes_equal(frontend_rot_axes, backend_rot_axes)
         set_axes_equal(frontend_trans_axes, backend_trans_axes)
 
+        fig_frontend.tight_layout(pad=0.9)
+        fig_backend.tight_layout(pad=0.9)
+        # fig_frontend.tight_layout()
+        # fig_backend.tight_layout()
+
 
 
 
 # make_plot("/root/results/DynoSAM/omd_vo_test", plot_frontend=False, plot_backend=True, objects=[4], suptitle=False)
 # make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=False, objects=[2], suptitle=True)
-# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
 # make_plot("/root/results/DynoSAM/test_kitti_vo_0003", plot_frontend=True, plot_backend=True, objects=[1], suptitle=True)
-
-make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
 # make_plot("/root/results/DynoSAM/test_kitti_vo_0004", plot_frontend=True, plot_backend=False)
+
+
+# these are the ones we actually used
+make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
+# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
 
 
 

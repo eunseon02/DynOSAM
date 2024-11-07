@@ -127,7 +127,7 @@ class ObjectTrajectoryPlotter(object):
             subplot_arg: int = 111,
             plot_start_end_markers: bool = False,
             length_unit: evo_plot.Unit = evo_plot.Unit.meters,
-            **kwargs):
+            **kwargs) -> Axes:
 
         if obj_trajectories_ref is not None and len(obj_trajectories) != len(obj_trajectories_ref):
             raise evo_plot.PlotException(f"Expected trajectories and ref trajectories to have the same length {len(obj_trajectories)} != {len(obj_trajectories_ref)}")

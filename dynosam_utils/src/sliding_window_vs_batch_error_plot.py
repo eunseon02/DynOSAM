@@ -6,6 +6,7 @@ import evo.core.units as evo_units
 import numpy as np
 
 import matplotlib.pyplot as plt
+import evaluation.formatting_utils as formatting_utils
 
 # batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000"
 # sliding_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000_sliding"
@@ -20,14 +21,35 @@ import matplotlib.pyplot as plt
 
 
 # Reset all rcParams to their default values
-plt.rcdefaults()
+# https://cduvallet.github.io/posts/2018/03/boxplots-in-python
+# plt.rcdefaults()
 
-plt.rcParams.update({
-                    "text.usetex": True,
-                    "font.family": "serif",
-                    "font.serif": ["Computer Modern Roman"],
-                    })
+# plt.rcParams.update({
+#                     "text.usetex": True,
+#                     "font.family": "serif",
+#                     "font.serif": ["Computer Modern Roman"],
+#                     })
 
+# # plt.rcParams['axes.titlesize'] = 33    # Title font size
+# # plt.rcParams['axes.labelsize'] = 30    # X/Y label font size
+# # plt.rcParams['figure.titlesize'] = 30    # Title font size
+# # plt.rcParams['xtick.labelsize'] = 30   # X tick label font size
+# # plt.rcParams['ytick.labelsize'] = 30   # Y tick label font size
+# # plt.rcParams['legend.fontsize']= 35
+
+
+# font_size=35
+
+# # # Change default font sizes.
+# plt.rc('font', size=font_size)
+# plt.rc('axes', titlesize=font_size)
+# plt.rc('axes', labelsize=font_size)
+# plt.rc('xtick', labelsize=0.6*font_size)
+# plt.rc('ytick', labelsize=0.6*font_size)
+# plt.rc('legend', fontsize=0.7*font_size)
+
+formatting_utils.startup_plotting(50)
+plt.rcParams["lines.linewidth"] = 4.0
 
 
 
@@ -134,9 +156,10 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
     # trans_fig = plt.figure(figsize=(10,4))
     # ax = trans_fig.gca()
     trans_axes.plot(batch_errors_timestamp, batch_errors_t, label="Batch")
-    trans_axes.set_ylabel("$E_t$(m)", fontsize=19)
-    # trans_axes.set_xlabel("Frame Index [-]")
-    # trans_axes.set_title("Batch vs. Sliding Window: AME$_t$ Error Comparison", fontweight='heavy', fontsize=23)
+    # trans_axes.set_ylabel("$E_t$(m)", fontsize=23)
+    trans_axes.set_ylabel("$AME_t$(m)")
+
+
     trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding")
     trans_axes.patch.set_facecolor('white')
     trans_axes.margins(x=0)
@@ -146,7 +169,8 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
         spine.set_linewidth(1)        # Set the border width (adjust as needed)
 
 
-    rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=19)
+    # rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
+    rot_axes.set_ylabel("$AME_r$(\N{degree sign})")
     # rot_axes.set_xlabel("Frame Index [-]")
     # rot_axes.set_title("Batch vs. Sliding Window: AME$_r$ Error Comparison", fontweight="bold",  fontsize=23)
     rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Batch")
@@ -169,6 +193,8 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
 
 
 
+
+
 # batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000"
 # sliding_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000_sliding"
 
@@ -179,50 +205,57 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
 # sliding_opt_folder_path = "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare"
 
 # Set global font sizes (optional)
-plt.rcParams['axes.titlesize'] = 25    # Title font size
-plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
-plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
-plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
+# plt.rcParams['axes.titlesize'] = 25    # Title font size
+# plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
+# plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
+# plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
 
-rot_fig = plt.figure(figsize=(20,8))
-trans_fig = plt.figure(figsize=(20,8))
+rot_fig = plt.figure(figsize=(16,11))
+trans_fig = plt.figure(figsize=(16,11))
 
 rot_axes_1 = rot_fig.add_subplot(211)
-rot_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
+# rot_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
+rot_axes_1.set_title(r"KITTI 00", loc="left")
 
 rot_axes_2 = rot_fig.add_subplot(212)
-rot_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
+# rot_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
+rot_axes_2.set_title(r"OMD (swinging 4 unconstrained)", loc="left")
 
 trans_axes_1 = trans_fig.add_subplot(211)
-trans_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
+# trans_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
+trans_axes_1.set_title(r"KITTI 00", loc="left")
 
 trans_axes_2 = trans_fig.add_subplot(212)
-trans_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
+# trans_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
+trans_axes_2.set_title(r"OMD (swinging 4 unconstrained)", loc="left")
 
 make_plot(trans_axes_1, rot_axes_1, "/root/results/Dynosam_tro2024/kitti_0000", "/root/results/Dynosam_tro2024/kitti_0000_sliding")
 make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_batch", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding")
 # make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_vo_test", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare")
 
-
-rot_axes_1.legend(loc="upper right", fontsize=23)
-rot_axes_2.legend(loc="upper right", fontsize=23)
-trans_axes_1.legend(loc="upper right", fontsize=23)
-trans_axes_2.legend(loc="upper right", fontsize=23)
-
+# rot_fig.legend(bbox_to_anchor=(0, 1.02, 1, 0.2), loc="upper center",
+            # mode="expand", borderaxespad=0, ncol=3)
+rot_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,fontsize=40,bbox_to_anchor=(0.5, 1.02))
+trans_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,fontsize=40,bbox_to_anchor=(0.5, 1.02))
 
 
+# rot_axes_1.legend(loc="upper right", fontsize=23)
+# rot_axes_2.legend(loc="upper right", fontsize=23)
+# trans_axes_1.legend(loc="upper right", fontsize=23)
+# trans_axes_2.legend(loc="upper right", fontsize=23)
 
 
-rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=30)
-rot_fig.supxlabel("Frame Index [-]",fontsize=27)
 
-trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=30)
-trans_fig.supxlabel("Frame Index [-]", fontsize=27)
+# rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=30)
+rot_fig.supxlabel("Frame Index [-]")
 
-rot_fig.tight_layout()
-trans_fig.tight_layout()
+# trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=30)
+trans_fig.supxlabel("Frame Index [-]")
 
-# plt.show()
+rot_fig.tight_layout(pad=0.1)
+trans_fig.tight_layout(pad=0.1)
+
+plt.show()
 
 # rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
 # trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")
