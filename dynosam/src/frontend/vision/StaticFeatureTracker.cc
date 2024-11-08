@@ -32,19 +32,21 @@
 
 namespace dyno {
 
-StaticFeatureTracker::StaticFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+StaticFeatureTracker::StaticFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     :FeatureTrackerBase(params, camera, display_queue) {}
 
 
-ExternalFlowFeatureTracker::ExternalFlowFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+ExternalFlowFeatureTracker::ExternalFlowFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     :StaticFeatureTracker(params, camera, display_queue),
-    static_grid_(params.cell_size_static,
-        std::ceil(static_cast<double>(camera->getParams().ImageWidth())/params.cell_size_static),
-        std::ceil(static_cast<double>(camera->getParams().ImageHeight())/params.cell_size_static))
+    static_grid_(static_cell_size,
+        std::ceil(static_cast<double>(camera->getParams().ImageWidth())/static_cell_size),
+        std::ceil(static_cast<double>(camera->getParams().ImageHeight())/static_cell_size))
 {
+
+    const auto orb_params = params.orb_params;
     orb_detector_ = std::make_unique<ORBextractor>(
-        params_.n_features, static_cast<float>(params_.scale_factor), params_.n_levels,
-        params_.init_threshold_fast, params_.min_threshold_fast);
+        params.max_nr_keypoints_before_anms, static_cast<float>(orb_params.scale_factor), orb_params.n_levels,
+        orb_params.init_threshold_fast, orb_params.min_threshold_fast);
 
     CHECK(!img_size_.empty());
 }
@@ -67,7 +69,7 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(Frame::Ptr previous_fra
     // assign tracked features to grid and add to static features
     FeatureContainer static_features;
 
-    const size_t& min_tracks = static_cast<size_t>(params_.max_tracking_points_bg);
+    const size_t& min_tracks = static_cast<size_t>(params_.max_features_per_frame);
     const FrameId frame_k = image_container.getFrameId();
 
     // appy tracking (ie get correspondences)
@@ -212,21 +214,14 @@ Feature::Ptr ExternalFlowFeatureTracker::constructStaticFeature(const ImageConta
 
 
 
-KltFeatureTracker::KltFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+KltFeatureTracker::KltFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : StaticFeatureTracker(params, camera, display_queue)
 {
-
-    max_features_per_frame_ = params_.max_tracking_points_bg;
-
-    clahe_ = cv::createCLAHE(2.0, cv::Size(8, 8));
-    non_maximum_supression_ = std::make_unique<AdaptiveNonMaximumSuppression>(AnmsAlgorithmType::RangeTree);
-    feature_detector_ = cv::GFTTDetector::create(
-          max_nr_keypoints_before_anms_,
-          quality_level_,
-          min_distance_btw_tracked_and_detected_features_,
-          block_size_,
-          use_harris_corner_detector_,
-          k_);
+    detector_ = std::make_shared<SparseFeatureDetector>(
+        params,
+        FunctionalDetector::FactoryCreate(params)
+    );
+    CHECK_NOTNULL(detector_);
 }
 
 
@@ -290,59 +285,20 @@ void KltFeatureTracker::equalizeImage(const ImageContainer& image_container, cv:
     CHECK(!mono.empty());
 
     mono.copyTo(equialized_greyscale);
-    CHECK(clahe_);
+    // CHECK(clahe_);
 
-    clahe_->apply(mono, equialized_greyscale);
+    // clahe_->apply(mono, equialized_greyscale);
 }
 
 
 std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(const cv::Mat& processed_img, int number_tracked, const cv::Mat& mask) {
-    std::vector<cv::KeyPoint> keypoints;
-    feature_detector_->detect(processed_img, keypoints, mask);
+    KeypointsCV keypoints;
+    detector_->detect(processed_img, keypoints, number_tracked, mask);
 
-    //params_.max_tracking_points_bg is overloaded as
-    int nr_corners_needed = std::max(
-      max_features_per_frame_ - number_tracked, 0);
+    LOG(INFO) << keypoints.size();
 
-    std::vector<cv::KeyPoint>& max_keypoints = keypoints;
-    static constexpr float tolerance = 0.1;
-
-    int nr_horizontal_bin = 5;
-    //! Number of vertical bins for feature binning
-    int nr_vertical_bins = 5;
-    //! Binary mask by the user to control which bins to use
-    Eigen::MatrixXd binning_mask;
-
-    max_keypoints = non_maximum_supression_->suppressNonMax(
-        keypoints,
-        nr_corners_needed,
-        tolerance,
-        processed_img.cols,
-        processed_img.rows,
-        nr_horizontal_bin,
-        nr_vertical_bins,
-        binning_mask);
-
-    // Convert keypoints to points
     std::vector<cv::Point2f> points;
-    cv::KeyPoint::convert(max_keypoints, points);
-
-    const  cv::Size winSize = cv::Size( 5, 5 );
-    const cv::Size zeroZone = cv::Size( -1, -1 );
-    cv::TermCriteria criteria = cv::TermCriteria(cv::TermCriteria::EPS + cv::TermCriteria::COUNT, 40, 0.001 );
-
-    if(points.size() > 0)
-        cv::cornerSubPix(
-                processed_img,
-                points,
-                winSize,
-                zeroZone,
-                criteria);
-
-
-
-    LOG(INFO) << "Number points after anms " << points.size();
-
+    cv::KeyPoint::convert(keypoints, points);
     return points;
 
 }
@@ -376,7 +332,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
             if(label != background_label) {
                 cv::circle(detection_mask_impl,
                 cv::Point2f(j, i),
-                min_distance_btw_tracked_and_detected_features_,
+                params_.min_distance_btw_tracked_and_detected_features,
                 cv::Scalar(0),
                 cv::FILLED);
             }
@@ -389,7 +345,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
         CHECK(feature->usable());
         cv::circle(detection_mask_impl,
             cv::Point2f(kp(0), kp(1)),
-            min_distance_btw_tracked_and_detected_features_,
+            params_.min_distance_btw_tracked_and_detected_features,
             cv::Scalar(0),
             cv::FILLED);
     }
@@ -400,7 +356,6 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
         current_features.size(),
         detection_mask_impl
     );
-
 
     for(const cv::Point2f& detected_point :  detected_points) {
         Keypoint kp(
@@ -427,8 +382,6 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img, const Image
         }
 
     }
-
-    LOG(INFO) << "New features " << new_features.size();
 
     return true;
 
@@ -555,7 +508,7 @@ bool KltFeatureTracker::trackPoints(
     const auto& n_tracked = tracked_features.size();
     tracker_info.static_track_optical_flow = n_tracked;
 
-    if(tracked_features.size() < static_cast<size_t>(max_features_per_frame_)) {
+    if(tracked_features.size() < static_cast<size_t>(params_.max_features_per_frame)) {
         //if we do not have enough features, detect more on the current image
         detectFeatures(current_processed_img, image_container, tracked_features, tracked_features, detection_mask);
 
@@ -588,7 +541,7 @@ Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(const Keypoin
 
     TrackletId tracklet_to_use = tracklet_id;
     //if age is too large, or age is zero, retrieve new tracklet id
-    if(age > max_feature_track_age_) {
+    if(age > params_.max_feature_track_age) {
         TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
         tracklet_to_use = tracked_id_manager.getTrackletIdCount();
         tracked_id_manager.incrementTrackletIdCount();
@@ -610,20 +563,7 @@ Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(const Keypoin
         .markInlier()
         .trackletId(tracklet_to_use)
         .keypoint(kp_current);
-        //   .measuredFlow(flow);
-        //   .predictedKeypoint(predicted_kp);
 
-
-    // feature->keypoint_ = kp_current;
-    // // feature->measured_flow_ = flow;
-    // // feature->predicted_keypoint_ = predicted_kp;
-    // feature->age_ = age;
-    // feature->tracklet_id_ = tracklet_to_use;
-    // feature->frame_id_ = frame_id;
-    // feature->type_ = KeyPointType::STATIC;
-    // feature->inlier_ = true;
-    // feature->instance_label_ = background_label;
-    // feature->tracking_label_ = background_label;
     return feature;
 
 }

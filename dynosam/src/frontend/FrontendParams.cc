@@ -22,112 +22,40 @@
  */
 
 #include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/utils/YamlParser.hpp"
-
+#include "dynosam/common/Flags.hpp"
 #include <string>
-#include <gflags/gflags.h>
 
-DEFINE_int32(shrink_row, 0, "Number of rows to shrink the tracking image by");
-DEFINE_int32(shrink_col, 0, "Number of cols to shrink the tracking image by");
+#include <config_utilities/config_utilities.h>
+
+DEFINE_bool(refine_motion_estimate, true, "If true, 3D motion refinement will be used");
+//TODO: clear up flags - this is defined in Flags.h
+DEFINE_bool(refine_with_optical_flow, true, "If true, then joint refinement with optical flow will be used");
+
 
 namespace dyno {
 
-FrontendParams FrontendParams::fromYaml(const std::string& file_path) {
-    YamlParser yaml_parser(file_path);
+void declare_config(FrontendParams& config) {
+    using namespace config;
 
-    FrontendParams params;
-    yaml_parser.getYamlParam("max_nr_static_points", &params.max_tracking_points_bg, params.max_tracking_points_bg);
-    yaml_parser.getYamlParam("max_nr_object_points", &params.max_tracking_points_obj, params.max_tracking_points_obj);
-    yaml_parser.getYamlParam("cell_size_static", &params.cell_size_static, params.cell_size_static);
-    yaml_parser.getYamlParam("cell_size_dynamic", &params.cell_size_dynamic, params.cell_size_dynamic);
+    name("FrontendParams");
+    field(config.scene_flow_magnitude, "scene_flow_magnitude");
+    field(config.scene_flow_percentage, "scene_flow_percentage");
 
-    yaml_parser.getYamlParam("scene_flow_mag_threshold", &params.scene_flow_magnitude, params.scene_flow_magnitude);
-    yaml_parser.getYamlParam("scene_flow_dist_threshold", &params.scene_flow_percentage, params.scene_flow_percentage);
+    field(config.max_background_depth, "max_background_depth");
+    field(config.max_object_depth, "max_object_depth");
 
-    yaml_parser.getYamlParam("max_depth_static", &params.depth_background_thresh, params.depth_background_thresh);
-    yaml_parser.getYamlParam("max_depth_object", &params.depth_obj_thresh, params.depth_obj_thresh);
+    field(config.use_ego_motion_pnp, "use_ego_motion_pnp");
+    field(config.use_object_motion_pnp, "use_object_motion_pnp");
+    field(config.refine_camera_pose_with_joint_of, "refine_camera_pose_with_joint_of");
 
-    yaml_parser.getYamlParam("n_features", &params.n_features, params.n_features);
-    yaml_parser.getYamlParam("scale_factor", &params.scale_factor, params.scale_factor);
-    yaml_parser.getYamlParam("n_levels", &params.n_levels, params.n_levels);
-    yaml_parser.getYamlParam("init_threshold_fast", &params.init_threshold_fast, params.init_threshold_fast);
-    yaml_parser.getYamlParam("min_threshold_fast", &params.min_threshold_fast, params.min_threshold_fast);
-
-    yaml_parser.getYamlParam("shrink_row", &params.shrink_row, params.shrink_row);
-    yaml_parser.getYamlParam("shrink_col", &params.shrink_col, params.shrink_col);
-
-    //update with FLAGS
-    params.shrink_row = FLAGS_shrink_row;
-    params.shrink_col = FLAGS_shrink_col;
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_use_2point_mono",
-        &params.ransac_use_2point_mono,
-        params.ransac_use_2point_mono);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_randomize",
-        &params.ransac_randomize,
-        params.ransac_randomize);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_threshold_mono",
-        &params.ransac_threshold_mono,
-        params.ransac_threshold_mono);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "optimize_2d2d_pose_from_inliers",
-        &params.optimize_2d2d_pose_from_inliers,
-        params.optimize_2d2d_pose_from_inliers);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "use_ego_motion_pnp",
-        &params.use_ego_motion_pnp,
-        params.use_ego_motion_pnp);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "use_object_motion_pnp",
-        &params.use_object_motion_pnp,
-        params.use_object_motion_pnp);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "refine_object_motion_esimate",
-        &params.refine_object_motion_esimate,
-        params.refine_object_motion_esimate);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_threshold_pnp",
-        &params.ransac_threshold_pnp,
-        params.ransac_threshold_pnp);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "optimize_3d2d_pose_from_inliers",
-        &params.optimize_3d2d_pose_from_inliers,
-        params.optimize_3d2d_pose_from_inliers);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_threshold_stereo",
-        &params.ransac_threshold_stereo,
-        params.ransac_threshold_stereo);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "optimize_3d3d_pose_from_inliers",
-        &params.optimize_3d3d_pose_from_inliers,
-        params.optimize_3d3d_pose_from_inliers);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_iterations",
-        &params.ransac_iterations,
-        params.ransac_iterations);
-
-    yaml_parser.getNestedYamlParam(
-        "tracker", "ransac_probability",
-        &params.ransac_probability,
-        params.ransac_probability);
+    field(config.object_motion_solver_params, "object_motion_solver");
+    field(config.ego_motion_solver_params, "camera_motion_solver");
+    field(config.tracker_params, "tracker_params");
 
 
-    return params;
-
+    //update with flags
+    config.object_motion_solver_params.refine_motion_with_joint_of = FLAGS_refine_with_optical_flow;
+    config.object_motion_solver_params.refine_motion_with_3d = FLAGS_refine_motion_estimate;
 }
 
 

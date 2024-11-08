@@ -91,6 +91,7 @@ private:
 
 
 private:
+    const FrontendParams frontend_params_;
     Frame::Ptr previous_frame_{ nullptr }; //! The frame that will be used as the previous frame next time track is called. After track, this is actually the frame that track() returns
     Frame::Ptr previous_tracked_frame_{nullptr}; //! The frame that has just beed used to track on a new frame is created.
     // ORBextractor::UniquePtr feature_detector_{nullptr};

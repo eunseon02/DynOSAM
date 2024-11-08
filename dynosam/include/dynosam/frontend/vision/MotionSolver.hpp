@@ -23,13 +23,10 @@
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
-
-#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
-#include "dynosam/factors/Pose3FlowProjectionFactor.h"
 
 
 #include <opengv/sac_problems/absolute_pose/AbsolutePoseSacProblem.hpp>
@@ -71,6 +68,14 @@ using Adapter3d3d = opengv::point_cloud::PointCloudAdapter;
 
 namespace dyno {
 
+struct RansacProblemParams {
+    double threshold = 1.0;
+    double ransac_iterations = 500;
+    double ransac_probability = 0.995;
+    bool do_nonlinear_optimization = false;
+
+};
+
 template <class SampleConsensusProblem>
 bool runRansac(
     std::shared_ptr<SampleConsensusProblem> sample_consensus_problem_ptr,
@@ -79,62 +84,22 @@ bool runRansac(
     const double& probability,
     const bool& do_nonlinear_optimization,
     gtsam::Pose3& best_pose,
-    std::vector<int>& inliers)
-{
-    CHECK(sample_consensus_problem_ptr);
-    inliers.clear();
-
-     //! Create ransac
-    opengv::sac::Ransac<SampleConsensusProblem> ransac(
-        max_iterations, threshold, probability);
-
-    //! Setup ransac
-    ransac.sac_model_ = sample_consensus_problem_ptr;
-
-    //! Run ransac
-    bool success = ransac.computeModel(0);
-
-    if (success) {
-      if (ransac.iterations_ >= max_iterations && ransac.inliers_.empty()) {
-        success = false;
-        best_pose = gtsam::Pose3();
-        inliers = {};
-      } else {
-        best_pose =
-            utils::openGvTfToGtsamPose3(ransac.model_coefficients_);
-        inliers = ransac.inliers_;
-
-
-        if (do_nonlinear_optimization) {
-          opengv::transformation_t optimized_pose;
-          sample_consensus_problem_ptr->optimizeModelCoefficients(
-              inliers, ransac.model_coefficients_, optimized_pose);
-          best_pose = Eigen::MatrixXd(optimized_pose);
-        }
-      }
-    } else {
-      CHECK(ransac.inliers_.empty());
-      best_pose = gtsam::Pose3();
-      inliers.clear();
-    }
-
-    return success;
-}
+    std::vector<int>& inliers);
 
 
 template <class SampleConsensusProblem>
 bool runRansac(
     std::shared_ptr<SampleConsensusProblem> sample_consensus_problem_ptr,
-    const FrontendParams& params,
+    const RansacProblemParams& params,
     gtsam::Pose3& best_pose,
     std::vector<int>& inliers)
 {
     return runRansac<SampleConsensusProblem>(
         sample_consensus_problem_ptr,
-        params.ransac_threshold_pnp,
+        params.threshold,
         params.ransac_iterations,
         params.ransac_probability,
-        params.optimize_3d2d_pose_from_inliers,
+        params.do_nonlinear_optimization,
         best_pose,
         inliers
     );
@@ -154,23 +119,6 @@ struct SolverResult {
 using Pose3SolverResult = SolverResult<gtsam::Pose3>;
 
 
-struct OpticalFlowAndPoseOptimizerParams {
-    double flow_sigma{10.0};
-    double flow_prior_sigma{3.33};
-    double k_huber{0.001};
-    bool outlier_reject{true};
-    //When true, this indicates that the optical flow images go from k to k+1 (rather than k-1 to k, when false)
-    //this left over from some original implementations.
-    //This param is used when updated the frames after optimization
-    bool flow_is_future{true};
-
-    //thresholds to use when updating the depth
-    //TODO: we should not actually need to update the depth like this,
-    //better for the frame to cache itself and we just clear the depth cache
-    double max_background_depth_threshold{40};
-    double max_object_depth_threshold{25};
-};
-
 
 /**
  * @brief Joinly refines optical flow with with the given pose
@@ -187,6 +135,17 @@ struct OpticalFlowAndPoseOptimizerParams {
 class OpticalFlowAndPoseOptimizer {
 
 public:
+    struct Params {
+        double flow_sigma{10.0};
+        double flow_prior_sigma{3.33};
+        double k_huber{0.001};
+        bool outlier_reject{true};
+        //When true, this indicates that the optical flow images go from k to k+1 (rather than k-1 to k, when false)
+        //this left over from some original implementations.
+        //This param is used when updated the frames after optimization
+        bool flow_is_future{true};
+    };
+
     struct ResultType {
         gtsam::Pose3 refined_pose;
         gtsam::Point2Vector refined_flows;
@@ -194,7 +153,7 @@ public:
     };
     using Result =  SolverResult<ResultType>;
 
-    OpticalFlowAndPoseOptimizer(const OpticalFlowAndPoseOptimizerParams& params) : params_(params) {}
+    OpticalFlowAndPoseOptimizer(const Params& params) : params_(params) {}
 
     /**
      * @brief Builds the factor-graph problem using the set of specificed correspondences (tracklets)
@@ -253,16 +212,10 @@ private:
     void updateFrameOutliersWithResult(const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k) const;
 
 private:
-    OpticalFlowAndPoseOptimizerParams params_;
+    Params params_;
 
 };
 
-struct MotionOnlyRefinementOptimizerParams {
-    double landmark_motion_sigma{0.001};
-    double projection_sigma{2.0};
-    double k_huber{0.0001};
-    bool outlier_reject{true};
-};
 
 
 /**
@@ -272,7 +225,15 @@ struct MotionOnlyRefinementOptimizerParams {
 class MotionOnlyRefinementOptimizer {
 
 public:
-    MotionOnlyRefinementOptimizer(const MotionOnlyRefinementOptimizerParams& params) : params_(params) {}
+
+    struct Params {
+        double landmark_motion_sigma{0.001};
+        double projection_sigma{2.0};
+        double k_huber{0.0001};
+        bool outlier_reject{true};
+    };
+
+    MotionOnlyRefinementOptimizer(const Params& params) : params_(params) {}
     enum RefinementSolver { ProjectionError, PointError };
 
     template<typename CALIBRATION>
@@ -294,16 +255,42 @@ public:
         const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
 
 private:
-    MotionOnlyRefinementOptimizerParams params_;
+    Params params_;
 
 };
-
 
 
 //TODO: eventually when we have a map, should we look up these values from there (the optimized versions, not the tracked ones?)
 class EgoMotionSolver {
 public:
-    EgoMotionSolver(const FrontendParams& params, const CameraParams& camera_params);
+
+    struct Params {
+        bool ransac_randomize = true;
+
+        //! Mono (2d2d) related params
+        // if mono pipeline is used AND an additional inertial sensor is provided (e.g IMU)
+        // then 2d point ransac will be used to estimate the camera pose
+        bool ransac_use_2point_mono = false;
+        //https://github.com/laurentkneip/opengv/issues/121
+        double ransac_threshold_mono = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
+        bool optimize_2d2d_pose_from_inliers = false;
+
+        //! equivalent to reprojection error in pixels
+        double ransac_threshold_pnp = 1.0;
+        //! Use 3D-2D tracking to remove outliers
+        bool optimize_3d2d_pose_from_inliers = false;
+
+        //!3D-3D options
+        double ransac_threshold_stereo = 0.001;
+        //! Use 3D-3D tracking to remove outliers
+        bool optimize_3d3d_pose_from_inliers = false;
+
+        //! Generic ransac params
+        double ransac_iterations = 500;
+        double ransac_probability = 0.995;
+    };
+
+    EgoMotionSolver(const Params& params, const CameraParams& camera_params);
     virtual ~EgoMotionSolver() = default;
 
     /**
@@ -368,7 +355,7 @@ protected:
     }
 
 protected:
-    const FrontendParams params_;
+    const Params params_;
     const CameraParams camera_params_;
 
 };
@@ -376,7 +363,15 @@ protected:
 class ObjectMotionSovler : protected EgoMotionSolver {
 
 public:
-    ObjectMotionSovler(const FrontendParams& params, const CameraParams& camera_params);
+    struct Params : public EgoMotionSolver::Params {
+        bool refine_motion_with_joint_of = true;
+        bool refine_motion_with_3d = true;
+
+        OpticalFlowAndPoseOptimizer::Params joint_of_params = OpticalFlowAndPoseOptimizer::Params();
+        MotionOnlyRefinementOptimizer::Params object_motion_refinement_params = MotionOnlyRefinementOptimizer::Params();
+    };
+
+    ObjectMotionSovler(const Params& params, const CameraParams& camera_params);
 
     Pose3SolverResult geometricOutlierRejection3d2d(
                             Frame::Ptr frame_k_1,
@@ -398,25 +393,16 @@ public:
                             ObjectId object_id);
 
 protected:
-
-
-
-
-    // //assumes we have updated frames with latest pose (camera) and the result is from the geometricOutlierReject function
-    // //only works with stereo
-    // void refineLocalObjectMotionEstimate(
-    //                         Pose3SolverResult& solver_result,
-    //                         Frame::Ptr frame_k_1,
-    //                         Frame::Ptr frame_k,
-    //                         ObjectId object_id,
-    //                         const RefinementSolver& solver = RefinementSolver::ProjectionError) const;
-
-
-
-
-
+    const Params object_motion_params;
 
 };
+
+
+void declare_config(OpticalFlowAndPoseOptimizer::Params& config);
+void declare_config(MotionOnlyRefinementOptimizer::Params& config);
+
+void declare_config(EgoMotionSolver::Params& config);
+void declare_config(ObjectMotionSovler::Params& config);
 
 
 

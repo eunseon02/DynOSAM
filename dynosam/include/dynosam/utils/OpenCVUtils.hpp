@@ -25,6 +25,7 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 
+
 #define CHECK_MAT_TYPES(mat1, mat2)                                                                                    \
   using namespace dyno::utils;                                                                                     \
   CHECK_EQ(mat1.type(), mat2.type()) << "Matricies should be of the same type ( " << cvTypeToString(mat1.type())       \
@@ -32,6 +33,7 @@
 
 
 namespace dyno {
+
 namespace utils {
 
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point, const cv::Scalar& colour, const double msize = 0.4);
@@ -130,3 +132,29 @@ bool writeOpticalFlow( const std::string& path, const cv::Mat& flow);
 
 }
 }
+
+#include <yaml-cpp/yaml.h>
+
+namespace YAML {
+
+template <typename T>
+struct convert<cv::Size_<T>> {
+    static Node encode(const cv::Size_<T>& size) {
+        Node node;
+        node["width"] = size.width;
+        node["height"] = size.height;
+        return node;
+    }
+
+    static bool decode(const Node& node, cv::Size_<T>& size) {
+        if (!node.IsMap()) {
+            return false;
+        }
+
+        size.width = node["width"].as<T>();
+        size.height = node["height"].as<T>();
+        return true;
+    }
+};
+
+} // namespace YAML

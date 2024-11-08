@@ -145,15 +145,27 @@ Camera::CameraImpl Frame::getFrameCamera() const {
     return Camera::CameraImpl(T_world_camera_, camera_params.constructGtsamCalibration<Camera::CalibrationType>());
 }
 
-bool Frame::updateDepths(double max_static_depth, double max_dynamic_depth) {
+bool Frame::updateDepths() {
     if(!image_container_.hasDepth()) {
         return false;
     }
 
     const ImageWrapper<ImageType::Depth>& depth = image_container_.getImageWrapper<ImageType::Depth>();
-    updateDepthsFeatureContainer(static_features_, depth, max_static_depth);
-    updateDepthsFeatureContainer(dynamic_features_, depth, max_dynamic_depth);
+    updateDepthsFeatureContainer(static_features_, depth, max_background_threshold_);
+    updateDepthsFeatureContainer(dynamic_features_, depth, max_object_threshold_);
     return true;
+}
+
+Frame& Frame::setMaxBackgroundDepth(double thresh) {
+    CHECK_GT(thresh, 0);
+    max_background_threshold_ = thresh;
+    return *this;
+}
+
+Frame& Frame::setMaxObjectDepth(double thresh) {
+    CHECK_GT(thresh, 0);
+    max_object_threshold_ = thresh;
+    return *this;
 }
 
 

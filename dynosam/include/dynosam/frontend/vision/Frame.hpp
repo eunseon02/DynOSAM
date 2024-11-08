@@ -212,12 +212,10 @@ public:
      *
      * Returns false if the internal image container does not have a depth mat.
      *
-     * @param max_static_depth
-     * @param max_dynamic_depth
      * @return true
      * @return false
      */
-    bool updateDepths(double max_static_depth, double max_dynamic_depth);
+    bool updateDepths();
 
     /**
      * @brief From the detected list of objects (in Frame::object_observations_) draw the object masks
@@ -228,6 +226,9 @@ public:
      * @return cv::Mat RGB image with drawn bounding boxes and labels
      */
     cv::Mat drawDetectedObjectBoxes() const;
+
+    Frame& setMaxBackgroundDepth(double thresh);
+    Frame& setMaxObjectDepth(double thresh);
 
 
     //TODO: this really needs testing
@@ -378,6 +379,11 @@ private:
     //! Based off the initial 2d observation and depth from the feature
     mutable LandmarkMap landmark_in_camera_cache_;
     mutable LandmarkMap landmark_in_world_cache_;
+
+    //! Background points greater than this depth will be discarded
+    double max_background_threshold_ = 40.0;
+    // ! Object points greater than this depth will be discarded
+    double max_object_threshold_ = 25.0;
 
 };
 

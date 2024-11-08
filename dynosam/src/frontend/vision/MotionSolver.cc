@@ -45,6 +45,7 @@
 #include "dynosam/backend/BackendDefinitions.hpp"
 
 #include <opengv/types.hpp>
+#include <config_utilities/config_utilities.h>
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h> //for now? //TODO: clean
@@ -54,88 +55,60 @@
 #include <glog/logging.h>
 
 
-DEFINE_bool(refine_motion_estimate, true, "If true, 3D motion refinement will be used");
-
-//TODO: clear up flags - this is defined in Flags.h
-DEFINE_bool(refine_with_optical_flow, true, "If true, then joint refinement with optical flow will be used");
 
 namespace dyno {
 
-// RelativeObjectMotionSolver::MotionResult RelativeObjectMotionSolver::solve(const GenericCorrespondences<Keypoint, Keypoint>& correspondences) const {
 
-//     const size_t& n_matches = correspondences.size();
+void declare_config(OpticalFlowAndPoseOptimizer::Params& config) {
+    using namespace config;
 
-//     if(n_matches < 5u) {
-//         return MotionResult::NotEnoughCorrespondences();
-//     }
+    name("OpticalFlowAndPoseOptimizerParams");
+    field(config.flow_sigma, "flow_sigma");
+    field(config.flow_prior_sigma, "flow_prior_sigma");
+    field(config.k_huber, "k_huber");
+    field(config.outlier_reject, "outlier_reject");
+    field(config.flow_is_future, "flow_is_future");
+}
+
+void declare_config(MotionOnlyRefinementOptimizer::Params& config) {
+    using namespace config;
+
+    name("MotionOnlyRefinementOptimizerParams");
+    field(config.landmark_motion_sigma, "landmark_motion_sigma");
+    field(config.projection_sigma, "projection_sigma");
+    field(config.k_huber, "k_huber");
+    field(config.outlier_reject, "outlier_reject");
+}
 
 
-//     std::vector<cv::Point2d> ref_kps, curr_kps;
-//     TrackletIds tracklets;
-//     for(size_t i = 0u; i < n_matches; i ++) {
-//         const auto& corres = correspondences.at(i);
-//         const Keypoint& ref_kp = corres.ref_;
-//         const Keypoint& cur_kp = corres.cur_;
+void declare_config(EgoMotionSolver::Params& config) {
+    using namespace config;
 
-//         ref_kps.push_back(utils::gtsamPointToCv(ref_kp));
-//         curr_kps.push_back(utils::gtsamPointToCv(cur_kp));
+    name("EgoMotionSolver::Params");
+    field(config.ransac_randomize, "ransac_randomize");
+    field(config.ransac_use_2point_mono, "ransac_use_2point_mono");
+    field(config.optimize_2d2d_pose_from_inliers, "optimize_2d2d_pose_from_inliers");
+    field(config.ransac_threshold_pnp, "ransac_threshold_pnp");
+    field(config.optimize_3d2d_pose_from_inliers, "optimize_3d2d_pose_from_inliers");
+    field(config.ransac_threshold_stereo, "ransac_threshold_stereo");
+    field(config.optimize_3d3d_pose_from_inliers, "optimize_3d3d_pose_from_inliers");
+    field(config.ransac_iterations, "ransac_iterations");
+    field(config.ransac_probability, "ransac_probability");
 
-//         tracklets.push_back(corres.tracklet_id_);
-//     }
+}
+void declare_config(ObjectMotionSovler::Params& config) {
+    using namespace config;
+    name("ObjectMotionSovler::Params");
 
-//     constexpr int method = cv::RANSAC;
-//     constexpr double  prob = 0.999;
-// 	constexpr double threshold = 1.0;
-//     constexpr int max_iterations = 500;
-//     const cv::Mat K = camera_params_.getCameraMatrix();
+    base<EgoMotionSolver::Params>(config);
+    field(config.refine_motion_with_joint_of, "refine_motion_with_joint_of");
+    field(config.refine_motion_with_3d, "refine_motion_with_3d");
+    field(config.joint_of_params, "joint_optical_flow");
+    field(config.object_motion_refinement_params, "object_motion_3d_refinement");
+}
 
-//     cv::Mat ransac_inliers;  // a [1 x N] vector
 
-//     const cv::Mat E = cv::findEssentialMat(
-//         ref_kps,
-//         curr_kps,
-//         K,
-//         method,
-//         prob,
-//         threshold,
-//         max_iterations,
-//         ransac_inliers); //ransac params?
-
-//     CHECK(ransac_inliers.rows == tracklets.size());
-
-//     cv::Mat R1, R2, t;
-//     try {
-//         cv::decomposeEssentialMat(E, R1, R2, t);
-//     }
-//     catch(const cv::Exception& e) {
-//         LOG(WARNING) << "decomposeEssentialMat failed with error " << e.what();
-//         return MotionResult::Unsolvable();
-//     }
-
-//     TrackletIds inliers, outliers;
-//     for (int i = 0; i < ransac_inliers.rows; i++)
-//     {
-//         if(ransac_inliers.at<int>(i)) {
-//             const auto& corres = correspondences.at(i);
-//             inliers.push_back(corres.tracklet_id_);
-//         }
-
-//     }
-
-//     determineOutlierIds(inliers, tracklets, outliers);
-//     CHECK_EQ((inliers.size() + outliers.size()), tracklets.size());
-
-//     EssentialDecompositionResult result(
-//         utils::cvMatToGtsamRot3(R1),
-//         utils::cvMatToGtsamRot3(R2),
-//         utils::cvMatToGtsamPoint3(t)
-//     );
-
-//     // LOG(INFO) << "Solving RelativeObjectMotionSolver with inliers " << inliers.size() << " outliers " <<  outliers.size();
-//     return MotionResult(result, tracklets, inliers, outliers);
-// }
-
-EgoMotionSolver::EgoMotionSolver(const FrontendParams& params, const CameraParams& camera_params)
+EgoMotionSolver::EgoMotionSolver(const Params& params, const CameraParams& camera_params)
     : params_(params), camera_params_(camera_params) {}
 
 Pose3SolverResult EgoMotionSolver::geometricOutlierRejection2d2d(
@@ -216,7 +189,10 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection2d2d(
                     RelativePoseProblem::NISTER,
                     params_.ransac_randomize
                 ),
-                params_,
+                params_.ransac_threshold_mono,
+                params_.ransac_iterations,
+                params_.ransac_probability,
+                params_.optimize_2d2d_pose_from_inliers,
                 best_result,
                 ransac_inliers
             );
@@ -420,7 +396,8 @@ void OpticalFlowAndPoseOptimizer::updateFrameOutliersWithResult(const Result& re
         feature_k_1->markOutlier();
     }
 
-    CHECK(frame_k->updateDepths(params_.max_background_depth_threshold, params_.max_object_depth_threshold));
+    // refresh depth information for each frame
+    CHECK(frame_k->updateDepths());
 }
 
 
@@ -507,7 +484,7 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d3d(
 
 
 
-ObjectMotionSovler::ObjectMotionSovler(const FrontendParams& params, const CameraParams& camera_params) : EgoMotionSolver(params, camera_params) {}
+ObjectMotionSovler::ObjectMotionSovler(const Params& params, const CameraParams& camera_params) : EgoMotionSolver(static_cast<const EgoMotionSolver::Params&>(params), camera_params) {}
 
 Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
                             Frame::Ptr frame_k_1,
@@ -564,8 +541,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 
 
         gtsam::Pose3 G_w = result.best_result.inverse();
-        if(FLAGS_refine_with_optical_flow) {
-            OpticalFlowAndPoseOptimizer flow_optimizer(OpticalFlowAndPoseOptimizerParams{});
+        if(object_motion_params.refine_motion_with_joint_of) {
+            OpticalFlowAndPoseOptimizer flow_optimizer(object_motion_params.joint_of_params);
             //Use the original result as the input to the refine joint optical flow function
             //the result.best_result variable is actually equivalent to ^wG^{-1}
             //and we want to solve something in the form
@@ -588,8 +565,8 @@ Pose3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
         gtsam::Pose3 H_w = T_world_k * G_w;
 
         // if(params_.refine_object_motion_esimate) {
-        if(FLAGS_refine_motion_estimate) {
-            MotionOnlyRefinementOptimizer motion_refinement_graph(MotionOnlyRefinementOptimizerParams{});
+        if(object_motion_params.refine_motion_with_3d) {
+            MotionOnlyRefinementOptimizer motion_refinement_graph(object_motion_params.object_motion_refinement_params);
             auto motion_refinement_result = motion_refinement_graph.optimizeAndUpdate<CalibrationType>(
                 frame_k_1,
                 frame_k,

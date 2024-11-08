@@ -23,22 +23,17 @@
 #pragma once
 
 #include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
+#include "dynosam/frontend/vision/FeatureDetector.hpp"
+
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/ORBextractor.hpp"
 #include "dynosam/frontend/vision/OccupancyGrid2D.hpp"
 #include "dynosam/common/Types.hpp"
 
-#include "dynosam/frontend/anms/NonMaximumSuppression.h"
-
 
 #include <opencv4/opencv2/opencv.hpp>
 
-namespace cv {
-  class CLAHE;
-  class SparsePyrLKOpticalFlow;
-  class FastFeatureDetector;
-}
 
 namespace dyno {
 
@@ -46,7 +41,7 @@ namespace dyno {
 class StaticFeatureTracker : public FeatureTrackerBase {
 public:
     DYNO_POINTER_TYPEDEFS(StaticFeatureTracker)
-    StaticFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    StaticFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     virtual ~StaticFeatureTracker() {}
 
@@ -74,7 +69,7 @@ public:
 class ExternalFlowFeatureTracker : public StaticFeatureTracker {
 
 public:
-    ExternalFlowFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    ExternalFlowFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
     FeatureContainer trackStatic(Frame::Ptr previous_frame, const ImageContainer& image_container, FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) override;
 
 
@@ -86,6 +81,8 @@ private:
     OccupandyGrid2D static_grid_; //! Grid used to feature bin static features
     ORBextractor::UniquePtr orb_detector_{nullptr};
 
+    const size_t static_cell_size = 15; //This tracker has practically been depricated so we hardocde in the params ;)
+
 };
 
 
@@ -96,7 +93,7 @@ private:
 class KltFeatureTracker : public StaticFeatureTracker {
 
 public:
-    KltFeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    KltFeatureTracker(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     /**
      * @brief Track features between frames k-1 and the current set of images (at k).
@@ -237,25 +234,7 @@ private:
     Feature::Ptr constructNewStaticFeature(const Keypoint& kp_current, const FrameId frame_id) const;
 
 private:
-    cv::Ptr<cv::CLAHE> clahe_;
-    cv::Ptr<cv::Feature2D> feature_detector_;
-
-    NonMaximumSuppression::UniquePtr non_maximum_supression_;
-
-    //Parameters to go in params eventually
-
-    // Number features to detect
-    int max_nr_keypoints_before_anms_ = 2000;
-    double quality_level_ = 0.001;
-    //also used for the mask
-    int min_distance_btw_tracked_and_detected_features_ = 8;
-    int block_size_ = 3;
-    bool use_harris_corner_detector_ = false;
-    double k_ = 0.04;
-
-    int max_features_per_frame_; // Threshold for the number of features to keep tracking
-    //! We relabel the track as a new track for any features longer that this
-    size_t max_feature_track_age_ = 25;
+    SparseFeatureDetector::Ptr detector_;
 
 
 };

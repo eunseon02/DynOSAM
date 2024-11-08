@@ -25,6 +25,7 @@
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
 
+#include <config_utilities/config_utilities.h>
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
 
@@ -32,6 +33,7 @@
 #include<fstream>
 
 namespace dyno {
+
 
 
 template<>

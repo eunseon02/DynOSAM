@@ -27,7 +27,6 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
-#include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
@@ -41,6 +40,7 @@
 
 namespace dyno {
 
+class FrontendParams;
 
 namespace vision_tools {
 

@@ -22,6 +22,7 @@
  */
 
 #include "dynosam/frontend/vision/VisionTools.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/logger/Logger.hpp"
 
 #include <cmath>

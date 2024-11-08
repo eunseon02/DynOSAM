@@ -28,6 +28,8 @@
 #include <opencv4/opencv2/opencv.hpp>
 #include <eigen3/Eigen/Dense>
 
+#include <config_utilities/config_utilities.h>
+
 
 
 namespace dyno {
@@ -44,7 +46,7 @@ struct TrackerParams {
 
     // GFTT is goodFeaturesToTrack detector.
     // ORB_SLAM_ORB is the ORB implementation from OrbSLAM
-    enum class FeatureDetectorType { GFTT = 0, ORB_SLAM_ORB = 1};
+    enum class FeatureDetectorType : unsigned int { GFTT = 0, ORB_SLAM_ORB = 1};
 
     struct AnmsParams {
         AnmsAlgorithmType non_max_suppression_type = AnmsAlgorithmType::RangeTree;
@@ -102,14 +104,27 @@ struct TrackerParams {
     //! below this number, new features are detected
     int max_features_per_frame = 400;
     //! We relabel the track as a new track for any features longer that this
-    int max_feature_track_age = 25;
+    size_t max_feature_track_age = 25;
+    //! Number of rows to shrink the input image by
+    int shrink_row = 0;
+    //! Number of cols to shrink the input image by
+    int shrink_col = 0;
 
     //! Good features to track params
     GFFTParams gfft_params = GFFTParams();
     OrbParams orb_params = OrbParams();
 
-
+    //Dynamic tracking specific
+    size_t semantic_mask_step_size = 3u;
+    bool use_propogate_mask = false;
 
 };
 
-}
+
+void declare_config(TrackerParams::AnmsParams& config);
+void declare_config(TrackerParams::SubPixelCornerRefinementParams& config);
+void declare_config(TrackerParams::GFFTParams& config);
+void declare_config(TrackerParams::OrbParams& config);
+void declare_config(TrackerParams& config);
+
+} //dyno

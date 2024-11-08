@@ -28,6 +28,7 @@ find_package(Eigen3 REQUIRED)
 find_package(PCL REQUIRED)
 find_package(nlohmann_json 3.2.0 REQUIRED) #nlohmann-json3-dev
 find_package(TBB REQUIRED) # should be packaged with GTSAM
+find_package(config_utilities REQUIRED)
 
 
 find_package(Boost REQUIRED)
@@ -109,6 +110,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
   src/frontend/vision/StaticFeatureTracker.cc
+  src/frontend/vision/TrackerParams.cc
   src/frontend/vision/FeatureTrackerBase.cc
   src/frontend/vision/FeatureDetector.cc
   src/frontend/RGBDInstance-Definitions.cc
@@ -181,6 +183,7 @@ target_link_libraries(${PROJECT_NAME}
   # PRIVATE
   opengv
   nlohmann_json::nlohmann_json
+  config_utilities::config_utilities
   # PUBLIC
   ${rclcpp_LIBRARIES}
   glog
@@ -204,6 +207,7 @@ ament_export_libraries(${PROJECT_NAME}
   gflags
   opengv
   Boost::boost
+  config_utilities::config_utilities
   gtsam
   # gtsamDebug
   ${OpenCV_LIBRARIES}
@@ -308,6 +312,7 @@ if(BUILD_TESTING)
     test/test_viz.cc
     test/test_factors.cc
     test/test_numerical.cc
+    test/test_params.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

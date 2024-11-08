@@ -63,7 +63,7 @@ private:
 class FeatureTrackerBase {
 
 public:
-    FeatureTrackerBase(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
+    FeatureTrackerBase(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue);
 
     cv::Mat computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug = false) const;
 
@@ -82,7 +82,7 @@ protected:
 
 
 protected:
-    const FrontendParams params_;
+    const TrackerParams params_;
     const cv::Size img_size_; //! Expected image size from the camera
 
     Camera::Ptr camera_;

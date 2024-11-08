@@ -46,8 +46,8 @@ namespace dyno {
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(const FrontendParams& frontend_params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
     : FrontendModule(frontend_params, display_queue),
       camera_(camera),
-      motion_solver_(frontend_params, camera->getParams()),
-      object_motion_solver_(frontend_params, camera->getParams())
+      motion_solver_(frontend_params.ego_motion_solver_params, camera->getParams()),
+      object_motion_solver_(frontend_params.object_motion_solver_params, camera->getParams())
     {
     CHECK_NOTNULL(camera_);
     tracker_ = std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -102,7 +102,7 @@ RGBDInstanceFrontendModule::boostrapSpin(FrontendInputPacketBase::ConstPtr input
     if(gt_packet_map_.find(frame->getFrameId()) != gt_packet_map_.end()) {
         frame->T_world_camera_ = gt_packet_map_.at(frame->getFrameId()).X_world_;
     }
-    CHECK(frame->updateDepths(base_params_.depth_background_thresh, base_params_.depth_obj_thresh));
+    CHECK(frame->updateDepths());
 
     return {State::Nominal, nullptr};
 }
@@ -147,7 +147,7 @@ RGBDInstanceFrontendModule::nominalSpin(FrontendInputPacketBase::ConstPtr input)
 
     {
         utils::TimingStatsCollector update_depths_timer("depth_updater");
-        frame->updateDepths(base_params_.depth_background_thresh, base_params_.depth_obj_thresh);
+        frame->updateDepths();
 
     }
     //updates frame->T_world_camera_
@@ -244,8 +244,10 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(Frame::Ptr frame_k, const Fra
         CHECK_GE(tracklets.size(), result.inliers.size() + result.outliers.size()); //tracklets shoudl be more (or same as) correspondances as there will be new points untracked
         frame_k->static_features_.markOutliers(result.outliers);
 
-        if(FLAGS_refine_with_optical_flow) {
-            OpticalFlowAndPoseOptimizer flow_optimizer(OpticalFlowAndPoseOptimizerParams{});
+        if(base_params_.refine_camera_pose_with_joint_of) {
+            OpticalFlowAndPoseOptimizer flow_optimizer(
+                base_params_.object_motion_solver_params.joint_of_params);
+
             auto flow_opt_result = flow_optimizer.optimizeAndUpdate<CalibrationType>(
                 frame_k_1,
                 frame_k,

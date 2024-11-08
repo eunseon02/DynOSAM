@@ -24,6 +24,8 @@
 #include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/utils/YamlParser.hpp"
 
+#include <config_utilities/parsing/yaml.h>
+
 DEFINE_int32(data_provider_type, 0,"Which data provider (loader) to use. Associated with specific datasets");
 
 namespace dyno {
@@ -33,7 +35,8 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     //currently just camera params
     camera_params_ = CameraParams::fromYamlFile(params_folder_path + "CameraParams.yaml");
 
-    frontend_params_ = FrontendParams::fromYaml(params_folder_path + "FrontendParams.yaml");
+    frontend_params_ = config::fromYamlFile<FrontendParams>(params_folder_path + "FrontendParams.yaml");
+    LOG(INFO) << "Frontend Params: " << config::toString(frontend_params_);
 
     YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
     pipeline_parser.getYamlParam("parallel_run", &parallel_run_);

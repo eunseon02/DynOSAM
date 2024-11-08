@@ -23,55 +23,27 @@
 
 #pragma once
 
+
 #include <string>
 #include <cmath>
+
+#include "dynosam/frontend/vision/TrackerParams.hpp"
+#include "dynosam/frontend/vision/MotionSolver.hpp"
 
 namespace dyno {
 
 struct FrontendParams {
-
-  // tracking points params
-  int max_tracking_points_bg = 800;
-  int max_tracking_points_obj = 800;
-
-  /// @brief  Maximum one feature per bucked with cell_size width and height (used for 2D occupancy grid for static features)
-  int cell_size_static = 15;
-  int cell_size_dynamic = 15;
 
   // scene flow thresholds
   double scene_flow_magnitude = 0.12;
   double scene_flow_percentage = 0.5;
 
   // depth thresholds
-  double depth_background_thresh = 40.0;
-  double depth_obj_thresh = 25.0;
-
-  // ORB detector params
-  int n_features = 1200;
-  double scale_factor = 1.2;
-  int n_levels = 8;
-  int init_threshold_fast = 20;
-  int min_threshold_fast = 7;
-
-  int shrink_row = 0;
-  int shrink_col = 0;
+  double max_background_depth = 40.0;
+  double max_object_depth = 25.0;
 
   //TODO: add depth cov
   //TODO: add projection cov (should this be for back and frontend?)
-
-
-  //if the mono pipeline is selcted as the frontend then only mono related ransac variables will be used
-  //if the pipeline is RGBD then the user can select either the pnp (3d2d ransac) or stereo (3d3d) solvers
-  //for both object and ego motion
-
-  //! Mono (2d2d) related params
-  // if mono pipeline is used AND an additional inertial sensor is provided (e.g IMU)
-  // then 2d point ransac will be used to estimate the camera pose
-  bool ransac_use_2point_mono = false;
-  bool ransac_randomize = true;
-  //used for 2d2d
-  double ransac_threshold_mono = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-  bool optimize_2d2d_pose_from_inliers = false;
 
   //!When using RGBD pipeline, ego-motion will be sovled using pnp (3d2d correspondences). Else, stereo
   bool use_ego_motion_pnp = true;
@@ -79,32 +51,18 @@ struct FrontendParams {
   //! When using RGBD pipeline, object motion will be sovled using pnp (3d2d correspondences). Else, stereo
   bool use_object_motion_pnp = true;
 
-  //! When using RGBD pipeline, object motion will be refined ba NLO using motion factor
-  //! e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
-  bool refine_object_motion_esimate = true;
+  // Refine the camera pose with oint optical flow optimisation
+  bool refine_camera_pose_with_joint_of = true;
+
+  ObjectMotionSovler::Params object_motion_solver_params = ObjectMotionSovler::Params();
+  EgoMotionSolver::Params ego_motion_solver_params = EgoMotionSolver::Params();
 
 
-  //!PnP (3d2d) related params
-  //https://github.com/laurentkneip/opengv/issues/121
-  // double ransac_threshold = 2.0*(1.0 - cos(atan(sqrt(2.0)*0.5/800.0)));
-  //! equivalent to reprojection error in pixels
-  double ransac_threshold_pnp = 1.0;
-  //! Use 3D-2D tracking to remove outliers
-  bool optimize_3d2d_pose_from_inliers = false;
+  TrackerParams tracker_params = TrackerParams();
 
-
-  //! Stereo (3d3d) related params
-  //TODO: not sure what this error realtes to!!!
-  double ransac_threshold_stereo = 0.001;
-  //! Use 3D-3D tracking to remove outliers
-  bool optimize_3d3d_pose_from_inliers = false;
-
-  //! Generic rasac params
-  double ransac_iterations = 500;
-  double ransac_probability = 0.995;
-
-  static FrontendParams fromYaml(const std::string& file_path);
 
 };
 
-}
+void declare_config(FrontendParams& config);
+
+} //dyno

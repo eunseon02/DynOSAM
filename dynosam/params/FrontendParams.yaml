@@ -1,58 +1,88 @@
-%YAML:1.0
 
-# max_nr_static_points: 800
-max_nr_static_points: 1200 #using the KLT tracking this is the same as max_features_per_frame_
-max_nr_object_points: 800
-# cell_size: 15 #kitti
-cell_size_static: 10
-cell_size_dynamic: 2
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
-max_depth_static: 40.0
-max_depth_object: 25.0
+max_background_depth: 40.0
+max_object_depth: 25.0
 
-#orb-extraction params
-# n_features: 3000
-n_features: 2000
-scale_factor: 1.2
-n_levels: 8
-init_threshold_fast: 20
-min_threshold_fast: 7
+# When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+use_ego_motion_pnp: True
+# When using rgbd-pipeline, camera-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+use_object_motion_pnp: True
+refine_camera_pose_with_joint_of: True
 
-shrink_row: 25 # KITTI # these will actuall get overwritten by GFLAGS in the frontend params
-shrink_col: 20 # KITTI!!!
-# shrink_row: 1
-# shrink_col: 1
-
-
-tracker:
-  # When using mono-pipeline AND and additional inertial sensor is provided,
-  # Then 2-point ransac will be used (eg. 2d2d ransac with rotation), else 5-point 2d2d pnp will be used
-  ransac_use_2point_mono: 0
-  ransac_randomize: 1
-  # ransac_threshold_mono:
-  optimize_2d2d_pose_from_inliers: 0
-
-  # When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
-  use_ego_motion_pnp: 1
-  # When using rgbd-pipeline, camera-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
-  use_object_motion_pnp: 1
-
-  # When using RGBD pipeline, object motion will be refined ba NLO using motion factor
-  # e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
-  refine_object_motion_esimate: 1 #TODO: gets overwritten by gflags in the motion solver
-
-  # 3d-2d PnP
-  # Equivalent to reprojection error in pixels
+object_motion_solver:
   ransac_threshold_pnp: 2.0
-  # ransac_threshold_pnp: 5.0
-  # ransac_threshold_pnp: 0.1
-  optimize_3d2d_pose_from_inliers: 0
+  refine_motion_with_joint_of: True
+  refine_motion_with_3d: True
 
-  # 3d-3d PnP (stereo)
-  ransac_threshold_stereo: 0.002
-  optimize_3d3d_pose_from_inliers: 0
-
-  # Generic ransac params and used for all ransac+pnp solvers
   ransac_iterations: 500
+  ransac_probability:  0.995
+
+  joint_optical_flow:
+    outlier_reject: True
+
+  object_motion_3d_refinement:
+    outlier_reject: True
+
+
+
+
+camera_motion_solver:
+  ransac_threshold_pnp: 2.0
+  ransac_iterations: 500
+  ransac_probability:  0.995
+
+
+tracker_params:
+  shrink_row: 0
+  shrink_col: 0
+  max_nr_keypoints_before_anms: 2000
+  max_features_per_frame: 500
+
+
+
+# #orb-extraction params
+# # n_features: 3000
+# n_features: 2000
+# scale_factor: 1.2
+# n_levels: 8
+# init_threshold_fast: 20
+# min_threshold_fast: 7
+
+# shrink_row: 25 # KITTI # these will actuall get overwritten by GFLAGS in the frontend params
+# shrink_col: 20 # KITTI!!!
+# # shrink_row: 1
+# # shrink_col: 1
+
+
+# tracker:
+#   # When using mono-pipeline AND and additional inertial sensor is provided,
+#   # Then 2-point ransac will be used (eg. 2d2d ransac with rotation), else 5-point 2d2d pnp will be used
+#   ransac_use_2point_mono: 0
+#   ransac_randomize: 1
+#   # ransac_threshold_mono:
+#   optimize_2d2d_pose_from_inliers: 0
+
+#   # When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+#   use_ego_motion_pnp: 1
+#   # When using rgbd-pipeline, camera-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
+#   use_object_motion_pnp: 1
+
+#   # When using RGBD pipeline, object motion will be refined ba NLO using motion factor
+#   # e = ^wm_{k} = ^w_{k-1}H_k * ^wm_{k-1}
+#   refine_object_motion_esimate: 1 #TODO: gets overwritten by gflags in the motion solver
+
+#   # 3d-2d PnP
+#   # Equivalent to reprojection error in pixels
+#   ransac_threshold_pnp: 2.0
+#   # ransac_threshold_pnp: 5.0
+#   # ransac_threshold_pnp: 0.1
+#   optimize_3d2d_pose_from_inliers: 0
+
+#   # 3d-3d PnP (stereo)
+#   ransac_threshold_stereo: 0.002
+#   optimize_3d3d_pose_from_inliers: 0
+
+#   # Generic ransac params and used for all ransac+pnp solvers
+#   ransac_iterations: 500
   ransac_probability:  0.995

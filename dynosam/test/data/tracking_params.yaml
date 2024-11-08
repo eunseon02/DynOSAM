@@ -1,0 +1,4 @@
+orb_params:
+  scale_factor: 12
+
+use_clahe_filter: false

@@ -32,21 +32,16 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <glog/logging.h>
-#include <gflags/gflags.h>
 
-
-
-DEFINE_int32(semantic_mask_step_size, 3, "The step sized used across the semantic mask when sampling points");
-DEFINE_bool(use_propogate_mask, true, "If true, the semantic mask will be propogated with optical flow");
 
 namespace dyno {
 
 
 
 FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
-    : FeatureTrackerBase(params, camera, display_queue) {
+    : FeatureTrackerBase(params.tracker_params, camera, display_queue), frontend_params_(params) {
     static_feature_tracker_ = std::make_unique<KltFeatureTracker>(
-      params, camera, display_queue
+      params.tracker_params, camera, display_queue
     );
     CHECK(!img_size_.empty());
 }
@@ -71,7 +66,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
     }
     else {
 
-        if(FLAGS_use_propogate_mask) {
+        if(params_.use_propogate_mask) {
           propogateMask(input_images);
         }
         CHECK(previous_frame_);
@@ -123,6 +118,11 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp, const Im
       dynamic_features,
       info_);
 
+    //update depth threshold information
+    new_frame->setMaxBackgroundDepth(frontend_params_.max_background_depth);
+    new_frame->setMaxObjectDepth(frontend_params_.max_object_depth);
+
+
     LOG(INFO) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15) << timestamp << ", object ids " << container_to_string(new_frame->getObjectIds());
     previous_frame_ = new_frame;
 
@@ -147,9 +147,11 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
   ObjectIds instance_labels;
   dynamic_features.clear();
 
-  OccupandyGrid2D grid(FLAGS_semantic_mask_step_size,
-          std::ceil(static_cast<double>(img_size_.width)/FLAGS_semantic_mask_step_size),
-          std::ceil(static_cast<double>(img_size_.height)/FLAGS_semantic_mask_step_size));
+  const auto step_size = params_.semantic_mask_step_size;
+
+  OccupandyGrid2D grid(step_size,
+          std::ceil(static_cast<double>(img_size_.width)/step_size),
+          std::ceil(static_cast<double>(img_size_.height)/step_size));
 
 
   if (previous_frame_)
@@ -246,7 +248,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id, const ImageContainer& image_
     }
   }
 
-  int step = FLAGS_semantic_mask_step_size;
+  int step = params_.semantic_mask_step_size;
   for (int i = 0; i < rgb.rows - step; i = i + step)
   {
     for (int j = 0; j < rgb.cols - step; j = j + step)

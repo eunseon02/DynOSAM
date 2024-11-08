@@ -31,7 +31,7 @@ namespace dyno {
 
 decltype(TrackletIdManager::instance_) TrackletIdManager::instance_;
 
-FeatureTrackerBase::FeatureTrackerBase(const FrontendParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
+FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
   : params_(params),
     img_size_(camera->getParams().imageSize()),
     camera_(camera),

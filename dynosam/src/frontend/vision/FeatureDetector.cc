@@ -108,7 +108,6 @@ void SparseFeatureDetector::detect(const cv::Mat& image, KeypointsCV& keypoints,
     //pre-process image if required
     if(clahe_) clahe_->apply(processed_image, processed_image);
 
-    //get keypoints
     std::vector<cv::KeyPoint> raw_keypoints;
     feature_detector_->detect(processed_image, raw_keypoints, detection_mask);
 
@@ -125,7 +124,7 @@ void SparseFeatureDetector::detect(const cv::Mat& image, KeypointsCV& keypoints,
         Eigen::MatrixXd binning_mask = anms_params.binning_mask;
 
         max_keypoints = non_maximum_supression_->suppressNonMax(
-            keypoints,
+            raw_keypoints,
             nr_corners_needed,
             tolerance,
             processed_image.cols,
