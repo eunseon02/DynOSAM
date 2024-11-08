@@ -56,7 +56,7 @@ dyno::DataProvider::Ptr DynoNode::createDataProvider() {
 
     RCLCPP_INFO_STREAM(this->get_logger(), "Loading dataset from: " << dataset_path);
 
-    dyno::DataProvider::Ptr data_loader = dyno::DataProviderFactory::Create(dataset_path, params_path, static_cast<dyno::DatasetType>(dyno_params.data_provider_type_));
+    dyno::DataProvider::Ptr data_loader = dyno::DataProviderFactory::Create(dataset_path, params_path, static_cast<dyno::DatasetType>(dyno_params.dataProviderType()));
     RCLCPP_INFO_STREAM(this->get_logger(), "Constructed data loader");
     return data_loader;
 }

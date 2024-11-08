@@ -128,10 +128,6 @@ add_library(${PROJECT_NAME} SHARED
   # src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
   src/backend/RGBDBackendModule.cc
-  src/backend/DynoISAM2.cc
-  src/backend/DynoISAM2Params.cc
-  src/backend/DynoISAM2-impl.cc
-  src/backend/DynoISAM2Clique.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc

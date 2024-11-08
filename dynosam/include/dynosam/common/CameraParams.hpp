@@ -34,6 +34,8 @@
 #include <opencv2/core/eigen.hpp> //for cv::cv2eigen
 #include <exception>
 
+#include <config_utilities/config_utilities.h>
+
 namespace dyno
 {
 
@@ -89,9 +91,6 @@ public:
               const DistortionModel& distortion_model, const gtsam::Pose3& T_robot_camera = gtsam::Pose3::Identity());
 
   virtual ~CameraParams() = default;
-
-
-  static CameraParams fromYamlFile(const std::string& file_path);
 
   inline double fx() const
   {
@@ -175,18 +174,6 @@ public:
   CALIBRATION constructGtsamCalibration() const;
 
 private:
-
-  static void parseDistortionModel(const YamlParser& yaml_parser, DistortionModel* model);
-  static void parseImgSize(const YamlParser& yaml_parser, cv::Size* image_size);
-  static void parseBodyPoseCam(const YamlParser& yaml_parser,
-                               gtsam::Pose3* body_Pose_cam);
-  static void parseCameraIntrinsics(const YamlParser& yaml_parser,
-                                    IntrinsicsCoeffs* intrinsics);
-  static void parseCameraDistortion(const YamlParser& yaml_parser,
-                                    DistortionCoeffs* distortion);
-
-
-private:
   // updates cv Mat P
   // for now only works if FISH_EYE
   //   void estimateNewMatrixForDistortion();
@@ -215,7 +202,7 @@ private:
 };
 
 
-
+void declare_config(CameraParams& config);
 
 
 }  // namespace dyno

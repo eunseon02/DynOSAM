@@ -27,7 +27,6 @@
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/common/Map.hpp"
 
-#include "dynosam/backend/DynoISAM2.hpp"
 #include "dynosam/common/Flags.hpp"
 
 

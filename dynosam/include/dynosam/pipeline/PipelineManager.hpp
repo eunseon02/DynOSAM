@@ -32,9 +32,6 @@
 #include "dynosam/utils/Spinner.hpp"
 #include "dynosam/common/Types.hpp"
 
-#include "dynosam/backend/Optimizer.hpp"
-#include "dynosam/backend/BatchOptimizer.hpp"
-#include "dynosam/backend/IncrementalOptimizer.hpp"
 
 
 
@@ -69,9 +66,6 @@ private:
     void launchSpinners();
     void shutdownSpinners();
     void shutdownPipelines();
-
-    template<typename Measurement>
-    typename Optimizer<Measurement>::Ptr createOptimizer(OptimizerType optimizer_type) const;
 
     void loadPipelines(const CameraParams& camera_params, FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display);
 
@@ -118,24 +112,6 @@ private:
 
 };
 
-//TODO: refactor!!
-template<typename Measurement>
-typename Optimizer<Measurement>::Ptr DynoPipelineManager::createOptimizer(OptimizerType optimizer_type) const {
-    if(optimizer_type == OptimizerType::kIncremental) {
-        LOG(INFO) << "Constructing incremental optimizer";
-        return std::make_shared<IncrementalOptimizer<Measurement>>();
-        // return std::make_shared<ISAMOptimizer<Measurement>>();
-    }
-    else if(optimizer_type == OptimizerType::kBatch) {
-        LOG(INFO) << "Constructing batch optimizer";
-
-        BatchOptimizerParams batch_params;
-        CHECK(get_dataset_size_) << "dataset size function must be set - right now only works with RBG!!";
-        batch_params.get_last_frame = get_dataset_size_;
-
-        return std::make_shared<BatchOptimizer<Measurement>>(batch_params);
-    }
-}
 
 
 

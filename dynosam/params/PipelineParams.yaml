@@ -1,6 +1,4 @@
-%YAML:1.0
-
-parallel_run: 0
+parallel_run: False
 
 
 #RGBD instance = 0, MONO instance = 1 (same as FrontendType)
@@ -11,6 +9,6 @@ optimizer_type: 1
 
 
 # Use the camera params provided by the dataprovider (if available),
-# instead the camera params specified by the CameraParams.yaml.
+# instead of the camera params specified by the CameraParams.yaml.
 # this is useful when running experiments as changing the dataset will change the camera extrinsics
-prefer_data_provider_camera_params: 1
+prefer_data_provider_camera_params: True

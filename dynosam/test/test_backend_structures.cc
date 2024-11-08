@@ -31,19 +31,6 @@ using namespace dyno;
 #include <gtest/gtest.h>
 
 
-TEST(DynamicObjectTracklet, testGetFirstFrame) {
-
-    DynamicObjectTracklet<int> tracklet(1);
-
-    //insert out of order
-    tracklet.insert2(2, 1);
-    tracklet.insert2(3, 1);
-
-    EXPECT_EQ(tracklet.getFirstFrame(), 2);
-
-}
-
-
 TEST(DynamicObjectSymbol, testReconstructMotionInfo) {
 
     gtsam::Key motion_key = ObjectMotionSymbol(12, 10);

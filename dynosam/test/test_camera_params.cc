@@ -22,7 +22,11 @@
  */
 
 #include "dynosam/common/CameraParams.hpp"
+#include "internal/helpers.hpp"
 
+
+
+#include <config_utilities/parsing/yaml.h>
 
 #include <gtsam/geometry/Cal3DS2.h>
 
@@ -97,7 +101,8 @@ TEST(testCameraParamss, basicConstructionCal3DS2)
 
 
 TEST(testCameraParams, parseYAML) {
-  CameraParams cam_params = CameraParams::fromYamlFile(FLAGS_test_data_path + "/sensor.yaml");
+  // CameraParams cam_params = CameraParams::fromYamlFile(getTestDataPath() + "/sensor.yaml");
+  auto cam_params = config::fromYamlFile<CameraParams>(getTestDataPath() + "/sensor.yaml");
 
   // Frame rate.
   const double frame_rate_expected = 1.0 / 20.0;

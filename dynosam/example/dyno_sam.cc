@@ -26,7 +26,6 @@
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
 #include "dynosam/pipeline/PipelineParams.hpp"
 
-#include "dynosam/backend/MonoBackendTools.hpp"
 
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"

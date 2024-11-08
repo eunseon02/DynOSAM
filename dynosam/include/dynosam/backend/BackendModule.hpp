@@ -33,7 +33,6 @@
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
-#include "dynosam/backend/Optimizer.hpp"
 
 
 #include "dynosam/visualizer/Visualizer-Definitions.hpp" //for ImageDisplayQueueOptional

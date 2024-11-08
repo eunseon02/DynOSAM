@@ -25,14 +25,11 @@
 #include "internal/helpers.hpp"
 
 #include "dynosam/backend/BackendPipeline.hpp"
-#include "dynosam/backend/IncrementalOptimizer.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 
 #include <gtsam/linear/GaussianEliminationTree.h>
-
 #include <gtsam/nonlinear/ISAM2-impl.h>
-
 
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>

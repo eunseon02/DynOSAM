@@ -23,15 +23,10 @@
 
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
-#include "dynosam/frontend/MonoInstanceFrontendModule.hpp"
-#include "dynosam/backend/MonoBatchBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
-#include "dynosam/backend/MonoBackendModule.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 #include "dynosam/logger/Logger.hpp"
-
-#include "dynosam/backend/Optimizer.hpp"
 
 #include <glog/logging.h>
 
@@ -44,7 +39,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     :   params_(params),
         use_offline_frontend_(FLAGS_frontend_from_file),
         data_loader_(std::move(data_loader)),
-        displayer_(&display_queue_, params.parallel_run_)
+        displayer_(&display_queue_, params.parallelRun())
 
 {
     LOG(INFO) << "Starting DynoPipelineManager";
@@ -53,7 +48,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     CHECK(frontend_display);
 
     //TODO: factories for different loaders etc later
-    data_interface_ = std::make_unique<DataInterfacePipeline>(params.parallel_run_);
+    data_interface_ = std::make_unique<DataInterfacePipeline>(params_.parallelRun());
     data_loader_->registerImageContainerCallback(
         std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue, data_interface_.get(), std::placeholders::_1)
     );
@@ -72,7 +67,7 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     data_interface_->registerOutputQueue(&frontend_input_queue_);
 
     CameraParams camera_params;
-    if(params_.prefer_data_provider_camera_params_ && data_loader_->getCameraParams().has_value()) {
+    if(params_.preferDataProviderCameraParams() && data_loader_->getCameraParams().has_value()) {
         LOG(INFO) << "Using camera params from DataProvider, not the config in the CameraParams.yaml!";
         camera_params = *data_loader_->getCameraParams();
     }
@@ -130,7 +125,7 @@ bool DynoPipelineManager::spin() {
         // and no need to spin the viz (TODO: right now this is only images and not the actual pipelines...)
         spin_func =[=]() -> bool {
             if(frontend_pipeline_->isWorking()) {
-                if(!params_.parallel_run_) {
+                if(!params_.parallelRun()) {
                     frontend_pipeline_->spinOnce();
                     if(backend_pipeline_) backend_pipeline_->spinOnce();
                 }
@@ -143,7 +138,7 @@ bool DynoPipelineManager::spin() {
         //regular spinner....
         spin_func =[=]() -> bool {
             if(data_loader_->spin() || frontend_pipeline_->isWorking()) {
-                if(!params_.parallel_run_) {
+                if(!params_.parallelRun()) {
                     frontend_pipeline_->spinOnce();
                     if(backend_pipeline_) backend_pipeline_->spinOnce();
                 }
@@ -168,9 +163,9 @@ bool DynoPipelineManager::spinViz() {
 
 
 void DynoPipelineManager::launchSpinners() {
-    LOG(INFO) << "Running PipelineManager with parallel_run=" << params_.parallel_run_;
+    LOG(INFO) << "Running PipelineManager with parallel_run=" << params_.parallelRun();
 
-    if(params_.parallel_run_) {
+    if(params_.parallelRun()) {
         frontend_pipeline_spinner_ = std::make_unique<dyno::Spinner>(std::bind(&dyno::FrontendPipeline::spin, frontend_pipeline_.get()), "frontend-pipeline-spinner");
 
         if(backend_pipeline_)
@@ -196,6 +191,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
     //a new queue to it regardless of the derived type (as long as it is at least a MIMO,
     //which it should be as this is the lowest type of actual pipeline with any functionality)
     typename FrontendPipeline::OutputRegistra::Ptr frontend_output_registra = nullptr;
+    const auto parallel_run = params_.parallelRun();
 
     switch (params_.frontend_type_)
     {
@@ -243,7 +239,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
                 FrontendPipeline::UniquePtr frontend_pipeline_derived = std::make_unique<FrontendPipeline>("frontend-pipeline", &frontend_input_queue_, frontend);
                 //make registra so we can register queues with this pipeline
                 frontend_output_registra = frontend_pipeline_derived->getOutputRegistra();
-                frontend_pipeline_derived->parallelRun(params_.parallel_run_);
+                frontend_pipeline_derived->parallelRun(parallel_run);
                 //conver pipeline to base type
                 frontend_pipeline_ = std::move(frontend_pipeline_derived);
 
@@ -275,10 +271,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
 
         }   break;
         case FrontendType::kMono: {
-            LOG(INFO) << "Making MonoInstance frontend";
-            Camera::Ptr camera = std::make_shared<Camera>(camera_params);
-            // auto frontend = std::make_shared<MonoInstanceFrontendModule>(params.frontend_params_, camera, &display_queue_);
-            // backend = std::make_shared<MonoBatchBackendModule>(params.backend_params_, camera, &display_queue_);
+            LOG(FATAL) << "MONO Not implemented!";
         }   break;
 
         default: {
@@ -292,7 +285,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
 
     if(backend) {
         backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
-        backend_pipeline_->parallelRun(params_.parallel_run_);
+        backend_pipeline_->parallelRun(parallel_run);
         //also register connection between front and back
         frontend_output_registra->registerQueue(&backend_input_queue_);
 

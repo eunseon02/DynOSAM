@@ -26,7 +26,6 @@
 #include "dynosam/utils/Numerical.hpp"    //for equals
 #include "dynosam/utils/OpenCVUtils.hpp"  //for cv equals
 #include "dynosam/utils/GtsamUtils.hpp"  //for cv equals
-#include "dynosam/utils/YamlParser.hpp"
 
 #include <glog/logging.h>
 #include <memory>
@@ -56,6 +55,49 @@ std::string to_string(const DistortionModel& distortion) {
   }
 }
 
+void declare_config(CameraParams& config) {
+  using namespace config;
+  name("Camera Params");
+
+  cv::Size image_size;
+  field(image_size, "resolution");
+
+
+  //camera to robot pose
+  std::vector<double> vector_pose;
+  field(vector_pose, "T_BS");
+  checkCondition(vector_pose.size() == 16u, "param 'T_BS' must be a 16 length vector in homogenous matrix form");
+
+  gtsam::Pose3 T_robot_camera = utils::poseVectorToGtsamPose3(vector_pose);
+
+  std::vector<double> intrinsics_v;
+  field(intrinsics_v, "intrinsics");
+  checkCondition(intrinsics_v.size() == 4, "param 'intrinsics' must be a 4 length vector.");
+  CameraParams::IntrinsicsCoeffs intrinsics;
+  intrinsics.resize(4u);
+  // Move elements from one to the other.
+  std::copy_n(std::make_move_iterator(intrinsics_v.begin()),
+              intrinsics.size(),
+              intrinsics.begin());
+
+  CameraParams::DistortionCoeffs distortion;
+  field(distortion, "distortion_coefficients");
+
+  std::string distortion_model, camera_model;
+  field(distortion_model, "distortion_model");
+  field(camera_model, "camera_model");
+
+  DistortionModel model = CameraParams::stringToDistortion(distortion_model, camera_model);
+  if(model == DistortionModel::NONE) {
+    throw InvalidCameraCalibration("Invalid distortion model/camera model combination when constructing camera params from yaml file - "
+      " distortion model: " + distortion_model + ", camera model: " + camera_model);
+  }
+
+  config = CameraParams(
+    intrinsics, distortion, image_size, model, T_robot_camera
+  );
+}
+
 CameraParams::CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionCoeffs& distortion, const cv::Size& image_size,
               const std::string& distortion_model, const gtsam::Pose3& T_robot_camera)
   : CameraParams(intrinsics, distortion, image_size, CameraParams::stringToDistortion(distortion_model, "pinhole"), T_robot_camera) {}
@@ -78,32 +120,6 @@ CameraParams::CameraParams(const IntrinsicsCoeffs& intrinsics, const DistortionC
   K_.copyTo(P_);
 }
 
-CameraParams CameraParams::fromYamlFile(const std::string& file_path) {
-  YamlParser yaml_parser(file_path);
-
-  std::string camera_id;
-  yaml_parser.getYamlParam("camera_id", &camera_id);
-  CHECK(!camera_id.empty()) << "Camera id cannot be empty.";
-  VLOG(1) << "Parsing camera parameters for: " << camera_id;
-
-  cv::Size image_size;
-  parseImgSize(yaml_parser, &image_size);
-
-  gtsam::Pose3 T_robot_camera;
-  parseBodyPoseCam(yaml_parser, &T_robot_camera);
-
-  IntrinsicsCoeffs intrinsics;
-  parseCameraIntrinsics(yaml_parser, &intrinsics);
-
-  DistortionCoeffs distortion;
-  parseCameraDistortion(yaml_parser, &distortion);
-
-  DistortionModel model;
-  parseDistortionModel(yaml_parser, &model);
-
-
-  return CameraParams(intrinsics, distortion, image_size, model, T_robot_camera);
-}
 
 void CameraParams::convertDistortionVectorToMatrix(const DistortionCoeffs& distortion_coeffs,
                                                   cv::Mat* distortion_coeffs_mat)
@@ -190,73 +206,6 @@ const std::string CameraParams::toString() const
       << "- P: " << P_ << '\n';
 
   return out.str();
-}
-
-void CameraParams::parseDistortionModel(const YamlParser& yaml_parser, DistortionModel* model) {
-  CHECK_NOTNULL(model);
-  std::string distortion_model, camera_model;
-  yaml_parser.getYamlParam("distortion_model", &distortion_model);
-  yaml_parser.getYamlParam("camera_model", &camera_model);
-  *model = stringToDistortion(distortion_model, camera_model);
-
-  if(*model == DistortionModel::NONE) {
-    throw InvalidCameraCalibration("Invalid distortion model/camera model combination when constructing camera params from yaml file - "
-      " distortion model: " + distortion_model + ", camera model: " + camera_model);
-  }
-
-}
-
-
-void CameraParams::parseImgSize(const YamlParser& yaml_parser,
-                                cv::Size* image_size) {
-  CHECK_NOTNULL(image_size);
-  std::vector<int> resolution;
-  yaml_parser.getYamlParam("resolution", &resolution);
-  CHECK_EQ(resolution.size(), 2);
-  *image_size = cv::Size(resolution[0], resolution[1]);
-}
-
-
-
-// void CameraParams::parseFrameRate(const YamlParser& yaml_parser,
-//                                   double* frame_rate) {
-//   CHECK_NOTNULL(frame_rate);
-//   int rate = 0;
-//   yaml_parser.getYamlParam("rate_hz", &rate);
-//   CHECK_GT(rate, 0u);
-//   *frame_rate = 1 / static_cast<double>(rate);
-// }
-
-void CameraParams::parseBodyPoseCam(const YamlParser& yaml_parser,
-                                    gtsam::Pose3* body_Pose_cam) {
-  CHECK_NOTNULL(body_Pose_cam);
-  // int n_rows = 0;
-  // yaml_parser.getNestedYamlParam("T_BS", "rows", &n_rows);
-  // CHECK_EQ(n_rows, 4);
-  // int n_cols = 0;
-  // yaml_parser.getNestedYamlParam("T_BS", "cols", &n_cols);
-  // CHECK_EQ(n_cols, 4);
-  std::vector<double> vector_pose;
-  yaml_parser.getNestedYamlParam("T_BS", "data", &vector_pose);
-  *body_Pose_cam = utils::poseVectorToGtsamPose3(vector_pose);
-}
-
-void CameraParams::parseCameraIntrinsics(const YamlParser& yaml_parser,
-                                         IntrinsicsCoeffs* intrinsics) {
-  CHECK_NOTNULL(intrinsics);
-  std::vector<double> intrinsics_v;
-  yaml_parser.getYamlParam("intrinsics", &intrinsics_v);
-  CHECK_EQ(intrinsics_v.size(), 4u);
-  intrinsics->resize(4u);
-  // Move elements from one to the other.
-  std::copy_n(std::make_move_iterator(intrinsics_v.begin()),
-              intrinsics->size(),
-              intrinsics->begin());
-}
-
-void CameraParams::parseCameraDistortion(const YamlParser& yaml_parser, DistortionCoeffs* distortion) {
-  CHECK_NOTNULL(distortion);
-  yaml_parser.getYamlParam("distortion_coefficients", distortion);
 }
 
 

@@ -53,7 +53,7 @@ public:
         auto params = this->getDynoParams();
 
         CameraParams camera_params;
-        if(params.prefer_data_provider_camera_params_ && data_loader->getCameraParams().has_value()) {
+        if(params.preferDataProviderCameraParams() && data_loader->getCameraParams().has_value()) {
             LOG(INFO) << "Using camera params from DataProvider, not the config in the CameraParams.yaml!";
             camera_params = *data_loader->getCameraParams();
         }
@@ -95,7 +95,7 @@ public:
         auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_, map, camera, updater_type);
 
         backend_pipeline_ = std::make_unique<BackendPipeline>("backend-pipeline", &backend_input_queue_, backend);
-        backend_pipeline_->parallelRun(params.parallel_run_);
+        backend_pipeline_->parallelRun(params.parallelRun());
         //also register connection between front and back
         offline_frontend_ptr->registerOutputQueue(&backend_input_queue_);
         //NO OUTPUT!!
@@ -139,8 +139,6 @@ int main(int argc, char* argv[]) {
     rclcpp::NodeOptions options;
     options.arguments(non_ros_args);
     options.use_intra_process_comms(true);
-
-    // LOG(INFO) << FLAGS_test_flag;
 
     rclcpp::executors::SingleThreadedExecutor exec;
     auto ros_pipeline = std::make_shared<dyno::BackendExperimentsNode>();

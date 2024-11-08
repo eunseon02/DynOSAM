@@ -25,36 +25,30 @@
 #include "dynosam/utils/YamlParser.hpp"
 
 #include <config_utilities/parsing/yaml.h>
+#include <config_utilities/config_utilities.h>
 
 DEFINE_int32(data_provider_type, 0,"Which data provider (loader) to use. Associated with specific datasets");
 
 namespace dyno {
 
+void declare_config(DynoParams::PipelineParams& config) {
+    using namespace config;
+
+    name("PipelineParams");
+    field(config.parallel_run, "parallel_run");
+    field(config.prefer_data_provider_camera_params, "prefer_data_provider_camera_params");
+
+    config.data_provider_type = FLAGS_data_provider_type;
+}
+
 DynoParams::DynoParams(const std::string& params_folder_path) {
 
-    //currently just camera params
-    camera_params_ = CameraParams::fromYamlFile(params_folder_path + "CameraParams.yaml");
-
+    pipeline_params_ = config::fromYamlFile<PipelineParams>(params_folder_path + "PipelineParams.yaml");
+    camera_params_ = config::fromYamlFile<CameraParams>(params_folder_path + "CameraParams.yaml");
     frontend_params_ = config::fromYamlFile<FrontendParams>(params_folder_path + "FrontendParams.yaml");
+
     LOG(INFO) << "Frontend Params: " << config::toString(frontend_params_);
-
-    YamlParser pipeline_parser(params_folder_path + "PipelineParams.yaml");
-    pipeline_parser.getYamlParam("parallel_run", &parallel_run_);
-
-    //TODO: is now flagfile!!
-    // pipeline_parser.getYamlParam("data_provider_type", &data_provider_type_);
-    data_provider_type_ = FLAGS_data_provider_type;
-
-    int frontend_type_i;
-    pipeline_parser.getYamlParam("frontend_type", &frontend_type_i);
-    frontend_type_ = static_cast<FrontendType>(frontend_type_i);
-
-    int optimizer_type_i;
-    pipeline_parser.getYamlParam("optimizer_type", &optimizer_type_i);
-    optimizer_type_ = static_cast<OptimizerType>(optimizer_type_i);
-
-
-    pipeline_parser.getYamlParam("prefer_data_provider_camera_params", &prefer_data_provider_camera_params_);
+    LOG(INFO) << "Pipeline Params: " << config::toString(pipeline_params_);
 
 }
 

@@ -29,16 +29,13 @@
 
 #include "dynosam/common/Flags.hpp"
 
-#include "dynosam/backend/IncrementalOptimizer.hpp"
 
 
-#include "dynosam/factors/LandmarkQuadricFactor.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/factors/ObjectKinematicFactor.hpp"
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
 #include "dynosam/factors/LandmarkPoseSmoothingFactor.hpp"
 
-#include <gtsam/base/debug.h>
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 

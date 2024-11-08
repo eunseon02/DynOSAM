@@ -51,25 +51,39 @@ public:
      */
     DynoParams() {}
 
+    struct PipelineParams {
+        int data_provider_type; //Kitti, VirtualKitti, Online... currently set with flagfile
+        //! If camera params are provided from the dataprovider, use this instead of the
+        //! params here. This allows the specific dataset camera params (which changes per dataset)
+        //! rather than needing the change the CameraParams.yaml everytime
+        bool prefer_data_provider_camera_params{true};
+        //! Pipeline level params
+        bool parallel_run{true};
+    };
+
+    // Quick access functions
+    bool parallelRun() const { return pipeline_params_.parallel_run;  }
+    int dataProviderType() const { return pipeline_params_.data_provider_type; }
+    bool preferDataProviderCameraParams() const { return pipeline_params_.prefer_data_provider_camera_params; }
+
+
 public:
+    PipelineParams pipeline_params_;
     FrontendParams frontend_params_;
     BackendParams backend_params_;
     CameraParams camera_params_;
 
-    int data_provider_type_; //Kitti, VirtualKitti, Online... # TODO: currently set with flagfile
-
     FrontendType frontend_type_ = FrontendType::kRGBD;
     OptimizerType optimizer_type_ = OptimizerType::kBatch;
 
-    //! If camera params are provided from the dataprovider, use this instead of the
-    //! params here. This allows the specific dataset camera params (which changes per dataset)
-    //! rather than needing the change the CameraParams.yaml everytime
-    bool prefer_data_provider_camera_params_{true};
 
-    //! Pipeline level params
-    bool parallel_run_{true};
+private:
 
 };
+
+void declare_config(DynoParams::PipelineParams& config);
+
+
 
 
 // ! Original code from: https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
