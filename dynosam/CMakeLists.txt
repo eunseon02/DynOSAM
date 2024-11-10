@@ -19,7 +19,6 @@ find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
-find_package(diagnostic_updater REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(opengv REQUIRED)
 find_package(GTSAM REQUIRED)
@@ -170,7 +169,6 @@ ament_target_dependencies(${PROJECT_NAME}
   rclcpp
   std_msgs
   sensor_msgs
-  diagnostic_updater
   opengv
   GTSAM
   OpenCV)

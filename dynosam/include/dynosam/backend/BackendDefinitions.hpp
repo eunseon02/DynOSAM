@@ -98,25 +98,6 @@ struct BackendSpinState {
 
 
 
-//TODO: depricate!!
-/**
- * @brief Construct an object motion symbol with the current frame id (k).
- *
- * A motion takes us from k-1 to k so we index using the k frame id.
- * This function takes the current frame id (k) which is normally what we work with and constructs the motion symbol
- * using k as the index such that the motion takes us from the k-1 to k.
- *
- * This does assume that we're tracking the object frame to frame
- *
- * @param object_label
- * @param current_frame_id
- * @return gtsam::Key
- */
-inline gtsam::Key ObjectMotionSymbolFromCurrentFrame(ObjectId object_label, FrameId current_frame_id) {
-    CHECK(current_frame_id > 0) << "Current frame Id must be at least 1 so that we can index from the previous frame!";
-    return ObjectMotionSymbol(object_label, current_frame_id);
-}
-
 std::string DynoLikeKeyFormatter(gtsam::Key);
 std::string DynoLikeKeyFormatterVerbose(gtsam::Key);
 

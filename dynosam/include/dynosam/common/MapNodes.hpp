@@ -309,89 +309,6 @@ public:
     gtsam::Key makeObjectMotionKey(ObjectId object_id) const;
     gtsam::Key makeObjectPoseKey(ObjectId object_id) const;
 
-    // //get pose estimate
-    // StateQuery<gtsam::Pose3> getPoseEstimate() const;
-    // //get object motion estimate
-    // StateQuery<gtsam::Pose3> getObjectMotionEstimate(ObjectId object_id) const;
-    // StateQuery<gtsam::Pose3> getObjectPoseEstimate(ObjectId object_id) const;
-    // //get dynamic point estimate (at this frame)??
-    // //O(logN)
-    // StateQuery<Landmark> getDynamicLandmarkEstimate(TrackletId tracklet_id) const;
-    // //TODO: need testing
-    // // //all in this frame
-    // StatusLandmarkEstimates getAllDynamicLandmarkEstimates() const;
-    // StatusLandmarkEstimates getDynamicLandmarkEstimates(ObjectId object_id) const;
-
-    // EstimateMap<ObjectId, gtsam::Pose3> getPoseEstimates() const {
-    //     EstimateMap<ObjectId, gtsam::Pose3> pose_estimates;
-
-    //     for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
-    //         StateQuery<gtsam::Pose3> pose = this->getObjectPoseEstimate(object_id);
-
-    //         if(pose) {
-    //             //TODO: hardcoded estimate!
-    //             pose_estimates.insert2(object_id,
-    //                 ReferenceFrameValue<Motion3>(pose.get(), ReferenceFrame::GLOBAL));
-    //         }
-    //     }
-    //     return pose_estimates;
-
-    // }
-
-
-    // /**
-    //  * @brief Computes a the centroid of each object at this frame using the estimated dynamic points.
-    //  *
-    //  * Internally, uses the overloaded std::tuple<gtsam::Point3, bool> computeObjectCentroid function
-    //  * and only includes centroids which are valid (ie returned with computeObjectCentroid()->second == true)
-    //  *
-    //  * @return gtsam::FastMap<ObjectId, gtsam::Point3>
-    //  */
-    // gtsam::FastMap<ObjectId, gtsam::Point3> computeObjectCentroids() const {
-    //     gtsam::FastMap<ObjectId, gtsam::Point3> centroids;
-    //     for(ObjectId object_id : objects_seen.template collectIds<ObjectId>()) {
-    //         const auto[centroid, result] = computeObjectCentroid(object_id);
-
-    //         if(result) {
-    //             centroids.insert2(object_id, centroid);
-    //         }
-    //     }
-    //     return centroids;
-    // }
-
-    // /**
-    //  * @brief Computes the centroid of the requested object using the estimated dynamic points.
-    //  *
-    //  * Throws exception if object not found.
-    //  *
-    //  * @param object_id
-    //  * @return std::tuple<gtsam::Point3, bool>
-    //  */
-    // std::tuple<gtsam::Point3, bool> computeObjectCentroid(ObjectId object_id) const {
-    //     const StatusLandmarkEstimates& dynamic_lmks = getDynamicLandmarkEstimates(object_id);
-
-    //     //convert to point cloud - should be a map with only one map in it
-    //     CloudPerObject object_clouds = groupObjectCloud(dynamic_lmks, this->getPoseEstimate().get());
-    //     if(object_clouds.size() == 0) {
-    //         //TODO: why does this happen so much!!!
-    //         LOG(INFO) << "Cannot collect object clouds from dynamic landmarks of " << object_id << " and frame " << frame_id << "!! "
-    //             << " # Dynamic lmks in the map for this object at this frame was " << dynamic_lmks.size() << " but reocrded lmks was " << dynamic_landmarks.size();
-    //         return {gtsam::Point3{}, false};
-    //     }
-    //     CHECK_EQ(object_clouds.size(), 1);
-    //     CHECK(object_clouds.exists(object_id));
-
-    //     const auto dynamic_point_cloud = object_clouds.at(object_id);
-    //     pcl::PointXYZ centroid;
-    //     pcl::computeCentroid(dynamic_point_cloud, centroid);
-    //     //TODO: outlier reject?
-    //     gtsam::Point3 translation = pclPointToGtsam(centroid);
-    //     return {translation, true};
-    // }
-
-    //O(logN)
-    // StateQuery<Landmark> getStaticLandmarkEstimate(TrackletId tracklet_id) const;
-    // StatusLandmarkEstimates getAllStaticLandmarkEstimates() const;
 
     /// @brief Const LandmarkNodePtr with corresponding Measurement value
     using LandmarkMeasurementPair = std::pair<const LandmarkNodePtr<MEASUREMENT>, MEASUREMENT>;
@@ -447,15 +364,6 @@ public:
     inline FrameId getFirstSeenFrame() const { return getSeenFrames().template getFirstIndex<FrameId>(); }
     inline FrameId getLastSeenFrame() const { return getSeenFrames().template getLastIndex<FrameId>(); }
 
-    // //this recomputed everything everytime
-    // //eventually should cache things but for now its okay
-    // gtsam::FastMap<FrameId, gtsam::Pose3> computeComposedPoseMap(const GroundTruthPacketMap::Optional& gt_packet_map = {}) const;
-
-    // /// @brief Looks for values with L key - does not guarantee that poses are consequative, but will be in order
-    // /// @return
-    // gtsam::FastMap<FrameId, gtsam::Pose3> computeEstimatedPoseMap() const;
-
-
     //this could take a while?
     //for all the lmks we have for this object, find the frames of those lmks
     FrameNodePtrSet<MEASUREMENT> getSeenFrames() const;
@@ -463,17 +371,6 @@ public:
     //The landmarks might have been seen at multiple frames but we know this is the subset of lmks at
     //this requested frame
     LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(FrameId frame_id) const;
-
-    // StateQuery<gtsam::Pose3> getMotionEstimate(FrameId frame_id) const;
-
-    // //only checks in the map
-    // bool hasMotionEstimate(FrameId frame_id, gtsam::Pose3* motion = nullptr) const;
-    // bool hasMotionEstimate(FrameId frame_id, gtsam::Pose3& motion) const;
-
-    // //may not be included, depending on the type
-    // //this will also affect the way the pose map is computed?!!
-    // //TODO: test
-    // StateQuery<gtsam::Pose3> getPoseEstimate(FrameId frame_id) const;
 
 
     /// @brief A pair of Const LandmarkNodePtr's
@@ -576,32 +473,6 @@ protected:
 
 };
 
-// //TODO: overwrites need test
-// template<typename MEASUREMENT>
-// class StaticLandmarkNode : public LandmarkNode<MEASUREMENT> {
-// public:
-//     using Base = LandmarkNode<MEASUREMENT>;
-//     using This = StaticLandmarkNode<MEASUREMENT>;
-//     DYNO_POINTER_TYPEDEFS(This)
-
-//     StaticLandmarkNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : Base(map) {}
-
-//     StateQuery<Landmark> getStaticLandmarkEstimate() const;
-//     StateQuery<Landmark> getLandmarkEstimate(FrameId frame_id) const;
-// };
-
-// template<typename MEASUREMENT>
-// class DynamicLandmarkNode : public LandmarkNode<MEASUREMENT> {
-// public:
-//     using Base = LandmarkNode<MEASUREMENT>;
-//     using This = DynamicLandmarkNode<MEASUREMENT>;
-//     DYNO_POINTER_TYPEDEFS(This)
-
-
-//     DynamicLandmarkNode(const std::shared_ptr<Map<MEASUREMENT>>& map) : Base(map) {}
-
-//     StateQuery<Landmark> getLandmarkEstimate(FrameId frame_id) const;
-// };
 
 
 } //dyno

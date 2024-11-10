@@ -27,7 +27,6 @@
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
 #include <dynosam/backend/RGBDBackendModule.hpp>
 #include <dynosam/common/Map.hpp>
-#include <dynosam/backend/Optimizer.hpp>
 #include <dynosam/logger/Logger.hpp>
 
 #include <glog/logging.h>
