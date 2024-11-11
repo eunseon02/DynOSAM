@@ -72,45 +72,6 @@ private:
 using FrontendVizPipeline = DisplayPipeline<FrontendOutputPacketBase>;
 using BackendVizPipeline = DisplayPipeline<BackendOutputPacket>;
 
-// struct VisualizerInput : public PipelinePayload {
-//   DYNO_POINTER_TYPEDEFS(VisualizerInput)
-//   DYNO_DELETE_COPY_CONSTRUCTORS(VisualizerInput)
-
-//   const FrontendOutputPacketBase::Ptr frontend_output_;
-//   const BackendOutputPacket::Ptr backend_output_;
-
-//   explicit VisualizerInput(
-//     const FrontendOutputPacketBase::Ptr& frontend_output,
-//     const BackendOutputPacket::Ptr& backend_output)
-//   : frontend_output_(frontend_output), backend_output_(backend_output) {}
-// };
-
-
-// class VisualizerPipeline : public MIMOPipelineModule<VisualizerInput, NullPipelinePayload> {
-
-// public:
-//     using Base =  MIMOPipelineModule<VisualizerInput, NullPipelinePayload>;
-//     using InputQueue = typename Base::InputQueue;
-
-//     VisualizerPipeline() = default;
-
-//     VisualizerInput::ConstPtr getInputPacket() override;
-
-//     void shutdownQueues() override;
-
-//     //! Checks if the module has work to do (should check input queues are empty)
-//     bool hasWork() const override;
-
-
-// protected:
-//   NullPipelinePayload::ConstPtr process(const VisualizerInput::ConstPtr& input) override;
-
-// private:
-//   //! Input Queues
-//   ThreadsafeQueue<FrontendOutputPacketBase::Ptr> frontend_queue_;
-//   ThreadsafeQueue<BackendOutputPacket::Ptr> backend_queue_;
-
-// };
 
 
 

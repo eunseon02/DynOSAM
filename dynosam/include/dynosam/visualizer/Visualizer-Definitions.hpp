@@ -23,7 +23,6 @@
 
 #pragma once
 
-#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 
 #include <opencv4/opencv2/opencv.hpp>

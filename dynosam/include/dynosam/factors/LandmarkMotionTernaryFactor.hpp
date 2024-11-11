@@ -31,17 +31,28 @@
 
 namespace dyno
 {
+
+/**
+ * @brief Implements the landmark motion factor that models the displacement of a tracked point, i, on a rigid body, j
+ * with the absolute motion H.
+ *
+ * Cost resdidual is defined as: ^wm_k - ^w_{k-1}H_k * ^wm_{k-1}
+ *
+ */
 class LandmarkMotionTernaryFactor : public gtsam::NoiseModelFactor3<gtsam::Point3, gtsam::Point3, gtsam::Pose3>
 {
 public:
   typedef boost::shared_ptr<LandmarkMotionTernaryFactor> shared_ptr;
   typedef LandmarkMotionTernaryFactor This;
 
+
   /**
-   * Constructor
-   * @param motion     pose transformation (motion)
-   * @param model      noise model for ternary factor
-   * @param m          Vector measurement
+   * @brief Constructs a new factor
+   *
+   * @param previousPointKey gtsam::Key for point ^wm_{k-1}
+   * @param currentPointKey gtsam::Key for ^wm_k
+   * @param motionKey gtsam::Key for absolute motion ^w_{k-1}H_k
+   * @param model gtsam::SharedNoiseModel with dimension 3.
    */
   LandmarkMotionTernaryFactor(gtsam::Key previousPointKey, gtsam::Key currentPointKey, gtsam::Key motionKey, gtsam::SharedNoiseModel model);
 

@@ -5,7 +5,6 @@
 #pragma once
 
 #include "dynosam/utils/Macros.hpp"
-#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 
 #include <atomic>
@@ -26,10 +25,39 @@
 namespace dyno
 {
 
+
 class PipelineBase
 {
 public:
   DYNO_POINTER_TYPEDEFS(PipelineBase)
+
+
+  struct ReturnCode {
+    enum Code {
+        SUCCESS,
+        IS_SHUTDOWN,
+        OUTPUT_PUSH_FAILURE,
+        PROCESSING_FAILURE,
+        GET_PACKET_FAILURE
+    };
+
+    Code code_;
+
+    ReturnCode() {}
+    ReturnCode(Code code) : code_(code) {}
+    explicit ReturnCode(int val) : code_(static_cast<Code>(val)) {}
+
+    ReturnCode& operator=(Code code) {
+        this->code_ = code;
+        return *this;
+    }
+    operator Code() const { return code_; }
+    operator bool() const { return code_ == Code::SUCCESS; }
+  };
+
+  using OnPipelineFailureCallback = std::function<void(ReturnCode)>;
+
+
 
   PipelineBase(const std::string& module_name) : module_name_(module_name)
   {
@@ -100,14 +128,14 @@ public:
    *
    * @return PipelineReturnStatus
    */
-  virtual PipelineReturnStatus spinOnce() = 0;
+  virtual ReturnCode spinOnce() = 0;
 
 protected:
   const std::string module_name_;
   std::atomic_bool is_thread_working_{ false };
 
 private:
-  void notifyFailures(PipelineReturnStatus result);
+  void notifyFailures(const ReturnCode& result);
 
 private:
   std::vector<OnPipelineFailureCallback> on_failure_callbacks_;
@@ -170,9 +198,9 @@ public:
   /**
    * @brief Spin the pipeline once
    *
-   * @return PipelineReturnStatus
+   * @return PipelineBase::ReturnCode
    */
-  PipelineReturnStatus spinOnce() override;
+  PipelineBase::ReturnCode spinOnce() override;
 
   /**
    * @brief Registers a function that will be called with the input and output data packets generated from a spinOnce() call.
@@ -293,7 +321,6 @@ public:
   using typename Base::OutputRegistra;
 
   using Base::isShutdown;
-  // using Base::module_name_;
 
   SIMOPipelineModule(const std::string& module_name, InputQueue* input_queue_, bool parallel_run = true)
     : MIMOPipelineModule<INPUT, OUTPUT>(module_name), input_queue(CHECK_NOTNULL(input_queue_)), parallel_run_(parallel_run)

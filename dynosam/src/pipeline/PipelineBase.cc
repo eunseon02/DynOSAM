@@ -59,7 +59,7 @@ bool PipelineBase::isWorking() const
 }
 
 
-void PipelineBase::notifyFailures(PipelineReturnStatus result)
+void PipelineBase::notifyFailures(const PipelineBase::ReturnCode& result)
 {
     for (const auto& failure_callbacks : on_failure_callbacks_)
     {

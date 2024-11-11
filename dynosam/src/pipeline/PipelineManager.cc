@@ -197,10 +197,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
         case FrontendType::kRGBD: {
             LOG(INFO) << "Making RGBDInstance frontend";
 
-            using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
             using MapType = RGBDBackendModule::MapType;
-            using MeasurementType = RGBDBackendModule::MeasurementType;
-
             typename MapType::Ptr map = MapType::create();
 
             Camera::Ptr camera = std::make_shared<Camera>(camera_params);
@@ -213,22 +210,20 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
                 const std::string file_path = getOutputFilePath(kRgbdFrontendOutputJsonFile);
                 LOG(INFO) << "Loading RGBD frontend output packets from " << file_path;
 
-                OfflineFrontend::UniquePtr offline_backed = std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path);
+                OfflineFrontend::UniquePtr offline_frontend = std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path);
                 //make registra so we can register queues with this pipeline
-                frontend_output_registra = offline_backed->getOutputRegistra();
-
+                frontend_output_registra = offline_frontend->getOutputRegistra();
                 //raw ptr type becuase we cannot copy the unique ptr!! This is only becuase
                 //we need it in the lambda function which is a temporary solution
-                OfflineFrontend* offline_backend_ptr = offline_backed.get();
+                OfflineFrontend* offline_frontend_ptr = offline_frontend.get();
                 //set get dataset size function (bit of a hack for now, and only for the batch optimizer so it
                 //knows when to optimize!!)
-                get_dataset_size_ = [offline_backend_ptr]() -> FrameId {
+                get_dataset_size_ = [offline_frontend_ptr]() -> FrameId {
                     //get frame id of the final frame saved
-                    return CHECK_NOTNULL(offline_backend_ptr)->getFrontendOutputPackets().rbegin()->first;
+                    return CHECK_NOTNULL(offline_frontend_ptr)->getFrontendOutputPackets().rbegin()->first;
                 };
-
                 //convert pipeline to base type
-                frontend_pipeline_ = std::move(offline_backed);
+                frontend_pipeline_ = std::move(offline_frontend);
             }
             else {
                 FrontendModule::Ptr frontend = std::make_shared<RGBDInstanceFrontendModule>(params_.frontend_params_, camera, &display_queue_);
@@ -291,13 +286,12 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params, Front
         backend_pipeline_->registerOutputQueue(&backend_output_queue_);
     }
 
-    //TODO: right now we cannot use the viz when we load from file as do not load certain data values (e.g. camera and debug info)
+    //right now we cannot use the viz when we load from file as do not load certain data values (e.g. camera and debug info)
     //so these will be null - the viz's try and access these causing a seg fault. Just need to add checks
     if(!use_offline_frontend_) {
         if(backend && backend_display) {
             backend_viz_pipeline_ = std::make_unique<BackendVizPipeline>("backend-viz-pipeline", &backend_output_queue_, backend_display);
         }
-
         frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>("frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);
 
     }

@@ -21,7 +21,8 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/pipeline/PipelineBase-Definitions.hpp"
+#pragma once
+
 #include "dynosam/pipeline/PipelineBase.hpp"
 
 #include "dynosam/utils/Timing.hpp"
@@ -30,43 +31,28 @@
 namespace dyno {
 
 template <typename INPUT, typename OUTPUT>
-PipelineReturnStatus PipelineModule<INPUT, OUTPUT>::spinOnce() {
+PipelineBase::ReturnCode PipelineModule<INPUT, OUTPUT>::spinOnce() {
+    using ReturnCode = PipelineBase::ReturnCode;
+
     if (isShutdown())
     {
-      return PipelineReturnStatus::IS_SHUTDOWN;
+      return ReturnCode::IS_SHUTDOWN;
     }
 
-    PipelineReturnStatus return_code;
+    ReturnCode return_code;
     utils::TimingStatsCollector timing_stats(module_name_);
 
     InputConstSharedPtr input = nullptr;
     is_thread_working_ = false;
-    // try
-    // {
-      input = getInputPacket();
-    // }
-    // catch (const std::exception& e)
-    // {
-    //   // context::shutdown("Exception raised in pipeline " + module_name_ +
-    //   //                   " on getInputPacket(): " + std::string(e.what()));
-    // }
+    input = getInputPacket();
     is_thread_working_ = true;
-    // this->logTiming("get_input_packet", utils::Timer::toc(tic_spin));
 
     if (input)
     {
       // Transfer the ownership of input to the actual pipeline module.
       // From this point on, you cannot use input, since process owns it.
       OutputConstSharedPtr output = nullptr;
-      // try
-      // {
-        output = process(input);
-        // this->logTiming("process", utils::Timer::toc(tic_process));
-      // }
-      // catch (const std::exception& e)
-      // {
-      //   // context::shutdown("Exception raised in pipeline " + module_name_ + " on process(): " + std::string(e.what()));
-      // }
+      output = process(input);
 
       if (output)
       {
@@ -75,26 +61,25 @@ PipelineReturnStatus PipelineModule<INPUT, OUTPUT>::spinOnce() {
         {
           LOG_EVERY_N(WARNING, 2) << "Module: " << module_name_ << " - Output push failed.";
           is_thread_working_ = false;
-          return_code = PipelineReturnStatus::OUTPUT_PUSH_FAILURE;
+          return_code = ReturnCode::OUTPUT_PUSH_FAILURE;
         }
         else
         {
           emitProcessCallbacks(input, output);
           is_thread_working_ = false;
-          return_code = PipelineReturnStatus::SUCCESS;
+          return_code = ReturnCode::SUCCESS;
         }
       }
       else
       {
-        return_code = PipelineReturnStatus::PROCESSING_FAILURE;
-        // notifyFailures(return_code);
+        return_code = ReturnCode::PROCESSING_FAILURE;
         is_thread_working_ = false;
       }
     }
     else
     {
       is_thread_working_ = false;
-      return_code = PipelineReturnStatus::GET_PACKET_FAILURE;
+      return_code = ReturnCode::GET_PACKET_FAILURE;
     }
 
     return return_code;

@@ -72,8 +72,10 @@ struct PointUpdateContext {
     typename MapTraitsType::FrameNodePtr frame_node_k_1;
     typename MapTraitsType::FrameNodePtr frame_node_k;
 
-    gtsam::Pose3 X_k_measured; //! Camera pose from measurement (or initial)
-    gtsam::Pose3 X_k_1_measured; //! Camera pose from measurement (or initial)
+    //! Camera pose from measurement (or initial)
+    gtsam::Pose3 X_k_measured;
+    //! Camera pose from measurement (or initial)
+    gtsam::Pose3 X_k_1_measured;
 
     //! If true then this frame is the first frame where a motion is available (i.e we have a pair of valid frames)
     //! e.g k-1 is the FIRST frame for this object and now, since we are at k, we can create a motion from k-1 to k
@@ -87,12 +89,10 @@ struct PointUpdateContext {
 template<typename MAP>
 struct ObjectUpdateContext {
     using MapTraitsType = MapTraits<MAP>;
-
-    /// @brief Frame that is part of the update context. Shared pointer to a frame node as defined by the Map type
+    //! Frame that is part of the update context. Shared pointer to a frame node as defined by the Map type
     typename MapTraitsType::FrameNodePtr frame_node_k;
-    /// @brief Object that is part of the update context. Shared pointer to a object node as defined by the Map type
+    //!Object that is part of the update context. Shared pointer to a object node as defined by the Map type
     typename MapTraitsType::ObjectNodePtr object_node;
-
     //! Indicates that we have a valid motion pair from k-1 to k (this frame)
     //! and therefore k is at least the second frame for which this object has been consequatively tracked
     //! When this is false, it means that the frame k-1 (getFrameId() - 1u) did not track/observe this object
@@ -119,12 +119,39 @@ struct FormulationParams {
     size_t min_static_observations = 2u;
     std::string suffix = "";
 };
-
+/**
+ * @brief Base class for a formulation that defines the structure and implementation for a factor-graph based
+ * Dynamic SLAM solution. Derived formulations construct the specific factor-graph which are solved independandtly
+ * to the formulation. The formulation is responsible for the construction of a single factor-graph with a single set of initial values
+ * and has an associated Accessor which knows how to extract these values into a common format. In the DynoSAM paper, this is referred to
+ * as the \mathbf{O}_k, which is the output of the backend. See Accessor.hpp for more details.
+ *
+ * The base formulation manages all high-level book keeping associated with any Dynamic SLAM factor graph and decided
+ * when points and objects should be added to the graph in a general sense (e.g. points must be seen multiple times, has this point
+ * already been added the graph in a general way). This is achieved in two ways:
+ * 1. Key virtual functions which provides the base formulation with some knowledge of the dervied formulations actions and
+ * 2. Access to the MAP which defines the structure of frames, objects and points directly from measurements.
+ *
+ * At a high-level the formulation has the following functionalities:
+ *  - Addition of odometry and pose priors
+ *  - Static point updates (which adds factors and values for static points)
+ *  - Dynamic point updates (which adds factors and values for dynamic points AND dynamic objects).
+ *
+ * The derived class must implement the dynamicPointUpdateCallback and objectUpdateContext pure-virtual functions
+ * and updated the UpdateObservationResult,gtsam::Values and gtsam::NonlinearFactorGraph objects based on the additional context
+ * that is parsed in. The context is build by the base-formulation class as part of the high-level bookeeping and indicates that
+ * this dynamic point/object has new observations associated with it and therefore new values/factors should be added. The new values/factors
+ * will eventually be added to the base-formualtions internal theta_ and factors_. These virtual functions are called
+ * in the corresponding update static/dynamic observation functions when the base class has determined new obsevrations have occurned.
+ *
+ * @tparam MAP
+ */
 template<typename MAP>
 class Formulation {
 public:
     using Map = MAP;
     using This = Formulation<Map>;
+    using MapTraitsType = MapTraits<Map>;
 
     using PointUpdateContextType = PointUpdateContext<Map>;
     using ObjectUpdateContextType = ObjectUpdateContext<Map>;
@@ -138,75 +165,277 @@ public:
         typename Map::Ptr map, const NoiseModels& noise_models);
     virtual ~Formulation() = default;
 
+
+protected:
+    /**
+     * @brief Virtual function to be implemented by derived class and indicates that a specific landmark has new measurements
+     * and new values/factors should be added. Details on the landmark to be updated are provied by the context. In general,
+     * this is used to add projection/motion factors and initial values for landmarks.
+     *
+     * This function is called when, for a frame k, a point has new measurements (from the front-end) and the point is well-tracked
+     * (e.g has been seen at least n times).
+     *
+     * If the point is new the gtsam::Values should be updated and gtsam::NonlinearFactorGraph should be updated with new factors.
+     * Note that the PointUpdateContextType is constructed in-terms of a MOTION so that information is provided about the k-1 and k'th observation.
+     * In the case that this point is first observed, this construction means that the point has been seen twice (at k-1 and k).
+     *
+     * UpdateObservationResult MUST also be updated if a new value or factor is added as this tells the base formulation
+     * that new information has been added to the graph. The result is used to determine which object's to then form a ObjectUpdateContextType for.
+     *
+     * This function should also set any internal logic to ensure that after a new point has been initalised/added, isDynamicTrackletInMap returns true as
+     * this is used internally.
+     *
+     * For all factor-graph construction functions, all functions additionally return (via out-args) all new factors and values added during the function.
+     * These new values/factors will ALSO be added to the internal theta_/factors_. This allows the Formulation to be used for batch optimisation, by accessing
+     * the full graph (getTheta(), getGraph()) or incremental optimisation by updating the incremental optimser using just the new values/factors returned from the update functions.
+     *
+     * NOTE all point update callbacks are triggered before any objectUpdateContext, although the order is arbitrary.
+     *
+     *
+     * @param context const PointUpdateContextType&
+     * @param result UpdateObservationResult&
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     */
     virtual void dynamicPointUpdateCallback(
         const PointUpdateContextType& context,
         UpdateObservationResult& result,
         gtsam::Values& new_values,
         gtsam::NonlinearFactorGraph& new_factors) = 0;
 
+    /**
+     * @brief Virtual function to be implemented by derived class and indicates that a specific object j and time-step k has been observed and
+     * its dynamic points updated in the graph, and associated values/factors should be added. Details on the object to be updated are provied by the context.
+     * In general, this is used to add smoothing factors and initial values for object motion/pose.
+     *
+     * This function is called when, for a frame k, the object has been seen at least m times and there is at least n points on this object
+     * that have new values/factors since the last iteration (as determined by the UpdateObservationResult from dynamicPointUpdateCallback).
+     *
+     * NOTE this function is called independanly for all objects and is triggered after all dynamicPointUpdateCallback's been called.
+     *
+     * @param context const ObjectUpdateContextType& context
+     * @param result UpdateObservationResult&
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     */
     virtual void objectUpdateContext(
         const ObjectUpdateContextType& context,
         UpdateObservationResult& result,
         gtsam::Values& new_values,
         gtsam::NonlinearFactorGraph& new_factors) = 0;
 
-    virtual bool isDynamicTrackletInMap(const LandmarkNode3d2d::Ptr& lmk_node) const = 0;
+    /**
+     * @brief Virtual function to be implemented by derived class and indicates that the specified landmark
+     * exists within the graph already. This is used as part of the internal bookeeping.
+     *
+     * @param lmk_node typename MapTraitsType::LandmarkNodePtr&. Pointer to a landmark node.
+     * @return true
+     * @return false
+     */
+    virtual bool isDynamicTrackletInMap(const typename MapTraitsType::LandmarkNodePtr& lmk_node) const = 0;
 
+    /**
+     * @brief Defines the base name of this formulation. This name will appear as part of the output logs and may be augmented
+     * with the FormulationParams::suffix, if given. To get the fully qualified name (the actual name that will appear in the logs),
+     * use This::getFullyQualifiedName().
+     *
+     * @return std::string
+     */
+    virtual std::string loggerPrefix() const = 0;
+
+    /**
+     * @brief Creates the associated Accessor for the derived formulation. The accessor will contain a pointer
+     * to This::theta_, so that when the values are updated the accessor has access to the latest values.
+     *
+     * @param values const gtsam::Values*
+     * @return AccessorType::Ptr
+     */
+    virtual typename AccessorType::Ptr createAccessor(const gtsam::Values* values) const = 0;
+
+public:
+    /**
+     * @brief Get the map used by the formulation
+     *
+     * @return Map::Ptr
+     */
+    typename Map::Ptr map() const { return map_; }
+
+    /**
+     * @brief Get the current linearization point for this formulation. These values can be updated after external optimisation
+     * and are constructed by the derived formulation during update.
+     *
+     * @return const gtsam::Values&
+     */
+    const gtsam::Values& getTheta() const { return theta_; }
+
+    /**
+     * @brief Sets the full set of theta values (overrides them). This is used after external optimisation to update the values for the accessor
+     * which has a internal reference (pointer) to theta.
+     *
+     * @param linearization const gtsam::Values&
+     */
     void setTheta(const gtsam::Values& linearization);
+
+    /**
+     * @brief Updates and assigns new values to theta. This is used after external optimisation to update the values for the accessor
+     * which has a internal reference (pointer) to theta.
+     *
+     * @param linearization const gtsam::Values&
+     */
     void updateTheta(const gtsam::Values& linearization);
 
-    //make logger with full logger name including possible suffix from config
+    /**
+     * @brief Gets the current graph associated with the current theta and constructed by the derived formulation.
+     * Along theta, this should be used by an external optimisation routine.
+     *
+     * @return const gtsam::NonlinearFactorGraph&
+     */
+    const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
+
+    /**
+     * @brief Get the fully qualified name of this formulation which is derived from the loggerPrefix and optionally the
+     * FormulationParams::suffix if given.
+     *
+     * @return const std::string
+     */
+    const std::string getFullyQualifiedName() const { return fully_qualified_name_.value_or(setFullyQualifiedName()); }
+
+    /**
+     * @brief Public fucntion to access the Accessor for the derived formulation.
+     *
+     * @return AccessorType::Ptr
+     */
+    typename AccessorType::Ptr accessorFromTheta() const;
+    /**
+     * @brief Makes a logger using the fully-qualified name for this formulation.
+     *
+     * @return BackendLogger::UniquePtr
+     */
     BackendLogger::UniquePtr makeFullyQualifiedLogger() const;
 
+    // Factor Graph build functions.
+
+    /**
+     * @brief Adds a gtsam::Pose3 as a value in the graph at frame k.
+     *
+     * @param T_world_camera const gtsam::Pose3&
+     * @param frame_id_k FrameId
+     * @param new_values gtsam::Values&
+     */
     void setInitialPose(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::Values& new_values);
+    /**
+     * @brief Adds a pose prior on a value in the graph at frame k using the given pose value as the prior's mean.
+     *
+     * @param T_world_camera const gtsam::Pose3&
+     * @param frame_id_k FrameId
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     */
     void setInitialPosePrior(const gtsam::Pose3& T_world_camera, FrameId frame_id_k, gtsam::NonlinearFactorGraph& new_factors);
 
+    /**
+     * @brief Adds odometry factor between multiple frames using the initial values from the front-end (as stored in the map) to calculate
+     * the odometry.
+     *
+     * @param from_frame FrameId
+     * @param to_frame FrameId
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     */
     void addOdometry(FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,  gtsam::NonlinearFactorGraph& new_factors);
+
+    /**
+     * @brief Adds odometry factor betwene k-1 and k using T_world_camera as the measurement at k and the existing value in the graph (or initial value
+     * from the front-end) as the pose measurement for k-1.
+     *
+     * @param frame_id_k FrameId
+     * @param T_world_camera const gtsam::Pose3&
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     */
     void addOdometry(FrameId frame_id_k, const gtsam::Pose3& T_world_camera, gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors);
 
+    /**
+     * @brief Update the static-point part of the factor graph between multiple frames.
+     * Internally makes several calls to updateStaticObservations(FrameId,gtsam::Values&,gtsam::NonlinearFactorGraph&,const UpdateObservationParams&)
+     * and returns the accumulated UpdateObservationResult.
+     *
+     * @param from_frame FrameId
+     * @param to_frame FrameId
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     * @param update_params const UpdateObservationParams&
+     * @return UpdateObservationResult
+     */
     UpdateObservationResult updateStaticObservations(
-            FrameId from_frame,
-            FrameId to_frame,
-            gtsam::Values& new_values,
-            gtsam::NonlinearFactorGraph& new_factors,
-            const UpdateObservationParams& update_params);
+        FrameId from_frame,
+        FrameId to_frame,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_factors,
+        const UpdateObservationParams& update_params);
 
-        UpdateObservationResult updateDynamicObservations(
-            FrameId from_frame,
-            FrameId to_frame,
-            gtsam::Values& new_values,
-            gtsam::NonlinearFactorGraph& new_factors,
-            const UpdateObservationParams& update_params);
+    /**
+     * @brief Update the dynamic-point part of the factor graph between multiple frames.
+     * Internally makes several calls to updateDynamicObservations(FrameId,gtsam::Values&,gtsam::NonlinearFactorGraph&,const UpdateObservationParams&)
+     * and returns the accumulated UpdateObservationResult.
+     *
+     * @param from_frame FrameId
+     * @param to_frame FrameId
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     * @param update_params const UpdateObservationParams&
+     * @return UpdateObservationResult
+     */
+    UpdateObservationResult updateDynamicObservations(
+        FrameId from_frame,
+        FrameId to_frame,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_factors,
+        const UpdateObservationParams& update_params);
 
+    /**
+     * @brief Updates the static-point part of the factor graph for frame k.
+     * This contains all the bookeeping logic to update the factor graph with static points.
+     *
+     * @param frame_id_k FrameId
+     * @param new_values gtsam::Values&
+     * @param new_factors gtsam::NonlinearFactorGraph&
+     * @param update_params const UpdateObservationParams&
+     * @return UpdateObservationResult
+     */
+    UpdateObservationResult updateStaticObservations(
+        FrameId frame_id_k,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_factors,
+        const UpdateObservationParams& update_params);
 
-        UpdateObservationResult updateStaticObservations(
-            FrameId frame_id_k,
-            gtsam::Values& new_values,
-            gtsam::NonlinearFactorGraph& new_factors,
-            const UpdateObservationParams& update_params);
+    /**
+     * @brief Updates the dyanmic-point part of the factor graph for frame k.
+     * This contains all the big-boi bookeeping logic to update the factor graph with dyanmic points and objects.
+     * This is where the virtual dynamicPointUpdateCallback and objectUpdateContext functions are called.
+     *
+     * @param frame_id_k
+     * @param new_values
+     * @param new_factors
+     * @param update_params
+     * @return UpdateObservationResult
+     */
+    UpdateObservationResult updateDynamicObservations(
+        FrameId frame_id_k,
+        gtsam::Values& new_values,
+        gtsam::NonlinearFactorGraph& new_factors,
+        const UpdateObservationParams& update_params);
 
-        UpdateObservationResult updateDynamicObservations(
-            FrameId frame_id_k,
-            gtsam::Values& new_values,
-            gtsam::NonlinearFactorGraph& new_factors,
-            const UpdateObservationParams& update_params);
-
-        //log everything all frames!!
-        void logBackendFromMap(const BackendMetaData& backend_info);
-        typename AccessorType::Ptr accessorFromTheta() const;
-
-        typename Map::Ptr map() const { return map_; }
-        const gtsam::Values& getTheta() const { return theta_; }
-        const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
-        const std::string getFullyQualifiedName() const { return fully_qualified_name_.value_or(setFullyQualifiedName()); }
+    /**
+     * @brief Logs all frames and values to file using Accessor and BackendLogger.
+     * The BackendMetaData provides meta-data and ground truth information for logging.
+     *
+     * @param backend_info const BackendMetaData&
+     */
+    void logBackendFromMap(const BackendMetaData& backend_info);
 
 
 protected:
     gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;
-
-    virtual std::string loggerPrefix() const = 0;
-    virtual typename AccessorType::Ptr createAccessor(const gtsam::Values* values) const = 0;
-
 private:
     std::string setFullyQualifiedName() const; //but isnt actually const ;)
 
@@ -215,9 +444,8 @@ protected:
     const FormulationParams params_;
     typename Map::Ptr map_;
     const NoiseModels noise_models_;
-
-
-    gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map; //! the set of (static related) values managed by this updater. Allows checking if values have already been added over successifve function calls
+    //! the set of (static related) values managed by this updater. Allows checking if values have already been added over successifve function calls
+    gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map;
 
 private:
     //! Current linearisation that will be associated with the current graph
@@ -228,7 +456,6 @@ private:
     mutable std::optional<std::string> fully_qualified_name_{std::nullopt};
 
 };
-
 
 } // dyno
 

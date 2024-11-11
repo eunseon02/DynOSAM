@@ -135,7 +135,6 @@ add_library(${PROJECT_NAME} SHARED
   src/factors/LandmarkPoseSmoothingFactor.cc
 
   src/pipeline/PipelineManager.cc
-  src/pipeline/PipelineDefinitions.cc
   src/pipeline/PipelineParams.cc
   src/pipeline/PipelineBase.cc
   src/pipeline/PipelineSpinner.cc
