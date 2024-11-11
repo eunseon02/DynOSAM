@@ -29,6 +29,7 @@
 #include "dynosam/backend/DynamicPointSymbol.hpp"
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/backend/BackendParams.hpp"
 
 #include <gtsam/slam/SmartProjectionPoseFactor.h>
 #include <gtsam/slam/ProjectionFactor.h>
@@ -63,6 +64,28 @@ inline gtsam::Symbol ObjectQuadricSymbol(ObjectId object_id) { return gtsam::Sym
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
 inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
 inline DynamicPointSymbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return DynamicPointSymbol(kDynamicLandmarkSymbolChar, tracklet_id, frame_id); }
+
+
+struct NoiseModels {
+    gtsam::SharedNoiseModel initial_pose_prior;
+    //! Between factor noise for between two consequative poses
+    gtsam::SharedNoiseModel odometry_noise;
+    //! Noise on the landmark tenrary factor
+    gtsam::SharedNoiseModel landmark_motion_noise;
+    //! Contant velocity noise model between motions
+    gtsam::SharedNoiseModel object_smoothing_noise;
+    //! Isometric [3x3] noise model on dynamic points;
+    gtsam::SharedNoiseModel dynamic_point_noise;
+    //! Isometric [3x3] noise model on static points;
+    gtsam::SharedNoiseModel static_point_noise;
+};
+
+
+//better to change to hook (or pointer?) and parse as config
+struct BackendMetaData {
+    BackendParams params;
+    std::optional<GroundTruthPacketMap> ground_truth_packets;
+};
 
 
 inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)

@@ -43,19 +43,19 @@ namespace dyno {
 
 
 /**
- * @brief A container that holds all connected information about static and dynamic entities that is build from 
+ * @brief A container that holds all connected information about static and dynamic entities that is build from
  * input measurements.
- * 
- * Structured as a undirected graph, this map structure holds temporal, observation and measurement information about 
+ *
+ * Structured as a undirected graph, this map structure holds temporal, observation and measurement information about
  * frames, objects and landmarks which are stored as nodes
- * 
- * From each node relevant information can be querired. No optimsiation information is held in the map, this is just 
- * used to hold the structure of information that can then be used to build a factor graph. 
- * 
+ *
+ * From each node relevant information can be querired. No optimsiation information is held in the map, this is just
+ * used to hold the structure of information that can then be used to build a factor graph.
+ *
  * So that nodes can carry a pointer to the map, we structure the map using enable_shared_from_this (https://en.cppreference.com/w/cpp/memory/enable_shared_from_this),
  * so that constructor is only usable by this class.
- * 
- * @tparam MEASUREMENT measurement type made by the frontend. 
+ *
+ * @tparam MEASUREMENT measurement type made by the frontend.
  */
 template<typename MEASUREMENT = Keypoint>
 class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
@@ -96,9 +96,9 @@ public:
     }
 
     /**
-     * @brief Update the map structure given new measurements. 
-     * 
-     * @tparam DERIVEDSTATUS 
+     * @brief Update the map structure given new measurements.
+     *
+     * @tparam DERIVEDSTATUS
      * @param measurements const MeasurementStatusVector<DERIVEDSTATUS>&
      */
     template<typename DERIVEDSTATUS>
@@ -114,39 +114,52 @@ public:
         }
     }
 
+    void updateSensorPoseMeasurement(FrameId frame_id, const gtsam::Pose3& X) {
+        auto frame_node = this->getFrame(frame_id);
+        CHECK_NOTNULL(frame_node);
+        //TODO: overwrites if currently set
+        frame_node->X_world = X;
+    }
+    void updateObjectMotionMeasurements(FrameId frame_id, const MotionEstimateMap& motions) {
+        auto frame_node = this->getFrame(frame_id);
+        CHECK_NOTNULL(frame_node);
+        //TODO: overwrites if currently set
+        frame_node->motions_world = motions;
+    }
+
     /**
      * @brief Check a frame exists at the requested frame id.
-     * 
+     *
      * @param frame_id FrameId
-     * @return true 
-     * @return false 
+     * @return true
+     * @return false
      */
     inline bool frameExists(FrameId frame_id) const { return frames_.exists(frame_id); }
 
     /**
      * @brief Check a landmark exists with the requested tracklet id.
-     * 
+     *
      * @param tracklet_id TrackletId
-     * @return true 
-     * @return false 
+     * @return true
+     * @return false
      */
     inline bool landmarkExists(TrackletId tracklet_id) const {return landmarks_.exists(tracklet_id); }
 
     /**
      * @brief Check that an object exists with the requested object id.
-     * 
+     *
      * @param object_id ObjectId
-     * @return true 
-     * @return false 
+     * @return true
+     * @return false
      */
     inline bool objectExists(ObjectId object_id) const {return objects_.exists(object_id); }
 
     /**
      * @brief Get the Object object.
      * If the object does not exist, return nullptr
-     * 
+     *
      * @param object_id ObjectId
-     * @return ObjectNodeM::Ptr 
+     * @return ObjectNodeM::Ptr
      */
     typename ObjectNodeM::Ptr getObject(ObjectId object_id) const {
         if(objectExists(object_id)) { return objects_.at(object_id);}
@@ -156,9 +169,9 @@ public:
     /**
      * @brief Get the Frame object.
      * If the frame does not exist, return nullptr.
-     * 
+     *
      * @param frame_id FrameId
-     * @return FrameNodeM::Ptr 
+     * @return FrameNodeM::Ptr
      */
     typename FrameNodeM::Ptr getFrame(FrameId frame_id) const {
         if(frameExists(frame_id)) { return frames_.at(frame_id);}
@@ -168,9 +181,9 @@ public:
     /**
      * @brief Get the Landmark object.
      * If the landmark does not exist, return nullptr.
-     * 
+     *
      * @param tracklet_id TrackletId
-     * @return LandmarkNodeM::Ptr 
+     * @return LandmarkNodeM::Ptr
      */
     typename LandmarkNodeM::Ptr getLandmark(TrackletId tracklet_id) const {
         if(landmarkExists(tracklet_id)) { return landmarks_.at(tracklet_id);}
@@ -179,8 +192,8 @@ public:
 
     /**
      * @brief Get the mapping of all tracklet id's to landmarks.
-     * 
-     * @return const gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr>& 
+     *
+     * @return const gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr>&
      */
     const gtsam::FastMap<TrackletId, typename LandmarkNodeM::Ptr>& getLandmarks() const {
         return landmarks_;
@@ -188,9 +201,9 @@ public:
 
     /**
      * @brief Get all static tracklet's that were observed at the requested frame id.
-     * 
+     *
      * @param frame_id FrameId
-     * @return TrackletIds 
+     * @return TrackletIds
      */
     TrackletIds getStaticTrackletsByFrame(FrameId frame_id) const {
         //if frame does not exist?
@@ -203,10 +216,51 @@ public:
         return tracklet_ids;
     }
 
+    //TODO:test
+    bool hasInitialObjectMotion(FrameId frame_id, ObjectId object_id, Motion3* motion) const {
+        auto frame_node = this->getFrame(frame_id);
+        if(!frame_node) {
+            return false;
+        }
+
+        //motion map has not been set
+        if(frame_node->motions_world) {
+            const auto& motions_world = *frame_node->motions_world;
+
+            //no motion for this object in map
+            if(!motions_world.exists(object_id)) { return false; }
+
+            if(motion) {
+                *motion = motions_world.at(object_id);
+            }
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+    //TODO: test
+    bool hasInitialSensorPose(FrameId frame_id, gtsam::Pose3* X = nullptr) const {
+        auto frame_node = this->getFrame(frame_id);
+        if(!frame_node) {
+            return false;
+        }
+
+        if(frame_node->X_world) {
+            const auto& pose = *frame_node->X_world;
+            if(X) *X = pose;
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
     /**
      * @brief Get number of objects seen
-     * 
-     * @return size_t 
+     *
+     * @return size_t
      */
     inline size_t numObjectsSeen() const {
         return objects_.size();
@@ -214,29 +268,29 @@ public:
 
     /**
      * @brief Get the most recent frame object.
-     * 
-     * @return const FrameNodeM::Ptr 
+     *
+     * @return const FrameNodeM::Ptr
      */
     const typename FrameNodeM::Ptr lastFrame() const { return frames_.crbegin()->second; }
 
     /**
      * @brief Get the earliest (first) frame object.
-     * 
-     * @return const FrameNodeM::Ptr 
+     *
+     * @return const FrameNodeM::Ptr
      */
     const typename FrameNodeM::Ptr firstFrame() const { return frames_.cbegin()->second; }
 
     /**
      * @brief Get the most recent frame id.
-     * 
-     * @return FrameId 
+     *
+     * @return FrameId
      */
     FrameId lastFrameId() const { return this->lastFrame()->frame_id; }
 
     /**
      * @brief Get the earliest (first) frame id.
-     * 
-     * @return FrameId 
+     *
+     * @return FrameId
      */
     FrameId firstFrameId() const { return this->firstFrame()->frame_id; }
 
@@ -246,11 +300,11 @@ public:
     /**
      * @brief Get the (by output-argument) object id for some tracked point.
      * Function returns false if the landmark does not exist.
-     * 
+     *
      * @param object_id ObjectId& (output-argument)
      * @param tracklet_id TrackletId
-     * @return true 
-     * @return false 
+     * @return true
+     * @return false
      */
     bool getLandmarkObjectId(ObjectId& object_id, TrackletId tracklet_id) const {
         const auto lmk = getLandmark(tracklet_id);
@@ -262,8 +316,8 @@ public:
 
     /**
      * @brief Get all object ids.
-     * 
-     * @return ObjectIds 
+     *
+     * @return ObjectIds
      */
     ObjectIds getObjectIds() const {
         ObjectIds object_ids;
@@ -275,8 +329,8 @@ public:
 
     /**
      * @brief Get all frame numbers.
-     * 
-     * @return FrameIds 
+     *
+     * @return FrameIds
      */
     FrameIds getFrameIds() const {
         FrameIds frame_ids;

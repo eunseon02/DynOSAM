@@ -23,26 +23,18 @@
 
 #pragma once
 
-#include <gflags/gflags.h>
+#include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/common/Map.hpp"
 
-/**
- * @brief Declaration of common gflags that are DEFINED in Types.cc
- *
- */
+namespace dyno {
 
-//common glags used in multiple modules
-DECLARE_bool(init_object_pose_from_gt);
-DECLARE_bool(save_frontend_json);
-DECLARE_bool(frontend_from_file);
-DECLARE_bool(use_smoothing_factor);
-DECLARE_int32(backend_updater_enum);
-DECLARE_bool(use_byte_tracker);
-DECLARE_bool(refine_with_optical_flow);
 
-//for now?
-DECLARE_bool(use_vo_factor);
-DECLARE_bool(use_identity_rot_L_for_init);
-DECLARE_bool(corrupt_L_for_init);
-DECLARE_double(corrupt_L_for_init_sigma);
-DECLARE_bool(init_LL_with_identity);
-DECLARE_bool(init_H_with_identity);
+// struct ConstructGraphOptions : public UpdateObservationParams {
+//     FrameId from_frame{0u};
+//     FrameId to_frame{0u};
+//     bool set_initial_camera_pose_prior = true;
+// };
+
+
+
+} // dyno

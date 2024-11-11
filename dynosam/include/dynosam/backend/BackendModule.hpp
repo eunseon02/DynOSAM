@@ -103,16 +103,7 @@ protected:
     ImageDisplayQueue* display_queue_{nullptr}; //! Optional display queue
 
     BackendSpinState spin_state_; //! Spin state of the backend. Updated in the backend module base via InputCallback (see BackendModule constructor).
-
-    //params for factors
-    SmartProjectionFactorParams static_projection_params_; //! Projection factor params for static points
-    gtsam::SharedNoiseModel static_pixel_noise_; //! 2d isotropic pixel noise on static points
-    gtsam::SharedNoiseModel dynamic_pixel_noise_; //! 2d isotropic pixel noise on dynamic points
-    gtsam::SharedNoiseModel static_projection_noise_; //! Projection factor noise for static points
-    gtsam::SharedNoiseModel odometry_noise_; //! Between factor noise for between two consequative poses
-    gtsam::SharedNoiseModel initial_pose_prior_;
-    gtsam::SharedNoiseModel landmark_motion_noise_; //! Noise on the landmark tenrary factor
-    gtsam::SharedNoiseModel object_smoothing_noise_; //! Contant velocity noise model between motions
+    NoiseModels noise_models_;
 
 private:
 

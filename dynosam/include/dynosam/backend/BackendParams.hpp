@@ -43,6 +43,8 @@ DECLARE_double(dynamic_point_noise_sigma);
 
 namespace dyno {
 
+//TODO: DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if true, else sliding window");
+
 
 struct BackendParams {
 
@@ -66,6 +68,7 @@ struct BackendParams {
     double motion_ternary_factor_noise_sigma_ = FLAGS_motion_ternary_factor_noise_sigma;
 
     bool use_logger_ = true; //TODO: make param!?
+    bool use_use_full_batch_opt = true;
 
     size_t min_static_obs_ = 2u;
     size_t min_dynamic_obs_ = 3u;

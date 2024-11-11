@@ -53,15 +53,18 @@ static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
 
+/// @brief Discrete object id, j.
 using ObjectId = int;
 using ObjectIds = std::vector<ObjectId>;
 
+/// @brief Discrete time-step k.
 using FrameId = size_t;
 using FrameIds = std::vector<FrameId>;
 
 using Depth = double;
 using Depths = std::vector<double>;
 
+/// @brief Unique tracklet/landmark id, i.
 using TrackletId = long int;  // -1 for invalid landmarks. // int would be too
                             // small if it is 16 bits!
 using TrackletIds = std::vector<TrackletId>;

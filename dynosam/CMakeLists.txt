@@ -122,11 +122,10 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendModule.cc
   src/backend/BackendParams.cc
   src/backend/FactorGraphTools.cc
-  #src/backend/MonoBackendModule.cc
-  #src/backend/MonoBatchBackendModule.cc
-  # src/backend/MonoBackendTools.cc
   src/backend/DynamicPointSymbol.cc
   src/backend/RGBDBackendModule.cc
+  src/backend/rgbd/WorldMotionEstimator.cc
+  src/backend/rgbd/WorldPoseEstimator.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc

@@ -55,32 +55,32 @@ BackendModule::BackendModule(const BackendParams& params, ImageDisplayQueue* dis
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {
     //set static noise
-    static_pixel_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.static_smart_projection_noise_sigma_);
-    CHECK(static_pixel_noise_);
+    // noise_models_.static_pixel_noise = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.static_smart_projection_noise_sigma_);
+    // CHECK(noise_models_.static_pixel_noise);
 
     //set dynamic noise
-    dynamic_pixel_noise_ = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.dynamic_smart_projection_noise_sigma_);
-    CHECK(dynamic_pixel_noise_);
+    // noise_models_.dynamic_pixel_noise = gtsam::noiseModel::Isotropic::Sigma(2u, backend_params.dynamic_smart_projection_noise_sigma_);
+    // CHECK(noise_models_.dynamic_pixel_noise);
 
     gtsam::Vector6 odom_sigmas;
     odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);
     odom_sigmas.tail<3>().setConstant(
         backend_params.odometry_translation_sigma_);
-    odometry_noise_ = gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
-    CHECK(odometry_noise_);
+    noise_models_.odometry_noise = gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
+    CHECK(noise_models_.odometry_noise);
 
-    initial_pose_prior_ =  gtsam::noiseModel::Isotropic::Sigma(6u, 0.0001);
-    CHECK(initial_pose_prior_);
+    noise_models_.initial_pose_prior =  gtsam::noiseModel::Isotropic::Sigma(6u, 0.0001);
+    CHECK(noise_models_.initial_pose_prior);
 
-    landmark_motion_noise_ = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
-    CHECK(landmark_motion_noise_);
+    noise_models_.landmark_motion_noise = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
+    CHECK(noise_models_.landmark_motion_noise);
 
     gtsam::Vector6 object_constant_vel_sigmas;
     object_constant_vel_sigmas.head<3>().setConstant(backend_params.constant_object_motion_rotation_sigma_);
     object_constant_vel_sigmas.tail<3>().setConstant(
         backend_params.constant_object_motion_translation_sigma_);
-    object_smoothing_noise_ = gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
-    CHECK(object_smoothing_noise_);
+    noise_models_.object_smoothing_noise = gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
+    CHECK(noise_models_.object_smoothing_noise);
 
 }
 
