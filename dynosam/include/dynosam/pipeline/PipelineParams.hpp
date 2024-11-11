@@ -74,7 +74,6 @@ public:
     CameraParams camera_params_;
 
     FrontendType frontend_type_ = FrontendType::kRGBD;
-    OptimizerType optimizer_type_ = OptimizerType::kBatch;
 
 
 private:

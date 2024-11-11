@@ -79,49 +79,49 @@ include_directories(include)
 # )
 
 #####exec test#########
-add_executable(kitti_semantic_to_motion src/KittiSemaniticToMotion.cc)
+# add_executable(kitti_semantic_to_motion src/KittiSemaniticToMotion.cc)
 
-target_link_libraries(kitti_semantic_to_motion
-tbb
-)
+# target_link_libraries(kitti_semantic_to_motion
+# tbb
+# )
 
-ament_target_dependencies(kitti_semantic_to_motion
-  rclcpp
-  std_msgs
-  dynosam
-)
+# ament_target_dependencies(kitti_semantic_to_motion
+#   rclcpp
+#   std_msgs
+#   dynosam
+# )
 
-ament_target_dependencies(kitti_semantic_to_motion "rclcpp" "std_msgs"
-"dynosam"
-)
+# ament_target_dependencies(kitti_semantic_to_motion "rclcpp" "std_msgs"
+# "dynosam"
+# )
 
-install(TARGETS
-kitti_semantic_to_motion
-  DESTINATION lib/${PROJECT_NAME})
-
-
+# install(TARGETS
+# kitti_semantic_to_motion
+#   DESTINATION lib/${PROJECT_NAME})
 
 
 
-add_executable(InstanceVizReader src/InstanceVizReader.cc)
 
-target_link_libraries(InstanceVizReader
-png
-)
 
-ament_target_dependencies(InstanceVizReader
-rclcpp
-std_msgs
-dynosam
-)
+# add_executable(InstanceVizReader src/InstanceVizReader.cc)
 
-ament_target_dependencies(InstanceVizReader "rclcpp" "std_msgs"
-"dynosam"
-)
+# target_link_libraries(InstanceVizReader
+# png
+# )
 
-install(TARGETS
-InstanceVizReader
-DESTINATION lib/${PROJECT_NAME})
+# ament_target_dependencies(InstanceVizReader
+# rclcpp
+# std_msgs
+# dynosam
+# )
+
+# ament_target_dependencies(InstanceVizReader "rclcpp" "std_msgs"
+# "dynosam"
+# )
+
+# install(TARGETS
+# InstanceVizReader
+# DESTINATION lib/${PROJECT_NAME})
 
 
 

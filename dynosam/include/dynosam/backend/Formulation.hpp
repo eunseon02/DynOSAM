@@ -133,7 +133,9 @@ public:
 
     DYNO_POINTER_TYPEDEFS(This)
 
-    Formulation(const FormulationParams& params, typename Map::Ptr map, const NoiseModels& noise_models);
+    Formulation(
+        const FormulationParams& params,
+        typename Map::Ptr map, const NoiseModels& noise_models);
     virtual ~Formulation() = default;
 
     virtual void dynamicPointUpdateCallback(

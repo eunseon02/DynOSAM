@@ -41,8 +41,8 @@
 #include <gtsam/inference/Symbol.h>
 #include <gtsam/inference/LabeledSymbol.h>
 
-#include <variant>
 #include <unordered_map>
+#include <functional>
 
 namespace dyno {
 
@@ -53,17 +53,33 @@ using SymbolChar = unsigned char;
 static constexpr SymbolChar kPoseSymbolChar = 'X';
 static constexpr SymbolChar kObjectMotionSymbolChar = 'H';
 static constexpr SymbolChar kObjectPoseSymbolChar = 'L';
-static constexpr SymbolChar kQuadricSymbolChar = 'P';
 static constexpr SymbolChar kStaticLandmarkSymbolChar = 'l';
 static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
 
 inline gtsam::Key H(unsigned char label, std::uint64_t j) {return gtsam::LabeledSymbol(kObjectMotionSymbolChar, label, j);}
 inline gtsam::Key L(unsigned char label, std::uint64_t j) {return gtsam::LabeledSymbol(kObjectPoseSymbolChar, label, j);}
 
-inline gtsam::Symbol ObjectQuadricSymbol(ObjectId object_id) { return gtsam::Symbol(kQuadricSymbolChar, object_id); }
 inline gtsam::Symbol CameraPoseSymbol(FrameId frame_id) { return gtsam::Symbol(kPoseSymbolChar, frame_id); }
 inline gtsam::Symbol StaticLandmarkSymbol(TrackletId tracklet_id) { return gtsam::Symbol(kStaticLandmarkSymbolChar, tracklet_id); }
 inline DynamicPointSymbol DynamicLandmarkSymbol(FrameId frame_id, TrackletId tracklet_id) { return DynamicPointSymbol(kDynamicLandmarkSymbolChar, tracklet_id, frame_id); }
+inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
+{
+  unsigned char label = object_label + '0';
+  return H(label, static_cast<std::uint64_t>(frame_id));
+}
+
+inline gtsam::Key ObjectPoseSymbol(ObjectId object_label, FrameId frame_id)
+{
+  unsigned char label = object_label + '0';
+  return L(label, static_cast<std::uint64_t>(frame_id));
+}
+
+
+bool checkIfLabeledSymbol(gtsam::Key key);
+bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
+bool reconstructPoseInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
+
+
 
 
 struct NoiseModels {
@@ -81,33 +97,29 @@ struct NoiseModels {
 };
 
 
+// /**
+//  * @brief Internal back-end structure allowing Formulation/Accessors to get meta-data
+//  * about the backend via hooks
+//  *
+//  */
+// struct InternalBackendMetaData {
+
+//     using BackendParamsRequest = std::function<const BackendParams&()>;
+//     using GroundTruthPacketsRequest = std::function<const std::optional<GroundTruthPacketMap>&()>;
+
+//     struct Hooks {
+//         BackendParamsRequest backend_params_request;
+//         GroundTruthPacketsRequest ground_truth_packets_request;
+//     };
+
+//     Hooks hooks;
+
+// };
+
 //better to change to hook (or pointer?) and parse as config
 struct BackendMetaData {
     BackendParams params;
     std::optional<GroundTruthPacketMap> ground_truth_packets;
-};
-
-
-inline gtsam::Key ObjectMotionSymbol(ObjectId object_label, FrameId frame_id)
-{
-  unsigned char label = object_label + '0';
-  return H(label, static_cast<std::uint64_t>(frame_id));
-}
-
-inline gtsam::Key ObjectPoseSymbol(ObjectId object_label, FrameId frame_id)
-{
-  unsigned char label = object_label + '0';
-  return L(label, static_cast<std::uint64_t>(frame_id));
-}
-
-bool checkIfLabeledSymbol(gtsam::Key key);
-
-bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
-bool reconstructPoseInfo(gtsam::Key key, ObjectId& object_label, FrameId& frame_id);
-
-enum class OptimizerType {
-    kIncremental = 0,
-    kBatch = 1
 };
 
 struct BackendSpinState {

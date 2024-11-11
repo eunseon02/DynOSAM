@@ -47,7 +47,6 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params, DataProvider:
     CHECK(data_loader_);
     CHECK(frontend_display);
 
-    //TODO: factories for different loaders etc later
     data_interface_ = std::make_unique<DataInterfacePipeline>(params_.parallelRun());
     data_loader_->registerImageContainerCallback(
         std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue, data_interface_.get(), std::placeholders::_1)

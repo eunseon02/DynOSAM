@@ -82,8 +82,6 @@ public:
         OfflineFrontend* offline_frontend_ptr = offline_frontend.get();
 
 
-        // auto optimizer = std::make_shared<BatchOptimizer<MeasurementType>>(batch_params);
-
         //TODO: make better params!!
         auto updater_type = static_cast<RGBDBackendModule::UpdaterType>(
             FLAGS_backend_updater_enum
