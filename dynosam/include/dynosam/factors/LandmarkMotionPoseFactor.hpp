@@ -31,6 +31,14 @@
 
 namespace dyno
 {
+
+/**
+ * @brief Implements the landmark motion factor that models the displacement of a tracked point, i, on a rigid body, j
+ * between consequative object poses ^wL_{k-1} and ^wL_k.
+ *
+ * Cost residual is implemented as: ^wm_k - ^wL_k ^wL_{k-1}^{-1} ^wm_{k-1}
+ *
+ */
 class LandmarkMotionPoseFactor : public gtsam::NoiseModelFactor4<gtsam::Point3, gtsam::Point3, gtsam::Pose3, gtsam::Pose3>
 {
 public:
