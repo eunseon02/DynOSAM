@@ -112,8 +112,14 @@ We provide a number of data providers which process datasets into the input form
 ### ii. Oxford Multimotion Dataset (OMD)
 
 ### iii. Cluster Dataset
+Access [raw dataset](https://huangjh-pub.github.io/page/clusterslam-dataset/) and download the CARLA-* sequences. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
 
-### iv. Virtual Kitti
+This dataset load can be specified by setting `--data_provider_type=2`
+
+### iv. Virtual Kitti 2
+Access [raw dataset](https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/) and extract in a folder. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
+
+This dataset load can be specified by setting `--data_provider_type=1`
 
 We are currently working on providing datasets to process live data, along side pre-processing modules which will be available soon.
 
