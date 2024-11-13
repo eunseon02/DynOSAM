@@ -51,6 +51,8 @@ public:
      */
     DynoParams() {}
 
+    void printAllParams(bool print_glog_params = true) const;
+
     struct PipelineParams {
         int data_provider_type; //Kitti, VirtualKitti, Online... currently set with flagfile
         //! If camera params are provided from the dataprovider, use this instead of the
@@ -79,6 +81,7 @@ public:
 private:
 
 };
+
 
 void declare_config(DynoParams::PipelineParams& config);
 

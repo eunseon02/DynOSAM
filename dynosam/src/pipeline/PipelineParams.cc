@@ -26,6 +26,7 @@
 
 #include <config_utilities/parsing/yaml.h>
 #include <config_utilities/config_utilities.h>
+#include <gflags/gflags.h>
 
 DEFINE_int32(data_provider_type, 0,"Which data provider (loader) to use. Associated with specific datasets");
 
@@ -37,6 +38,7 @@ void declare_config(DynoParams::PipelineParams& config) {
     name("PipelineParams");
     field(config.parallel_run, "parallel_run");
     field(config.prefer_data_provider_camera_params, "prefer_data_provider_camera_params");
+    // field(config.data_provider_type, "data_provider_type");
 
     config.data_provider_type = FLAGS_data_provider_type;
 }
@@ -46,11 +48,19 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
     pipeline_params_ = config::fromYamlFile<PipelineParams>(params_folder_path + "PipelineParams.yaml");
     camera_params_ = config::fromYamlFile<CameraParams>(params_folder_path + "CameraParams.yaml");
     frontend_params_ = config::fromYamlFile<FrontendParams>(params_folder_path + "FrontendParams.yaml");
+}
+
+
+void DynoParams::printAllParams(bool print_glog_params) const {
 
     LOG(INFO) << "Frontend Params: " << config::toString(frontend_params_);
     LOG(INFO) << "Pipeline Params: " << config::toString(pipeline_params_);
 
+    //TODO: currently cannot print camera params becuase we use intermediate variables in the loading process!!
+    // LOG(INFO) << "Camera Params: " << config::toString(camera_params_);
+
+    if(print_glog_params) google::ShowUsageWithFlags("");
 }
 
 
-}
+} //dyno

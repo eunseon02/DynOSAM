@@ -31,7 +31,7 @@
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 
-DEFINE_int32(test_flag, 10, "A test flag");
+DEFINE_bool(show_dyno_args, false, "Show all loaded DynoSAM args (YAML and gflag) and exit");
 
 
 int main(int argc, char* argv[]) {
@@ -41,10 +41,18 @@ int main(int argc, char* argv[]) {
     options.arguments(non_ros_args);
     options.use_intra_process_comms(true);
 
-    // LOG(INFO) << FLAGS_test_flag;
-
     rclcpp::executors::SingleThreadedExecutor exec;
     auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
+
+    if(FLAGS_show_dyno_args) {
+        const dyno::DynoParams& params = ros_pipeline->getDynoParams();
+        params.printAllParams(true);
+        rclcpp::shutdown();
+        return 0;
+    }
+    else {
+        ros_pipeline->initalisePipeline();
+    }
 
     exec.add_node(ros_pipeline);
     while(rclcpp::ok()) {
@@ -55,6 +63,7 @@ int main(int argc, char* argv[]) {
     }
 
     ros_pipeline.reset();
+    return 0;
 
 
 }

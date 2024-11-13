@@ -28,6 +28,7 @@
 #include "rclcpp/rclcpp.hpp"
 
 
+
 namespace dyno {
 
 /**
@@ -50,14 +51,8 @@ char** constructArgvC(const std::vector<std::string>& args) {
     return argv;
 }
 
-// void freeArgvC(int argc, char** argv) {
-//     for(int i = 0; i < argc; i++) {
-//         delete[] argv[i];
-//     }
-//     delete[] argv;
-// }
 
-std::vector<std::string>  initRosAndLogging(int argc, char* argv[]) {
+std::vector<std::string> initRosAndLogging(int argc, char* argv[]) {
     // google::ParseCommandLineFlags(&argc, &argv, true);
     auto non_ros_args = rclcpp::init_and_remove_ros_arguments(argc, argv);
 

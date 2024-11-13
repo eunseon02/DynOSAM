@@ -67,7 +67,6 @@ void declare_config(CameraParams& config) {
   std::vector<double> vector_pose;
   field(vector_pose, "T_BS");
   checkCondition(vector_pose.size() == 16u, "param 'T_BS' must be a 16 length vector in homogenous matrix form");
-
   gtsam::Pose3 T_robot_camera = utils::poseVectorToGtsamPose3(vector_pose);
 
   std::vector<double> intrinsics_v;

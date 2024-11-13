@@ -85,8 +85,9 @@ std::string DynoNode::searchForPathWithParams(const std::string& param_name, con
 }
 
 
-DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : DynoNode("dynosam", options)
-{
+DynoPipelineManagerRos::DynoPipelineManagerRos(const rclcpp::NodeOptions& options) : DynoNode("dynosam", options) {}
+
+void DynoPipelineManagerRos::initalisePipeline() {
     RCLCPP_INFO_STREAM(this->get_logger(), "Starting DynoPipelineManagerRos");
 
     auto params = getDynoParams();
