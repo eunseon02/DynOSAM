@@ -71,7 +71,7 @@ CATKIN_IGNORE
 % Remove recovery files from matlab.
 *~
 % Ignore media files
-*.png
+# *.png
 *.mp4
 
 /dynosam_odom/scripts/*.yaml
