@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://robotics.sydney.edu.au/our-research/robotic-perception/">
-    <img align="center" src="docs/media/acfr_rpg_logo.png" width="150" alt="acfr-rpg">
+    <img align="center" src="./docs/media/acfr_rpg_logo.png" width="150" alt="acfr-rpg">
   </a>
 </div>
 
@@ -23,7 +23,7 @@ DynoSAM was build as a culmination of several works:
 ## Demo
 
 <div align="center">
-  <img src="docs/media/omd-demo.gif"/>
+  <img src="./docs/media/omd-demo.gif"/>
 </div>
 
 
