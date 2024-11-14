@@ -278,8 +278,6 @@ public:
 
 protected:
   const std::string module_name_;
-
-  //TODO: dont all these errors as evo will do it for us!!
   const std::string object_pose_file_name_;
   const std::string object_motion_file_name_;
   const std::string object_bbx_file_name_;

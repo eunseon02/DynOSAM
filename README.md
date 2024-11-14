@@ -1,6 +1,6 @@
 <div align="center">
   <a href="https://robotics.sydney.edu.au/our-research/robotic-perception/">
-    <img align="center" src="docs/acfr_rpg_logo.png" width="150" alt="acfr-rpg">
+    <img align="center" src="docs/media/acfr_rpg_logo.png" width="150" alt="acfr-rpg">
   </a>
 </div>
 
@@ -19,6 +19,13 @@ DynoSAM was build as a culmination of several works:
 - J. Morris, Y. Wang, V. Ila.  [**The Importance of Coordinate Frames in Dynamic SLAM**](https://acfr-rpg.github.io/dynamic_slam_coordinates/). IEEE Intl. Conf. on Robotics and Automation (ICRA), 2024
 - J. Zhang, M. Henein, R. Mahony, V. Ila [**VDO-SLAM:  A Visual Dynamic Object-aware SLAM System**](https://arxiv.org/abs/2005.11052), ArXiv
 - M. Henein, J. Zhang, R. Mahony, V. Ila. [**Dynamic SLAM: The Need for Speed**](https://ieeexplore.ieee.org/abstract/document/9196895).2020 IEEE International Conference on Robotics and Automation (ICRA). IEEE, 2020.
+
+## Demo
+
+<div align="center">
+  <img src="docs/media/omd-demo.gif"/>
+</div>
+
 
 # 1. Installtion
 
@@ -196,12 +203,106 @@ This allows each data-loader to specfy/loaded the camera params from the dataset
 # 4. Evaluation
 
 ## Output logs
-When the DynoSAM pipeline is logged it will output log files in the given output directory. As mentioned, the output directory is specified by
+When the DynoSAM pipeline is run it will output log files in the given output directory. The log files record the output of the state-estimation as well as various interal data.
+As mentioned, the output directory is specified by `--output_path=/path/to/results` (and may be further specified using `--name` when using `eval_launch.py`).
+
+The log files include (but are not limited to) files in the form
+
+- __*camera_pose_log.csv__
+- __*object_motion_log.csv__
+- __*object_pose_log.csv__
+
+The presence of these three files in a folder define a "dynosam results folder", from which the provided evaluation suite can process and produce results and metrics.
+
+Some additional statistics files will also be logged. The * specifies a module prefix (e.g. frontend, rgbd_world_backend) that is used to specify where the logged state-estimates have come from.
+This is used to separate out the front-end estimation from the back-end. Each back-end formulation (ie. Motion Estimator and Pose Estimator) provides its own module name, which is used as the module prefix. An additional suffix can be added to the module name through the `--updater_suffix` gflag.
+
+Camera Pose log files are in the form:
+```
+frame id, tx, ty, tz, qx, qy, qz, qw, gt_tx, gt_ty, gt_tz, gt_qx, gt_qy, gt_qz, gt_qw
+```
+where the transformation `T_world_camera` is reported in translation and quaternion form.
+
+Object Pose/Motion log files log in the form:
+```
+frame id, object id, tx, ty, tz, qx, qy, qz, qw, gt_tx, gt_ty, gt_tz, gt_qx, gt_qy, gt_qz, gt_qw
+```
+In the case of motion logs, the frame id is the __to__ motion, such that the motion logged takes the object frame __from frame id - 1 to frame id__.
+
+## Results and Metrics
+
+The DynoSAM framework comes with automated [evaluation tools](./dynosam_utils/src/evaluation/) that run as part of the pipeline. This can be run with the`--run_analysis` argument when using `eval_launch.py`. The evaluation module will look for a valid dynosam results folder in the provided output directory and will run evaluations _per prefix found_ in the folder. This enables one folder to contain multiple sets of log files, each defined with a different prefix, i.e for one dataset, multiple configurations of the back-end can be run and logged to the same folder, as long as the prefix is different.
+
+From the logged files the evaluation suite will produce ATE and RPE results for visual odometry and AME, RME and RPE results for objects. See our TRO paper for more details on these metrics. Per-frame numerical errors are logged in __*results.pdf__ with error plots for each metric as well as plots of the object and camera trajectory additionally included.
+
+> Two examples of our automated result generation are shown below
+<table>
+  <tr>
+    <td><img src="./docs/media/results_example/all_trajectories.png" alt="Image 1 description"></td>
+    <td><img src="./docs/media/results_example/ame_per_frame.png" alt="Image 2 description"></td>
+  </tr>
+</table>
+
+A full summary of numerical results are also generated in __result_tables.pdf__. This file includes all metrics for all sets of dynosam results found. The per-object error (for each metric) is recorded, as is the mean error over all objects for a particular metric.
+
+The `DatasetEvaluator` does most of the heavy lifting and can be found in the [evaluation_lib.py](./dynosam_utils/src/evaluation/evaluation_lib.py) module. As shown in some of the other evaluation scripts (e.g [sliding_window_vs_batch_error_plot.py](./dynosam_utils/src/sliding_window_vs_batch_error_plot.py)) we can use the tools and classes defined to do more complex evaluation and visualisation.
+
+# 5. Program Structure and Modules
 
 
-# References to paper (DynoSAM: )
-frame id -> k
-object id -> j
-tracklet id -> i
+<div align="center">
+  <img src="docs/media/dynosam_system_diagram.png"/>
+</div>
 
-Where other things are implemented e.g. modules
+
+We follow a similar module/pipeline structure as developed in [Kimera](https://github.com/MIT-SPARK/Kimera-VIO) and I would like to thank the authors for their wondeful open-source code that has given me much inspiration.
+
+Where possible, I have streamlined their 'Modular Pipelining'; each high-level component (effectively the data-provider, front-end, back-end and visualiser) is defined by a [Pipeline](./dynosam/include/dynosam/pipeline/PipelineBase.hpp) and a [Module](./dynosam/include/dynosam/common/ModuleBase.hpp).
+
+
+A Pipeline is a connecting class, derived from `PipelineBase`, is responsible for controlling the movement and transformation of data too and from modules. In most cases, this involves some data-packet that is produced as the output of another module and sending through the pipeline. This is achieved by connecting a [`ThreadSafeQueue`](./dynosam/include/dynosam/pipeline/ThreadSafeQueue.hpp) to the input and output of a pipeline. Each pipeline has an associated module which actually does the processing on the input data and produced some output data, which is then sent along the connected ouput queue to any connecting modules.
+
+
+## References to paper (DynoSAM: )
+How many times have you read a research paper and then gone to the code only to have absolutely no idea how the implementation connects to the theory/discussion?
+
+Too many in my experience.
+
+### Notation
+
+The notation from our paper has the following implementation:
+
+- $k$ (used as discrete time-step) is denoted with `FrameId` in the code.
+  > NOTE: $k$ is treated as a 'time-step' but in the code this is assocaited with a frame number (an integer value from 0... N). We also have assocaited `Timestamp` information associated with each frame but this is not actually used.
+- $i$ (used as unique tracking id) is denoted as `TrackletId` in the code.
+- $j$ (used as unique object id) is denoted as `ObjectId` in the code.
+
+All transform types (e.g. poses $X$ and motions $H$) are implemented using `gtsam::Pose3` and measurement types (e.g. 3D landmarks/points and 2D Features) are `Eigen::Vectors` as implemented through gtsam.
+
+> NOTE: I was very inconsistent with my variable naming through this code, mainly becuase I did not find a good way to deal with the funky three-indexed notation very well. I am fixing this as I go ;)
+
+### Modules
+The front-end and back-end's are implemented in associated subfolders.
+
+
+__Front-end__
+
+- Main feature tracker defined in [FeatureTracker.hpp](./dynosam/include/dynosam/frontend/vision/FeatureTracker.hpp) although the implementation is spread across a few impl and .cc files.
+
+- Motion Estimation modules (PnP + RANSAC and the two refinement steps) are all defined in [MotionSolver.hpp](./dynosam/include/dynosam/frontend/vision/MotionSolver.hpp).
+
+__Back-end__
+
+As per our key contributions, our back-end is structured to facilitate new implementations for Dynamic SLAM systems. This is achieved through two key classes
+
+- [Formulation](./dynosam/include/dynosam/backend/Formulation.hpp) base class which acts as the foundational structure for building and managin factor graphs in Dynamic SLAM.
+  - It is reponsible for Constructs factor graphs with initial values.
+  - Manages the high-level bookkeeping for when points and objects are added.
+  - Integrates new observations into the graph and updates it accordingly.
+  - It creates an `Acccessor` object which is used externally to extract and interact with the internal representation.
+
+- [Accessor](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathbf{O}_k$.
+
+Each formulation will need to derive from `Formulation` and define their own `Accessor`. The two formulations discussed in our paper are implemented as
+  - [WorldMotionFormulation](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
+  - [WorldPoseFormulation](./dynosam/include/dynosam/backend/rgbd/WorldPoseEstimator.hpp)
