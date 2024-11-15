@@ -38,20 +38,10 @@ Tested on Ubuntu 20.04
 - [GTSAM](https://github.com/borglab/gtsam) >= 4.1
 - [OpenCV](https://github.com/opencv/opencv) >= 3.4
 - [OpenGV](https://github.com/MIT-SPARK/opengv)
-    > Note: This links to a forked version of OpenGV which contains an updated fix the CMakeLists.txt due to issues with march=native
 - [Glog](http://rpg.ifi.uzh.ch/docs/glog.html), [Gflags](https://gflags.github.io/gflags/)
 - [Gtest](https://github.com/google/googletest/blob/master/googletest/docs/primer.md) (installed automagically)
 - [config_utilities](https://github.com/MIT-SPARK/config_utilities)
 
-## Dependancies
-```
-sudo apt install nlohmann-json3-dev libpng++-dev
-```
-For evaluation we also need various formatting tools
-```
-pip install pylatex evo &&
-sudo apt-get install texlive-pictures texlive-science texlive-latex-extra latexmk
-```
 
 ## Installation Instructions
 DynoSAM is currently built within the ROS2 infrastructure (if there is enough interest I will split out each component into ROS and non-ROS modules.)
@@ -60,7 +50,9 @@ We provide a development [Dockerfile](./docker/Dockerfile) that will install all
 
 > NOTE: there are some minor issues with the current dockerfile which will be fixed in-time.
 
-The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages.
+The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages. 
+
+More detailed instructions are fonud here: [Insallation instructions](./docs/media/INSTALL.md)
 
 # 2. Usage
 
@@ -172,7 +164,7 @@ params_folder:
   - *.flags
 ```
 
-The [dynosam launch file](./dynosam_ros//launch/dyno_sam_launch.py) has some smarts in it so that it will search given the folder at `params path` for any file with the ".flags" suffix and load the provided gflags.
+The [dynosam launch file](./dynosam_ros//launch/dyno_sam_launch.py) has some smarts in it so that it will search the given the folder (`params path`) for any file with the ".flags" suffix and load the specified flags.
 
 From a design persepctive, we use gflags in addition to yaml files becuase we are able to programmatically change these params as additional arguments to the DynoSAM program. This is used extensively for automated experiments where we re-configure the pipeline for different runs.
 
@@ -212,7 +204,7 @@ The log files include (but are not limited to) files in the form
 - __*object_motion_log.csv__
 - __*object_pose_log.csv__
 
-The presence of these three files in a folder define a "dynosam results folder", from which the provided evaluation suite can process and produce results and metrics.
+The presence of (at least ) these three files in a folder define a "dynosam results folder", from which the provided evaluation suite can process and produce results and metrics.
 
 Some additional statistics files will also be logged. The * specifies a module prefix (e.g. frontend, rgbd_world_backend) that is used to specify where the logged state-estimates have come from.
 This is used to separate out the front-end estimation from the back-end. Each back-end formulation (ie. Motion Estimator and Pose Estimator) provides its own module name, which is used as the module prefix. An additional suffix can be added to the module name through the `--updater_suffix` gflag.
@@ -295,14 +287,18 @@ __Back-end__
 
 As per our key contributions, our back-end is structured to facilitate new implementations for Dynamic SLAM systems. This is achieved through two key classes
 
-- [Formulation](./dynosam/include/dynosam/backend/Formulation.hpp) base class which acts as the foundational structure for building and managin factor graphs in Dynamic SLAM.
+- [`Formulation`](./dynosam/include/dynosam/backend/Formulation.hpp) base class which acts as the foundational structure for building and managin factor graphs in Dynamic SLAM.
   - It is reponsible for Constructs factor graphs with initial values.
   - Manages the high-level bookkeeping for when points and objects are added.
   - Integrates new observations into the graph and updates it accordingly.
   - It creates an `Acccessor` object which is used externally to extract and interact with the internal representation.
 
-- [Accessor](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathbf{O}_k$.
+- [`Accessor`](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathbf{O}_k$.
 
 Each formulation will need to derive from `Formulation` and define their own `Accessor`. The two formulations discussed in our paper are implemented as
-  - [WorldMotionFormulation](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
-  - [WorldPoseFormulation](./dynosam/include/dynosam/backend/rgbd/WorldPoseEstimator.hpp)
+  - [`WorldMotionFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
+  - [`WorldPoseFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldPoseEstimator.hpp)
+
+# 6. BSD License
+
+The DynoSAM framework is open-sourced under the BSD License, see [LICENSE](./LICENSE).
