@@ -50,7 +50,7 @@ We provide a development [Dockerfile](./docker/Dockerfile) that will install all
 
 > NOTE: there are some minor issues with the current dockerfile which will be fixed in-time.
 
-The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages. 
+The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages.
 
 More detailed instructions are fonud here: [Insallation instructions](./docs/media/INSTALL.md)
 
@@ -299,6 +299,28 @@ Each formulation will need to derive from `Formulation` and define their own `Ac
   - [`WorldMotionFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
   - [`WorldPoseFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldPoseEstimator.hpp)
 
-# 6. BSD License
+
+# 6. Contribution Guidelines
+
+We strongly encourage you to submit issues, feedback and potential improvements.
+We follow the branch, open PR, review, and merge workflow.
+
+As of Nov 2024 I still actively developing this project as part of my PhD at the [ACFR](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-robotics.html). Things may change but I will do my best to ensure versions are tagged etc... as a result I will also be happy to address all bugs and feature requests! Send 'em through!!
+
+To contribute to this repo, make sure you have [pre-commit](https://pre-commit.com/) installed to enable checks.
+```bash
+pip install pre-commit
+```
+
+We provide a pre-commit configuration so just ensure you have the git hooks setup:
+
+```bash
+pre-commit install
+```
+
+We also provide a `.clang-format` file with the style rules that the repo uses, so that you can use [`clang-format`](https://clang.llvm.org/docs/ClangFormat.html) to reformat your code.
+
+
+# 7. BSD License
 
 The DynoSAM framework is open-sourced under the BSD License, see [LICENSE](./LICENSE).
