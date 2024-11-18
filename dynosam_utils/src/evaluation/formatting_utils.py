@@ -477,68 +477,6 @@ class LatexTableFormatter(object):
         else:
             print(f"No vo in results. Skipping...")
 
-    # def _write_single_plot_to_doc(self, name: str, plot_collection: evo_plot.PlotCollection):
-    #     for fig_name, fig in plot_collection.figures.items():
-    #         with self._doc.create(Figure(position='htbp')) as plot:
-    #             plot.add_plot(width=NoEscape(r'0.8\textwidth'), dpi=300)
-    #             plot.add_caption('I am a caption.')
-
-
-# def write_metric_stats_to_latex_table(results: Dict) -> str:
-
-
-#     assert "objects" in results
-#     assert "vo" in results
-
-#     print("Writing metric stats!!")
-
-#     def populate_object_pose_doc(results: Dict):
-
-#         metric_poses_map = results["objects"]
-
-
-#         geometry_options = {"tmargin": "1cm", "lmargin": "1cm"}
-#         doc = Document(geometry_options=geometry_options)
-#         doc.packages.append(Package("siunitx"))
-#         doc.packages.append(Package("mathtools"))
-#         doc.packages.append(Package("amsmath"))
-
-#         with doc.create(Subsection('Object Pose Errors')):
-#             with doc.create(Tabular('c|cc|cc|')) as table:
-#                 header_row = ("", MultiColumn(2, align='c', data='APE'),MultiColumn(2, align='c|', data='RPE'))
-#                 table.add_row(header_row)
-#                 table.add_row((
-#                     "obj",
-#                     NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})"),
-#                     NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
-#                 table.add_hline()
-#                 table.add_hline()
-
-#                 # populate rows with results
-#                 for object_id, all_metrics in metric_poses_map.items():
-#                     if "poses" not in all_metrics:
-#                         print(f"Poses metrics missing from object: {object_id}")
-#                         continue
-
-#                     poses_metric_map = all_metrics["poses"]
-
-#                     ape_translation = poses_metric_map["ape_translation"]["mean"]
-#                     ape_rotation = poses_metric_map["ape_rotation"]["mean"]
-#                     rpe_translation = poses_metric_map["rpe_translation"]["mean"]
-#                     rpe_rotation = poses_metric_map["rpe_rotation"]["mean"]
-
-#                     table.add_row(
-#                         object_id, ape_translation, ape_rotation, rpe_translation, rpe_rotation
-#                     )
-#                 # table.add_row(1, 1, 2, 3, 4)
-#                 # table.add_row(2, 1, 2, 3, 4)
-#                 table.add_hline()
-#         doc.generate_pdf('full', clean_tex=False)
-
-
-#     populate_object_pose_doc(results)
-
-
 import numpy as np
 
 import os

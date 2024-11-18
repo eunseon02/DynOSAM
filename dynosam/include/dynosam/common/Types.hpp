@@ -48,6 +48,8 @@
 /** \mainpage C++ API documentation
  *  DynoSAM is a C++ library for Dynamic Visual SLAM.
  *
+ * TODO: add link back to project page when it is live....
+ *
  */
 
 namespace dyno {

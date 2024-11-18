@@ -255,7 +255,7 @@ Where possible, I have streamlined their 'Modular Pipelining'; each high-level c
 A Pipeline is a connecting class, derived from `PipelineBase`, is responsible for controlling the movement and transformation of data too and from modules. In most cases, this involves some data-packet that is produced as the output of another module and sending through the pipeline. This is achieved by connecting a [`ThreadSafeQueue`](./dynosam/include/dynosam/pipeline/ThreadSafeQueue.hpp) to the input and output of a pipeline. Each pipeline has an associated module which actually does the processing on the input data and produced some output data, which is then sent along the connected ouput queue to any connecting modules.
 
 
-## References to paper (DynoSAM: )
+## References to our TRO Paper
 How many times have you read a research paper and then gone to the code only to have absolutely no idea how the implementation connects to the theory/discussion?
 
 Too many in my experience.
