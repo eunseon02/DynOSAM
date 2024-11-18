@@ -1,395 +1,458 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #include "dynosam/backend/RGBDBackendModule.hpp"
-#include "dynosam/backend/FactorGraphTools.hpp"
-#include "dynosam/utils/SafeCast.hpp"
-#include "dynosam/utils/TimingStats.hpp"
-#include "dynosam/logger/Logger.hpp"
 
-#include "dynosam/common/Flags.hpp"
+#include <gflags/gflags.h>
+#include <glog/logging.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam_unstable/slam/PoseToPointFactor.h>
 
 #include "dynosam/backend/Accessor.hpp"
+#include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
-
-#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
-#include "dynosam/factors/ObjectKinematicFactor.hpp"
+#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/common/Flags.hpp"
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
+#include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/factors/LandmarkPoseSmoothingFactor.hpp"
+#include "dynosam/factors/ObjectKinematicFactor.hpp"
+#include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/SafeCast.hpp"
+#include "dynosam/utils/TimingStats.hpp"
 
-#include <gtsam_unstable/slam/PoseToPointFactor.h>
-#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+DEFINE_int32(opt_window_size, 10, "Sliding window size for optimisation");
+DEFINE_int32(opt_window_overlap, 4, "Overlap for window size optimisation");
 
-#include <glog/logging.h>
-#include <gflags/gflags.h>
+DEFINE_bool(use_full_batch_opt, true,
+            "Use full batch optimisation if true, else sliding window");
+DEFINE_bool(
+    use_vo_factor, true,
+    "If true, use visual odometry measurement as factor from the frontend");
 
-DEFINE_int32(opt_window_size,  10, "Sliding window size for optimisation");
-DEFINE_int32(opt_window_overlap,  4, "Overlap for window size optimisation");
+DEFINE_bool(
+    use_identity_rot_L_for_init, false,
+    "For experiments: set the initalisation point of L with identity rotation");
+DEFINE_bool(corrupt_L_for_init, false,
+            "For experiments: corrupt the initalisation point for L with "
+            "gaussian noise");
+DEFINE_double(corrupt_L_for_init_sigma, 0.2,
+              "For experiments: sigma value to correupt initalisation point "
+              "for L. When corrupt_L_for_init is true");
 
-DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if true, else sliding window");
-DEFINE_bool(use_vo_factor, true, "If true, use visual odometry measurement as factor from the frontend");
+DEFINE_bool(init_LL_with_identity, false, "For experiments");
+DEFINE_bool(init_H_with_identity, true, "For experiments");
 
-DEFINE_bool(use_identity_rot_L_for_init, false, "For experiments: set the initalisation point of L with identity rotation");
-DEFINE_bool(corrupt_L_for_init, false, "For experiments: corrupt the initalisation point for L with gaussian noise");
-DEFINE_double(corrupt_L_for_init_sigma, 0.2, "For experiments: sigma value to correupt initalisation point for L. When corrupt_L_for_init is true");
-
-DEFINE_bool(init_LL_with_identity, false,"For experiments");
-DEFINE_bool(init_H_with_identity, true,"For experiments");
-
-DEFINE_string(updater_suffix, "", "Suffix for updater to denote specific experiments");
+DEFINE_string(updater_suffix, "",
+              "Suffix for updater to denote specific experiments");
 
 namespace dyno {
 
-RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params, Map3d2d::Ptr map, Camera::Ptr camera, const UpdaterType& updater_type, ImageDisplayQueue* display_queue)
-    : Base(backend_params, map, display_queue), camera_(CHECK_NOTNULL(camera)), updater_type_(updater_type)
-{
-    CHECK_NOTNULL(map);
-    CHECK_NOTNULL(map_);
+RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
+                                     Map3d2d::Ptr map, Camera::Ptr camera,
+                                     const UpdaterType& updater_type,
+                                     ImageDisplayQueue* display_queue)
+    : Base(backend_params, map, display_queue),
+      camera_(CHECK_NOTNULL(camera)),
+      updater_type_(updater_type) {
+  CHECK_NOTNULL(map);
+  CHECK_NOTNULL(map_);
 
-    //TODO: functioanlise and streamline with BackendModule
-    noise_models_.static_point_noise = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.static_point_noise_sigma_);
-    noise_models_.dynamic_point_noise = gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.dynamic_point_noise_sigma_);
-    //set in base!
-    noise_models_.landmark_motion_noise =  gtsam::noiseModel::Isotropic::Sigma(3u, backend_params.motion_ternary_factor_noise_sigma_);
+  // TODO: functioanlise and streamline with BackendModule
+  noise_models_.static_point_noise = gtsam::noiseModel::Isotropic::Sigma(
+      3u, backend_params.static_point_noise_sigma_);
+  noise_models_.dynamic_point_noise = gtsam::noiseModel::Isotropic::Sigma(
+      3u, backend_params.dynamic_point_noise_sigma_);
+  // set in base!
+  noise_models_.landmark_motion_noise = gtsam::noiseModel::Isotropic::Sigma(
+      3u, backend_params.motion_ternary_factor_noise_sigma_);
 
-    if(backend_params.use_robust_kernals_) {
-        noise_models_.static_point_noise = gtsam::noiseModel::Robust::Create(
-            gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), noise_models_.static_point_noise);
+  if (backend_params.use_robust_kernals_) {
+    noise_models_.static_point_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models_.static_point_noise);
 
-        noise_models_.dynamic_point_noise = gtsam::noiseModel::Robust::Create(
-            gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), noise_models_.dynamic_point_noise);
+    noise_models_.dynamic_point_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models_.dynamic_point_noise);
 
-        //TODO: not k_huber_3d_points_ not just used for 3d points
-        noise_models_.landmark_motion_noise = gtsam::noiseModel::Robust::Create(
-            gtsam::noiseModel::mEstimator::Huber::Create(backend_params.k_huber_3d_points_), noise_models_.landmark_motion_noise);
+    // TODO: not k_huber_3d_points_ not just used for 3d points
+    noise_models_.landmark_motion_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models_.landmark_motion_noise);
+  }
 
-    }
+  CHECK_NOTNULL(noise_models_.static_point_noise);
+  CHECK_NOTNULL(noise_models_.dynamic_point_noise);
+  CHECK_NOTNULL(noise_models_.landmark_motion_noise);
 
-    CHECK_NOTNULL(noise_models_.static_point_noise);
-    CHECK_NOTNULL(noise_models_.dynamic_point_noise);
-    CHECK_NOTNULL(noise_models_.landmark_motion_noise);
+  noise_models_.dynamic_point_noise->print("Dynamic Point Noise");
+  noise_models_.landmark_motion_noise->print("Landmark motion noise");
+  // CHECK(false);
 
-    noise_models_.dynamic_point_noise->print("Dynamic Point Noise");
-    noise_models_.landmark_motion_noise->print("Landmark motion noise");
-    // CHECK(false);
-
-    new_updater_ = std::move(makeUpdater());
-    sliding_window_condition_ = std::make_unique<SlidingWindow>(
-        FLAGS_opt_window_size,
-        FLAGS_opt_window_overlap
-    );
-
+  new_updater_ = std::move(makeUpdater());
+  sliding_window_condition_ = std::make_unique<SlidingWindow>(
+      FLAGS_opt_window_size, FLAGS_opt_window_overlap);
 }
 
 RGBDBackendModule::~RGBDBackendModule() {
-    LOG(INFO) << "Destructing RGBDBackendModule";
+  LOG(INFO) << "Destructing RGBDBackendModule";
 
-    if(base_params_.use_logger_) {
-        //hack to make sure things are updated!!
-        BackendMetaData backend_info;
-        backend_info.params = base_params_;
-        backend_info.ground_truth_packets = this->getGroundTruthPackets();
-
-        new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
-        new_updater_->logBackendFromMap(backend_info);
-    }
-
-}
-
-RGBDBackendModule::SpinReturn
-RGBDBackendModule::boostrapSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
-
-    const FrameId frame_k = input->getFrameId();
-    first_frame_id_ = frame_k;
-    CHECK_EQ(spin_state_.frame_id, frame_k);
-    LOG(INFO) << "Running backend " << frame_k;
-    CHECK(!(bool)sliding_window_condition_->check(frame_k)); //trigger the check to update the first frame call. Bit gross!
-
-     // Pose estimate from the front-end
-    const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
-    {
-        utils::TimingStatsCollector timer("map.update_observations");
-        map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
-        map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
-        //update other measurements
-        map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
-        map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
-    }
-
-    gtsam::Values new_values;
-    gtsam::NonlinearFactorGraph new_factors;
-
-    new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
-    new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k, new_factors);
-    return {State::Nominal, nullptr};
-}
-
-RGBDBackendModule::SpinReturn
-RGBDBackendModule::nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) {
-
-    const FrameId frame_k = input->getFrameId();
-    CHECK_EQ(spin_state_.frame_id, frame_k);
-
-    // Pose estimate from the front-end
-    const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
-    LOG(INFO) << "Running backend " << frame_k;
-    {
-        utils::TimingStatsCollector timer("map.update_observations");
-        map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
-        map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
-        //update other measurements
-        map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
-        map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
-    }
-
-    gtsam::Values new_values;
-    gtsam::NonlinearFactorGraph new_factors;
-
-    new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values, new_factors);
-
-    UpdateObservationParams update_params;
-    update_params.enable_debug_info = true;
-    update_params.do_backtrack = false; //apparently this is v important for making the results == ICRA
-
-    {
-        LOG(INFO) << "Starting updateStaticObservations";
-        utils::TimingStatsCollector timer("backend.update_static_obs");
-        new_updater_->updateStaticObservations(frame_k, new_values, new_factors, update_params);
-    }
-
-    {
-        LOG(INFO) << "Starting updateDynamicObservations";
-        utils::TimingStatsCollector timer("backend.update_dynamic_obs");
-        new_updater_->updateDynamicObservations(frame_k, new_values, new_factors, update_params);
-    }
-
-
-
-    if(FLAGS_use_full_batch_opt) {
-        LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
-        if(base_params_.full_batch_frame-1== (int)frame_k) {
-            LOG(INFO) << " Doing full batch at frame " << frame_k;
-
-            // graph.error(values);
-            gtsam::LevenbergMarquardtParams opt_params;
-            // if(VLOG_IS_ON(20))
-            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-
-            const auto theta =  new_updater_->getTheta();
-            const auto graph = new_updater_->getGraph();
-            utils::StatsCollector(new_updater_->getFullyQualifiedName() + ".full_batch_opt_num_vars_all").AddSample(theta.size());
-
-            double error_before = graph.error(theta);
-            utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() + ".full_batch_opt");
-
-            gtsam::LevenbergMarquardtOptimizer problem(graph,theta, opt_params);
-            gtsam::Values optimised_values = problem.optimize();
-            double error_after = graph.error(optimised_values);
-
-            utils::StatsCollector(new_updater_->getFullyQualifiedName() + ".inner_iterations").AddSample(problem.getInnerIterations());
-            utils::StatsCollector(new_updater_->getFullyQualifiedName() + ".iterations").AddSample(problem.iterations());
-
-            new_updater_->updateTheta(optimised_values);
-            LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
-
-
-        }
-    }
-    else {
-        double error_before, error_after;
-        gtsam::Values optimised_values;
-        if(buildSlidingWindowOptimisation(frame_k, optimised_values, error_before, error_after)) {
-            LOG(INFO) << "Updating values with opt!";
-            new_updater_->updateTheta(optimised_values);
-            LOG(INFO) << " Error before sliding window: " << error_before << " error after: " << error_after;
-        }
-    }
-
-
-    auto accessor = new_updater_->accessorFromTheta();
-
-    utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() + ".post_update");
+  if (base_params_.use_logger_) {
+    // hack to make sure things are updated!!
     BackendMetaData backend_info;
     backend_info.params = base_params_;
     backend_info.ground_truth_packets = this->getGroundTruthPackets();
-    new_updater_->accessorFromTheta()->postUpdateCallback(backend_info); //force update every time (slow! and just for testing)
 
-    auto backend_output = std::make_shared<BackendOutputPacket>();
-    backend_output->timestamp_ = input->getTimestamp();
-    backend_output->frame_id_ = input->getFrameId();
-    backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
-    backend_output->static_landmarks_ = accessor->getFullStaticMap();
-    backend_output->dynamic_landmarks_ = accessor->getDynamicLandmarkEstimates(frame_k);
+    new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
+    new_updater_->logBackendFromMap(backend_info);
+  }
+}
 
-    for(FrameId frame_id : map_->getFrameIds()) {
-        backend_output->optimized_poses_.push_back(accessor->getSensorPose(frame_id).get());
+RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
+    RGBDInstanceOutputPacket::ConstPtr input) {
+  const FrameId frame_k = input->getFrameId();
+  first_frame_id_ = frame_k;
+  CHECK_EQ(spin_state_.frame_id, frame_k);
+  LOG(INFO) << "Running backend " << frame_k;
+  CHECK(!(bool)sliding_window_condition_->check(
+      frame_k));  // trigger the check to update the first frame call. Bit
+                  // gross!
+
+  // Pose estimate from the front-end
+  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
+  {
+    utils::TimingStatsCollector timer("map.update_observations");
+    map_->updateObservations(
+        input->collectStaticLandmarkKeypointMeasurements());
+    map_->updateObservations(
+        input->collectDynamicLandmarkKeypointMeasurements());
+    // update other measurements
+    map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
+    map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
+  }
+
+  gtsam::Values new_values;
+  gtsam::NonlinearFactorGraph new_factors;
+
+  new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
+  new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k,
+                                    new_factors);
+
+  if (callback) {
+    callback(frame_k, new_values, new_factors);
+  }
+
+  return {State::Nominal, nullptr};
+}
+
+RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
+    RGBDInstanceOutputPacket::ConstPtr input) {
+  const FrameId frame_k = input->getFrameId();
+  CHECK_EQ(spin_state_.frame_id, frame_k);
+
+  // Pose estimate from the front-end
+  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
+  LOG(INFO) << "Running backend " << frame_k;
+  {
+    utils::TimingStatsCollector timer("map.update_observations");
+    map_->updateObservations(
+        input->collectStaticLandmarkKeypointMeasurements());
+    map_->updateObservations(
+        input->collectDynamicLandmarkKeypointMeasurements());
+    // update other measurements
+    map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
+    map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
+  }
+
+  gtsam::Values new_values;
+  gtsam::NonlinearFactorGraph new_factors;
+
+  new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values,
+                            new_factors);
+
+  UpdateObservationParams update_params;
+  update_params.enable_debug_info = true;
+  update_params.do_backtrack =
+      false;  // apparently this is v important for making the results == ICRA
+
+  {
+    LOG(INFO) << "Starting updateStaticObservations";
+    utils::TimingStatsCollector timer("backend.update_static_obs");
+    new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
+                                           update_params);
+  }
+
+  {
+    LOG(INFO) << "Starting updateDynamicObservations";
+    utils::TimingStatsCollector timer("backend.update_dynamic_obs");
+    new_updater_->updateDynamicObservations(frame_k, new_values, new_factors,
+                                            update_params);
+  }
+
+  if (callback) {
+    callback(frame_k, new_values, new_factors);
+  }
+
+  if (FLAGS_use_full_batch_opt) {
+    LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
+    if (base_params_.full_batch_frame - 1 == (int)frame_k) {
+      LOG(INFO) << " Doing full batch at frame " << frame_k;
+
+      // graph.error(values);
+      gtsam::LevenbergMarquardtParams opt_params;
+      // if(VLOG_IS_ON(20))
+      opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+      const auto theta = new_updater_->getTheta();
+      const auto graph = new_updater_->getGraph();
+      utils::StatsCollector(new_updater_->getFullyQualifiedName() +
+                            ".full_batch_opt_num_vars_all")
+          .AddSample(theta.size());
+
+      double error_before = graph.error(theta);
+      utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
+                                        ".full_batch_opt");
+
+      gtsam::LevenbergMarquardtOptimizer problem(graph, theta, opt_params);
+      gtsam::Values optimised_values = problem.optimize();
+      double error_after = graph.error(optimised_values);
+
+      utils::StatsCollector(new_updater_->getFullyQualifiedName() +
+                            ".inner_iterations")
+          .AddSample(problem.getInnerIterations());
+      utils::StatsCollector(new_updater_->getFullyQualifiedName() +
+                            ".iterations")
+          .AddSample(problem.iterations());
+
+      new_updater_->updateTheta(optimised_values);
+      LOG(INFO) << " Error before sliding window: " << error_before
+                << " error after: " << error_after;
     }
+  } else {
+    double error_before, error_after;
+    gtsam::Values optimised_values;
+    if (buildSlidingWindowOptimisation(frame_k, optimised_values, error_before,
+                                       error_after)) {
+      LOG(INFO) << "Updating values with opt!";
+      new_updater_->updateTheta(optimised_values);
+      LOG(INFO) << " Error before sliding window: " << error_before
+                << " error after: " << error_after;
+    }
+  }
 
-    backend_output->composed_object_poses = accessor->getObjectPoses();
+  auto accessor = new_updater_->accessorFromTheta();
 
-    debug_info_ = DebugInfo();
+  utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
+                                    ".post_update");
+  BackendMetaData backend_info;
+  backend_info.params = base_params_;
+  backend_info.ground_truth_packets = this->getGroundTruthPackets();
+  new_updater_->accessorFromTheta()->postUpdateCallback(
+      backend_info);  // force update every time (slow! and just for testing)
 
-    return {State::Nominal, backend_output};
+  auto backend_output = std::make_shared<BackendOutputPacket>();
+  backend_output->timestamp_ = input->getTimestamp();
+  backend_output->frame_id_ = input->getFrameId();
+  backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
+  backend_output->static_landmarks_ = accessor->getFullStaticMap();
+  backend_output->dynamic_landmarks_ =
+      accessor->getDynamicLandmarkEstimates(frame_k);
+
+  for (FrameId frame_id : map_->getFrameIds()) {
+    backend_output->optimized_poses_.push_back(
+        accessor->getSensorPose(frame_id).get());
+  }
+
+  backend_output->composed_object_poses = accessor->getObjectPoses();
+
+  debug_info_ = DebugInfo();
+
+  return {State::Nominal, backend_output};
 }
 
 std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
-RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior, std::optional<gtsam::Values> initial_theta) {
-    CHECK_LT(from_frame, to_frame);
-    gtsam::Values new_values;
-    gtsam::NonlinearFactorGraph new_factors;
+RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame,
+                                  bool set_initial_camera_pose_prior,
+                                  std::optional<gtsam::Values> initial_theta) {
+  CHECK_LT(from_frame, to_frame);
+  gtsam::Values new_values;
+  gtsam::NonlinearFactorGraph new_factors;
 
-    auto updater = std::move(makeUpdater());
+  auto updater = std::move(makeUpdater());
 
-    if(initial_theta) {
-        //update initial linearisation points (could be from a previous optimisation)
-        //TODO: currently cannot set theta becuase this will be ALL the previous values
-        //and not just the ones in
-        //TODO: for now dont do this as we have to handle covariance/santiy checks
-        //differently as some modules expect values to be new and will check that
-        //a value does not exist yet (becuase it shouldn't in that iteration, but overall it may!)
-        // updater->setTheta(*initial_theta);
+  if (initial_theta) {
+    // update initial linearisation points (could be from a previous
+    // optimisation)
+    // TODO: currently cannot set theta becuase this will be ALL the previous
+    // values and not just the ones in
+    // TODO: for now dont do this as we have to handle covariance/santiy checks
+    // differently as some modules expect values to be new and will check that
+    // a value does not exist yet (becuase it shouldn't in that iteration, but
+    // overall it may!)
+    //  updater->setTheta(*initial_theta);
+  }
+
+  UpdateObservationParams update_params;
+  update_params.do_backtrack = false;
+  update_params.enable_debug_info = true;
+
+  UpdateObservationResult results;
+
+  CHECK_GE(from_frame, map_->firstFrameId());
+  CHECK_LE(to_frame, map_->lastFrameId());
+
+  // TODO: pick how new values are going to be used as right now they get
+  // appened internallty to the thera and I think this is very slow so we should
+  // not do this...
+
+  for (auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
+    LOG(INFO) << "Constructing dynamic graph at frame " << frame_id
+              << " in loop (" << from_frame << " -> " << to_frame << ")";
+
+    // pose estimate from frontend
+    gtsam::Pose3 T_world_camera_k;
+    CHECK(map_->hasInitialSensorPose(frame_id, &T_world_camera_k));
+
+    // if first frame
+    if (frame_id == from_frame) {
+      // add first pose
+      updater->setInitialPose(T_world_camera_k, frame_id, new_values);
+
+      if (set_initial_camera_pose_prior)
+        updater->setInitialPosePrior(T_world_camera_k, frame_id, new_factors);
+    } else {
+      updater->addOdometry(frame_id, T_world_camera_k, new_values, new_factors);
+      // no backtrack
+      results += updater->updateDynamicObservations(frame_id, new_values,
+                                                    new_factors, update_params);
     }
+    results += updater->updateStaticObservations(frame_id, new_values,
+                                                 new_factors, update_params);
+  }
 
-    UpdateObservationParams update_params;
-    update_params.do_backtrack = false;
-    update_params.enable_debug_info = true;
-
-    UpdateObservationResult results;
-
-    CHECK_GE(from_frame, map_->firstFrameId());
-    CHECK_LE(to_frame, map_->lastFrameId());
-
-    //TODO: pick how new values are going to be used as right now they get appened internallty to the thera and I think this is very slow
-    //so we should not do this...
-
-    for(auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
-        LOG(INFO) << "Constructing dynamic graph at frame " << frame_id << " in loop (" << from_frame << " -> " << to_frame << ")";
-
-        // pose estimate from frontend
-        gtsam::Pose3 T_world_camera_k;
-        CHECK(map_->hasInitialSensorPose(frame_id, &T_world_camera_k));
-
-        //if first frame
-        if(frame_id == from_frame) {
-            //add first pose
-            updater->setInitialPose(T_world_camera_k, frame_id, new_values);
-
-            if(set_initial_camera_pose_prior)
-                updater->setInitialPosePrior(T_world_camera_k, frame_id, new_factors);
-        }
-        else {
-            updater->addOdometry(frame_id, T_world_camera_k, new_values, new_factors);
-            //no backtrack
-            results += updater->updateDynamicObservations(frame_id, new_values, new_factors, update_params);
-        }
-        results += updater->updateStaticObservations(frame_id, new_values, new_factors, update_params);
-
-    }
-
-    return {new_values, new_factors};
+  return {new_values, new_factors};
 }
 
+bool RGBDBackendModule::buildSlidingWindowOptimisation(
+    FrameId frame_k, gtsam::Values& optimised_values, double& error_before,
+    double& error_after) {
+  auto condition_result = sliding_window_condition_->check(frame_k);
+  if (condition_result) {
+    const auto start_frame = condition_result.starting_frame;
+    const auto end_frame = condition_result.ending_frame;
+    LOG(INFO) << "Running dynamic slam window on between frames " << start_frame
+              << " - " << end_frame;
 
-
-bool RGBDBackendModule::buildSlidingWindowOptimisation(FrameId frame_k, gtsam::Values& optimised_values, double& error_before, double& error_after) {
-    auto condition_result = sliding_window_condition_->check(frame_k);
-    if(condition_result) {
-        const auto start_frame = condition_result.starting_frame;
-        const auto end_frame = condition_result.ending_frame;
-        LOG(INFO) << "Running dynamic slam window on between frames " << start_frame << " - " << end_frame;
-
-        gtsam::Values values;
-        gtsam::NonlinearFactorGraph graph;
-        {
-        utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() + ".sliding_window_construction");
-        std::tie(values, graph) = constructGraph(start_frame, end_frame, true, new_updater_->getTheta());
-        LOG(INFO) << " Finished graph construction";
-        }
-
-        error_before = graph.error(values);
-        gtsam::LevenbergMarquardtParams opt_params;
-        if(VLOG_IS_ON(20))
-            opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-
-        utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() + ".sliding_window_optimise");
-        utils::StatsCollector(new_updater_->getFullyQualifiedName() + ".sliding_window_optimise_num_vars_all").AddSample(values.size());
-        try {
-            optimised_values = gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params).optimize();
-            LOG(INFO) << "Finished op!";
-        }
-        catch(const gtsam::ValuesKeyDoesNotExist& e) {
-            LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist: key does not exist in the values" <<  DynoLikeKeyFormatter(e.key());
-        }
-        error_after = graph.error(optimised_values);
-
-        return true;
-
+    gtsam::Values values;
+    gtsam::NonlinearFactorGraph graph;
+    {
+      utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
+                                        ".sliding_window_construction");
+      std::tie(values, graph) = constructGraph(start_frame, end_frame, true,
+                                               new_updater_->getTheta());
+      LOG(INFO) << " Finished graph construction";
     }
-    return false;
+
+    error_before = graph.error(values);
+    gtsam::LevenbergMarquardtParams opt_params;
+    if (VLOG_IS_ON(20))
+      opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
+
+    utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
+                                      ".sliding_window_optimise");
+    utils::StatsCollector(new_updater_->getFullyQualifiedName() +
+                          ".sliding_window_optimise_num_vars_all")
+        .AddSample(values.size());
+    try {
+      optimised_values =
+          gtsam::LevenbergMarquardtOptimizer(graph, values, opt_params)
+              .optimize();
+      LOG(INFO) << "Finished op!";
+    } catch (const gtsam::ValuesKeyDoesNotExist& e) {
+      LOG(FATAL)
+          << "gtsam::ValuesKeyDoesNotExist: key does not exist in the values"
+          << DynoLikeKeyFormatter(e.key());
+    }
+    error_after = graph.error(optimised_values);
+
+    return true;
+  }
+  return false;
 }
 
-Formulation<RGBDBackendModule::RGBDMap>::UniquePtr RGBDBackendModule::makeUpdater() {
-        FormulationParams formulation_params;
-        formulation_params.min_static_observations = base_params_.min_static_obs_;
-        formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
-        formulation_params.suffix = FLAGS_updater_suffix;
+Formulation<RGBDBackendModule::RGBDMap>::UniquePtr
+RGBDBackendModule::makeUpdater() {
+  FormulationParams formulation_params;
+  formulation_params.min_static_observations = base_params_.min_static_obs_;
+  formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
+  formulation_params.suffix = FLAGS_updater_suffix;
 
-        if(updater_type_ == UpdaterType::MotionInWorld) {
-            LOG(INFO) << "Using MotionInWorld";
-            return  std::make_unique<WorldMotionFormulation>(formulation_params, getMap(), noise_models_);
+  if (updater_type_ == UpdaterType::MotionInWorld) {
+    LOG(INFO) << "Using MotionInWorld";
+    return std::make_unique<WorldMotionFormulation>(formulation_params,
+                                                    getMap(), noise_models_);
 
-        }
-        else if(updater_type_ == UpdaterType::LLWorld) {
-            LOG(INFO) << "Using LLWorld";
-            return std::make_unique<WorldPoseFormulation>(formulation_params, getMap(), noise_models_);
-        }
-        else {
-            CHECK(false) << "Not implemented";
-        }
-    }
+  } else if (updater_type_ == UpdaterType::LLWorld) {
+    LOG(INFO) << "Using LLWorld";
+    return std::make_unique<WorldPoseFormulation>(formulation_params, getMap(),
+                                                  noise_models_);
+  } else if (updater_type_ == UpdaterType::ObjectCentric) {
+    LOG(INFO) << "Using ObjectCentric";
+    return std::make_unique<ObjectCentricFormulation>(formulation_params,
+                                                      getMap(), noise_models_);
+  } else {
+    CHECK(false) << "Not implemented";
+  }
+}
 
-
-
-
-//TODO: these functions can go in base
+// TODO: these functions can go in base
 void RGBDBackendModule::saveGraph(const std::string& file) {
-
-    //TODO: must be careful as there could be inconsistencies between the graph in the optimzier,
-    //and the graph in the map
-    //TODO:
-    // gtsam::NonlinearFactorGraph graph = map_->getGraph();
-    // // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
-    // graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+  // TODO: must be careful as there could be inconsistencies between the graph
+  // in the optimzier, and the graph in the map
+  // TODO:
+  //  gtsam::NonlinearFactorGraph graph = map_->getGraph();
+  //  // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+  //  graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
 }
 void RGBDBackendModule::saveTree(const std::string& file) {
-    // auto incremental_optimizer = safeCast<Optimizer<Landmark>, IncrementalOptimizer<Landmark>>(optimizer_);
-    // if(incremental_optimizer) {
-    //     auto smoother = incremental_optimizer->getSmoother();
-    //     smoother.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
-    //     // smoother.getISAM2().saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
-    // }
+  // auto incremental_optimizer = safeCast<Optimizer<Landmark>,
+  // IncrementalOptimizer<Landmark>>(optimizer_); if(incremental_optimizer) {
+  //     auto smoother = incremental_optimizer->getSmoother();
+  //     smoother.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+  //     // smoother.getISAM2().saveGraph(getOutputFilePath(file),
+  //     DynoLikeKeyFormatter);
+  // }
 }
 
-
-
-} //dyno
+}  // namespace dyno

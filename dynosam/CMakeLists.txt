@@ -125,6 +125,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/RGBDBackendModule.cc
   src/backend/rgbd/WorldMotionEstimator.cc
   src/backend/rgbd/WorldPoseEstimator.cc
+  src/backend/rgbd/ObjectCentricEstimator.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc

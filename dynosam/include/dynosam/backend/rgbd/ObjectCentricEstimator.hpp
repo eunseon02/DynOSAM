@@ -27,43 +27,62 @@
  THE
  *   SOFTWARE.
  */
-
 #pragma once
 
 #include "dynosam/backend/Accessor.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/common/Map.hpp"
 
 namespace dyno {
 
-class WorldPoseAccessor : public Accessor<Map3d2d> {
- public:
-  WorldPoseAccessor(const gtsam::Values* theta, Map3d2d::Ptr map)
-      : Accessor<Map3d2d>(theta, map) {}
-  virtual ~WorldPoseAccessor() {}
-
-  StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
-  virtual StateQuery<gtsam::Pose3> getObjectMotion(
-      FrameId frame_id, ObjectId object_id) const override;
-  virtual StateQuery<gtsam::Pose3> getObjectPose(
-      FrameId frame_id, ObjectId object_id) const override;
-  StateQuery<gtsam::Point3> getDynamicLandmark(
-      FrameId frame_id, TrackletId tracklet_id) const override;
+struct ObjectCentricProperties {
+  inline gtsam::Symbol makeDynamicKey(TrackletId tracklet_id) const {
+    return gtsam::Symbol(kDynamicLandmarkSymbolChar, tracklet_id);
+  }
 };
 
-class WorldPoseFormulation : public Formulation<Map3d2d> {
+class ObjectCentricAccessor : public Accessor<Map3d2d>,
+                              public ObjectCentricProperties {
+ public:
+  ObjectCentricAccessor(
+      const gtsam::Values* theta, Map3d2d::Ptr map,
+      const gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>*
+          L0_values)
+      : Accessor<Map3d2d>(theta, map), L0_values_(L0_values) {}
+  virtual ~ObjectCentricAccessor() {}
+
+  StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
+  StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id,
+                                           ObjectId object_id) const override;
+  StateQuery<gtsam::Pose3> getObjectPose(FrameId frame_id,
+                                         ObjectId object_id) const override;
+  StateQuery<gtsam::Point3> getDynamicLandmark(
+      FrameId frame_id, TrackletId tracklet_id) const override;
+  // in thie case we can actually propogate all object points ;)
+  StatusLandmarkEstimates getDynamicLandmarkEstimates(
+      FrameId frame_id, ObjectId object_id) const override;
+
+ private:
+  const gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>*
+      L0_values_;  // for now!!
+};
+
+class ObjectCentricFormulation : public Formulation<Map3d2d>,
+                                 public ObjectCentricProperties {
  public:
   using Base = Formulation<Map3d2d>;
   using Base::AccessorTypePointer;
   using Base::ObjectUpdateContextType;
   using Base::PointUpdateContextType;
 
-  DYNO_POINTER_TYPEDEFS(WorldPoseFormulation)
+  DYNO_POINTER_TYPEDEFS(ObjectCentricFormulation)
 
-  WorldPoseFormulation(const FormulationParams& params, typename Map::Ptr map,
-                       const NoiseModels& noise_models)
+  ObjectCentricFormulation(const FormulationParams& params,
+                           typename Map::Ptr map,
+                           const NoiseModels& noise_models)
       : Base(params, map, noise_models) {}
-  virtual ~WorldPoseFormulation() {}
+  virtual ~ObjectCentricFormulation() {}
 
   void dynamicPointUpdateCallback(
       const PointUpdateContextType& context, UpdateObservationResult& result,
@@ -83,12 +102,19 @@ class WorldPoseFormulation : public Formulation<Map3d2d> {
  protected:
   AccessorTypePointer createAccessor(
       const gtsam::Values* values) const override {
-    return std::make_shared<WorldPoseAccessor>(values, this->map());
+    return std::make_shared<ObjectCentricAccessor>(values, this->map(), &L0_);
   }
 
-  std::string loggerPrefix() const override { return "rgbd_LL_world_identity"; }
+  std::string loggerPrefix() const override { return "object_centric"; }
 
- protected:
+ private:
+  std::pair<FrameId, gtsam::Pose3> getL0(ObjectId object_id, FrameId frame_id);
+  gtsam::Pose3 computeInitialHFromFrontend(ObjectId object_id,
+                                           FrameId frame_id);
+
+  gtsam::FastMap<ObjectId, std::vector<PointUpdateContextType>> point_contexts_;
+  gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>> L0_;
+
   // we need a separate way of tracking if a dynamic tracklet is in the map,
   // since each point is modelled uniquely simply used as an O(1) lookup, the
   // value is not actually used. If the key exists, we assume that the tracklet
