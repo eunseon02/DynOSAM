@@ -11,21 +11,21 @@
 
 
 # --motion_ternary_factor_noise_sigma=0.00000000001
---motion_ternary_factor_noise_sigma=0.01
+--motion_ternary_factor_noise_sigma=0.001
 
 # --odometry_rotation_sigma=0.2
 # --odometry_translation_sigma=0.3
---odometry_rotation_sigma=0.5
---odometry_translation_sigma=0.1
+--odometry_rotation_sigma=0.05
+--odometry_translation_sigma=0.01
 
 
 
---static_point_noise_sigma=0.06
+--static_point_noise_sigma=0.01
 --dynamic_point_noise_sigma=0.0625
 # --dynamic_point_noise_sigma=0.00006
 
---opt_window_size=20
---opt_window_overlap=4
+--opt_window_size=10
+--opt_window_overlap=2
 
 
 --use_vo_factor=true

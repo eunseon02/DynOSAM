@@ -76,13 +76,12 @@ DEFINE_string(updater_suffix, "",
 namespace dyno {
 
 RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
-                                     Map3d2d::Ptr map, Camera::Ptr camera,
+                                     Camera::Ptr camera,
                                      const UpdaterType& updater_type,
                                      ImageDisplayQueue* display_queue)
-    : Base(backend_params, map, display_queue),
+    : Base(backend_params, display_queue),
       camera_(CHECK_NOTNULL(camera)),
       updater_type_(updater_type) {
-  CHECK_NOTNULL(map);
   CHECK_NOTNULL(map_);
 
   // TODO: functioanlise and streamline with BackendModule
@@ -119,6 +118,17 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   noise_models_.dynamic_point_noise->print("Dynamic Point Noise");
   noise_models_.landmark_motion_noise->print("Landmark motion noise");
   // CHECK(false);
+
+  gtsam::ISAM2Params isam2_params;
+  isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
+  isam2_params.relinearizeSkip = 2;
+  isam2_params.keyFormatter = DynoLikeKeyFormatter;
+  isam2_params.evaluateNonlinearError = true;
+  smoother_ = std::make_unique<gtsam::ISAM2>(isam2_params);
+  fixed_lag_smoother_ =
+      std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
+  dynamic_fixed_lag_smoother_ =
+      std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
 
   new_updater_ = std::move(makeUpdater());
   sliding_window_condition_ = std::make_unique<SlidingWindow>(
@@ -170,8 +180,11 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
                                     new_factors);
 
   if (callback) {
-    callback(frame_k, new_values, new_factors);
+    callback(new_updater_, frame_k, new_values, new_factors);
   }
+
+  fixed_lag_smoother_->update(new_factors, new_values);
+  // smoother_->update(new_factors, new_values);
 
   return {State::Nominal, nullptr};
 }
@@ -213,18 +226,72 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
                                            update_params);
   }
 
+  gtsam::Values new_dynamic_values;
+  gtsam::NonlinearFactorGraph new_dynamic_factors;
+
   {
     LOG(INFO) << "Starting updateDynamicObservations";
     utils::TimingStatsCollector timer("backend.update_dynamic_obs");
-    new_updater_->updateDynamicObservations(frame_k, new_values, new_factors,
-                                            update_params);
+    new_updater_->updateDynamicObservations(frame_k, new_dynamic_values,
+                                            new_dynamic_factors, update_params);
   }
 
   if (callback) {
-    callback(frame_k, new_values, new_factors);
+    callback(new_updater_, frame_k, new_dynamic_values, new_dynamic_factors);
   }
 
-  if (FLAGS_use_full_batch_opt) {
+  LOG(INFO) << "Starting any updates";
+
+  bool incremental = true;
+  if (incremental) {
+    LOG(INFO) << "Updating incremental";
+    gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
+    for (const auto& factor : new_factors) {
+      for (const auto key : factor->keys()) {
+        gtsam::Symbol sym(key);
+        if (sym.chr() == dyno::kPoseSymbolChar) {
+          timestamp_map[key] = frame_k;
+        }
+      }
+
+      // if(sym.chr() == dyno::kObjectMotionSymbolChar) {
+      //     timestamp_map[key_value.key] =  frame_k;
+      // }
+    }
+
+    // auto result = smoother_->update(new_factors, new_values);
+    fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);
+
+    timestamp_map.clear();
+    for (const auto& key_value : new_values) {
+      gtsam::Symbol sym(key_value.key);
+      // if(sym.chr() == dyno::kPoseSymbolChar) {
+      //     timestamp_map[key_value.key] =  frame_k;
+      // }
+
+      if (sym.chr() == dyno::kObjectMotionSymbolChar) {
+        timestamp_map[key_value.key] = frame_k;
+      }
+    }
+    // dynamic_fixed_lag_smoother_->update(new_dynamic_factors,
+    // new_dynamic_values, timestamp_map);
+
+    auto result = fixed_lag_smoother_->getISAM2Result();
+    smoother_->update();
+    smoother_->update();
+    LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
+              << " error after " << result.getErrorAfter();
+    gtsam::Values optimised_values = fixed_lag_smoother_->calculateEstimate();
+    // for (const auto& key_value : optimised_values) {
+    //   gtsam::Symbol sym(key_value.key);
+    //   if(sym.chr() == dyno::kObjectMotionSymbolChar) {
+    //     LOG(INFO) << optimised_values.at<gtsam::Pose3>(key_value.key);
+    //   }
+    // }
+
+    new_updater_->updateTheta(optimised_values);
+    new_updater_->updateTheta(dynamic_fixed_lag_smoother_->calculateEstimate());
+  } else if (FLAGS_use_full_batch_opt) {
     LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
     if (base_params_.full_batch_frame - 1 == (int)frame_k) {
       LOG(INFO) << " Doing full batch at frame " << frame_k;
@@ -262,6 +329,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   } else {
     double error_before, error_after;
     gtsam::Values optimised_values;
+    LOG(INFO) << "Doing sliding window";
     if (buildSlidingWindowOptimisation(frame_k, optimised_values, error_before,
                                        error_after)) {
       LOG(INFO) << "Updating values with opt!";
@@ -270,6 +338,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
                 << " error after: " << error_after;
     }
   }
+  LOG(INFO) << "Done any udpates";
 
   auto accessor = new_updater_->accessorFromTheta();
 

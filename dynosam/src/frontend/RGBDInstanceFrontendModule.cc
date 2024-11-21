@@ -263,6 +263,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
     frame_k->static_features_.markOutliers(result.outliers);
 
     if (base_params_.refine_camera_pose_with_joint_of) {
+      VLOG(10) << "Refining camera pose with joint of";
       OpticalFlowAndPoseOptimizer flow_optimizer(
           base_params_.object_motion_solver_params.joint_of_params);
 

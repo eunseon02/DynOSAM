@@ -29,8 +29,10 @@
  */
 #pragma once
 
+#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
@@ -40,9 +42,6 @@
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
-// #include <gtsam/nonlinear/ISAM2.h>
-
-#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
 namespace dyno {
 
@@ -56,8 +55,8 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
   enum UpdaterType { MotionInWorld = 0, LLWorld = 1, ObjectCentric = 2 };
 
-  RGBDBackendModule(const BackendParams& backend_params, RGBDMap::Ptr map,
-                    Camera::Ptr camera, const UpdaterType& updater_type,
+  RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
+                    const UpdaterType& updater_type,
                     ImageDisplayQueue* display_queue = nullptr);
   ~RGBDBackendModule();
 
@@ -79,8 +78,8 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
   // FOR NOW!!
-  std::function<void(FrameId, const gtsam::Values&,
-                     const gtsam::NonlinearFactorGraph&)>
+  std::function<void(const Formulation<RGBDMap>::UniquePtr&, FrameId,
+                     const gtsam::Values&, const gtsam::NonlinearFactorGraph&)>
       callback;
 
  public:
@@ -175,6 +174,10 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
   // logger here!!
   BackendLogger::UniquePtr logger_{nullptr};
   DebugInfo debug_info_;
+  std::unique_ptr<gtsam::ISAM2> smoother_;
+  std::unique_ptr<gtsam::IncrementalFixedLagSmoother> fixed_lag_smoother_;
+  std::unique_ptr<gtsam::IncrementalFixedLagSmoother>
+      dynamic_fixed_lag_smoother_;
 };
 
 }  // namespace dyno

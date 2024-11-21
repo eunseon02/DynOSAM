@@ -30,10 +30,13 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <gtsam/base/debug.h>
 #include <gtsam/linear/GaussianEliminationTree.h>
 #include <gtsam/nonlinear/ISAM2-impl.h>
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
+#include <gtsam/nonlinear/NonlinearISAM.h>
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 #include <gtsam_unstable/slam/PoseToPointFactor.h>
 
 #include <exception>
@@ -43,9 +46,31 @@
 #include "dynosam/backend/BackendPipeline.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
+#include "dynosam/common/Map.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "internal/helpers.hpp"
 #include "internal/simulator.hpp"
+
+void recursiveMarkAffectedKeys(const gtsam::Key& key,
+                               const gtsam::ISAM2Clique::shared_ptr& clique,
+                               std::set<gtsam::Key>& additionalKeys) {
+  // Check if the separator keys of the current clique contain the specified key
+  if (std::find(clique->conditional()->beginParents(),
+                clique->conditional()->endParents(),
+                key) != clique->conditional()->endParents()) {
+    // Mark the frontal keys of the current clique
+    for (gtsam::Key i : clique->conditional()->frontals()) {
+      additionalKeys.insert(i);
+    }
+
+    // Recursively mark all of the children
+    for (const gtsam::ISAM2Clique::shared_ptr& child : clique->children) {
+      recursiveMarkAffectedKeys(key, child, additionalKeys);
+    }
+  }
+  // If the key was not found in the separator/parents, then none of its
+  // children can have it either
+}
 
 TEST(RGBDBackendModule, constructSimpleGraph) {
   // make camera with a constant motion model starting at zero
@@ -60,10 +85,10 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   // overlap?)
   dyno_testing::RGBDScenario scenario(
       camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(8, 7));
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(30, 28));
 
   // add one obect
-  const size_t num_points = 3;
+  const size_t num_points = 4;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
@@ -85,40 +110,211 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   scenario.addObjectBody(1, object1);
   // scenario.addObjectBody(2, object2);
 
-  dyno::Map3d2d::Ptr map = dyno::Map3d2d::create();
+  //   SETDEBUG("IncrementalFixedLagSmoother update", true);
+  //   CHECK(gtsam::isDebugVersion());
+  //   CHECK(ISDEBUG("IncrementalFixedLagSmoother update"));
+
   dyno::RGBDBackendModule backend(
-      dyno::BackendParams().useLogger(false), map,
+      dyno::BackendParams().useLogger(false),
       dyno_testing::makeDefaultCameraPtr(),
       dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
 
-  gtsam::ISAM2 isam2;
+  gtsam::ISAM2Params isam2_params;
+  isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
+  //   isam2_params.relinearizeSkip = 1;
+  gtsam::ISAM2 isam2(isam2_params);
+  //   gtsam::NonlinearISAM isam(1, gtsam::EliminateQR);
+  // gtsam::IncrementalFixedLagSmoother smoother(2.0, isam2_params);
 
   backend.callback =
-      [&](dyno::FrameId frame_id, const gtsam::Values& new_values,
+      [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
+          dyno::FrameId frame_id, const gtsam::Values& new_values,
           const gtsam::NonlinearFactorGraph& new_factors) -> void {
     LOG(INFO) << "In backend callback " << frame_id;
+    // return;
 
-    for (const auto& key_value : new_values) {
-      gtsam::Key key = key_value.key;
-      const gtsam::Value& value = key_value.value;
+    // gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
+    // for (const auto& key_value : new_values) {
 
-      // Print key using the custom KeyFormatter
-      std::cout << dyno::DynoLikeKeyFormatter(key) << std::endl;
+    //     gtsam::Symbol sym(key_value.key);
+    //     if(sym.chr() == dyno::kPoseSymbolChar) {
+    //         timestamp_map[key_value.key] =  2;
+    //     }
+
+    //     dyno::ObjectId object_id;
+    //     dyno::FrameId k;
+    //     if(dyno::reconstructMotionInfo(key_value.key, object_id, k)) {
+    //         if(k <= frame_id) {
+    //             //get smoother to remove key
+    //             timestamp_map[key_value.key] =  0;
+    //             LOG(INFO) << "Remove Key " <<
+    //             dyno::DynoLikeKeyFormatter(key_value.key);
+    //         }
+    //         else {
+    //             timestamp_map[key_value.key] =  1;
+    //         }
+    //     }
+    //     else {
+    //         timestamp_map[key_value.key] =  1;
+    //     }
+
+    // }
+
+    gtsam::KeyVector marginalizableKeys;
+    gtsam::FastMap<gtsam::Key, int> constrained_keys;
+    // for (const auto& factors : new_factors) {
+    //   gtsam::KeyVector keys = factors->keys();
+    //   for(const auto key : keys) {
+    //     dyno::ObjectId object_id;
+    //     dyno::FrameId k;
+    //     if(dyno::reconstructMotionInfo(key, object_id, k)) {
+    //         if(k < frame_id)  marginalizableKeys.push_back(key);
+    //     }
+
+    //   }
+    // }
+
+    // new keys
+    const auto new_keys = new_values.keys();
+    const auto old_keys = isam2.getLinearizationPoint().keys();
+
+    for (const auto key : new_keys) {
+      dyno::ObjectId object_id;
+      dyno::FrameId k;
+      if (dyno::reconstructMotionInfo(key, object_id, k)) {
+        // if(k < frame_id) {
+        //     marginalizableKeys.push_back(key);
+        //     LOG(INFO) << "Adding marginal var at" << object_id << " f = " <<
+        //     k; constrained_keys[key] = 0;
+        // }
+        // else {
+        //     constrained_keys[key] = 1;
+        // }
+        if (k == frame_id) {
+          constrained_keys[key] = 1;
+        }
+      }
+      // else {
+      //     constrained_keys[key] = 1;
+      // }
     }
+    // for(const auto key : new_keys) {
+    //     constrained_keys[key] = 1;
+    // }
+
+    // for (const auto& key_value : new_values) {
+    //   gtsam::Symbol sym(key_value.key);
+    //     //put object motion keys at start
+    //      if(sym.chr() == dyno::kObjectMotionSymbolChar) {
+    //         constrained_keys[(gtsam::Key)sym] = 0;
+    //         marginalizableKeys.push_back(key_value.key);
+    //      }
+    //     else {
+    //         constrained_keys[(gtsam::Key)sym] = 1;
+    //     }
+
+    // //   if(sym.chr() == dyno::kStaticLandmarkSymbolChar) {
+    // //     constrained_keys[(gtsam::Key)sym] = 0;
+    // //   }
+    // //   else if(sym.chr() == dyno::kPoseSymbolChar){
+    // //     constrained_keys[(gtsam::Key)sym] = 1;
+    // //   }
+    // //   else if(sym.chr() == dyno::kDynamicLandmarkSymbolChar){
+    // //     constrained_keys[(gtsam::Key)sym] = 2;
+    // //   }
+    // //   else{
+    // //     constrained_keys[(gtsam::Key)sym] = 3;
+    // //   }
+    // //   const gtsam::Value& value = key_value.value;
+
+    // //   // Print key using the custom KeyFormatter
+    // //   std::cout << gtsam::DefaultKeyFormatter(key) << std::endl;
+    // }
+
+    std::set<gtsam::Key> additionalKeys;
+    for (auto key : marginalizableKeys) {
+      LOG(INFO) << "Marginal keys " << gtsam::DefaultKeyFormatter(key);
+      gtsam::ISAM2Clique::shared_ptr clique = isam2[key];
+      for (const gtsam::ISAM2Clique::shared_ptr& child : clique->children) {
+        recursiveMarkAffectedKeys(key, child, additionalKeys);
+      }
+    }
+
+    gtsam::KeyList additionalMarkedKeys(additionalKeys.begin(),
+                                        additionalKeys.end());
+
+    gtsam::ISAM2UpdateParams update_params;
+    update_params.constrainedKeys = constrained_keys;
+    // update_params.extraReelimKeys = additionalMarkedKeys;
 
     for (const auto& factors : new_factors) {
-      factors->printKeys("Factor: ", dyno::DynoLikeKeyFormatter);
+      factors->printKeys("Factor: ");
+    }
+    gtsam::ISAM2Result result;
+    try {
+      // smoother.update(new_factors, new_values, timestamp_map);
+      // result = smoother.getISAM2Result();
+      result = isam2.update(new_factors, new_values, update_params);
+      // isam.update(new_factors, new_values);
+
+      // if (marginalizableKeys.size() > 0) {
+      //     gtsam::FastList<gtsam::Key> leafKeys(marginalizableKeys.begin(),
+      //         marginalizableKeys.end());
+      //     isam2.marginalizeLeaves(leafKeys);
+      // }
+
+    } catch (gtsam::IndeterminantLinearSystemException& e) {
+      LOG(INFO) << "Caught exception " << e.what();
+      const auto& graph = formulation->getGraph();
+      const auto& initial_estimate = formulation->getTheta();
+
+      graph.saveGraph(
+          dyno::getOutputFilePath("construct_simple_graph_fail_test_" +
+                                  std::to_string(frame_id) + ".dot"));
+
+      // LOG(INFO) << "Full graph";
+      //  for (const auto& key_value : initial_estimate) {
+      // gtsam::Key key = key_value.key;
+      // // const gtsam::Value& value = key_value.value;
+
+      // // Print key using the custom KeyFormatter
+      // std::cout << gtsam::DefaultKeyFormatter(key) << std::endl;
+      // }
+
+      // dyno::NonlinearFactorGraphManager nlfg(graph, initial_estimate);
+      // cv::Mat J = nlfg.drawBlockJacobian(gtsam::Ordering::COLAMD,
+      // dyno::factor_graph_tools::DrawBlockJacobiansOptions());
+      // cv::imshow("Jacobians", J);
+      // cv::waitKey(0);
     }
 
-    isam2.update(new_factors, new_values);
+    if (isam2.empty()) return;
 
-    isam2.calculateBestEstimate();
+    // smoother.
 
+    // isam2.calculateBestEstimate();
+    gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+    for (const auto& key : result.markedKeys) {
+      coloured_affected_keys.insert2(key, "red");
+    }
+
+    // dyno::factor_graph_tools::saveBayesTree(
+    //     smoother.getISAM2(),
+    //     dyno::getOutputFilePath("oc_bayes_tree_" + std::to_string(frame_id) +
+    //                             ".dot"),
+    //     dyno::DynoLikeKeyFormatter,
+    //     coloured_affected_keys);
     dyno::factor_graph_tools::saveBayesTree(
         isam2,
         dyno::getOutputFilePath("oc_bayes_tree_" + std::to_string(frame_id) +
                                 ".dot"),
-        dyno::DynoLikeKeyFormatter);
+        dyno::DynoLikeKeyFormatter, coloured_affected_keys);
+    //  dyno::factor_graph_tools::saveBayesTree(
+    //     isam.bayesTree(),
+    //     dyno::getOutputFilePath("oc_bayes_tree_" + std::to_string(frame_id) +
+    //                             ".dot"),
+    //     dyno::DynoLikeKeyFormatter,
+    //     coloured_affected_keys);
   };
 
   for (size_t i = 0; i < 10; i++) {

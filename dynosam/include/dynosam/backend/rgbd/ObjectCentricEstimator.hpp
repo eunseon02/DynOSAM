@@ -38,7 +38,7 @@ namespace dyno {
 
 struct ObjectCentricProperties {
   inline gtsam::Symbol makeDynamicKey(TrackletId tracklet_id) const {
-    return gtsam::Symbol(kDynamicLandmarkSymbolChar, tracklet_id);
+    return (gtsam::Symbol)DynamicLandmarkSymbol(0u, tracklet_id);
   }
 };
 
