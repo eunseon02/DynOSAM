@@ -232,17 +232,17 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   {
     LOG(INFO) << "Starting updateDynamicObservations";
     utils::TimingStatsCollector timer("backend.update_dynamic_obs");
-    new_updater_->updateDynamicObservations(frame_k, new_dynamic_values,
-                                            new_dynamic_factors, update_params);
+    new_updater_->updateDynamicObservations(frame_k, new_values, new_factors,
+                                            update_params);
   }
 
   if (callback) {
-    callback(new_updater_, frame_k, new_dynamic_values, new_dynamic_factors);
+    callback(new_updater_, frame_k, new_values, new_factors);
   }
 
   LOG(INFO) << "Starting any updates";
 
-  bool incremental = true;
+  bool incremental = false;
   if (incremental) {
     LOG(INFO) << "Updating incremental";
     gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;

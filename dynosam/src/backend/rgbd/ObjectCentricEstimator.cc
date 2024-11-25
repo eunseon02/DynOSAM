@@ -694,10 +694,6 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
         lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
         landmark_motion_noise);
 
-    new_factors.addPrior<gtsam::Pose3>(
-        object_motion_key_k_1, gtsam::Pose3::Identity(),
-        gtsam::noiseModel::Isotropic::Sigma(6u, 0.0001));
-
     // new_factors.emplace_shared<AuxillaryPFactor>(
     //      object_motion_key_k_1, point_key,
     //      lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
@@ -818,9 +814,9 @@ void ObjectCentricFormulation::objectUpdateContext(
     //  smoothing factor
     if (is_other_values_in_map.exists(object_motion_key_k_1) &&
         is_other_values_in_map.exists(object_motion_key_k)) {
-      new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
-          object_motion_key_k_1, object_motion_key_k, gtsam::Pose3::Identity(),
-          object_smoothing_noise);
+      // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
+      //     object_motion_key_k_1, object_motion_key_k,
+      //     gtsam::Pose3::Identity(), object_smoothing_noise);
       // if(result.debug_info)
       // result.debug_info->getObjectInfo(context.getObjectId()).smoothing_factor_added
       // = true;

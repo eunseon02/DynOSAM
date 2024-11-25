@@ -85,18 +85,19 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   // overlap?)
   dyno_testing::RGBDScenario scenario(
       camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(30, 28));
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5));
 
   // add one obect
-  const size_t num_points = 4;
+  const size_t num_points = 5;
+  const size_t obj1_overlap = 3;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
-          std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(
-              num_points));
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj1_overlap));
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -113,15 +114,17 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   //   SETDEBUG("IncrementalFixedLagSmoother update", true);
   //   CHECK(gtsam::isDebugVersion());
   //   CHECK(ISDEBUG("IncrementalFixedLagSmoother update"));
+  dyno::BackendParams backend_params;
+  backend_params.useLogger(false);
+  backend_params.min_dynamic_obs_ = 1u;
 
   dyno::RGBDBackendModule backend(
-      dyno::BackendParams().useLogger(false),
-      dyno_testing::makeDefaultCameraPtr(),
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
       dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
-  //   isam2_params.relinearizeSkip = 1;
+  // isam2_params.relinearizeSkip = 1;
   gtsam::ISAM2 isam2(isam2_params);
   //   gtsam::NonlinearISAM isam(1, gtsam::EliminateQR);
   // gtsam::IncrementalFixedLagSmoother smoother(2.0, isam2_params);
@@ -178,58 +181,58 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     const auto new_keys = new_values.keys();
     const auto old_keys = isam2.getLinearizationPoint().keys();
 
-    for (const auto key : new_keys) {
-      dyno::ObjectId object_id;
-      dyno::FrameId k;
-      if (dyno::reconstructMotionInfo(key, object_id, k)) {
-        // if(k < frame_id) {
-        //     marginalizableKeys.push_back(key);
-        //     LOG(INFO) << "Adding marginal var at" << object_id << " f = " <<
-        //     k; constrained_keys[key] = 0;
-        // }
-        // else {
-        //     constrained_keys[key] = 1;
-        // }
-        if (k == frame_id) {
-          constrained_keys[key] = 1;
-        }
-      }
-      // else {
-      //     constrained_keys[key] = 1;
-      // }
-    }
+    // for (const auto key : new_keys) {
+    //   dyno::ObjectId object_id;
+    //   dyno::FrameId k;
+    // //   constrained_keys[key] = 0;
+    //   if (dyno::reconstructMotionInfo(key, object_id, k)) {
+    //     // if(k < frame_id) {
+    //     //     marginalizableKeys.push_back(key);
+    //     //     LOG(INFO) << "Adding marginal var at" << object_id << " f = "
+    //     <<
+    //     //     k; constrained_keys[key] = 0;
+    //     // }
+    //     // else {
+    //     //     constrained_keys[key] = 1;
+    //     // }
+    //     // if (k == frame_id) {
+    //     //   constrained_keys[key] = 1;
+    //     // }
+    //   }
+    //   // else {
+    //   //     constrained_keys[key] = 1;
+    //   // }
+    // }
     // for(const auto key : new_keys) {
     //     constrained_keys[key] = 1;
     // }
 
-    // for (const auto& key_value : new_values) {
-    //   gtsam::Symbol sym(key_value.key);
-    //     //put object motion keys at start
-    //      if(sym.chr() == dyno::kObjectMotionSymbolChar) {
-    //         constrained_keys[(gtsam::Key)sym] = 0;
-    //         marginalizableKeys.push_back(key_value.key);
-    //      }
-    //     else {
-    //         constrained_keys[(gtsam::Key)sym] = 1;
-    //     }
+    for (const auto& key_value : new_values) {
+      gtsam::Symbol sym(key_value.key);
+      // put object motion keys at start
+      if (sym.chr() == dyno::kObjectMotionSymbolChar) {
+        constrained_keys[(gtsam::Key)sym] = 1;
+        // marginalizableKeys.push_back(key_value.key);
+      }
+      // else {
+      //     constrained_keys[(gtsam::Key)sym] = 1;
+      // }
 
-    // //   if(sym.chr() == dyno::kStaticLandmarkSymbolChar) {
-    // //     constrained_keys[(gtsam::Key)sym] = 0;
-    // //   }
-    // //   else if(sym.chr() == dyno::kPoseSymbolChar){
-    // //     constrained_keys[(gtsam::Key)sym] = 1;
-    // //   }
-    // //   else if(sym.chr() == dyno::kDynamicLandmarkSymbolChar){
-    // //     constrained_keys[(gtsam::Key)sym] = 2;
-    // //   }
-    // //   else{
-    // //     constrained_keys[(gtsam::Key)sym] = 3;
-    // //   }
-    // //   const gtsam::Value& value = key_value.value;
+      if (sym.chr() == dyno::kStaticLandmarkSymbolChar) {
+        constrained_keys[(gtsam::Key)sym] = 0;
+      } else if (sym.chr() == dyno::kPoseSymbolChar) {
+        constrained_keys[(gtsam::Key)sym] = 0;
+      } else if (sym.chr() == dyno::kDynamicLandmarkSymbolChar) {
+        constrained_keys[(gtsam::Key)sym] = 1;
+      }
+      //   else{
+      //     constrained_keys[(gtsam::Key)sym] = 3;
+      //   }
+      //   const gtsam::Value& value = key_value.value;
 
-    // //   // Print key using the custom KeyFormatter
-    // //   std::cout << gtsam::DefaultKeyFormatter(key) << std::endl;
-    // }
+      //   // Print key using the custom KeyFormatter
+      //   std::cout << gtsam::DefaultKeyFormatter(key) << std::endl;
+    }
 
     std::set<gtsam::Key> additionalKeys;
     for (auto key : marginalizableKeys) {
@@ -244,18 +247,23 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
                                         additionalKeys.end());
 
     gtsam::ISAM2UpdateParams update_params;
-    update_params.constrainedKeys = constrained_keys;
+    // update_params.constrainedKeys = constrained_keys;
     // update_params.extraReelimKeys = additionalMarkedKeys;
 
-    for (const auto& factors : new_factors) {
-      factors->printKeys("Factor: ");
-    }
+    // for (const auto& factors : new_factors) {
+    //   factors->printKeys("Factor: ");
+    // }
+
     gtsam::ISAM2Result result;
     try {
       // smoother.update(new_factors, new_values, timestamp_map);
       // result = smoother.getISAM2Result();
       result = isam2.update(new_factors, new_values, update_params);
-      // isam.update(new_factors, new_values);
+
+      isam2.getFactorsUnsafe().saveGraph(
+          dyno::getOutputFilePath("isam_graph_" + std::to_string(frame_id) +
+                                  ".dot"),
+          dyno::DynoLikeKeyFormatter);
 
       // if (marginalizableKeys.size() > 0) {
       //     gtsam::FastList<gtsam::Key> leafKeys(marginalizableKeys.begin(),
@@ -304,6 +312,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //                             ".dot"),
     //     dyno::DynoLikeKeyFormatter,
     //     coloured_affected_keys);
+
     dyno::factor_graph_tools::saveBayesTree(
         isam2,
         dyno::getOutputFilePath("oc_bayes_tree_" + std::to_string(frame_id) +
@@ -322,7 +331,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
     std::stringstream ss;
     ss << output->T_world_camera_ << "\n";
-    ss << dyno::container_to_string(output->static_landmarks_);
+    ss << dyno::container_to_string(output->dynamic_landmarks_);
 
     // LOG(INFO) << ss.str();
     backend.spinOnce(output);
@@ -434,21 +443,21 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
       dyno::getOutputFilePath("construct_simple_graph_test.dot"),
       dyno::DynoLikeKeyFormatter);
 
-  {
-    const auto [delayed_values, delayed_graph] =
-        backend.constructGraph(2, 6, true);
-    delayed_graph.saveGraph(
-        dyno::getOutputFilePath("construct_simple_delayed_graph_test_2_6.dot"),
-        dyno::DynoLikeKeyFormatter);
-  }
+  //   {
+  //     const auto [delayed_values, delayed_graph] =
+  //         backend.constructGraph(2, 6, true);
+  //     delayed_graph.saveGraph(
+  //         dyno::getOutputFilePath("construct_simple_delayed_graph_test_2_6.dot"),
+  //         dyno::DynoLikeKeyFormatter);
+  //   }
 
-  {
-    const auto [delayed_values, delayed_graph] =
-        backend.constructGraph(5, 9, true);
-    delayed_graph.saveGraph(
-        dyno::getOutputFilePath("construct_simple_delayed_graph_test_5_9.dot"),
-        dyno::DynoLikeKeyFormatter);
-  }
+  //   {
+  //     const auto [delayed_values, delayed_graph] =
+  //         backend.constructGraph(5, 9, true);
+  //     delayed_graph.saveGraph(
+  //         dyno::getOutputFilePath("construct_simple_delayed_graph_test_5_9.dot"),
+  //         dyno::DynoLikeKeyFormatter);
+  //   }
 
   // gtsam::LevenbergMarquardtParams opt_params;
   // opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;

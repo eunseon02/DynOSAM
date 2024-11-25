@@ -325,7 +325,7 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
   //! At least three points on the object are required to solve
   //! otherise the system is indeterminate
-  constexpr static size_t kMinNumberPoints = 3u;
+  // constexpr static size_t kMinNumberPoints = 3u;
 
   const FrameId frame_id_k_1 = frame_id_k - 1u;
   VLOG(20) << "Add dynamic observations between frames " << frame_id_k_1
@@ -355,9 +355,9 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
     // if we dont have at least N observations of this object in this frame AND
     // the previous frame
-    if (seen_lmks_k.size() < kMinNumberPoints ||
+    if (seen_lmks_k.size() < params_.min_dynamic_observations ||
         object_node->getLandmarksSeenAtFrame(frame_id_k_1).size() <
-            kMinNumberPoints) {
+            params_.min_dynamic_observations) {
       continue;
     }
 
