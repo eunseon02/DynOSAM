@@ -1,4 +1,4 @@
-import evaluation.evaluation_lib as eval
+import dynosam_utils.evaluation.evaluation_lib as eval
 
 from evo.core import lie_algebra, trajectory, metrics, transformations
 import evo.tools.plot as evo_plot
@@ -6,7 +6,7 @@ import evo.core.units as evo_units
 import numpy as np
 
 import matplotlib.pyplot as plt
-import evaluation.formatting_utils as formatting_utils
+import dynosam_utils.evaluation.formatting_utils as formatting_utils
 
 # batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000"
 # sliding_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000_sliding"

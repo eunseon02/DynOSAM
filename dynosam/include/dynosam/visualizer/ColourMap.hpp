@@ -1,61 +1,70 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/utils/Numerical.hpp"
-
-#include <opencv4/opencv2/opencv.hpp>
-#include <opencv2/viz/types.hpp>
 #include <glog/logging.h>
 
 #include <cmath>
+#include <opencv2/viz/types.hpp>
+#include <opencv4/opencv2/opencv.hpp>
+
+#include "dynosam/common/Types.hpp"
+#include "dynosam/utils/Numerical.hpp"
 
 namespace dyno {
 
-//Encapsulated differences between processing float/double depths and uint8_t
-template<typename T, typename Enable = void>
+// Encapsulated differences between processing float/double depths and uint8_t
+template <typename T, typename Enable = void>
 struct color_traits;
 
-template<typename T>
+template <typename T>
 struct _floating_point_colour_traits {
   static constexpr inline T max() { return 1.0; }
 };
 
-template<typename T>
+template <typename T>
 struct _int_point_colour_traits {
   static constexpr inline T max() { return 255; }
 };
 
-//Specalisation for integer types
+// Specalisation for integer types
 template <typename T>
-struct color_traits<T, std::enable_if_t<std::is_integral<T>::value>> : _int_point_colour_traits<T> {};
-//Specalisation for floating point types
+struct color_traits<T, std::enable_if_t<std::is_integral<T>::value>>
+    : _int_point_colour_traits<T> {};
+// Specalisation for floating point types
 template <typename T>
-struct color_traits<T, std::enable_if_t<std::is_floating_point<T>::value>> : _floating_point_colour_traits<T> {};
+struct color_traits<T, std::enable_if_t<std::is_floating_point<T>::value>>
+    : _floating_point_colour_traits<T> {};
 
-template<typename T>
+template <typename T>
 struct RGBA {
   // Data.
   T r = 0;
@@ -66,12 +75,12 @@ struct RGBA {
   RGBA() = default;
   RGBA(T r, T g, T b, T a = max()) : r(r), g(g), b(b), a(a) {}
 
-  template<typename U>
+  template <typename U>
   RGBA(const RGBA<U>& other) {
-    //check if we need to go up (1 -> 255) or down (255 -> 1)
+    // check if we need to go up (1 -> 255) or down (255 -> 1)
     constexpr auto other_max = RGBA<U>::max();
 
-    //this is lower than other so we need to normalize using other max
+    // this is lower than other so we need to normalize using other max
     if constexpr (this->max() < other_max) {
       this->r = is_zero(other.r) ? 0 : static_cast<T>(other.r / other_max);
       this->g = is_zero(other.g) ? 0 : static_cast<T>(other.g / other_max);
@@ -79,7 +88,7 @@ struct RGBA {
       this->a = is_zero(other.a) ? 0 : static_cast<T>(other.a / other_max);
       CHECK_LE(this->a, max());
     }
-    //this is higher than other so we need to normalize using this max
+    // this is higher than other so we need to normalize using this max
     else {
       constexpr U cast_max = static_cast<U>(max());
       this->r = is_zero(other.r) ? 0 : static_cast<T>(other.r * cast_max);
@@ -95,14 +104,15 @@ struct RGBA {
   static constexpr inline T max() { return color_traits<T>::max(); }
 };
 
-
-//From https://github.com/MIT-SPARK/Spark-DSG/blob/main/include/spark_dsg/color.h
+// From
+// https://github.com/MIT-SPARK/Spark-DSG/blob/main/include/spark_dsg/color.h
 struct Color : RGBA<uint8_t> {
   using RGBA<uint8_t>::max;
 
   // Constructors.
   Color() = default;
-  Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = max()) : RGBA(r, g, b, a) {}
+  Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = max())
+      : RGBA(r, g, b, a) {}
   virtual ~Color() = default;
 
   // Operators.
@@ -113,37 +123,29 @@ struct Color : RGBA<uint8_t> {
   friend std::ostream& operator<<(std::ostream&, const Color&);
 
   // Operator to cv::Scalar in RGBA format
-  operator cv::Scalar() const {
-    return rgba();
-  }
+  operator cv::Scalar() const { return rgba(); }
 
   /**
    * @brief Return in rgba format
    *
    * @return cv::Scalar
    */
-  inline cv::Scalar rgba() const {
-    return cv::Scalar(r, g, b, a);
-  }
+  inline cv::Scalar rgba() const { return cv::Scalar(r, g, b, a); }
 
   /**
    * @brief Return in BGRA format.
    *
    * @return cv::Scalar
    */
-  inline cv::Scalar bgra() const {
-    return cv::Scalar(b, g, r, a);
-  }
-
+  inline cv::Scalar bgra() const { return cv::Scalar(b, g, r, a); }
 
   /**
-   * @brief Return the RGBA values as a double. Note this will change the range from 0-255 to 0-1.
+   * @brief Return the RGBA values as a double. Note this will change the range
+   * from 0-255 to 0-1.
    *
    * @return RGBA<double>
    */
-  inline RGBA<double> toDouble() const {
-    return RGBA<double>(*this);
-  }
+  inline RGBA<double> toDouble() const { return RGBA<double>(*this); }
 
   // Tools.
   /**
@@ -197,16 +199,17 @@ struct Color : RGBA<uint8_t> {
 
   /**
    * @brief Generate a color based on a quality value.
-   * @param value The quality value [0,1], where 0 is red, 0.5 is yellow, and 1 is
-   * green.
+   * @param value The quality value [0,1], where 0 is red, 0.5 is yellow, and 1
+   * is green.
    */
   static Color quality(float value);
 
   /**
    * @brief Generate a color based on a spectrum of colors.
-   * @param value The spectrum value [0,1], where 0 is the first color and 1 is the
-   * last color.
-   * @param colors The list of colors in the spectrum. Colors are assumed equidistant.
+   * @param value The spectrum value [0,1], where 0 is the first color and 1 is
+   * the last color.
+   * @param colors The list of colors in the spectrum. Colors are assumed
+   * equidistant.
    */
   static Color spectrum(float value, const std::vector<Color>& colors);
 
@@ -218,32 +221,50 @@ struct Color : RGBA<uint8_t> {
 
   /**
    * @brief Generate a color based on a rainbow value.
-   * @param value The rainbow value [0,1], where 0 is red, 0.5 is green, and 1 is
-   * blue.
+   * @param value The rainbow value [0,1], where 0 is red, 0.5 is green, and 1
+   * is blue.
    */
   static Color rainbow(float value);
 
   /**
-   * @brief Generate a sequence of never repeating colors in the rainbow spectrum.
+   * @brief Generate a sequence of never repeating colors in the rainbow
+   * spectrum.
    * @param id The id of the color in the sequence.
    * @param ids_per_revolution The number of colors per revolution of the hue.
    */
   static Color rainbowId(size_t id, size_t ids_per_revolution = 16);
 
   /**
-   * @brief Generates a sequence of never repeating colors using the golden ration to seperate
-   * the colours along the HSV ring spectrum.
+   * @brief Generates a sequence of never repeating colors using the golden
+   * ration to seperate the colours along the HSV ring spectrum.
    *
    * @param id The id of the color in the sequence.
    * @param saturation Saturation value
    * @param value Value value ;)
    * @return Color
    */
-  static Color uniqueId(size_t id, float saturation = 0.5f, float value = 0.95f);
+  static Color uniqueId(size_t id, float saturation = 0.5f,
+                        float value = 0.95f);
 
  private:
   static const std::vector<Color> ironbow_colors_;
 };
 
+/**
+ * @brief Palette of colours based of 'color blindness' which presents a set of
+ * colours which are optimized for color-blinded individuals. In other words,
+ * they are very easy to see and look very nice. To be used in vizualizations.
+ *
+ */
+struct NiceColors {
+  static Color black() { return Color(0, 0, 0); }
+  static Color orange() { return Color(230, 159, 0); }
+  static Color skyblue() { return Color(86, 180, 233); }
+  static Color bluishgreen() { return Color(0, 158, 115); }
+  static Color yellow() { return Color(240, 228, 66); }
+  static Color blue() { return Color(0, 114, 178); }
+  static Color vermillion() { return Color(213, 94, 0); }
+  static Color reddishpurple() { return Color(204, 121, 167); }
+};
 
-} //dyno
+}  // namespace dyno

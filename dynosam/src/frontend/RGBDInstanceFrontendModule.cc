@@ -91,31 +91,6 @@ RGBDInstanceFrontendModule::validateImageContainer(
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
-
-  // if we only have instance semgentation (not motion) then we need to make a
-  // motion mask out of the semantic mask we cannot do this for the first frame
-  // so we will just treat the semantic mask and the motion mask and then
-  // subsequently elimate non-moving objects later on
-  TrackingInputImages tracking_images;
-  if (image_container->hasSemanticMask()) {
-    CHECK(!image_container->hasMotionMask());
-    // TODO: some bug when going from semantic mask to motion mask as motion
-    // mask is empty in the tracker after this process!!! its becuase we dont
-    // actually use the tracking_images!!
-    auto intermediate_tracking_images =
-        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
-                                    ImageType::SemanticMask>();
-    tracking_images = TrackingInputImages(
-        intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-        intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-        ImageWrapper<ImageType::MotionMask>(
-            intermediate_tracking_images.get<ImageType::SemanticMask>()));
-  } else {
-    tracking_images =
-        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
-                                    ImageType::MotionMask>();
-  }
-
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container);
   CHECK(frame->updateDepths());
@@ -126,27 +101,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
-  // if we only have instance semgentation (not motion) then we need to make a
-  // motion mask out of the semantic mask we cannot do this for the first frame
-  // so we will just treat the semantic mask and the motion mask and then
-  // subsequently elimate non-moving objects later on
-  TrackingInputImages tracking_images;
-  if (image_container->hasSemanticMask()) {
-    CHECK(!image_container->hasMotionMask());
-
-    auto intermediate_tracking_images =
-        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
-                                    ImageType::SemanticMask>();
-    tracking_images = TrackingInputImages(
-        intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-        intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-        ImageWrapper<ImageType::MotionMask>(
-            intermediate_tracking_images.get<ImageType::SemanticMask>()));
-  } else {
-    tracking_images =
-        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
-                                    ImageType::MotionMask>();
-  }
 
   Frame::Ptr frame = nullptr;
   {
@@ -200,11 +154,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         ImageToDisplay("tracks", debug_imagery.tracking_image));
 
   debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
-  // use the tracking images from the frame NOT the input tracking images since
-  // the feature tracking will do some modifications on the images
-  // (particularily the mask during mask propogation)
-  //  debug_imagery.input_images = frame->tracking_images_;
-  debug_imagery.input_images = tracking_images;
+  debug_imagery.input_images = constructTrackingImages(image_container);
 
   RGBDInstanceOutputPacket::Ptr output =
       constructOutput(*frame, motion_estimates, frame->T_world_camera_,
@@ -482,6 +432,34 @@ void RGBDInstanceFrontendModule::propogateObjectPoses(
                                object_centroids_k_1, object_centroids_k,
                                frame_id);
   }
+}
+
+TrackingInputImages RGBDInstanceFrontendModule::constructTrackingImages(
+    const ImageContainer::Ptr image_container) {
+  // if we only have instance semgentation (not motion) then we need to make a
+  // motion mask out of the semantic mask we cannot do this for the first frame
+  // so we will just treat the semantic mask and the motion mask and then
+  // subsequently elimate non-moving objects later on
+  TrackingInputImages tracking_images;
+  if (image_container->hasSemanticMask()) {
+    CHECK(!image_container->hasMotionMask());
+    // TODO: some bug when going from semantic mask to motion mask as motion
+    // mask is empty in the tracker after this process!!! its becuase we dont
+    // actually use the tracking_images!!
+    auto intermediate_tracking_images =
+        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
+                                    ImageType::SemanticMask>();
+    tracking_images = TrackingInputImages(
+        intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
+        intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
+        ImageWrapper<ImageType::MotionMask>(
+            intermediate_tracking_images.get<ImageType::SemanticMask>()));
+  } else {
+    tracking_images =
+        image_container->makeSubset<ImageType::RGBMono, ImageType::OpticalFlow,
+                                    ImageType::MotionMask>();
+  }
+  return tracking_images;
 }
 
 }  // namespace dyno

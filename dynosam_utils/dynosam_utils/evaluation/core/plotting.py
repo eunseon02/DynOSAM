@@ -12,7 +12,7 @@ from evo.core.trajectory import PosePath3D
 from matplotlib.axes import Axes
 import gtsam
 
-from evaluation.formatting_utils import *
+from dynosam_utils.evaluation.formatting_utils import *
 
 
 # apparently this ordereed needed

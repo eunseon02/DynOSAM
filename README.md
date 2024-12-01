@@ -58,13 +58,14 @@ More detailed instructions are fonud here: [Insallation instructions](./docs/med
 
 ## Running and Configuration
 
-DynoSAM uses a combination of yaml files and GFLAGS (these are being simplified but GFLAGS allow an easier way to programatically set variables over cmd-line) to configure the system. ROS params are used sparingly and are only used to set input file paths.
+DynoSAM uses a combination of yaml files and GFLAGS (these are being simplified but GFLAGS allows an easier way to programatically set variables over cmd-line) to configure the system. ROS params are used sparingly and are only used to set input file paths.
 
 ### Running with Launch files
 All .yaml and .flag files should be placed in the same params folder, which is specified by the command line.
 To specify the dataset loader, the GFLAG `--data_provider_type` should be set (see [pipeline.flags](./dynosam/params/pipeline.flags)). Eventually, this will also include the option to take data live from a sensor. For data providers that are specific to each dataset used for evaluation, a dataset path must also be set.
 
-DynoSAM will also log all output configuration to an output-folder specified by `--output_path` (see [pipeline.flags](./dynosam/params/pipeline.flags)). Data will only be logged if this folder exists.
+DynoSAM will also log all output configuration to an output-folder specified by `--output_path` (see [pipeline.flags](./dynosam/params/pipeline.flags)).
+__Data will only be logged if this folder exists.__
 
 The DynoSAM pipeline can be launched via launch file:
 ```
@@ -73,13 +74,9 @@ ros2 launch dynosam_ros dyno_sam_launch.py params_path:=<value> dataset_path:=<>
 The launch file will load all the GFLAG's from all .flag files found in the params folder.
 
 ### Running with complex input
-For evaluation and more refined control over the input to the system we also provide a evaluation launch script
+For evaluation and more refined control over the input to the system we also provide an evaluation launch script and can be run as:
 ```
-cd dynosam_utils/src
-```
-and can be run as
-```
-python3 eval_launch.py
+run dynosam_utils eval_launch.py
   --dataset_path <Path to dataset>
   --params_path <Absolute path to the params folder to run dynosam with>
   --launch_file <Wich dynosam launch file to run with!>
@@ -90,11 +87,15 @@ python3 eval_launch.py
   *args...
 
 ```
-In addition to these arguments, this script takes all additional cmd-line arguments and parses them to the DynoSAM node, allowing any GFLAGS to be overwritten directly by specifying them in the commandline. e.g the dataset provider type can be specifued as:
+This script automated the process of running the evaluation suite (ie. `--run_analysis_`) and set all rosparams/re-direct input and output paths (e.g. `--output_path`, `name`, etc...).
+
+In addition to these arguments, this script takes all additional cmd-line arguments and parses them to the DynoSAM node, allowing any GFLAGS to be overwritten directly by specifying them in the commandline. e.g the dataset provider type can be specified as:
 ```
-python3 eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
+run dynosam_utils eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
 ```
-This script will also construct the corresponding output folder (e.g. ouput_path/name) and make it, if it does not exist. In the aboce example, the program will make the folder '/path/to/results/test/' and deposit all output logs in that folder.
+This script will also construct the corresponding output folder (e.g. ouput_path/name) and make it, if it does not exist. In the aboce example, the program will make the folder _'/path/to/results/test/'_ and deposit all output logs in that folder.
+
+> NOTE: for all evaluations and metrics, this script was used to run the program.
 
 ### Running programtically
 All the cmdline functionality can be replicated programtically using python in order to run experiments and evaluations.

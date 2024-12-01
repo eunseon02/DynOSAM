@@ -125,10 +125,11 @@ def load_dynosam_node(context, *args, **kwargs):
     loaded_params_folder = validate_path(dynosam_params_folder_config.perform(context))
     loaded_glog_verbose_flag = glog_verbose_flag_config.perform(context)
 
-
+    # arguments to the dynosam Node, these are passed as non-ros args
     arguments = construct_flagfile_arguments(loaded_params_folder)
     arguments.append(contruct_glags_verbose_argument(loaded_glog_verbose_flag))
 
+    # add additional arguments - this will most often be any gflags passed along the command line
     additional_arguments = construct_additional_arguments(argv)
     if additional_arguments:
         arguments.extend(additional_arguments)

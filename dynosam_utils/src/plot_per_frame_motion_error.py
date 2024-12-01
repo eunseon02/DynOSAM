@@ -1,6 +1,6 @@
-import evaluation.evaluation_lib as eval
-import evaluation.core.metrics as eval_metrics
-from evaluation.formatting_utils import * #for nice colours
+import dynosam_utils.evaluation.evaluation_lib as eval
+import dynosam_utils.evaluation.core.metrics as eval_metrics
+from dynosam_utils.evaluation.formatting_utils import * #for nice colours
 
 
 from evo.core import lie_algebra, trajectory, metrics, transformations

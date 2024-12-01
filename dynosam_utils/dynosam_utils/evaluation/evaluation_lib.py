@@ -13,11 +13,10 @@ import matplotlib
 
 import copy
 
-from .filesystem_utils import DataFiles, read_csv
+from dynosam_utils.evaluation.filesystem_utils import DataFiles, read_csv
+import dynosam_utils.evaluation.core.plotting as plotting
 
-import evaluation.core.plotting as plotting
-
-from .tools import (
+from dynosam_utils.evaluation.tools import (
     so3_from_euler,
     common_entries,
     transform_camera_trajectory_to_world,
@@ -29,7 +28,7 @@ from .tools import (
     load_bson
 )
 
-import evaluation.tools as tools
+import dynosam_utils.evaluation.tools as tools
 
 
 logger = logging.getLogger("dynosam_eval")

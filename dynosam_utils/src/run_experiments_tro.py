@@ -1,4 +1,4 @@
-from eval_launch import run
+from dynosam_utils.evaluation.runner import run
 import os
 import sys
 
