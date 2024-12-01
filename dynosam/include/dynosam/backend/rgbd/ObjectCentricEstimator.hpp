@@ -113,7 +113,11 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
                                            FrameId frame_id);
 
   gtsam::FastMap<ObjectId, std::vector<PointUpdateContextType>> point_contexts_;
-  gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>> L0_;
+
+  // TODO: in the sliding window case the formulation gets reallcoated every
+  // time so that L0 map is different, but the values will share the same H
+  // (which is now from a different L0)!! make static (hack) for now
+  static gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>> L0_;
 
   // we need a separate way of tracking if a dynamic tracklet is in the map,
   // since each point is modelled uniquely simply used as an O(1) lookup, the

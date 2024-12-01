@@ -252,29 +252,15 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
         if (sym.chr() == dyno::kPoseSymbolChar) {
           timestamp_map[key] = frame_k;
         }
-      }
 
-      // if(sym.chr() == dyno::kObjectMotionSymbolChar) {
-      //     timestamp_map[key_value.key] =  frame_k;
-      // }
+        if (sym.chr() == dyno::kObjectMotionSymbolChar) {
+          timestamp_map[key] = frame_k;
+        }
+      }
     }
 
     // auto result = smoother_->update(new_factors, new_values);
     fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);
-
-    timestamp_map.clear();
-    for (const auto& key_value : new_values) {
-      gtsam::Symbol sym(key_value.key);
-      // if(sym.chr() == dyno::kPoseSymbolChar) {
-      //     timestamp_map[key_value.key] =  frame_k;
-      // }
-
-      if (sym.chr() == dyno::kObjectMotionSymbolChar) {
-        timestamp_map[key_value.key] = frame_k;
-      }
-    }
-    // dynamic_fixed_lag_smoother_->update(new_dynamic_factors,
-    // new_dynamic_values, timestamp_map);
 
     auto result = fixed_lag_smoother_->getISAM2Result();
     smoother_->update();
@@ -290,7 +276,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     // }
 
     new_updater_->updateTheta(optimised_values);
-    new_updater_->updateTheta(dynamic_fixed_lag_smoother_->calculateEstimate());
+    // new_updater_->updateTheta(dynamic_fixed_lag_smoother_->calculateEstimate());
   } else if (FLAGS_use_full_batch_opt) {
     LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
     if (base_params_.full_batch_frame - 1 == (int)frame_k) {

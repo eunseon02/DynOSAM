@@ -109,10 +109,40 @@ class ObjectCentricMotionFactor
                                 const gtsam::Point3& measurement,
                                 const gtsam::Pose3& L_0) {
     // apply transform to put map point into world via its motion
-    gtsam::Point3 map_point_world = motion * L_0 * point_object;
+    gtsam::Point3 map_point_world = motion * (L_0 * point_object);
     // put map_point_world into local camera coordinate
     gtsam::Point3 map_point_camera = camera_pose.inverse() * map_point_world;
-    return measurement - map_point_camera;
+    return map_point_camera - measurement;
+  }
+};
+
+class ObjectCentricSmoothing
+    : public gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Pose3> {
+ public:
+  typedef boost::shared_ptr<ObjectCentricSmoothing> shared_ptr;
+  typedef ObjectCentricSmoothing This;
+  typedef gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Pose3> Base;
+
+  gtsam::Pose3 L_0_;
+
+  ObjectCentricSmoothing(gtsam::Key motion_k_1, gtsam::Key motion_k,
+                         const gtsam::Pose3& L_0, gtsam::SharedNoiseModel model)
+      : Base(model, motion_k_1, motion_k), L_0_(L_0) {}
+
+  gtsam::Vector evaluateError(
+      const gtsam::Pose3& motion_k_1, const gtsam::Pose3& motion_k,
+      boost::optional<gtsam::Matrix&> J1 = boost::none,
+      boost::optional<gtsam::Matrix&> J2 = boost::none) const override {
+    gtsam::Matrix H1, H2;
+    const gtsam::Pose3 L_k_1 = motion_k_1.compose(L_0_, H1);
+    const gtsam::Pose3 L_k = motion_k.compose(L_0_, H2);
+
+    gtsam::Pose3 hx =
+        gtsam::traits<gtsam::Pose3>::Between(L_k_1, L_k, J1, J2);  // h(x)
+
+    // if(J1) *J1 = H1 * (*J1);
+    // if(J2) *J2 = H2 * (*J2);
+    return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(), hx);
   }
 };
 
@@ -335,7 +365,7 @@ class ObjectCentricMotionOnlyFactor
                                 const gtsam::Pose3& X_k,
                                 const gtsam::Pose3& L_0) {
     // apply transform to put map point into world via its motion
-    gtsam::Point3 map_point_world = motion * L_0 * point_object;
+    gtsam::Point3 map_point_world = motion * (L_0 * point_object);
     // put map_point_world into local camera coordinate
     gtsam::Point3 map_point_camera = X_k.inverse() * map_point_world;
     return map_point_camera - measurement;
@@ -478,6 +508,10 @@ class SmartHFactor
 
 // };
 
+// TODO: hack for now!
+gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>
+    ObjectCentricFormulation::L0_;
+
 StateQuery<gtsam::Pose3> ObjectCentricAccessor::getSensorPose(
     FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
@@ -497,11 +531,15 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
     StateQuery<gtsam::Pose3> motion_s0_k_1 = this->query<gtsam::Pose3>(
         frame_node_k_1->makeObjectMotionKey(object_id));
 
+    // TODO: if motion_s0_k_1 but motion_s0_k then check that this frame ==s0,
+    // then the motion will just be motion_s0_k (and should be identity)
+
     if (motion_s0_k && motion_s0_k_1) {
       // want a motion from k-1 to k, but we estimate s0 to k
       //^w_{k-1}H_k = ^w_{s0}H_k \: ^w_{s0}H_{k-1}^{-1}
-      return StateQuery<gtsam::Pose3>(
-          motion_key, motion_s0_k.get() * motion_s0_k_1->inverse());
+      gtsam::Pose3 motion = motion_s0_k.get() * motion_s0_k_1->inverse();
+      LOG(INFO) << "Obj motion " << motion;
+      return StateQuery<gtsam::Pose3>(motion_key, motion);
     } else {
       return StateQuery<gtsam::Pose3>::NotInMap(
           frame_node_k->makeObjectMotionKey(object_id));
@@ -531,7 +569,10 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
   if (motion_s0_k) {
     CHECK(L0_values_->exists(object_id));
     const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
+    // LOG(INFO) << "Object pose s0 " << L0;
+    // LOG(INFO) << "Object motion " << motion_s0_k.get();
     const gtsam::Pose3 L_k = motion_s0_k.get() * L0;
+    // LOG(INFO) << "Object pose " << L_k;
 
     return StateQuery<gtsam::Pose3>(pose_key, L_k);
   } else {
@@ -556,9 +597,13 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
   StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
 
-  if (point_local)
-    CHECK(motion_s0_k) << "We have a point " << DynoLikeKeyFormatter(point_key)
-                       << " but no motion at frame " << frame_id;
+  // TODO: I guess can happen if we miss a motion becuae an object is not seen
+  // for one frame?!?
+  //  if (point_local)
+  //    CHECK(motion_s0_k) << "We have a point " <<
+  //    DynoLikeKeyFormatter(point_key)
+  //                       << " but no motion at frame " << frame_id << " with
+  //                       key: " << DynoLikeKeyFormatter(motion_key);
   if (point_local && motion_s0_k) {
     CHECK(L0_values_->exists(object_id));
     const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
@@ -642,7 +687,10 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   std::tie(s0, L_0) = getL0(context.getObjectId(), frame_node_k_1->getId());
   auto landmark_motion_noise = noise_models_.landmark_motion_noise;
   // check that the first frame id is at least the initial frame for s0
-  CHECK_GE(frame_node_k_1->getId(), s0);
+
+  // TODO:this will not be the case with sliding/window as we reconstruct the
+  // graph from a different starting point!!
+  //  CHECK_GE(frame_node_k_1->getId(), s0);
 
   if (!isDynamicTrackletInMap(lmk_node)) {
     // TODO: this will not hold in the batch case as the first dynamic point we
@@ -660,6 +708,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     // in this case k is k-1 as we use frame_node_k_1
     gtsam::Pose3 s0_H_k = computeInitialHFromFrontend(context.getObjectId(),
                                                       frame_node_k_1->getId());
+    // LOG(INFO) << "s0_H_k " << s0_H_k;
     // measured point in camera frame
     const gtsam::Point3 m_camera =
         lmk_node->getMeasurement(frame_node_k_1).landmark;
@@ -682,17 +731,17 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
   if (context.is_starting_motion_frame) {
     // add factor at k-1
-    // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-    //     frame_node_k_1->makePoseKey(),  // pose key at previous frames,
-    //     object_motion_key_k_1, point_key,
-    //     lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-    //     landmark_motion_noise);
-    const gtsam::Pose3 X_world =
-        getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
-    new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+    new_factors.emplace_shared<ObjectCentricMotionFactor>(
+        frame_node_k_1->makePoseKey(),  // pose key at previous frames,
         object_motion_key_k_1, point_key,
-        lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
+        lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
         landmark_motion_noise);
+    // const gtsam::Pose3 X_world =
+    //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
+    // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+    //     object_motion_key_k_1, point_key,
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
+    //     landmark_motion_noise);
 
     // new_factors.emplace_shared<AuxillaryPFactor>(
     //      object_motion_key_k_1, point_key,
@@ -710,18 +759,18 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   }
 
   // add factor at k
-  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
-  //     object_motion_key_k, point_key,
-  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-  //     landmark_motion_noise);
-
-  const gtsam::Pose3 X_world =
-      getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
-  new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+  new_factors.emplace_shared<ObjectCentricMotionFactor>(
+      frame_node_k->makePoseKey(),  // pose key at previous frames,
       object_motion_key_k, point_key,
-      lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
+      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
       landmark_motion_noise);
+
+  // const gtsam::Pose3 X_world =
+  //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
+  // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+  //     object_motion_key_k, point_key,
+  //     lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
+  //     landmark_motion_noise);
 
   // new_factors.emplace_shared<AuxillaryPFactor>(
   //        object_motion_key_k, point_key,
@@ -775,9 +824,18 @@ void ObjectCentricFormulation::objectUpdateContext(
     // gtsam::Pose3 motion;
     const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
     gtsam::Pose3 motion = computeInitialHFromFrontend(object_id, frame_id);
+    LOG(INFO) << "Added motion at  "
+              << DynoLikeKeyFormatter(object_motion_key_k);
     // gtsam::Pose3 motion;
     new_values.insert(object_motion_key_k, motion);
     is_other_values_in_map.insert2(object_motion_key_k, true);
+
+    FrameId s0 = getL0(object_id, frame_id).first;
+    if (s0 == frame_id) {
+      // add prior
+      //  new_factors.addPrior<gtsam::Pose3>(object_motion_key_k,
+      //  gtsam::Pose3::Identity());
+    }
   }
 
   if (frame_id < 2) return;
@@ -814,6 +872,9 @@ void ObjectCentricFormulation::objectUpdateContext(
     //  smoothing factor
     if (is_other_values_in_map.exists(object_motion_key_k_1) &&
         is_other_values_in_map.exists(object_motion_key_k)) {
+      new_factors.emplace_shared<ObjectCentricSmoothing>(
+          object_motion_key_k_1, object_motion_key_k,
+          getL0(object_id, frame_id).second, object_smoothing_noise);
       // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
       //     object_motion_key_k_1, object_motion_key_k,
       //     gtsam::Pose3::Identity(), object_smoothing_noise);

@@ -174,12 +174,13 @@ def load_to_frontend_packet(path:str):
     frontend_output_packet_map = decoded_json[0]['data']
     for _, rgbd_frontend_data_packet in frontend_output_packet_map:
         rgbd_frontend_data = RGBDInstanceOutputPacket.from_dict(rgbd_frontend_data_packet)
-        print(rgbd_frontend_data.frame_id)
-        return
-        rgbd_frontend_data_list.append(rgbd_frontend_data)
+        print(rgbd_frontend_data.static_keypoints)
+        # return
+        # rgbd_frontend_data_list.append(rgbd_frontend_data)
     return rgbd_frontend_data_list
 
 
 
 if __name__ == '__main__':
-    load_to_frontend_packet('/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_500/rgbd_frontend_output.bson')
+    # load_to_frontend_packet('/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_500/rgbd_frontend_output.bson')
+    load_to_frontend_packet('/root/results/DynoSAM/test_small_frontend/rgbd_frontend_output.bson')

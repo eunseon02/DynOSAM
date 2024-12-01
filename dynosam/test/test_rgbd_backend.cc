@@ -48,6 +48,7 @@
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
+#include "dynosam/frontend/FrontendPipeline.hpp"
 #include "internal/helpers.hpp"
 #include "internal/simulator.hpp"
 
@@ -70,6 +71,62 @@ void recursiveMarkAffectedKeys(const gtsam::Key& key,
   }
   // If the key was not found in the separator/parents, then none of its
   // children can have it either
+}
+
+TEST(RGBDBackendModule, smallKITTIDataset) {
+  using namespace dyno;
+  using OfflineFrontend =
+      FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
+  const auto file_path = getTestDataPath() + "/small_frontend.bson";
+
+  OfflineFrontend::UniquePtr offline_frontend =
+      std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path);
+
+  dyno::BackendParams backend_params;
+  backend_params.useLogger(false);
+  backend_params.min_dynamic_obs_ = 1u;
+
+  dyno::RGBDBackendModule backend(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
+
+  gtsam::ISAM2Params isam2_params;
+  isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
+  // isam2_params.relinearizeSkip = 1;
+  gtsam::ISAM2 isam2(isam2_params);
+  //   gtsam::NonlinearISAM isam(1, gtsam::EliminateQR);
+  // gtsam::IncrementalFixedLagSmoother smoother(2.0, isam2_params);
+
+  backend.callback =
+      [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
+          dyno::FrameId frame_id, const gtsam::Values& new_values,
+          const gtsam::NonlinearFactorGraph& new_factors) -> void {
+    LOG(INFO) << "In backend callback " << frame_id;
+
+    auto result = isam2.update(new_factors, new_values);
+
+    isam2.getFactorsUnsafe().saveGraph(
+        dyno::getOutputFilePath("small_isam_graph_" + std::to_string(frame_id) +
+                                ".dot"),
+        dyno::DynoLikeKeyFormatter);
+
+    gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
+    for (const auto& key : result.markedKeys) {
+      coloured_affected_keys.insert2(key, "red");
+    }
+
+    dyno::factor_graph_tools::saveBayesTree(
+        isam2,
+        dyno::getOutputFilePath("small_oc_bayes_tree_" +
+                                std::to_string(frame_id) + ".dot"),
+        dyno::DynoLikeKeyFormatter, coloured_affected_keys);
+  };
+
+  auto output = offline_frontend->process(offline_frontend->getInputPacket());
+  while (output != nullptr) {
+    backend.spinOnce(output);
+    output = offline_frontend->process(offline_frontend->getInputPacket());
+  }
 }
 
 TEST(RGBDBackendModule, constructSimpleGraph) {
