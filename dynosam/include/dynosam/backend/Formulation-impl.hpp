@@ -586,7 +586,17 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
 template <typename MAP>
 void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
-  BackendLogger::UniquePtr logger = makeFullyQualifiedLogger();
+  // BackendLogger::UniquePtr logger = makeFullyQualifiedLogger();
+  // TODO:
+  std::string logger_prefix = this->loggerPrefix();
+  const std::string suffix = backend_info.suffix;
+
+  // add suffix to name if required
+  if (!suffix.empty()) {
+    logger_prefix += ("_" + suffix);
+  }
+  BackendLogger::UniquePtr logger =
+      std::make_unique<BackendLogger>(logger_prefix);
 
   typename Map::Ptr map = this->map();
   auto accessor = this->accessorFromTheta();

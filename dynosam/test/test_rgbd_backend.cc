@@ -140,9 +140,15 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   // needs to be at least 3 overlap so we can meet requirements in graph
   // TODO: how can we do 1 point but with lots of overlap (even infinity
   // overlap?)
+
+  dyno_testing::RGBDScenario::NoiseParams noise_params;
+  noise_params.H_R_sigma = 0.1;
+  noise_params.H_t_sigma = 0.2;
+  noise_params.dynamic_point_sigma = 0.01;
+
   dyno_testing::RGBDScenario scenario(
-      camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5));
+      camera, std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5),
+      noise_params);
 
   // add one obect
   const size_t num_points = 5;
@@ -150,7 +156,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
-              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
@@ -159,7 +165,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
-              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(10, 0, 0)),
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(
@@ -185,6 +191,8 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   gtsam::ISAM2 isam2(isam2_params);
   //   gtsam::NonlinearISAM isam(1, gtsam::EliminateQR);
   // gtsam::IncrementalFixedLagSmoother smoother(2.0, isam2_params);
+
+  gtsam::Values opt_values;
 
   backend.callback =
       [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
@@ -381,118 +389,29 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //                             ".dot"),
     //     dyno::DynoLikeKeyFormatter,
     //     coloured_affected_keys);
+
+    const auto& graph = formulation->getGraph();
+    const auto& theta = formulation->getTheta();
+    LOG(INFO) << "Formulation error: " << graph.error(theta);
+
+    gtsam::LevenbergMarquardtOptimizer problem(graph, theta);
+    // save the result of the optimisation and log after all runs
+    opt_values = problem.optimize();
+    LOG(INFO) << "Formulation error after: " << graph.error(opt_values);
   };
 
   for (size_t i = 0; i < 10; i++) {
-    auto output = scenario.getOutput(i);
+    dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
+    std::tie(output_gt, output_noisy) = scenario.getOutput(i);
 
-    std::stringstream ss;
-    ss << output->T_world_camera_ << "\n";
-    ss << dyno::container_to_string(output->dynamic_landmarks_);
+    // std::stringstream ss;
+    // ss << output_gt->T_world_camera_ << "\n";
+    // ss << dyno::container_to_string(output->dynamic_landmarks_);
 
     // LOG(INFO) << ss.str();
-    backend.spinOnce(output);
+    backend.spinOnce(output_noisy);
 
     LOG(INFO) << "Spun backend";
-
-    // //Is this the full graph?
-    // gtsam::NonlinearFactorGraph full_graph = backend.getMap()->getGraph();
-    // gtsam::Values values = backend.smoother_->getLinearizationPoint();
-
-    // get variables in this frame
-    //  const auto& map = backend.getMap();
-    //  const auto frame_k_node = map->getFrame(i);
-    //  const auto dyn_lmk_nodes = frame_k_node->dynamic_landmarks;
-    //  const auto object_nodes = frame_k_node->objects_seen;
-
-    // gtsam::KeyVector dyn_lmks_this_frame;
-
-    // for(const auto& dyn_lmk_node : dyn_lmk_nodes) {
-    //     gtsam::Key key = dyn_lmk_node->makeDynamicKey(i);
-    //     if(map->exists(key)) {
-    //         dyn_lmks_this_frame.push_back(key);
-    //     }
-    // }
-
-    // dyn_lmks_this_frame.push_back(map->getFrame(i)->makePoseKey());
-
-    // gtsam::KeyVector object_motions_this_frame;
-
-    // for(const auto& node : object_nodes) {
-    //     const gtsam::Key key =
-    //     frame_k_node->makeObjectMotionKey(node->getId());
-    //     if(map->exists(key)) {
-    //         dyn_lmks_this_frame.push_back(key);
-    //     }
-    // }
-
-    // gtsam::VariableIndex affectedFactorsVarIndex(full_graph);
-    // gtsam::Ordering order =
-    // gtsam::Ordering::ColamdConstrainedLast(affectedFactorsVarIndex,
-    // dyn_lmks_this_frame); auto linearized = full_graph.linearize(values);
-
-    // auto bayesTree =
-    //     gtsam::ISAM2JunctionTree(
-    //         gtsam::GaussianEliminationTree(*linearized,
-    //         affectedFactorsVarIndex, order))
-    //         .eliminate(gtsam::EliminatePreferCholesky)
-    //         .first;
-
-    // LOG(INFO) << bayesTree->roots().size();
-    // LOG(WARNING) << "Number nnz bayes tree " <<
-    // bayesTree->roots().at(0)->calculate_nnz(); LOG(WARNING) << "Number nnz
-    // isam2 tree " << optimizer->getSmoother().roots().at(0)->calculate_nnz();
-
-    // // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"),
-    // dyno::DynoLikeKeyFormatter);
-    // dyno::factor_graph_tools::saveBayesTree(*bayesTree,
-    // dyno::getOutputFilePath("elimated_tree.dot"),
-    // dyno::DynoLikeKeyFormatter);
-
-    // const auto& dynosam2_result = optimizer->getResult();
-
-    // gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
-    // for(const auto& key : dynosam2_result.reeliminatedKeys) {
-    //     coloured_affected_keys.insert2(key, "red");
-    // }
-
-    // // const auto& smoother = optimizer->getSmoother().bayesTree();
-    // const auto& smoother = optimizer->getSmoother();
-
-    // // smoother.calculateBestEstimate();
-    // if(smoother.roots().empty()) {
-    //     continue;
-    // }
-
-    // dyno::factor_graph_tools::saveBayesTree(
-    //     smoother,
-    //     dyno::getOutputFilePath("rgbd_bayes_tree_" + std::to_string(i) +
-    //     ".dot"), dyno::DynoLikeKeyFormatter, coloured_affected_keys);
-
-    // {
-    //     gtsam::KeySet marginalize_keys =
-    //     dyno::factor_graph_tools::travsersal::getLeafKeys(smoother);
-    //     gtsam::PrintKeySet(marginalize_keys, "Leaf keys",
-    //     dyno::DynoLikeKeyFormatter);
-
-    //     gtsam::FastMap<gtsam::Key, std::string> coloured_affected_keys;
-    //     for(const auto& key : marginalize_keys) {
-    //         coloured_affected_keys.insert2(key, "blue");
-    //     }
-
-    //     dyno::factor_graph_tools::saveBayesTree(
-    //         smoother,
-    //         dyno::getOutputFilePath("rgbd_bayes_tree_leaf.dot"),
-    //         dyno::DynoLikeKeyFormatter,
-    //         coloured_affected_keys);
-
-    // }
-
-    // smoother.getFactorsUnsafe().saveGraph(dyno::getOutputFilePath("smoother_graph_"
-    // + std::to_string(i) + ".dot"), dyno::DynoLikeKeyFormatter);
-
-    // backend.saveGraph("rgbd_graph_" + std::to_string(i) + ".dot");
-    // backend.saveTree("rgbd_bayes_tree_" + std::to_string(i) + ".dot");
   }
 
   gtsam::NonlinearFactorGraph full_graph = backend.new_updater_->getGraph();
@@ -500,77 +419,15 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
       dyno::getOutputFilePath("construct_simple_graph_test.dot"),
       dyno::DynoLikeKeyFormatter);
 
-  //   {
-  //     const auto [delayed_values, delayed_graph] =
-  //         backend.constructGraph(2, 6, true);
-  //     delayed_graph.saveGraph(
-  //         dyno::getOutputFilePath("construct_simple_delayed_graph_test_2_6.dot"),
-  //         dyno::DynoLikeKeyFormatter);
-  //   }
+  // log results of LM optimisation with different suffix
+  dyno::BackendMetaData backend_info;
+  backend_info.ground_truth_packets = backend.getGroundTruthPackets();
+  backend.new_updater_->logBackendFromMap(backend_info);
 
-  //   {
-  //     const auto [delayed_values, delayed_graph] =
-  //         backend.constructGraph(5, 9, true);
-  //     delayed_graph.saveGraph(
-  //         dyno::getOutputFilePath("construct_simple_delayed_graph_test_5_9.dot"),
-  //         dyno::DynoLikeKeyFormatter);
-  //   }
-
-  // gtsam::LevenbergMarquardtParams opt_params;
-  // opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
-  // // opt_params.
-  // try {
-  //     gtsam::Values opt_values =
-  //     gtsam::LevenbergMarquardtOptimizer(delayed_graph, delayed_values,
-  //     opt_params).optimize();
-  // }
-  // catch(const gtsam::ValuesKeyDoesNotExist& e) {
-  //     LOG(INFO) << "Key does not exist in the values " <<
-  //     dyno::DynoLikeKeyFormatter(e.key());
-  // }
-
-  // graph depends on optimzier used
-  // dummy one will += new factors so should be the full graph
-  //  gtsam::NonlinearFactorGraph full_graph = optimizer->getFactors();
-  //  full_graph.saveGraph(dyno::getOutputFilePath("construct_simple_graph_test.dot"),
-  //  dyno::DynoLikeKeyFormatter);
-
-  // backend.saveTree();
-
-  // auto graph = backend.getMap()->getGraph();
-  // auto estimates = backend.getMap()->getValues();
-
-  // gtsam::GaussianFactorGraph factors = *graph.linearize(estimates);
-  // gtsam::VariableIndex affectedFactorsVarIndex(factors);
-  // //NOTE: NOT the same as in sam2 because of the affectedFactorsVarIndex
-  // //maybe we can reconstruct the affectedFactorsVarIndex by looking at the
-  // factor index's and making a factor graph
-  // //from this? This needs to be the factors that are affected
-  // const gtsam::Ordering ordering =
-  //   gtsam::Ordering::ColamdConstrained(affectedFactorsVarIndex,
-  //   gtsam::FastMap<gtsam::Key, int>{});
-
-  // gtsam::GaussianEliminationTree etree(factors, affectedFactorsVarIndex,
-  // ordering);
-
-  // auto bayesTree = gtsam::ISAM2JunctionTree(etree)
-  //                    .eliminate(gtsam::EliminatePreferCholesky)
-  //                    .first;
-  // bayesTree->saveGraph(dyno::getOutputFilePath("elimated_tree.dot"),
-  // dyno::DynoLikeKeyFormatter);
-  // // etree.sa();
-
-  // auto gfg = graph.linearize(estimates);
-
-  // gtsam::Ordering
-  // isam2_ordering(dyno::factor_graph_tools::travsersal::getEliminatonOrder(*backend.smoother_));
-
-  // //this ordering is not right. how do we get the ordering used by the bayes
-  // tree?
-  // //OH DUH, the bayes tree IS the order!!! So which tree traversal algorithm
-  // do we use?
-  // //Do we not start at the roots and check the frontal variables?
-  // dyno::factor_graph_tools::computeRFactor(gfg, isam2_ordering);
+  backend_info.suffix = "LM_opt";
+  backend.new_updater_->updateTheta(opt_values);
+  backend.new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
+  backend.new_updater_->logBackendFromMap(backend_info);
 }
 
 TEST(RGBDBackendModule, testCliques) {

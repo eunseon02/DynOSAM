@@ -1,54 +1,56 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
+#include <glog/logging.h>
+#include <gtsam/geometry/Cal3_S2.h>
+#include <gtsam/geometry/Point3.h>
+#include <gtsam/geometry/Pose3.h>
+#include <gtsam/geometry/Rot3.h>
+#include <gtsam/geometry/Unit3.h>
+#include <gtsam/inference/Key.h>
+#include <gtsam/inference/Symbol.h>
+#include <gtsam/linear/Sampler.h>
+#include <gtsam/nonlinear/NonlinearFactor.h>
+#include <gtsam/nonlinear/Values.h>
+
+#include <eigen3/Eigen/Core>  //must be included before opencv
+#include <opencv4/opencv2/opencv.hpp>
+#include <optional>
+#include <type_traits>
+
 #include "dynosam/utils/Numerical.hpp"
 
-#include <type_traits>
-#include <optional>
-
-#include <eigen3/Eigen/Core> //must be included before opencv
-#include <gtsam/geometry/Unit3.h>
-#include <gtsam/inference/Symbol.h>
-#include <gtsam/geometry/Pose3.h>
-#include <gtsam/geometry/Point3.h>
-#include <gtsam/geometry/Rot3.h>
-#include <gtsam/geometry/Cal3_S2.h>
-#include <gtsam/nonlinear/Values.h>
-#include <gtsam/inference/Key.h>
-#include <gtsam/nonlinear/NonlinearFactor.h>
-#include <gtsam/linear/Sampler.h>
-
-#include <opencv4/opencv2/opencv.hpp>
-
-#include <glog/logging.h>
-
-
 template <typename T>
-struct is_gtsam_factor : std::is_base_of<gtsam::Factor, T>
-{
-};
+struct is_gtsam_factor : std::is_base_of<gtsam::Factor, T> {};
 
 template <class T>
 static constexpr bool is_gtsam_factor_v = is_gtsam_factor<T>::value;
@@ -56,13 +58,12 @@ static constexpr bool is_gtsam_factor_v = is_gtsam_factor<T>::value;
 template <class T>
 using enable_if_gtsam_factor = std::enable_if_t<is_gtsam_factor_v<T>>;
 
-
-template<class T, class = std::void_t<>>
+template <class T, class = std::void_t<>>
 struct is_gtsam_value : std::false_type {};
 
-template<class T>
-struct is_gtsam_value<T, std::void_t<decltype(gtsam::traits<T>::Equals)>> : std::true_type{};
-
+template <class T>
+struct is_gtsam_value<T, std::void_t<decltype(gtsam::traits<T>::Equals)>>
+    : std::true_type {};
 
 template <class T>
 static constexpr bool is_gtsam_value_v = is_gtsam_value<T>::value;
@@ -71,14 +72,10 @@ namespace opengv {
 typedef Eigen::Matrix<double, 3, 4> transformation_t;
 }
 
+namespace dyno {
+namespace utils {
 
-namespace dyno
-{
-namespace utils
-{
-
-
-//TODO: (jesse) coudl replace with binary predicate... I guess...?
+// TODO: (jesse) coudl replace with binary predicate... I guess...?
 /**
  * @brief Check if two objects wrapped in std::optional are equal.
  * If both are std::nullopt, function will return true
@@ -91,13 +88,14 @@ namespace utils
  * @return true
  * @return false
  */
-template<typename T>
-bool equateGtsamOptionalValues(const std::optional<T>& a, const std::optional<T>& b) {
-  if(a && b) {
+template <typename T>
+bool equateGtsamOptionalValues(const std::optional<T>& a,
+                               const std::optional<T>& b) {
+  if (a && b) {
     return gtsam::traits<T>::Equals(*a, *b);
   }
 
-  if(!a && !b) {
+  if (!a && !b) {
     return true;
   }
 
@@ -121,23 +119,23 @@ cv::Mat gtsamPoint3ToCvMat(const gtsam::Point3& point);
 
 /**
  * @brief Converts a vector of 16 elements listing the elements of a 4x4 3D pose
-*  matrix by rows into a pose3 in gtsam
+ *  matrix by rows into a pose3 in gtsam
  *
  */
 gtsam::Pose3 poseVectorToGtsamPose3(const std::vector<double>& vector_pose);
 
 /**
- * @brief Converts a 3x3 (or 3xM, M > 3) camera matrix from opencv to gtsam::Cal3_S2
+ * @brief Converts a 3x3 (or 3xM, M > 3) camera matrix from opencv to
+ * gtsam::Cal3_S2
  *
  * @param M
  * @return gtsam::Cal3_S2
  */
 gtsam::Cal3_S2 Cvmat2Cal3_S2(const cv::Mat& M);
 
-
 /**
- * @brief  Converts a gtsam pose3 to a 3x3 rotation matrix and translation vector
- * in opencv format (note: the function only extracts R and t, without
+ * @brief  Converts a gtsam pose3 to a 3x3 rotation matrix and translation
+ * vector in opencv format (note: the function only extracts R and t, without
  * changing them)
  *
  * @param pose const gtsam::Pose3&
@@ -149,13 +147,10 @@ cv::Mat gtsamMatrix3ToCvMat(const gtsam::Matrix3& rot);
 cv::Mat gtsamVector3ToCvMat(const gtsam::Vector3& tran);
 cv::Point3d gtsamVector3ToCvPoint3(const gtsam::Vector3& tran);
 
-
-
-
 /**
- * @brief Perturbs a gtsam::Value type object via sampling a normal distribution using
- * the sigmas provided. The length of the sigmas must match the dimension of the value
- * as given by gtsam::traits<T>::dimension.
+ * @brief Perturbs a gtsam::Value type object via sampling a normal distribution
+ * using the sigmas provided. The length of the sigmas must match the dimension
+ * of the value as given by gtsam::traits<T>::dimension.
  *
  * @tparam T
  * @param t
@@ -163,56 +158,57 @@ cv::Point3d gtsamVector3ToCvPoint3(const gtsam::Vector3& tran);
  * @param seed
  * @return T
  */
-template<typename T>
+template <typename T>
 T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   CHECK_EQ(gtsam::traits<T>::dimension, sigmas.size());
-  //! Make static so that the generator (internal to the sampler) remains in memory during calls
-  //! and that we actually get a random distribution
-  //TODO: (jesse)yeah, but we pass different sigmas and seeds to it, so wont this mean it just doesnt get updated?
-  static gtsam::Sampler sample(sigmas, seed);
+  //! Make static so that the generator (internal to the sampler) remains in
+  //! memory during calls and that we actually get a random distribution
+  // TODO: (jesse)yeah, but we pass different sigmas and seeds to it, so wont
+  // this mean it just doesnt get updated?
+  gtsam::Sampler sample(sigmas, seed);
 
-  gtsam::Vector delta(sample.sample()); //delta should be the tangent vector
+  gtsam::Vector delta(sample.sample());  // delta should be the tangent vector
   return gtsam::traits<T>::Retract(t, delta);
 }
 
-template<typename T>
+template <typename T>
 T perturbWithNoise(const T& t, double sigma, int32_t seed = 42) {
-  gtsam::Vector sigmas = gtsam::Vector::Constant(gtsam::traits<T>::dimension, sigma);
+  gtsam::Vector sigmas =
+      gtsam::Vector::Constant(gtsam::traits<T>::dimension, sigma);
   return perturbWithNoise<T>(t, sigmas, seed);
 }
 
-template<typename T>
+template <typename T>
 T createRandomAroundIdentity(double sigma, int32_t seed = 52) {
   T t = gtsam::traits<T>::Identity();
   return perturbWithNoise(t, sigma, seed);
 }
 
-
-template <typename T=double>
-inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point)
-{
-  return gtsam::Point2(static_cast<double>(point.x), static_cast<double>(point.y));
+template <typename T = double>
+inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point) {
+  return gtsam::Point2(static_cast<double>(point.x),
+                       static_cast<double>(point.y));
 }
 
-template <typename T=float>
+template <typename T = float>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
   gtsam::Point2Vector gtsam_points;
-  for (const auto& p : points)
-  {
+  for (const auto& p : points) {
     gtsam_points.push_back(cvPointToGtsam<T>(p));
   }
   return gtsam_points;
 }
 
-template<typename T=float>
+template <typename T = float>
 inline cv::Point_<T> gtsamPointToCv(const gtsam::Point2& point) {
   return cv::Point_<T>(static_cast<T>(point(0)), static_cast<T>(point(1)));
 }
 
-template<typename T=float, typename Allocator>
-std::vector<cv::Point_<T>> gtsamPointsToCv(const std::vector<gtsam::Point2,Allocator>& points) {
+template <typename T = float, typename Allocator>
+std::vector<cv::Point_<T>> gtsamPointsToCv(
+    const std::vector<gtsam::Point2, Allocator>& points) {
   std::vector<cv::Point_<T>> cv_points;
-  for(const auto& p : points) {
+  for (const auto& p : points) {
     cv_points.push_back(gtsamPointToCv<T>(p));
   }
   return cv_points;
@@ -221,28 +217,24 @@ std::vector<cv::Point_<T>> gtsamPointsToCv(const std::vector<gtsam::Point2,Alloc
 //  converts an opengv transformation (3x4 [R t] matrix) to a gtsam::Pose3
 gtsam::Pose3 openGvTfToGtsamPose3(const opengv::transformation_t& RT);
 
-
 template <class T>
-static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key, T* estimate)
-{
-  if (state.exists(key))
-  {
+static bool getEstimateOfKey(const gtsam::Values& state, const gtsam::Key& key,
+                             T* estimate) {
+  if (state.exists(key)) {
     *CHECK_NOTNULL(estimate) = state.at<T>(key);
     return true;
-  }
-  else
-  {
+  } else {
     return false;
   }
 }
 
-inline bool saveNoiseModelAsUpperTriangular(std::ostream& os, const gtsam::noiseModel::Gaussian& noise_model) {
+inline bool saveNoiseModelAsUpperTriangular(
+    std::ostream& os, const gtsam::noiseModel::Gaussian& noise_model) {
   const gtsam::Matrix info = noise_model.information();
   return saveMatrixAsUpperTriangular(os, info);
 }
 
-
-} //utils
-} //dyno
+}  // namespace utils
+}  // namespace dyno
 
 #include "dynosam/utils/GtsamUtils-inl.hpp"

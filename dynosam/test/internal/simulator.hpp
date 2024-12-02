@@ -32,6 +32,8 @@
 
 #include <gtsam/geometry/Pose3.h>
 
+#include <optional>
+
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
@@ -243,7 +245,7 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
                      CHECK(p_body.contains(frame_id));
                      const gtsam::Point3 P_world =
                          body_visitor->motionWorldFromInitial(frame_id) *
-                         p_body.P_body_.second;
+                         body_visitor->pose(frame_id) * p_body.P_body_.second;
                      return std::make_pair(p_body.P_body_.first, P_world);
                    });
 
@@ -273,8 +275,10 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
     std::uniform_int_distribution<> distrib(2, overlap_);
     auto O = distrib(gen);
     auto ending_frame = frame + O;
-    auto tracked_point =
-        PointsGenerator::generateNewPoint(gtsam::Point3(0, 0, 0), 1.0);
+
+    std::uniform_int_distribution<int> seed_dist(0, 100);
+    auto tracked_point = PointsGenerator::generateNewPoint(
+        gtsam::Point3(0, 0, 0), 1.0, seed_dist(gen));
     Point p(frame, ending_frame, tracked_point);
     all_points_.push_back(p);
     return p;
@@ -462,39 +466,95 @@ class Scenario {
 
 class RGBDScenario : public Scenario {
  public:
-  RGBDScenario(ScenarioBody::Ptr camera_body,
-               StaticPointGeneratorVisitor::Ptr static_points_generator)
-      : Scenario(camera_body, static_points_generator) {}
+  struct NoiseParams {
+    double H_R_sigma{0.0};
+    double H_t_sigma{0.0};
+    double X_R_sigma{0.0};
+    double X_t_sigma{0.0};
 
-  RGBDInstanceOutputPacket::Ptr getOutput(FrameId frame_id) const {
-    StatusLandmarkEstimates static_landmarks, dynamic_landmarks;
+    double dynamic_point_sigma{0.0};
+    double static_point_sigma{0.0};
+
+    NoiseParams() {}
+  };
+
+  RGBDScenario(ScenarioBody::Ptr camera_body,
+               StaticPointGeneratorVisitor::Ptr static_points_generator,
+               const NoiseParams& noise_params = NoiseParams())
+      : Scenario(camera_body, static_points_generator),
+        noise_params_(noise_params) {}
+
+  // first is gt, second is with noisy
+  using Output =
+      std::pair<RGBDInstanceOutputPacket::Ptr, RGBDInstanceOutputPacket::Ptr>;
+
+  Output getOutput(FrameId frame_id) const {
+    StatusLandmarkEstimates static_landmarks, dynamic_landmarks,
+        noisy_static_landmarks, noisy_dynamic_landmarks;
     StatusKeypointMeasurements static_keypoint_measurements,
         dynamic_keypoint_measurements;
 
-    MotionEstimateMap motions;
+    GroundTruthInputPacket gt_packet;
+    gt_packet.frame_id_ = frame_id;
+
+    MotionEstimateMap motions, noisy_motions;
     const gtsam::Pose3 X_world = cameraPose(frame_id);
+    gt_packet.X_world_ = X_world;
+
+    gtsam::Vector6 pose_sigmas;
+    pose_sigmas.head<3>().setConstant(noise_params_.X_R_sigma);
+    pose_sigmas.tail<3>().setConstant(noise_params_.X_t_sigma);
+    const gtsam::Pose3 noisy_X_world =
+        dyno::utils::perturbWithNoise(X_world, pose_sigmas);
 
     // tracklets should be uniqyue but becuase we use the DynamicPointSymbol
     // they only need to be unique per frame
     for (const auto& [object_id, object] : object_bodies_) {
       if (objectInScenario(object_id, frame_id)) {
         const gtsam::Pose3 H_world_k = object->motionWorld(frame_id);
+        const gtsam::Pose3 L_world_k = object->pose(frame_id);
         TrackedPoints points_world = object->getPointsWorld(frame_id);
+
+        ObjectPoseGT object_pose_gt;
+        object_pose_gt.frame_id_ = frame_id;
+        object_pose_gt.object_id_ = object_id;
+        object_pose_gt.L_world_ = L_world_k;
+        object_pose_gt.prev_H_current_world_ = H_world_k;
+        gt_packet.object_poses_.push_back(object_pose_gt);
 
         motions.insert2(object_id,
                         dyno::ReferenceFrameValue<gtsam::Pose3>(
                             H_world_k, dyno::ReferenceFrame::GLOBAL));
+
+        gtsam::Vector6 motion_sigmas;
+        motion_sigmas.head<3>().setConstant(noise_params_.H_R_sigma);
+        motion_sigmas.tail<3>().setConstant(noise_params_.H_t_sigma);
+        const gtsam::Pose3 noisy_H_world_k =
+            dyno::utils::perturbWithNoise(H_world_k, motion_sigmas);
+        noisy_motions.insert2(
+            object_id, dyno::ReferenceFrameValue<gtsam::Pose3>(
+                           noisy_H_world_k, dyno::ReferenceFrame::GLOBAL));
 
         // convert to status vectors
         for (const TrackedPoint& tracked_p_world : points_world) {
           auto tracklet_id = tracked_p_world.first;
           auto p_world = tracked_p_world.second;
           const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+          const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
+              p_camera, noise_params_.dynamic_point_sigma);
+
+          // LOG(INFO) << p_camera;
+          // LOG(INFO) << noisy_p_camera;
 
           auto landmark_status = dyno::LandmarkStatus::DynamicInLocal(
               p_camera, frame_id, tracklet_id, object_id,
               dyno::LandmarkStatus::Method::MEASURED);
           dynamic_landmarks.push_back(landmark_status);
+
+          auto noisy_landmark_status = dyno::LandmarkStatus::DynamicInLocal(
+              noisy_p_camera, frame_id, tracklet_id, object_id,
+              dyno::LandmarkStatus::Method::MEASURED);
+          noisy_dynamic_landmarks.push_back(noisy_landmark_status);
 
           // the keypoint sttatus should be unused in the RGBD case but
           // we need it to fill out the data structures
@@ -514,11 +574,18 @@ class RGBDScenario : public Scenario {
       auto tracklet_id = tracked_p_world.first;
       auto p_world = tracked_p_world.second;
       const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+      const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
+          p_camera, noise_params_.static_point_sigma);
 
       auto landmark_status = dyno::LandmarkStatus::StaticInLocal(
           p_camera, frame_id, tracklet_id,
           dyno::LandmarkStatus::Method::MEASURED);
       static_landmarks.push_back(landmark_status);
+
+      auto noisy_landmark_status = dyno::LandmarkStatus::StaticInLocal(
+          noisy_p_camera, frame_id, tracklet_id,
+          dyno::LandmarkStatus::Method::MEASURED);
+      noisy_static_landmarks.push_back(noisy_landmark_status);
 
       // the keypoint sttatus should be unused in the RGBD case but
       // we need it to fill out the data structures
@@ -527,11 +594,20 @@ class RGBDScenario : public Scenario {
       static_keypoint_measurements.push_back(keypoint_status);
     }
 
-    return std::make_shared<RGBDInstanceOutputPacket>(
-        static_keypoint_measurements, dynamic_keypoint_measurements,
-        static_landmarks, dynamic_landmarks, X_world, frame_id, frame_id,
-        motions);
+    return {
+        std::make_shared<RGBDInstanceOutputPacket>(
+            static_keypoint_measurements, dynamic_keypoint_measurements,
+            static_landmarks, dynamic_landmarks, X_world, frame_id, frame_id,
+            motions, ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr, gt_packet),
+        std::make_shared<RGBDInstanceOutputPacket>(
+            static_keypoint_measurements, dynamic_keypoint_measurements,
+            noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world,
+            frame_id, frame_id, noisy_motions, ObjectPoseMap{},
+            gtsam::Pose3Vector{}, nullptr, gt_packet)};
   }
+
+ private:
+  NoiseParams noise_params_;
 };
 
 }  // namespace dyno_testing

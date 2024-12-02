@@ -43,5 +43,9 @@ def make_plot(results_folder_path, prefix):
 # make_plot("/root/results/DynoSAM/test_kitti_main/", "rgbd_motion_world_backend")
 # make_plot("/root/results/DynoSAM/test_kitti_vo_0004/", "rgbd_motion_world_backend")
 # make_plot("/root/results/DynoSAM/omd_vo_test/", "rgbd_motion_world_backend")
-make_plot("/root/results/DynoSAM/test_kitti_main/", "rgbd_motion_world_backend")
+# make_plot("/root/results/DynoSAM/test_kitti_main/", "rgbd_motion_world_backend")
+
 # make_plot("/root/results/Dynosam_tro2024/kitti_0000/", "rgbd_motion_world_backend")
+
+# make_plot("/root/results/misc/", "object_centric_backend")
+make_plot("/root/results/misc/", "object_centric_LM_opt_backend")

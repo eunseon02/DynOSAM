@@ -708,7 +708,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     // in this case k is k-1 as we use frame_node_k_1
     gtsam::Pose3 s0_H_k = computeInitialHFromFrontend(context.getObjectId(),
                                                       frame_node_k_1->getId());
-    // LOG(INFO) << "s0_H_k " << s0_H_k;
+    LOG(INFO) << "s0_H_k " << s0_H_k;
     // measured point in camera frame
     const gtsam::Point3 m_camera =
         lmk_node->getMeasurement(frame_node_k_1).landmark;

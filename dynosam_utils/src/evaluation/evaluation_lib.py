@@ -735,6 +735,9 @@ class MapPlotter3D(Evaluator):
         map_fig = plt.figure(figsize=(8,14))
         # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
         ax = map_fig.add_subplot(111, projection="3d")
+        ax.set_ylabel(r"Y(m)")
+        ax.set_xlabel(r"X(m)")
+        ax.set_zlabel(r"Z(m)")
         # ax = map_fig.add_subplot(111, projection="3d")
 
 
@@ -747,6 +750,7 @@ class MapPlotter3D(Evaluator):
 
         # do gross renamign
         all_traj = object_trajs
+        all_gt_traj = copy.deepcopy(self._object_eval.object_poses_traj_ref)
 
         import itertools
 
@@ -827,13 +831,13 @@ class MapPlotter3D(Evaluator):
                 # if int(frame_id) % 10 != 0:
                 #     continue
 
-                object_trajectory = self._object_eval.make_object_trajectory(object_id)
-                #this worls for when the code output the frame id as the timestamp (which may change in future?)
-                object_trajectory_frames = object_trajs[object_id].timestamps
+                # object_trajectory = self._object_eval.make_object_trajectory(object_id)
+                # #this worls for when the code output the frame id as the timestamp (which may change in future?)
+                # object_trajectory_frames = object_trajs[object_id].timestamps
 
-                last_frame = object_trajectory_frames[-1]
+                # last_frame = object_trajectory_frames[-1]
 
-                print(f"frame {frame_id} last frame {last_frame}")
+                # print(f"frame {frame_id} last frame {last_frame}")
 
                 # if frame_id < last_frame:
                 #     k_H_last = lie_algebra.se3()
@@ -850,34 +854,34 @@ class MapPlotter3D(Evaluator):
                 #     t_robot_convention = k_H_last @ t_robot_convention
 
 
-                if int(frame_id) == int(last_frame):
+                # if int(frame_id) == int(last_frame):
                     # get normalised timestamp in range 0-1
                     # normalised_frame_id = (frame_id - np.min(object_trajectory_frames))/(np.max(object_trajectory_frames) - np.min(object_trajectory_frames))
                     # print(frame_id)
                     # print(normalised_frame_id)
                     # time_dependant_colour = colour_generator_map[object_id](normalised_frame_id)
 
-                    if object_id not in object_points:
-                        # x,y,z,colour
-                        object_points[object_id] = [[], [], []]
+                if object_id not in object_points:
+                    # x,y,z,colour
+                    object_points[object_id] = [[], [], []]
 
-                    object_points[object_id][0].append(t_robot_convention[0])
-                    object_points[object_id][1].append(t_robot_convention[1])
-                    object_points[object_id][2].append(t_robot_convention[2])
+                object_points[object_id][0].append(t_robot_convention[0])
+                object_points[object_id][1].append(t_robot_convention[1])
+                object_points[object_id][2].append(t_robot_convention[2])
 
-                    print(f"Adding object point {t_robot_convention}: {object_id}")
+                # print(f"Adding object point {t_robot_convention}: {object_id}")
 
 
 
         ax.view_init(azim=0, elev=90)
-        ax.patch.set_facecolor('white')
-        ax.axis('off')
+        # ax.patch.set_facecolor('white')
+        # ax.axis('off')
 
         # static points
         # some of these params are after handtuning on particular datasets for pretty figures ;)
         ax.scatter(x_points, y_points, z_points, s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
-        # for (_, data), object_colour in zip(object_points.items(), colour_list):
-        #     ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
+        for (_, data), object_colour in zip(object_points.items(), colour_list):
+            ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
         tools.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
@@ -888,6 +892,18 @@ class MapPlotter3D(Evaluator):
                                        traj_zorder=30,
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
+
+        tools.plot_object_trajectories(map_fig, all_gt_traj,
+                                       plot_mode=evo_plot.PlotMode.xyz,
+                                       colours=colour_list,
+                                    #    plot_axis_est=True,
+                                       plot_start_end_markers=False,
+                                       axis_marker_scale=1.5,
+                                       traj_zorder=30,
+                                       est_style="--",
+                                       est_name_prefix="Object GT",
+                                       traj_linewidth=3.0)
+
 
         trajectory_helper.set_ax_limits(map_fig.gca())
         map_fig.tight_layout()
