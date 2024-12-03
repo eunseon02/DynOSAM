@@ -129,9 +129,12 @@ struct UpdateObservationParams {
 // forward declare
 class BackendParams;
 
+// TODO: copy so many of these params from backendparams, why not just use the
+// same one?
 struct FormulationParams {
   size_t min_dynamic_observations = 3u;
   size_t min_static_observations = 2u;
+  bool use_smoothing_factor = true;
   std::string suffix = "";
 };
 /**
@@ -189,7 +192,8 @@ class Formulation {
   DYNO_POINTER_TYPEDEFS(This)
 
   Formulation(const FormulationParams& params, typename Map::Ptr map,
-              const NoiseModels& noise_models);
+              const NoiseModels& noise_models,
+              const FormulationHooks& hooks = FormulationHooks());
   virtual ~Formulation() = default;
 
  protected:
@@ -299,7 +303,7 @@ class Formulation {
    * @return AccessorType::Ptr
    */
   virtual typename AccessorType::Ptr createAccessor(
-      const gtsam::Values* values) const = 0;
+      const SharedFormulationData& shared_data) const = 0;
 
  public:
   // TODO: get formatter!?
@@ -347,6 +351,9 @@ class Formulation {
    * @return const gtsam::NonlinearFactorGraph&
    */
   const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
+
+  const FormulationHooks& hooks() const { return hooks_; }
+  // FormulationHooks& hooks() { return hooks_; }
 
   /**
    * @brief Get the fully qualified name of this formulation which is derived
@@ -512,6 +519,7 @@ class Formulation {
   const FormulationParams params_;
   typename Map::Ptr map_;
   const NoiseModels noise_models_;
+  FormulationHooks hooks_;
   //! the set of (static related) values managed by this updater. Allows
   //! checking if values have already been added over successifve function calls
   gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map;

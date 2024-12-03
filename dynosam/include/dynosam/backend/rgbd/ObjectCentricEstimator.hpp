@@ -46,10 +46,10 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
                               public ObjectCentricProperties {
  public:
   ObjectCentricAccessor(
-      const gtsam::Values* theta, Map3d2d::Ptr map,
+      const SharedFormulationData& shared_data, Map3d2d::Ptr map,
       const gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>*
           L0_values)
-      : Accessor<Map3d2d>(theta, map), L0_values_(L0_values) {}
+      : Accessor<Map3d2d>(shared_data, map), L0_values_(L0_values) {}
   virtual ~ObjectCentricAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
@@ -80,8 +80,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
 
   ObjectCentricFormulation(const FormulationParams& params,
                            typename Map::Ptr map,
-                           const NoiseModels& noise_models)
-      : Base(params, map, noise_models) {}
+                           const NoiseModels& noise_models,
+                           const FormulationHooks& hooks)
+      : Base(params, map, noise_models, hooks) {}
   virtual ~ObjectCentricFormulation() {}
 
   void dynamicPointUpdateCallback(
@@ -101,8 +102,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
 
  protected:
   AccessorTypePointer createAccessor(
-      const gtsam::Values* values) const override {
-    return std::make_shared<ObjectCentricAccessor>(values, this->map(), &L0_);
+      const SharedFormulationData& shared_data) const override {
+    return std::make_shared<ObjectCentricAccessor>(shared_data, this->map(),
+                                                   &L0_);
   }
 
   std::string loggerPrefix() const override { return "object_centric"; }

@@ -74,7 +74,6 @@ typedef Eigen::Matrix<double, 3, 4> transformation_t;
 
 namespace dyno {
 namespace utils {
-
 // TODO: (jesse) coudl replace with binary predicate... I guess...?
 /**
  * @brief Check if two objects wrapped in std::optional are equal.
@@ -165,9 +164,10 @@ T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   //! memory during calls and that we actually get a random distribution
   // TODO: (jesse)yeah, but we pass different sigmas and seeds to it, so wont
   // this mean it just doesnt get updated?
-  gtsam::Sampler sample(sigmas, seed);
-
-  gtsam::Vector delta(sample.sample());  // delta should be the tangent vector
+  // gtsam::Sampler sample(sigmas, seed);
+  static std::mt19937_64 rng(std::random_device{}());
+  gtsam::Vector delta = gtsam::Sampler::sampleDiagonal(
+      sigmas, &rng);  // delta should be the tangent vector
   return gtsam::traits<T>::Retract(t, delta);
 }
 

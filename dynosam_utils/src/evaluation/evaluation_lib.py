@@ -775,14 +775,13 @@ class MapPlotter3D(Evaluator):
             if object_trajectory and plot_velocities:
                 tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
-        # all_traj["Camera"] = camera_traj
 
         tools.plot_object_trajectories(map_fig, {"Camera":camera_traj},
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,
                                        plot_start_end_markers=False,
-                                       axis_marker_scale=1.0,
+                                       axis_marker_scale=0.1,
                                        downscale=0.1,
                                        traj_zorder=30,
                                        traj_linewidth=3.0)
@@ -886,9 +885,9 @@ class MapPlotter3D(Evaluator):
         tools.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
-                                    #    plot_axis_est=True,
-                                       plot_start_end_markers=False,
-                                       axis_marker_scale=1.5,
+                                       plot_axis_est=True,
+                                       plot_start_end_markers=True,
+                                       axis_marker_scale=0.1,
                                        traj_zorder=30,
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
@@ -896,9 +895,9 @@ class MapPlotter3D(Evaluator):
         tools.plot_object_trajectories(map_fig, all_gt_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
-                                    #    plot_axis_est=True,
-                                       plot_start_end_markers=False,
-                                       axis_marker_scale=1.5,
+                                       plot_axis_est=True,
+                                       plot_start_end_markers=True,
+                                       axis_marker_scale=0.1,
                                        traj_zorder=30,
                                        est_style="--",
                                        est_name_prefix="Object GT",
@@ -909,7 +908,7 @@ class MapPlotter3D(Evaluator):
         map_fig.tight_layout()
         # plt.show()
 
-        plot_collection.add_figure("Static map", map_fig)
+        plot_collection.add_figure(self.kwargs.get("title", "Map"), map_fig)
 
 
 

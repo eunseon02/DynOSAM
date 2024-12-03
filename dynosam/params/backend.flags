@@ -5,8 +5,8 @@
 # --constant_object_motion_translation_sigma=0.2
 
 # good for carla
---constant_object_motion_rotation_sigma=2.0
---constant_object_motion_translation_sigma=10.0
+--constant_object_motion_rotation_sigma=0.4
+--constant_object_motion_translation_sigma=2.0
 
 
 
@@ -21,7 +21,7 @@
 
 
 --static_point_noise_sigma=0.01
---dynamic_point_noise_sigma=0.0625
+--dynamic_point_noise_sigma=0.001
 # --dynamic_point_noise_sigma=0.00006
 
 --opt_window_size=10
@@ -29,7 +29,7 @@
 
 
 --use_vo_factor=true
---use_smoothing_factor=false
+--use_smoothing_factor=true
 --use_full_batch_opt=true
 
 

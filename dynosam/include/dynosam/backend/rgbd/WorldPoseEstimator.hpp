@@ -38,8 +38,8 @@ namespace dyno {
 
 class WorldPoseAccessor : public Accessor<Map3d2d> {
  public:
-  WorldPoseAccessor(const gtsam::Values* theta, Map3d2d::Ptr map)
-      : Accessor<Map3d2d>(theta, map) {}
+  WorldPoseAccessor(const SharedFormulationData& shared_data, Map3d2d::Ptr map)
+      : Accessor<Map3d2d>(shared_data, map) {}
   virtual ~WorldPoseAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
@@ -61,8 +61,9 @@ class WorldPoseFormulation : public Formulation<Map3d2d> {
   DYNO_POINTER_TYPEDEFS(WorldPoseFormulation)
 
   WorldPoseFormulation(const FormulationParams& params, typename Map::Ptr map,
-                       const NoiseModels& noise_models)
-      : Base(params, map, noise_models) {}
+                       const NoiseModels& noise_models,
+                       const FormulationHooks& hooks)
+      : Base(params, map, noise_models, hooks) {}
   virtual ~WorldPoseFormulation() {}
 
   void dynamicPointUpdateCallback(
@@ -82,8 +83,8 @@ class WorldPoseFormulation : public Formulation<Map3d2d> {
 
  protected:
   AccessorTypePointer createAccessor(
-      const gtsam::Values* values) const override {
-    return std::make_shared<WorldPoseAccessor>(values, this->map());
+      const SharedFormulationData& shared_data) const override {
+    return std::make_shared<WorldPoseAccessor>(shared_data, this->map());
   }
 
   std::string loggerPrefix() const override { return "rgbd_LL_world_identity"; }

@@ -107,6 +107,24 @@ struct NoiseModels {
   gtsam::SharedNoiseModel static_point_noise;
 };
 
+struct FormulationHooks {
+  using BackendParamsRequest = std::function<const BackendParams&()>;
+  // Return copy? Should return reference? Maybe?
+  using GroundTruthPacketsRequest =
+      std::function<std::optional<GroundTruthPacketMap>()>;
+
+  GroundTruthPacketsRequest ground_truth_packets_request;
+  BackendParamsRequest backend_params_request;
+};
+
+struct SharedFormulationData {
+  const gtsam::Values* values;
+  const FormulationHooks* hooks;
+
+  SharedFormulationData(const gtsam::Values* v, const FormulationHooks* h)
+      : values(v), hooks(h) {}
+};
+
 // /**
 //  * @brief Internal back-end structure allowing Formulation/Accessors to get
 //  meta-data
@@ -129,10 +147,11 @@ struct NoiseModels {
 // };
 
 // better to change to hook (or pointer?) and parse as config
+// TODO: clean up!??
 struct BackendMetaData {
-  BackendParams params;
+  // BackendParams params;
   std::string suffix;
-  std::optional<GroundTruthPacketMap> ground_truth_packets;
+  // std::optional<GroundTruthPacketMap> ground_truth_packets;
 };
 
 struct BackendSpinState {

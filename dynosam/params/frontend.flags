@@ -2,10 +2,10 @@
 
 --use_byte_tracker=false
 
---init_object_pose_from_gt=true
+--init_object_pose_from_gt=false
 --use_frontend_logger=true
 
---semantic_mask_step_size=14
+--semantic_mask_step_size=22
 
 #we turn off for cluster as there is some problem with the OF I think?
 --use_propogate_mask=true

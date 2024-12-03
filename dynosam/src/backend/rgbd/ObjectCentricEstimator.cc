@@ -117,32 +117,69 @@ class ObjectCentricMotionFactor
 };
 
 class ObjectCentricSmoothing
-    : public gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Pose3> {
+    : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
+                                      gtsam::Pose3> {
  public:
   typedef boost::shared_ptr<ObjectCentricSmoothing> shared_ptr;
   typedef ObjectCentricSmoothing This;
-  typedef gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Pose3> Base;
+  typedef gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3>
+      Base;
 
   gtsam::Pose3 L_0_;
 
-  ObjectCentricSmoothing(gtsam::Key motion_k_1, gtsam::Key motion_k,
-                         const gtsam::Pose3& L_0, gtsam::SharedNoiseModel model)
-      : Base(model, motion_k_1, motion_k), L_0_(L_0) {}
+  ObjectCentricSmoothing(gtsam::Key motion_k_2, gtsam::Key motion_k_1,
+                         gtsam::Key motion_k, const gtsam::Pose3& L_0,
+                         gtsam::SharedNoiseModel model)
+      : Base(model, motion_k_2, motion_k_1, motion_k), L_0_(L_0) {}
 
   gtsam::Vector evaluateError(
-      const gtsam::Pose3& motion_k_1, const gtsam::Pose3& motion_k,
+      const gtsam::Pose3& motion_k_2, const gtsam::Pose3& motion_k_1,
+      const gtsam::Pose3& motion_k,
       boost::optional<gtsam::Matrix&> J1 = boost::none,
-      boost::optional<gtsam::Matrix&> J2 = boost::none) const override {
-    gtsam::Matrix H1, H2;
-    const gtsam::Pose3 L_k_1 = motion_k_1.compose(L_0_, H1);
-    const gtsam::Pose3 L_k = motion_k.compose(L_0_, H2);
+      boost::optional<gtsam::Matrix&> J2 = boost::none,
+      boost::optional<gtsam::Matrix&> J3 = boost::none) const override {
+    if (J1) {
+      *J1 = gtsam::numericalDerivative31<gtsam::Vector6, gtsam::Pose3,
+                                         gtsam::Pose3, gtsam::Pose3>(
+          std::bind(&ObjectCentricSmoothing::residual, std::placeholders::_1,
+                    std::placeholders::_2, std::placeholders::_3, L_0_),
+          motion_k_2, motion_k_1, motion_k);
+    }
 
-    gtsam::Pose3 hx =
-        gtsam::traits<gtsam::Pose3>::Between(L_k_1, L_k, J1, J2);  // h(x)
+    if (J2) {
+      *J2 = gtsam::numericalDerivative32<gtsam::Vector6, gtsam::Pose3,
+                                         gtsam::Pose3, gtsam::Pose3>(
+          std::bind(&ObjectCentricSmoothing::residual, std::placeholders::_1,
+                    std::placeholders::_2, std::placeholders::_3, L_0_),
+          motion_k_2, motion_k_1, motion_k);
+    }
 
-    // if(J1) *J1 = H1 * (*J1);
-    // if(J2) *J2 = H2 * (*J2);
-    return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(), hx);
+    if (J3) {
+      *J3 = gtsam::numericalDerivative33<gtsam::Vector6, gtsam::Pose3,
+                                         gtsam::Pose3, gtsam::Pose3>(
+          std::bind(&ObjectCentricSmoothing::residual, std::placeholders::_1,
+                    std::placeholders::_2, std::placeholders::_3, L_0_),
+          motion_k_2, motion_k_1, motion_k);
+    }
+
+    return residual(motion_k_2, motion_k_1, motion_k, L_0_);
+  }
+
+  static gtsam::Vector residual(const gtsam::Pose3& motion_k_2,
+                                const gtsam::Pose3& motion_k_1,
+                                const gtsam::Pose3& motion_k,
+                                const gtsam::Pose3& L_0) {
+    const gtsam::Pose3 L_k_2 = motion_k_2 * L_0;
+    const gtsam::Pose3 L_k_1 = motion_k_1 * L_0;
+    const gtsam::Pose3 L_k = motion_k * L_0;
+
+    gtsam::Pose3 k_2_H_k_1 = L_k_2.inverse() * L_k_1;
+    gtsam::Pose3 k_1_H_k = L_k_1.inverse() * L_k;
+
+    gtsam::Pose3 relative_motion = k_2_H_k_1.inverse() * k_1_H_k;
+
+    return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(),
+                                              relative_motion);
   }
 };
 
@@ -477,6 +514,21 @@ class SmartHFactor
 
 //     size_t dim() const override {}
 
+//     double error(const gtsam::Values& c) override const {
+//        if (active(c)) {
+//         const Vector b = unwhitenedError(c);
+//         check(noiseModel_, b.size());
+//         if (noiseModel_)
+//           return
+//           noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
+//         else
+//           return 0.5 * b.squaredNorm();
+//       } else {
+//         return 0.0;
+//       }
+
+//     }
+
 //     std::shared_ptr<gtsam::GaussianFactor> linearize(const Values& c) const
 //     override {
 //       std::vector<gtsam::Matrix> A(size());
@@ -523,22 +575,43 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node_k = map()->getFrame(frame_id);
   const auto frame_node_k_1 = map()->getFrame(frame_id - 1u);
-  if (frame_node_k && frame_node_k_1) {
-    const auto motion_key = frame_node_k->makeObjectMotionKey(object_id);
-    StateQuery<gtsam::Pose3> motion_s0_k =
-        this->query<gtsam::Pose3>(motion_key);
+
+  if (!frame_node_k) {
+    LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
+                 << " object id=" << object_id
+                 << " as the frame does not exist!";
+    return StateQuery<gtsam::Pose3>::InvalidMap();
+  }
+
+  auto motion_key = frame_node_k->makeObjectMotionKey(object_id);
+  StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
+  if (!motion_s0_k) {
+    LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
+                 << " object id=" << object_id
+                 << ". Frame exists by motion is missing!!!";
+    return StateQuery<gtsam::Pose3>::InvalidMap();
+  }
+
+  // first object motion (ie s0 -> s1)
+  if (!frame_node_k_1) {
+    CHECK_NOTNULL(frame_node_k);
+    FrameId s0 = L0_values_->at(object_id).first;
+    // check that the first frame of the object motion is actually this frame
+    // this motion should actually be identity
+    CHECK_EQ(s0, frame_id);
+    return StateQuery<gtsam::Pose3>(motion_key, *motion_s0_k);
+  } else {
+    CHECK_NOTNULL(frame_node_k);
+    CHECK_NOTNULL(frame_node_k_1);
 
     StateQuery<gtsam::Pose3> motion_s0_k_1 = this->query<gtsam::Pose3>(
         frame_node_k_1->makeObjectMotionKey(object_id));
-
-    // TODO: if motion_s0_k_1 but motion_s0_k then check that this frame ==s0,
-    // then the motion will just be motion_s0_k (and should be identity)
 
     if (motion_s0_k && motion_s0_k_1) {
       // want a motion from k-1 to k, but we estimate s0 to k
       //^w_{k-1}H_k = ^w_{s0}H_k \: ^w_{s0}H_{k-1}^{-1}
       gtsam::Pose3 motion = motion_s0_k.get() * motion_s0_k_1->inverse();
-      LOG(INFO) << "Obj motion " << motion;
+      // LOG(INFO) << "Obj motion " << motion;
       return StateQuery<gtsam::Pose3>(motion_key, motion);
     } else {
       return StateQuery<gtsam::Pose3>::NotInMap(
@@ -569,6 +642,7 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
   if (motion_s0_k) {
     CHECK(L0_values_->exists(object_id));
     const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
+    // LOG(INFO) << "Frame " << frame_id << " obj id " << object_id;
     // LOG(INFO) << "Object pose s0 " << L0;
     // LOG(INFO) << "Object motion " << motion_s0_k.get();
     const gtsam::Pose3 L_k = motion_s0_k.get() * L0;
@@ -706,14 +780,19 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
 
     // use first point as initalisation?
     // in this case k is k-1 as we use frame_node_k_1
-    gtsam::Pose3 s0_H_k = computeInitialHFromFrontend(context.getObjectId(),
-                                                      frame_node_k_1->getId());
-    LOG(INFO) << "s0_H_k " << s0_H_k;
+    gtsam::Pose3 s0_H_k_world = computeInitialHFromFrontend(
+        context.getObjectId(), frame_node_k_1->getId());
+    gtsam::Pose3 L_k = s0_H_k_world * L_0;
+    // H from k to s0 in frame k (^wL_k)
+    //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();
+    gtsam::Pose3 k_H_s0_k = (L_0.inverse() * s0_H_k_world * L_0).inverse();
+    gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
+    // LOG(INFO) << "s0_H_k " << s0_H_k;
     // measured point in camera frame
     const gtsam::Point3 m_camera =
         lmk_node->getMeasurement(frame_node_k_1).landmark;
     Landmark lmk_L0_init =
-        L_0.inverse() * s0_H_k.inverse() * context.X_k_1_measured * m_camera;
+        L_0.inverse() * k_H_s0_W * context.X_k_1_measured * m_camera;
 
     // initalise value //cannot initalise again the same -> it depends where L_0
     // is created, no?
@@ -735,7 +814,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
         frame_node_k_1->makePoseKey(),  // pose key at previous frames,
         object_motion_key_k_1, point_key,
         lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-        landmark_motion_noise);
+        dynamic_point_noise);
     // const gtsam::Pose3 X_world =
     //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
     // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
@@ -763,7 +842,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
       frame_node_k->makePoseKey(),  // pose key at previous frames,
       object_motion_key_k, point_key,
       lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-      landmark_motion_noise);
+      dynamic_point_noise);
 
   // const gtsam::Pose3 X_world =
   //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
@@ -833,22 +912,29 @@ void ObjectCentricFormulation::objectUpdateContext(
     FrameId s0 = getL0(object_id, frame_id).first;
     if (s0 == frame_id) {
       // add prior
-      //  new_factors.addPrior<gtsam::Pose3>(object_motion_key_k,
-      //  gtsam::Pose3::Identity());
+      new_factors.addPrior<gtsam::Pose3>(object_motion_key_k,
+                                         gtsam::Pose3::Identity(),
+                                         noise_models_.initial_pose_prior);
     }
   }
 
   if (frame_id < 2) return;
 
   auto frame_node_k_1 = map()->getFrame(frame_id - 1u);
-  if (!frame_node_k_1) {
+  auto frame_node_k_2 = map()->getFrame(frame_id - 2u);
+  if (!frame_node_k_1 || !frame_node_k_2) {
     return;
   }
 
-  if (FLAGS_use_smoothing_factor && frame_node_k_1->objectObserved(object_id)) {
+  if (params_.use_smoothing_factor &&
+      frame_node_k_1->objectObserved(object_id) &&
+      frame_node_k_2->objectObserved(object_id)) {
     // motion key at previous frame
     const gtsam::Symbol object_motion_key_k_1 =
         frame_node_k_1->makeObjectMotionKey(object_id);
+
+    const gtsam::Symbol object_motion_key_k_2 =
+        frame_node_k_2->makeObjectMotionKey(object_id);
 
     auto object_smoothing_noise = noise_models_.object_smoothing_noise;
     CHECK(object_smoothing_noise);
@@ -870,17 +956,18 @@ void ObjectCentricFormulation::objectUpdateContext(
     //  from k-2 to k-1)
     // exists in the map or is about to exist via new values, add the
     //  smoothing factor
-    if (is_other_values_in_map.exists(object_motion_key_k_1) &&
+    if (is_other_values_in_map.exists(object_motion_key_k_2) &&
+        is_other_values_in_map.exists(object_motion_key_k_1) &&
         is_other_values_in_map.exists(object_motion_key_k)) {
       new_factors.emplace_shared<ObjectCentricSmoothing>(
-          object_motion_key_k_1, object_motion_key_k,
+          object_motion_key_k_2, object_motion_key_k_1, object_motion_key_k,
           getL0(object_id, frame_id).second, object_smoothing_noise);
       // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
       //     object_motion_key_k_1, object_motion_key_k,
       //     gtsam::Pose3::Identity(), object_smoothing_noise);
-      // if(result.debug_info)
-      // result.debug_info->getObjectInfo(context.getObjectId()).smoothing_factor_added
-      // = true;
+      if (result.debug_info)
+        result.debug_info->getObjectInfo(context.getObjectId())
+            .smoothing_factor_added = true;
     }
 
     //   // // if(smoothing_added) {
@@ -990,7 +1077,22 @@ void ObjectCentricFormulation::objectUpdateContext(
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getL0(
     ObjectId object_id, FrameId frame_id) {
   if (L0_.exists(object_id)) {
+    LOG(INFO) << "Getting L0 from cache " << object_id << " SE(3) "
+              << L0_.at(object_id).second;
     return L0_.at(object_id);
+  }
+
+  if (FLAGS_init_object_pose_from_gt) {
+    const auto gt_packets = hooks().ground_truth_packets_request();
+    if (gt_packets && gt_packets->exists(frame_id)) {
+      const auto& gt_packet = gt_packets->at(frame_id);
+
+      ObjectPoseGT object_gt;
+      if (gt_packet.getObject(object_id, object_gt)) {
+        L0_.insert2(object_id, std::make_pair(frame_id, object_gt.L_world_));
+        return L0_.at(object_id);
+      }
+    }
   }
 
   // else initalise from centroid?

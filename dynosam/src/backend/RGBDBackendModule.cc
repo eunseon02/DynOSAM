@@ -141,8 +141,8 @@ RGBDBackendModule::~RGBDBackendModule() {
   if (base_params_.use_logger_) {
     // hack to make sure things are updated!!
     BackendMetaData backend_info;
-    backend_info.params = base_params_;
-    backend_info.ground_truth_packets = this->getGroundTruthPackets();
+    // backend_info.params = base_params_;
+    // backend_info.ground_truth_packets = this->getGroundTruthPackets();
 
     new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
     new_updater_->logBackendFromMap(backend_info);
@@ -183,8 +183,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
     callback(new_updater_, frame_k, new_values, new_factors);
   }
 
-  fixed_lag_smoother_->update(new_factors, new_values);
-  // smoother_->update(new_factors, new_values);
+  // fixed_lag_smoother_->update(new_factors, new_values);
+  smoother_->update(new_factors, new_values);
 
   return {State::Nominal, nullptr};
 }
@@ -242,32 +242,44 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
   LOG(INFO) << "Starting any updates";
 
-  bool incremental = false;
+  bool incremental = true;
   if (incremental) {
     LOG(INFO) << "Updating incremental";
-    gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
-    for (const auto& factor : new_factors) {
-      for (const auto key : factor->keys()) {
-        gtsam::Symbol sym(key);
-        if (sym.chr() == dyno::kPoseSymbolChar) {
-          timestamp_map[key] = frame_k;
-        }
+    const auto old_keys = smoother_->getLinearizationPoint().keys();
+    gtsam::FastList<gtsam::Key> noRelinKeys;
+    // gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
+    // for (const auto& factor : new_factors) {
+    //   for (const auto key : factor->keys()) {
+    //     gtsam::Symbol sym(key);
+    //     if (sym.chr() == dyno::kPoseSymbolChar) {
+    //       timestamp_map[key] = frame_k;
+    //     }
 
-        if (sym.chr() == dyno::kObjectMotionSymbolChar) {
-          timestamp_map[key] = frame_k;
+    //     if (sym.chr() == dyno::kObjectMotionSymbolChar) {
+    //       timestamp_map[key] = frame_k;
+    //     }
+    //   }
+    // }
+
+    for (const auto key : old_keys) {
+      dyno::ObjectId object_id;
+      dyno::FrameId k;
+      if (dyno::reconstructMotionInfo(key, object_id, k)) {
+        if (k < frame_k) {
+          noRelinKeys.push_back(key);
         }
       }
     }
 
-    // auto result = smoother_->update(new_factors, new_values);
-    fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);
+    auto result = smoother_->update(new_factors, new_values);
+    // fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);
 
-    auto result = fixed_lag_smoother_->getISAM2Result();
+    // auto result = fixed_lag_smoother_->getISAM2Result();
     smoother_->update();
     smoother_->update();
     LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
               << " error after " << result.getErrorAfter();
-    gtsam::Values optimised_values = fixed_lag_smoother_->calculateEstimate();
+    gtsam::Values optimised_values = smoother_->calculateEstimate();
     // for (const auto& key_value : optimised_values) {
     //   gtsam::Symbol sym(key_value.key);
     //   if(sym.chr() == dyno::kObjectMotionSymbolChar) {
@@ -331,8 +343,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
                                     ".post_update");
   BackendMetaData backend_info;
-  backend_info.params = base_params_;
-  backend_info.ground_truth_packets = this->getGroundTruthPackets();
+  // backend_info.params = base_params_;
   new_updater_->accessorFromTheta()->postUpdateCallback(
       backend_info);  // force update every time (slow! and just for testing)
 
@@ -469,23 +480,35 @@ bool RGBDBackendModule::buildSlidingWindowOptimisation(
 Formulation<RGBDBackendModule::RGBDMap>::UniquePtr
 RGBDBackendModule::makeUpdater() {
   FormulationParams formulation_params;
+  // TODO: why are we copying params over???
   formulation_params.min_static_observations = base_params_.min_static_obs_;
   formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
-  formulation_params.suffix = FLAGS_updater_suffix;
+  formulation_params.suffix = FLAGS_updater_suffix;  // TODO: depricate!!!
+  formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
+
+  FormulationHooks hooks;
+  hooks.ground_truth_packets_request =
+      [&]() -> std::optional<GroundTruthPacketMap> {
+    return this->getGroundTruthPackets();
+  };
+
+  hooks.backend_params_request = [&]() -> const BackendParams& {
+    return base_params_;
+  };
 
   if (updater_type_ == UpdaterType::MotionInWorld) {
     LOG(INFO) << "Using MotionInWorld";
-    return std::make_unique<WorldMotionFormulation>(formulation_params,
-                                                    getMap(), noise_models_);
+    return std::make_unique<WorldMotionFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
 
   } else if (updater_type_ == UpdaterType::LLWorld) {
     LOG(INFO) << "Using LLWorld";
     return std::make_unique<WorldPoseFormulation>(formulation_params, getMap(),
-                                                  noise_models_);
+                                                  noise_models_, hooks);
   } else if (updater_type_ == UpdaterType::ObjectCentric) {
     LOG(INFO) << "Using ObjectCentric";
-    return std::make_unique<ObjectCentricFormulation>(formulation_params,
-                                                      getMap(), noise_models_);
+    return std::make_unique<ObjectCentricFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
   } else {
     CHECK(false) << "Not implemented";
   }

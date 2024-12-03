@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 
 plt.rcdefaults()
 
-def make_plot(results_folder_path, prefix):
+
+
+def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollection=None):
     dataset_eval = eval.DatasetEvaluator(results_folder_path)
     data_files = dataset_eval.make_data_files(prefix)
 
@@ -21,13 +23,14 @@ def make_plot(results_folder_path, prefix):
     camera_pose_eval = dataset_eval.create_camera_pose_evaluator(data_files)
     motion_eval = dataset_eval.create_motion_error_evaluator(data_files)
 
-    plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval)
+    plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval, title=prefix)
 
-    plot_collection = evo_plot.PlotCollection("Map")
+    if plot_collection is None:
+        plot_collection = evo_plot.PlotCollection("Map")
     results = {}
 
     plotter.process(plot_collection, results)
-    plot_collection.show()
+    return plot_collection
 
     # MapPlotter3D,
     #             map_points_log_path,
@@ -48,4 +51,14 @@ def make_plot(results_folder_path, prefix):
 # make_plot("/root/results/Dynosam_tro2024/kitti_0000/", "rgbd_motion_world_backend")
 
 # make_plot("/root/results/misc/", "object_centric_backend")
-make_plot("/root/results/misc/", "object_centric_LM_opt_backend")
+# make_plot("/root/results/misc/", "object_centric_LM_opt_backend")
+
+plot_collection = evo_plot.PlotCollection("Map")
+
+make_plot("/root/results/misc/", "rgbd_motion_world_LM_opt_backend", plot_collection)
+make_plot("/root/results/misc/", "rgbd_motion_world_backend", plot_collection)
+
+make_plot("/root/results/misc/", "object_centric_backend", plot_collection)
+make_plot("/root/results/misc/", "object_centric_LM_opt_backend", plot_collection)
+
+plot_collection.show()

@@ -40,8 +40,9 @@ namespace dyno {
 template <typename MAP>
 Formulation<MAP>::Formulation(const FormulationParams& params,
                               typename Map::Ptr map,
-                              const NoiseModels& noise_models)
-    : params_(params), map_(map), noise_models_(noise_models) {}
+                              const NoiseModels& noise_models,
+                              const FormulationHooks& hooks)
+    : params_(params), map_(map), noise_models_(noise_models), hooks_(hooks) {}
 
 template <typename MAP>
 void Formulation<MAP>::setTheta(const gtsam::Values& linearization) {
@@ -569,7 +570,7 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
   }
 
   // this doesnt really work any more as debug info is meant to be per frame?
-  if (result.debug_info && VLOG_IS_ON(20)) {
+  if (result.debug_info) {
     for (const auto& [object_id, object_info] :
          result.debug_info->getObjectInfos()) {
       std::stringstream ss;
@@ -600,8 +601,9 @@ void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
 
   typename Map::Ptr map = this->map();
   auto accessor = this->accessorFromTheta();
-  const auto& ground_truth_packets = backend_info.ground_truth_packets;
-  const auto& backend_params = backend_info.params;
+  CHECK(hooks_.ground_truth_packets_request);
+  const auto ground_truth_packets = hooks_.ground_truth_packets_request();
+  const auto& backend_params = hooks_.backend_params_request();
 
   const ObjectPoseMap object_pose_map = accessor->getObjectPoses();
 
@@ -660,7 +662,8 @@ template <typename MAP>
 typename Formulation<MAP>::AccessorType::Ptr
 Formulation<MAP>::accessorFromTheta() const {
   if (!accessor_theta_) {
-    accessor_theta_ = createAccessor(&theta_);
+    SharedFormulationData shared_data(&theta_, &hooks_);
+    accessor_theta_ = createAccessor(shared_data);
   }
   return accessor_theta_;
 }

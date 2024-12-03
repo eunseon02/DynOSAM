@@ -136,56 +136,75 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
               gtsam::Pose3::Identity(),
               // motion only in x
-              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.1, 0, 0))));
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.1, 0.0),
+                           gtsam::Point3(0.1, 0.05, 0))));
   // needs to be at least 3 overlap so we can meet requirements in graph
   // TODO: how can we do 1 point but with lots of overlap (even infinity
   // overlap?)
 
+  const double H_R_sigma = 0.1;
+  const double H_t_sigma = 0.2;
+  const double dynamic_point_sigma = 0.1;
+
   dyno_testing::RGBDScenario::NoiseParams noise_params;
-  noise_params.H_R_sigma = 0.1;
-  noise_params.H_t_sigma = 0.2;
-  noise_params.dynamic_point_sigma = 0.01;
+  noise_params.H_R_sigma = H_R_sigma;
+  noise_params.H_t_sigma = H_t_sigma;
+  noise_params.dynamic_point_sigma = dynamic_point_sigma;
 
   dyno_testing::RGBDScenario scenario(
       camera, std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5),
       noise_params);
 
   // add one obect
-  const size_t num_points = 5;
-  const size_t obj1_overlap = 3;
+  const size_t num_points = 10;
+  const size_t obj1_overlap = 4;
+  const size_t obj2_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
               // motion only in x
-              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
+                           gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj1_overlap));
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
-              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(1, 0.4, 0.1)),
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
-          std::make_unique<dyno_testing::ConstantObjectPointsVisitor>(
-              num_points));
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj2_overlap));
 
   scenario.addObjectBody(1, object1);
-  // scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(2, object2);
 
   //   SETDEBUG("IncrementalFixedLagSmoother update", true);
   //   CHECK(gtsam::isDebugVersion());
   //   CHECK(ISDEBUG("IncrementalFixedLagSmoother update"));
   dyno::BackendParams backend_params;
   backend_params.useLogger(false);
-  backend_params.min_dynamic_obs_ = 1u;
+  backend_params.min_dynamic_obs_ = 3u;
+  backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
+
+  //   dyno::FormulationHooks hooks;
+  //   hooks.ground_truth_packets_request = [&scenario] () ->
+  //   std::optional<GroundTruthPacketMap> {
+  //     return scenario.getGroundTruths();
+  //   };
+
+  //   hooks.backend_params_request = [&] () -> const BackendParams& {
+  //     return backend_params;
+  //   };
 
   dyno::RGBDBackendModule backend(
       backend_params, dyno_testing::makeDefaultCameraPtr(),
-      dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
+      dyno::RGBDBackendModule::UpdaterType::MotionInWorld);
 
   gtsam::ISAM2Params isam2_params;
+  isam2_params.evaluateNonlinearError = true;
   isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
   // isam2_params.relinearizeSkip = 1;
   gtsam::ISAM2 isam2(isam2_params);
@@ -230,6 +249,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
     gtsam::KeyVector marginalizableKeys;
     gtsam::FastMap<gtsam::Key, int> constrained_keys;
+    gtsam::FastList<gtsam::Key> noRelinKeys;
     // for (const auto& factors : new_factors) {
     //   gtsam::KeyVector keys = factors->keys();
     //   for(const auto key : keys) {
@@ -246,6 +266,15 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     const auto new_keys = new_values.keys();
     const auto old_keys = isam2.getLinearizationPoint().keys();
 
+    for (const auto key : old_keys) {
+      dyno::ObjectId object_id;
+      dyno::FrameId k;
+      if (dyno::reconstructMotionInfo(key, object_id, k)) {
+        if (k < frame_id) {
+          noRelinKeys.push_back(key);
+        }
+      }
+    }
     // for (const auto key : new_keys) {
     //   dyno::ObjectId object_id;
     //   dyno::FrameId k;
@@ -312,6 +341,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
                                         additionalKeys.end());
 
     gtsam::ISAM2UpdateParams update_params;
+    update_params.noRelinKeys = noRelinKeys;
     // update_params.constrainedKeys = constrained_keys;
     // update_params.extraReelimKeys = additionalMarkedKeys;
 
@@ -390,14 +420,17 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     //     dyno::DynoLikeKeyFormatter,
     //     coloured_affected_keys);
 
-    const auto& graph = formulation->getGraph();
-    const auto& theta = formulation->getTheta();
-    LOG(INFO) << "Formulation error: " << graph.error(theta);
+    LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
+              << " error after " << result.getErrorAfter();
+    opt_values = isam2.calculateEstimate();
+    // const auto& graph = formulation->getGraph();
+    // const auto& theta = formulation->getTheta();
+    // LOG(INFO) << "Formulation error: " << graph.error(theta);
 
-    gtsam::LevenbergMarquardtOptimizer problem(graph, theta);
-    // save the result of the optimisation and log after all runs
-    opt_values = problem.optimize();
-    LOG(INFO) << "Formulation error after: " << graph.error(opt_values);
+    // gtsam::LevenbergMarquardtOptimizer problem(graph, theta);
+    // // save the result of the optimisation and log after all runs
+    // opt_values = problem.optimize();
+    // LOG(INFO) << "Formulation error after: " << graph.error(opt_values);
   };
 
   for (size_t i = 0; i < 10; i++) {
@@ -421,7 +454,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
   // log results of LM optimisation with different suffix
   dyno::BackendMetaData backend_info;
-  backend_info.ground_truth_packets = backend.getGroundTruthPackets();
+  backend.new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
   backend.new_updater_->logBackendFromMap(backend_info);
 
   backend_info.suffix = "LM_opt";

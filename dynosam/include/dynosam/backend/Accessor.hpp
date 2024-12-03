@@ -56,7 +56,7 @@ class Accessor {
 
   DYNO_POINTER_TYPEDEFS(This)
 
-  Accessor(const gtsam::Values* theta, typename Map::Ptr map);
+  Accessor(const SharedFormulationData& shared_data, typename Map::Ptr map);
   virtual ~Accessor() {}
 
   /**
@@ -321,6 +321,13 @@ class Accessor {
  protected:
   auto map() const { return map_; }
 
+  const gtsam::Values& values() const {
+    return *CHECK_NOTNULL(shared_data_.values);
+  }
+  const FormulationHooks& hooks() const {
+    return *CHECK_NOTNULL(shared_data_.hooks);
+  }
+
  private:
   /**
    * @brief Compute all pairs of object motions and poses at the requested
@@ -336,9 +343,11 @@ class Accessor {
                              FrameId pose_frame_id) const;
 
  private:
-  const gtsam::Values* theta_;  //! Pointer to the set of current values stored
-                                //! in the associated formulation
-  typename Map::Ptr map_;       //! Pointer to internal map structure;
+  //   const gtsam::Values* theta_;  //! Pointer to the set of current values
+  //   stored
+  //                                 //! in the associated formulation
+  const SharedFormulationData shared_data_;
+  typename Map::Ptr map_;  //! Pointer to internal map structure;
 };
 
 }  // namespace dyno

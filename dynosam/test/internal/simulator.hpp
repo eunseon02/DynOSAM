@@ -244,7 +244,6 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
                      CHECK_NOTNULL(body_visitor);
                      CHECK(p_body.contains(frame_id));
                      const gtsam::Point3 P_world =
-                         body_visitor->motionWorldFromInitial(frame_id) *
                          body_visitor->pose(frame_id) * p_body.P_body_.second;
                      return std::make_pair(p_body.P_body_.first, P_world);
                    });
@@ -278,7 +277,7 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
 
     std::uniform_int_distribution<int> seed_dist(0, 100);
     auto tracked_point = PointsGenerator::generateNewPoint(
-        gtsam::Point3(0, 0, 0), 1.0, seed_dist(gen));
+        gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
     Point p(frame, ending_frame, tracked_point);
     all_points_.push_back(p);
     return p;
@@ -594,6 +593,8 @@ class RGBDScenario : public Scenario {
       static_keypoint_measurements.push_back(keypoint_status);
     }
 
+    ground_truths_.insert2(frame_id, gt_packet);
+
     return {
         std::make_shared<RGBDInstanceOutputPacket>(
             static_keypoint_measurements, dynamic_keypoint_measurements,
@@ -606,8 +607,11 @@ class RGBDScenario : public Scenario {
             gtsam::Pose3Vector{}, nullptr, gt_packet)};
   }
 
+  const GroundTruthPacketMap& getGroundTruths() const { return ground_truths_; }
+
  private:
   NoiseParams noise_params_;
+  mutable GroundTruthPacketMap ground_truths_;
 };
 
 }  // namespace dyno_testing
