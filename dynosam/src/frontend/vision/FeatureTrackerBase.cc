@@ -61,9 +61,9 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   const bool show_intermediate_tracking =
       debug && config.show_intermediate_tracking;
 
-  static const cv::Scalar red(NiceColors::reddishpurple().bgra());
-  static const cv::Scalar green(NiceColors::bluishgreen().bgra());
-  static const cv::Scalar blue(NiceColors::blue().bgra());
+  static const cv::Scalar red(Color::red().bgra());
+  static const cv::Scalar green(Color::green().bgra());
+  static const cv::Scalar blue(Color::blue().bgra());
 
   constexpr static int kFeatureThicknessDebug = 5;
   constexpr static int kFeatureThickness = 4;
