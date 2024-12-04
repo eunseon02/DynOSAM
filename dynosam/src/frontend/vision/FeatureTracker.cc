@@ -221,9 +221,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
         // limit point tracking of a certain age
         TrackletId tracklet_to_use = tracklet_id;
-        // TODO: hack ;)
-        if (new_age > 4) {
-          // if(new_age > 25u) {
+        if (new_age > 25u) {
           tracklet_to_use = tracked_id_manager.getTrackletIdCount();
           tracked_id_manager.incrementTrackletIdCount();
           new_age = 0;

@@ -506,59 +506,55 @@ class SmartHFactor
   }
 };
 
-// class SmartMotionFactor : public gtsam::NonlinearFactor {
+class SmartMotionFactor : public gtsam::NonlinearFactor {
+ public:
+  SmartMotionFactor() {}
+  ~SmartMotionFactor() {}
 
-// public:
-//     SmartMotionFactor() {}
-//     ~SmartMotionFactor() {}
+  /// Return the dimension (number of rows!) of the factor.
+  size_t dim() const override {}
 
-//     size_t dim() const override {}
+  double error(const gtsam::Values& c) override const {
+    if (active(c)) {
+      const Vector b = unwhitenedError(c);
+      check(noiseModel_, b.size());
+      if (noiseModel_)
+        return noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
+      else
+        return 0.5 * b.squaredNorm();
+    } else {
+      return 0.0;
+    }
+  }
 
-//     double error(const gtsam::Values& c) override const {
-//        if (active(c)) {
-//         const Vector b = unwhitenedError(c);
-//         check(noiseModel_, b.size());
-//         if (noiseModel_)
-//           return
-//           noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
-//         else
-//           return 0.5 * b.squaredNorm();
-//       } else {
-//         return 0.0;
-//       }
+  std::shared_ptr<gtsam::GaussianFactor> linearize(
+      const Values& c) const override {
+    std::vector<gtsam::Matrix> A(size());
 
-//     }
+    Vector b = -unwhitenedError(x, A);
+    // check(noiseModel_, b.size());
 
-//     std::shared_ptr<gtsam::GaussianFactor> linearize(const Values& c) const
-//     override {
-//       std::vector<gtsam::Matrix> A(size());
+    // Whiten the corresponding system now
+    if (noiseModel_) noiseModel_->WhitenSystem(A, b);
 
-//       Vector b = -unwhitenedError(x, A);
-//       // check(noiseModel_, b.size());
+    // Fill in terms, needed to create JacobianFactor below
+    std::vector<std::pair<Key, Matrix>> terms(size());
+    for (size_t j = 0; j < size(); ++j) {
+      terms[j].first = keys()[j];
+      terms[j].second.swap(A[j]);
+    }
 
-//       // Whiten the corresponding system now
-//       if (noiseModel_)
-//         noiseModel_->WhitenSystem(A, b);
-
-//       // Fill in terms, needed to create JacobianFactor below
-//       std::vector<std::pair<Key, Matrix> > terms(size());
-//       for (size_t j = 0; j < size(); ++j) {
-//         terms[j].first = keys()[j];
-//         terms[j].second.swap(A[j]);
-//       }
-
-//       // TODO pass unwhitened + noise model to Gaussian factor
-//       using noiseModel::Constrained;
-//       if (noiseModel_ && noiseModel_->isConstrained())
-//         return GaussianFactor::shared_ptr(
-//             new JacobianFactor(terms, b,
-//                 std::static_pointer_cast<Constrained>(noiseModel_)->unit()));
-//       else {
-//         return GaussianFactor::shared_ptr(new JacobianFactor(terms, b));
-//       }
-//     }
-
-// };
+    // TODO pass unwhitened + noise model to Gaussian factor
+    using noiseModel::Constrained;
+    if (noiseModel_ && noiseModel_->isConstrained())
+      return GaussianFactor::shared_ptr(new JacobianFactor(
+          terms, b,
+          std::static_pointer_cast<Constrained>(noiseModel_)->unit()));
+    else {
+      return GaussianFactor::shared_ptr(new JacobianFactor(terms, b));
+    }
+  }
+};
 
 // TODO: hack for now!
 gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>
@@ -810,17 +806,17 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
   if (context.is_starting_motion_frame) {
     // add factor at k-1
-    new_factors.emplace_shared<ObjectCentricMotionFactor>(
-        frame_node_k_1->makePoseKey(),  // pose key at previous frames,
-        object_motion_key_k_1, point_key,
-        lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-        dynamic_point_noise);
-    // const gtsam::Pose3 X_world =
-    //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
-    // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+    // new_factors.emplace_shared<ObjectCentricMotionFactor>(
+    //     frame_node_k_1->makePoseKey(),  // pose key at previous frames,
     //     object_motion_key_k_1, point_key,
-    //     lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
-    //     landmark_motion_noise);
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
+    //     dynamic_point_noise);
+    const gtsam::Pose3 X_world =
+        getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
+    new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+        object_motion_key_k_1, point_key,
+        lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
+        dynamic_point_noise);
 
     // new_factors.emplace_shared<AuxillaryPFactor>(
     //      object_motion_key_k_1, point_key,
@@ -838,18 +834,18 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   }
 
   // add factor at k
-  new_factors.emplace_shared<ObjectCentricMotionFactor>(
-      frame_node_k->makePoseKey(),  // pose key at previous frames,
-      object_motion_key_k, point_key,
-      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-      dynamic_point_noise);
-
-  // const gtsam::Pose3 X_world =
-  //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
-  // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
+  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
   //     object_motion_key_k, point_key,
-  //     lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
-  //     landmark_motion_noise);
+  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
+  //     dynamic_point_noise);
+
+  const gtsam::Pose3 X_world =
+      getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
+  new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+      object_motion_key_k, point_key,
+      lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
+      dynamic_point_noise);
 
   // new_factors.emplace_shared<AuxillaryPFactor>(
   //        object_motion_key_k, point_key,

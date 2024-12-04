@@ -261,15 +261,15 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     //   }
     // }
 
-    for (const auto key : old_keys) {
-      dyno::ObjectId object_id;
-      dyno::FrameId k;
-      if (dyno::reconstructMotionInfo(key, object_id, k)) {
-        if (k < frame_k) {
-          noRelinKeys.push_back(key);
-        }
-      }
-    }
+    // for (const auto key : old_keys) {
+    //   dyno::ObjectId object_id;
+    //   dyno::FrameId k;
+    //   if (dyno::reconstructMotionInfo(key, object_id, k)) {
+    //     if (k < frame_k) {
+    //       noRelinKeys.push_back(key);
+    //     }
+    //   }
+    // }
 
     auto result = smoother_->update(new_factors, new_values);
     // fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);

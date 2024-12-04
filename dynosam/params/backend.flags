@@ -5,8 +5,8 @@
 # --constant_object_motion_translation_sigma=0.2
 
 # good for carla
---constant_object_motion_rotation_sigma=0.4
---constant_object_motion_translation_sigma=2.0
+--constant_object_motion_rotation_sigma=0.02
+--constant_object_motion_translation_sigma=0.1
 
 
 

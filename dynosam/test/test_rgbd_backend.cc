@@ -201,7 +201,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
   dyno::RGBDBackendModule backend(
       backend_params, dyno_testing::makeDefaultCameraPtr(),
-      dyno::RGBDBackendModule::UpdaterType::MotionInWorld);
+      dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.evaluateNonlinearError = true;
