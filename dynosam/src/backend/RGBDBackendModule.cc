@@ -183,8 +183,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
     callback(new_updater_, frame_k, new_values, new_factors);
   }
 
-  // fixed_lag_smoother_->update(new_factors, new_values);
   smoother_->update(new_factors, new_values);
+  // smoother_->update(new_factors, new_values);
 
   return {State::Nominal, nullptr};
 }
@@ -245,7 +245,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   bool incremental = true;
   if (incremental) {
     LOG(INFO) << "Updating incremental";
-    const auto old_keys = smoother_->getLinearizationPoint().keys();
+    // const auto old_keys = smoother_->getLinearizationPoint().keys();
     gtsam::FastList<gtsam::Key> noRelinKeys;
     // gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
     // for (const auto& factor : new_factors) {
@@ -256,7 +256,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     //     }
 
     //     if (sym.chr() == dyno::kObjectMotionSymbolChar) {
-    //       timestamp_map[key] = frame_k;
+    //       // timestamp_map[key] = frame_k;
     //     }
     //   }
     // }

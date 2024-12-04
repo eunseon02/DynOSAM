@@ -37,84 +37,60 @@
 
 namespace dyno {
 
-class ObjectCentricMotionFactor
-    : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
-                                      gtsam::Point3> {
- public:
-  typedef boost::shared_ptr<ObjectCentricMotionFactor> shared_ptr;
-  typedef ObjectCentricMotionFactor This;
-  typedef gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3, gtsam::Point3>
-      Base;
-
-  gtsam::Point3 measurement_;
-  gtsam::Pose3 L_0_;
-
-  ObjectCentricMotionFactor(gtsam::Key camera_pose, gtsam::Key motion,
-                            gtsam::Key point_object,
-                            const gtsam::Point3& measurement,
-                            const gtsam::Pose3& L_0,
-                            gtsam::SharedNoiseModel model)
-      : Base(model, camera_pose, motion, point_object),
-        measurement_(measurement),
-        L_0_(L_0) {}
-
-  gtsam::Vector evaluateError(
-      const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
-      const gtsam::Point3& point_object,
-      boost::optional<gtsam::Matrix&> J1 = boost::none,
-      boost::optional<gtsam::Matrix&> J2 = boost::none,
-      boost::optional<gtsam::Matrix&> J3 = boost::none) const override {
-    if (J1) {
-      // error w.r.t to camera pose
-      Eigen::Matrix<double, 3, 6> df_dX =
-          gtsam::numericalDerivative31<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Point3>(
-              std::bind(&ObjectCentricMotionFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, measurement_, L_0_),
-              camera_pose, motion, point_object);
-      *J1 = df_dX;
-    }
-
-    if (J2) {
-      // error w.r.t to motion
-      Eigen::Matrix<double, 3, 6> df_dH =
-          gtsam::numericalDerivative32<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Point3>(
-              std::bind(&ObjectCentricMotionFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, measurement_, L_0_),
-              camera_pose, motion, point_object);
-      *J2 = df_dH;
-    }
-
-    if (J3) {
-      // error w.r.t to point in local
-      Eigen::Matrix<double, 3, 3> df_dm =
-          gtsam::numericalDerivative33<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Point3>(
-              std::bind(&ObjectCentricMotionFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, measurement_, L_0_),
-              camera_pose, motion, point_object);
-      *J3 = df_dm;
-    }
-
-    return residual(camera_pose, motion, point_object, measurement_, L_0_);
+gtsam::Vector ObjectCentricMotionFactor::evaluateError(
+    const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
+    const gtsam::Point3& point_object, boost::optional<gtsam::Matrix&> J1,
+    boost::optional<gtsam::Matrix&> J2,
+    boost::optional<gtsam::Matrix&> J3) const {
+  if (J1) {
+    // error w.r.t to camera pose
+    Eigen::Matrix<double, 3, 6> df_dX =
+        gtsam::numericalDerivative31<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Point3>(
+            std::bind(&ObjectCentricMotionFactor::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, measurement_, L_0_),
+            camera_pose, motion, point_object);
+    *J1 = df_dX;
   }
 
-  static gtsam::Vector residual(const gtsam::Pose3& camera_pose,
-                                const gtsam::Pose3& motion,
-                                const gtsam::Point3& point_object,
-                                const gtsam::Point3& measurement,
-                                const gtsam::Pose3& L_0) {
-    // apply transform to put map point into world via its motion
-    gtsam::Point3 map_point_world = motion * (L_0 * point_object);
-    // put map_point_world into local camera coordinate
-    gtsam::Point3 map_point_camera = camera_pose.inverse() * map_point_world;
-    return map_point_camera - measurement;
+  if (J2) {
+    // error w.r.t to motion
+    Eigen::Matrix<double, 3, 6> df_dH =
+        gtsam::numericalDerivative32<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Point3>(
+            std::bind(&ObjectCentricMotionFactor::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, measurement_, L_0_),
+            camera_pose, motion, point_object);
+    *J2 = df_dH;
   }
-};
+
+  if (J3) {
+    // error w.r.t to point in local
+    Eigen::Matrix<double, 3, 3> df_dm =
+        gtsam::numericalDerivative33<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Point3>(
+            std::bind(&ObjectCentricMotionFactor::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, measurement_, L_0_),
+            camera_pose, motion, point_object);
+    *J3 = df_dm;
+  }
+
+  return residual(camera_pose, motion, point_object, measurement_, L_0_);
+}
+
+gtsam::Vector ObjectCentricMotionFactor::residual(
+    const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
+    const gtsam::Point3& point_object, const gtsam::Point3& measurement,
+    const gtsam::Pose3& L_0) {
+  // apply transform to put map point into world via its motion
+  gtsam::Point3 map_point_world = motion * (L_0 * point_object);
+  // put map_point_world into local camera coordinate
+  gtsam::Point3 map_point_camera = camera_pose.inverse() * map_point_world;
+  return map_point_camera - measurement;
+}
 
 class ObjectCentricSmoothing
     : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
@@ -503,56 +479,6 @@ class SmartHFactor
     gtsam::Point3 m_previous_world = X_previous * Z_previous;
     gtsam::Point3 m_current_world = X_current * Z_current;
     return m_current_world - prev_H_current * m_previous_world;
-  }
-};
-
-class SmartMotionFactor : public gtsam::NonlinearFactor {
- public:
-  SmartMotionFactor() {}
-  ~SmartMotionFactor() {}
-
-  /// Return the dimension (number of rows!) of the factor.
-  size_t dim() const override {}
-
-  double error(const gtsam::Values& c) override const {
-    if (active(c)) {
-      const Vector b = unwhitenedError(c);
-      check(noiseModel_, b.size());
-      if (noiseModel_)
-        return noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
-      else
-        return 0.5 * b.squaredNorm();
-    } else {
-      return 0.0;
-    }
-  }
-
-  std::shared_ptr<gtsam::GaussianFactor> linearize(
-      const Values& c) const override {
-    std::vector<gtsam::Matrix> A(size());
-
-    Vector b = -unwhitenedError(x, A);
-    // check(noiseModel_, b.size());
-
-    // Whiten the corresponding system now
-    if (noiseModel_) noiseModel_->WhitenSystem(A, b);
-
-    // Fill in terms, needed to create JacobianFactor below
-    std::vector<std::pair<Key, Matrix>> terms(size());
-    for (size_t j = 0; j < size(); ++j) {
-      terms[j].first = keys()[j];
-      terms[j].second.swap(A[j]);
-    }
-
-    // TODO pass unwhitened + noise model to Gaussian factor
-    using noiseModel::Constrained;
-    if (noiseModel_ && noiseModel_->isConstrained())
-      return GaussianFactor::shared_ptr(new JacobianFactor(
-          terms, b,
-          std::static_pointer_cast<Constrained>(noiseModel_)->unit()));
-    else {
-      return GaussianFactor::shared_ptr(new JacobianFactor(terms, b));
-    }
   }
 };
 

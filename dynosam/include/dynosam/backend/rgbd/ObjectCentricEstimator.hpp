@@ -29,12 +29,365 @@
  */
 #pragma once
 
+#include <gtsam/base/numericalDerivative.h>  //only needed for factors
+
 #include "dynosam/backend/Accessor.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/common/Map.hpp"
+#include "dynosam/common/Types.hpp"  //only needed for factors
 
 namespace dyno {
+
+class ObjectCentricMotionFactor
+    : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
+                                      gtsam::Point3> {
+ public:
+  typedef boost::shared_ptr<ObjectCentricMotionFactor> shared_ptr;
+  typedef ObjectCentricMotionFactor This;
+  typedef gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3, gtsam::Point3>
+      Base;
+
+  gtsam::Point3 measurement_;
+  gtsam::Pose3 L_0_;
+
+  ObjectCentricMotionFactor(gtsam::Key camera_pose, gtsam::Key motion,
+                            gtsam::Key point_object,
+                            const gtsam::Point3& measurement,
+                            const gtsam::Pose3& L_0,
+                            gtsam::SharedNoiseModel model)
+      : Base(model, camera_pose, motion, point_object),
+        measurement_(measurement),
+        L_0_(L_0) {}
+
+  gtsam::Vector evaluateError(
+      const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
+      const gtsam::Point3& point_object,
+      boost::optional<gtsam::Matrix&> J1 = boost::none,
+      boost::optional<gtsam::Matrix&> J2 = boost::none,
+      boost::optional<gtsam::Matrix&> J3 = boost::none) const override;
+
+  static gtsam::Vector residual(const gtsam::Pose3& camera_pose,
+                                const gtsam::Pose3& motion,
+                                const gtsam::Point3& point_object,
+                                const gtsam::Point3& measurement,
+                                const gtsam::Pose3& L_0);
+};
+
+template <size_t DIM, typename MOTION, typename POSE>
+struct MotionFactorTraits {
+  static constexpr size_t ZDim = DIM;
+  using Motion = MOTION;
+  using Pose = POSE;
+
+  using Motions = std::vector<Motion>;
+  using Poses = std::vector<Pose>;
+  //! Measurement dimension
+  using Z = Eigen::Matrix<double, ZDim, 1>;
+  using ZVector = std::vector<Z, Eigen::aligned_allocator<Z>>;
+
+  //! Motion dimension
+  static constexpr int HDim = gtsam::traits<Motion>::dimension;
+  //! Pose dimension
+  static constexpr int XDim = gtsam::traits<Pose>::dimension;
+  static constexpr int HessianDim = HDim + XDim;
+  //! G blocks (derivatives wrt motion, H)
+  using MatrixGD = Eigen::Matrix<double, ZDim, HDim>;
+  //! F blocks (derivatives wrt pose, X)
+  using MatrixFD = Eigen::Matrix<double, ZDim, XDim>;
+  //! E blocks (derivatives wrt point, m)
+  using MatrixED = Eigen::Matrix<double, ZDim, ZDim>;
+
+  using GBlocks = std::vector<MatrixGD, Eigen::aligned_allocator<MatrixGD>>;
+  using FBlocks = std::vector<MatrixFD, Eigen::aligned_allocator<MatrixFD>>;
+  using EBlocks = std::vector<MatrixED, Eigen::aligned_allocator<MatrixED>>;
+};
+
+// should be object centric smart factor... :)
+template <size_t DIM, typename MOTION, typename POSE>
+class SmartMotionFactor : public gtsam::NonlinearFactor,
+                          MotionFactorTraits<DIM, MOTION, POSE> {
+ public:
+  using Base = gtsam::NonlinearFactor;
+  using This = SmartMotionFactor<DIM, MOTION, POSE>;
+  using MotionTraits = MotionFactorTraits<DIM, MOTION, POSE>;
+
+  static constexpr size_t ZDim = MotionTraits::ZDim;
+
+  using typename MotionTraits::Z;
+  using typename MotionTraits::ZVector;
+
+  using typename MotionTraits::Motion;
+  using typename MotionTraits::Pose;
+
+  using typename MotionTraits::Motions;
+  using typename MotionTraits::Poses;
+
+  using typename MotionTraits::MatrixED;
+  using typename MotionTraits::MatrixFD;
+  using typename MotionTraits::MatrixGD;
+
+  using typename MotionTraits::EBlocks;
+  using typename MotionTraits::FBlocks;
+  using typename MotionTraits::GBlocks;
+
+  static constexpr int HessianDim = MotionTraits::HessianDim;
+
+  SmartMotionFactor(const gtsam::Pose3 L_s0) : Base(), L_s0_(L_s0) {}
+  ~SmartMotionFactor() {}
+
+ public:
+  /// Return the dimension (number of rows!) of the factor.
+  size_t dim() const override { return ZDim * this->measured_.size(); }
+
+  void add(const Z& measured, const gtsam::Key& key) {
+    if (std::find(keys_.begin(), keys_.end(), key) != keys_.end()) {
+      throw std::invalid_argument(
+          "SmartMotionFactor::add: adding duplicate measurement for key.");
+    }
+    this->measured_.push_back(measured);
+    this->keys_.push_back(key);
+  }
+
+  /// Return the 2D measurements (ZDim, in general).
+  const ZVector& measured() const { return measured_; }
+
+  // double error(const gtsam::Values& c) override const {
+  //   if (active(c)) {
+  //     const Vector b = unwhitenedError(c);
+  //     check(noiseModel_, b.size());
+  //     if (noiseModel_)
+  //       return noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
+  //     else
+  //       return 0.5 * b.squaredNorm();
+  //   } else {
+  //     return 0.0;
+  //   }
+  // }
+
+  Motions motions(const gtsam::Values& values) const { return Motions{}; }
+
+  Poses poses(const gtsam::Values& values) const { return Poses{}; }
+
+  double totalReprojectionError(
+      const Motions& motions, const Poses& poses,
+      std::optional<gtsam::Point3> externalPoint = {}) const {
+    // if (externalPoint)
+    //   result_ = TriangulationResult(*externalPoint);
+    // else
+    //   result_ = triangulateSafe(cameras);
+
+    // if (result_)
+    //   // All good, just use version in base class
+    //   return Base::totalReprojectionError(cameras, *result_);
+    // else if (params_.degeneracyMode == HANDLE_INFINITY) {
+    //   // Otherwise, manage the exceptions with rotation-only factors
+    //   Unit3 backprojected = cameras.front().backprojectPointAtInfinity(
+    //       this->measured_.at(0));
+    //   return Base::totalReprojectionError(cameras, backprojected);
+    // } else
+    //   // if we don't want to manage the exceptions we discard the factor
+    //   return 0.0;
+  }
+  /**
+   * Calculate the error of the factor.
+   * This is the log-likelihood, e.g. \f$ 0.5(h(x)-z)^2/\sigma^2 \f$ in case of
+   * Gaussian. In this class, we take the raw prediction error \f$ h(x)-z \f$,
+   * ask the noise model to transform it to \f$ (h(x)-z)^2/\sigma^2 \f$, and
+   * then multiply by 0.5. Will be used in "error(Values)" function required by
+   * NonlinearFactor base class
+   */
+  double totalReprojectionError(const Motions& motions, const Poses& poses,
+                                const gtsam::Point3& point_l) const {
+    gtsam::Vector error = whitenedError(motions, poses, point_l);
+    return 0.5 * error.dot(error);
+  }
+
+  /**
+   * Calculate vector of re-projection errors [h(x)-z] = [cameras.project(p) -
+   * z], with the noise model applied.
+   */
+  gtsam::Vector whitenedError(const Motions& motions, const Poses& poses,
+                              const gtsam::Point3& point_l) const {
+    gtsam::Vector error = unwhitenedError(motions, poses, point_l);
+    if (noiseModel_) noiseModel_->whitenInPlace(error);
+    return error;
+  }
+
+  gtsam::Vector unwhitenedError(const Motions& motions, const Poses& poses,
+                                const gtsam::Point3& point_l,
+                                GBlocks* Gs = nullptr, FBlocks* Fs = nullptr,
+                                EBlocks* Es = nullptr) {
+    return reprojectionError(motions, poses, point_l, Gs, Fs, Es);
+  }
+
+  // TODO: unhitened error?
+  template <class POINT, class... OptArgs,
+            typename = std::enable_if_t<sizeof...(OptArgs) != 0>>
+  gtsam::Vector unwhitenedError(const Motions& motions, const Poses& poses,
+                                const gtsam::Point3& point_l,
+                                OptArgs&&... optArgs) const {
+    return unwhitenedError(motions, poses, point_l, (&optArgs)...);
+  }
+
+  // TODO:computeJacobians
+
+  // template<>
+  // gtsam::Vector reprojectionError<3>(const Motions& motions, const Poses&
+  // poses, const gtsam::Point3& point_w) const {
+  //   CHECK_EQ(motions.size(), poses.size());
+  // }
+
+  double error(const gtsam::Values& c) const override {
+    if (this->active(c)) {
+      return totalReprojectionError(motions(c), poses(c));
+    } else {  // else of active flag
+      return 0.0;
+    }
+    return 0;
+  }
+
+  //   std::shared_ptr<gtsam::GaussianFactor> linearize(
+  //       const Values& c) const override {
+  //     std::vector<gtsam::Matrix> A(size());
+
+  //     Vector b = -unwhitenedError(x, A);
+  //     // check(noiseModel_, b.size());
+
+  //     // Whiten the corresponding system now
+  //     if (noiseModel_) noiseModel_->WhitenSystem(A, b);
+
+  //     // Fill in terms, needed to create JacobianFactor below
+  //     std::vector<std::pair<Key, Matrix>> terms(size());
+  //     for (size_t j = 0; j < size(); ++j) {
+  //       terms[j].first = keys()[j];
+  //       terms[j].second.swap(A[j]);
+  //     }
+
+  //     // TODO pass unwhitened + noise model to Gaussian factor
+  //     using noiseModel::Constrained;
+  //     if (noiseModel_ && noiseModel_->isConstrained())
+  //       return GaussianFactor::shared_ptr(new JacobianFactor(
+  //           terms, b,
+  //           std::static_pointer_cast<Constrained>(noiseModel_)->unit()));
+  //     else {
+  //       return GaussianFactor::shared_ptr(new JacobianFactor(terms, b));
+  //     }
+  //   }
+
+  boost::shared_ptr<gtsam::GaussianFactor> linearize(
+      const gtsam::Values& c) const override {
+    // linearizeDamped(values)
+  }
+
+  boost::shared_ptr<gtsam::RegularHessianFactor<HessianDim>>
+  createHessianFactor(const Motions& motions, const Poses& poses,
+                      const double lambda = 0.0,
+                      bool diagonalDamping = false) const {
+    // trinagulate safe -> get point which is used when getting the Jacobians
+    // TODO: can we use the LOST values etc by making the cam pose: G = X.inv()
+    // * H like we do for reprojection RANSAC? no degeneracy as we are 3D?
+
+    // compute G, F, E and b blocks
+
+    // whiten Jacobians (how does this differ now we have 3?)
+    // check difference between WhitenSystem and Whiten
+
+    // do shuur compliment to get augmented Jacobian
+    // how on earth to test
+
+    // cash money!!
+  }
+
+ private:
+  // template <size_t N = ZDim, typename = std::enable_if_t<N==3>>
+  // gtsam::Vector reprojectionError(const Motions& motions, const Poses& poses,
+  // const gtsam::Point3& point_l, GBlocks* Gs, FBlocks* Fs, EBlocks* Es) const
+  // {
+
+  // }
+
+  // template <size_t N = ZDim, typename = std::enable_if_t<N==2>>
+  // gtsam::Vector reprojectionError(const Motions& motions, const Poses& poses,
+  // const gtsam::Point3& point_l, GBlocks* Gs, FBlocks* Fs, EBlocks* Es) const
+  // { throw std::runtime_error("Not implemented N==2!!"); }
+
+  gtsam::Vector reprojectionError(const Motions& motions, const Poses& poses,
+                                  const gtsam::Point3& point_l, GBlocks* Gs,
+                                  FBlocks* Fs, EBlocks* Es) const {
+    CHECK_EQ(motions.size(), poses.size());
+    const auto measurements = measured();
+    CHECK_EQ(motions.size(), measurements.size());
+
+    const size_t m = measurements.size();
+    // expected z, ie h(x)
+    ZVector z;
+    z.reserve(m);
+
+    // Allocate derivatives
+    if (Es) Es->resize(m);
+    if (Fs) Fs->resize(m);
+    if (Gs) Gs->resize(m);
+
+    // Project and fill derivatives
+    for (size_t i = 0; i < m; i++) {
+      MatrixGD Gi;
+      MatrixFD Fi;
+      MatrixED Ei;
+
+      // given the point in the object frame and associated camera pose and
+      // motion, project the point into the camera frame
+      auto project = [&](const Motion& motioni, const Pose& posei,
+                         const gtsam::Point3& point_l) -> Z {
+        const gtsam::Point3 map_point_world = motioni * (L_s0_ * point_l);
+        return posei.inverse() * map_point_world;
+      };
+
+      Gi = gtsam::numericalDerivative31<gtsam::Vector3, gtsam::Pose3,
+                                        gtsam::Pose3, gtsam::Point3>(
+          project, motions.at(i), poses.at(i), point_l);
+
+      Fi = gtsam::numericalDerivative32<gtsam::Vector3, gtsam::Pose3,
+                                        gtsam::Pose3, gtsam::Point3>(
+          project, motions.at(i), poses.at(i), point_l);
+
+      Ei = gtsam::numericalDerivative33<gtsam::Vector3, gtsam::Pose3,
+                                        gtsam::Pose3, gtsam::Point3>(
+          project, motions.at(i), poses.at(i), point_l);
+
+      z.emplace_back(project(motions.at(i), poses.at(i), point_l));
+      if (Gs) (*Gs)[i] = Gi;
+      if (Fs) (*Fs)[i] = Fi;
+      if (Es) (*Es)[i] = Ei;
+      // if (E) E->block<ZDim, N>(ZDim * i, 0) = Ei;
+    }
+
+    // Fill Error factor
+    gtsam::Vector b(ZDim * m);
+    CHECK_EQ(m, z.size());
+    for (size_t i = 0, row = 0; i < m; i++, row += ZDim) {
+      gtsam::Vector bi = gtsam::traits<Z>::Local(measurements[i], z[i]);
+      // if (ZDim == 3 && std::isnan(bi(1))) {  // if it is a stereo point and
+      // the
+      //                                       // right pixel is missing (nan)
+      //   bi(1) = 0;
+      // }
+      b.segment<ZDim>(row) = bi;
+    }
+    return b;
+  }
+
+ protected:
+  const gtsam::Pose3 L_s0_;
+  // Cache for Fblocks, to avoid a malloc ever time we re-linearize
+  mutable FBlocks Fs;
+  // Cache for Fblocks, to avoid a malloc ever time we re-linearize
+  mutable GBlocks Gs;
+
+  ZVector measured_;
+
+  gtsam::SharedIsotropic noiseModel_;
+};
 
 struct ObjectCentricProperties {
   inline gtsam::Symbol makeDynamicKey(TrackletId tracklet_id) const {
