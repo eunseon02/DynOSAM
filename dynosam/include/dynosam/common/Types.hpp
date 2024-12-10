@@ -277,145 +277,141 @@ inline constexpr bool IsDerivedTrackedValueStatus =
     std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
 
 /**
- * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
+ * @brief Defines a single visual measurement with tracking label, object id,
+ * frame id and measurement.
  *
- * Label may be background at which point the KeyPointType should be
- * background_label Also includes information on how the landamrk was estimated,
- * age etc...
- *
+ * @tparam T
  */
-struct LandmarkStatus : public TrackedValueStatus<Landmark> {
-  using Base = TrackedValueStatus<Landmark>;
+template <typename T>
+struct VisualMeasurementStatus : public TrackedValueStatus<T> {
+  using Base = TrackedValueStatus<T>;
   using Base::Value;
-  enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
-  Method method_;
+  //! dimension of the measurement. Must have gtsam::dimension traits
+  constexpr static int dim = gtsam::traits<T>::dimension;
 
-  LandmarkStatus() {}
+  VisualMeasurementStatus() = default;
+  VisualMeasurementStatus(const Base& base)
+      : VisualMeasurementStatus(base.value(), base.frameId(), base.trackletId(),
+                                base.objectId(), base.referenceFrame()) {}
 
-  /**
-   * @brief Construct a new Landmark Status object
-   *
-   * @param lmk
-   * @param frame_id
-   * @param tracklet_id
-   * @param label
-   * @param method
-   */
-  LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,
-                 ObjectId label, ReferenceFrame reference_frame, Method method)
-      : Base(lmk, frame_id, tracklet_id, label, reference_frame),
-        method_(method) {}
+  VisualMeasurementStatus(const T& m, FrameId frame_id, TrackletId tracklet_id,
+                          ObjectId label, ReferenceFrame reference_frame)
+      : Base(m, frame_id, tracklet_id, label, reference_frame) {}
 
-  inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id,
-                                      TrackletId tracklet_id,
-                                      ReferenceFrame reference_frame,
-                                      Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          reference_frame, method);
-  }
-
-  inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id,
-                                       TrackletId tracklet_id, ObjectId label,
-                                       ReferenceFrame reference_frame,
-                                       Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label, reference_frame,
-                          method);
-  }
-
-  inline static LandmarkStatus StaticInLocal(const Landmark& lmk,
-                                             FrameId frame_id,
-                                             TrackletId tracklet_id,
-                                             Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          ReferenceFrame::LOCAL, method);
-  }
-
-  inline static LandmarkStatus DynamicInLocal(const Landmark& lmk,
-                                              FrameId frame_id,
-                                              TrackletId tracklet_id,
-                                              ObjectId label, Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label,
-                          ReferenceFrame::LOCAL, method);
-  }
-
-  inline static LandmarkStatus StaticInGlobal(const Landmark& lmk,
-                                              FrameId frame_id,
-                                              TrackletId tracklet_id,
-                                              Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          ReferenceFrame::GLOBAL, method);
-  }
-
-  inline static LandmarkStatus DynamicInGLobal(const Landmark& lmk,
-                                               FrameId frame_id,
+  inline static VisualMeasurementStatus Static(const T& m, FrameId frame_id,
                                                TrackletId tracklet_id,
-                                               ObjectId label, Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label,
-                          ReferenceFrame::GLOBAL, method);
+                                               ReferenceFrame reference_frame) {
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
+                                   reference_frame);
   }
 
-  bool operator==(const LandmarkStatus& other) const {
-    return static_cast<const Base&>(*this) == static_cast<const Base&>(other) &&
-           method_ == other.method_;
+  inline static VisualMeasurementStatus Dynamic(
+      const T& m, FrameId frame_id, TrackletId tracklet_id, ObjectId label,
+      ReferenceFrame reference_frame) {
+    CHECK(label != background_label);
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
+                                   reference_frame);
+  }
+
+  inline static VisualMeasurementStatus StaticInLocal(const T& m,
+                                                      FrameId frame_id,
+                                                      TrackletId tracklet_id) {
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
+                                   ReferenceFrame::LOCAL);
+  }
+
+  inline static VisualMeasurementStatus DynamicInLocal(const T& m,
+                                                       FrameId frame_id,
+                                                       TrackletId tracklet_id,
+                                                       ObjectId label) {
+    CHECK(label != background_label);
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
+                                   ReferenceFrame::LOCAL);
+  }
+
+  inline static VisualMeasurementStatus StaticInGlobal(const T& m,
+                                                       FrameId frame_id,
+                                                       TrackletId tracklet_id) {
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
+                                   ReferenceFrame::GLOBAL);
+  }
+
+  inline static VisualMeasurementStatus DynamicInGLobal(const T& m,
+                                                        FrameId frame_id,
+                                                        TrackletId tracklet_id,
+                                                        ObjectId label) {
+    CHECK(label != background_label);
+    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
+                                   ReferenceFrame::GLOBAL);
   }
 };
 
-// TODO: change so that all info is contained in the templated type (so we dont
-// need to have each derived) Status type have its own constructors etc... this
-// is soooooooo messy ;)
 /**
- * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
+ * @brief Defines a measurement with associated covariance matrix.
  *
- * Label may be background at which point the KeyPointType should be
- * background_label
+ * We define the dimensions of this type and provide an equals function to make
+ * it compatible with gtsam::traits<T>::dimension and gtsam::traits<T>::Equals.
  *
+ * //TODO: maybe change covariance to just gtsam::NoiseModel?
+ *
+ * @tparam T measurement type
+ * @tparam D dimension of the measurement. Used to construct the covariance
+ * matrix.
  */
-struct KeypointStatus : public TrackedValueStatus<Keypoint> {
-  using Base = TrackedValueStatus<Keypoint>;
-  using Base::Value;
-  KeyPointType kp_type_;
+template <typename T, int D = gtsam::traits<T>::dimension>
+struct MeasurementWithCovariance {
+  using This = MeasurementWithCovariance<T, D>;
+  using Covariance = Eigen::Matrix<double, D, D>;
+  using Sigmas = Eigen::Matrix<double, D, 1>;
+  //! Need to have dimension to satisfy gtsam::dimemsions
+  enum { dimension = D };
+  T measurement;
+  Covariance covariance;
 
-  // for I/O
-  KeypointStatus() {}
+  MeasurementWithCovariance() = default;
+  MeasurementWithCovariance(const T& m) : measurement(m), covariance() {}
+  MeasurementWithCovariance(const T& m, const Covariance& cov)
+      : measurement(m), covariance(cov) {}
+  MeasurementWithCovariance(const T& m, const Sigmas& sigmas)
+      : measurement(m), covariance(sigmas.matrix().asDiagonal()) {}
+  MeasurementWithCovariance(const std::pair<T, Covariance>& pair)
+      : MeasurementWithCovariance(pair.first, pair.second) {}
 
-  /**
-   * @brief Construct a new Keypoint Status object
-   *
-   * Since the object is Keypoint, the reference frame is set to be in camera in
-   * the base class
-   *
-   * @param kp
-   * @param frame_id
-   * @param tracklet_id
-   * @param label
-   * @param kp_type
-   */
-  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,
-                 ObjectId label, KeyPointType kp_type)
-      : Base(kp, frame_id, tracklet_id, label, ReferenceFrame::LOCAL),
-        kp_type_(kp_type) {}
+  operator const T&() const { return measurement; }
+  operator const Covariance&() const { return covariance; }
 
-  inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id,
-                                      TrackletId tracklet_id) {
-    return KeypointStatus(kp, frame_id, tracklet_id, background_label,
-                          KeyPointType::STATIC);
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const This& measurement_with_cov) {
+    os << "m: " << measurement_with_cov.measurement
+       << ", cov: " << measurement_with_cov.covariance;
+    return os;
   }
 
-  inline static KeypointStatus Dynamic(const Keypoint& kp, FrameId frame_id,
-                                       TrackletId tracklet_id, ObjectId label) {
-    CHECK(label != background_label);
-    return KeypointStatus(kp, frame_id, tracklet_id, label,
-                          KeyPointType::DYNAMIC);
+  inline void print(const std::string& s = "") const {
+    std::cout << s << *this << std::endl;
   }
 
-  bool operator==(const KeypointStatus& other) const {
-    return static_cast<const Base&>(*this) == static_cast<const Base&>(other) &&
-           kp_type_ == other.kp_type_;
+  inline bool equals(const MeasurementWithCovariance& other,
+                     double tol = 1e-8) const {
+    return gtsam::traits<T>::Equals(measurement, other.measurement, tol) &&
+           gtsam::traits<Covariance>::Equals(covariance, other.covariance, tol);
   }
 };
+
+/// @brief Alias to a visual measurement with a fixed-sized covariance matrix.
+/// @tparam T Measurement type (e.g. 2D keypoint, 3D landmark)
+template <typename T>
+using VisualMeasurementWithCovStatus =
+    VisualMeasurementStatus<MeasurementWithCovariance<T>>;
+
+/// @brief Alias for a landmark measurement with 3x3 covariance.
+typedef VisualMeasurementWithCovStatus<Landmark> LandmarkStatus;
+/// @brief Alias for a keypoint measurement with 2x2 covariance.
+typedef VisualMeasurementWithCovStatus<Keypoint> KeypointStatus;
+/// @brief Alias for a depth measurement with scalar covariance.
+typedef VisualMeasurementWithCovStatus<Depth> DepthStatus;
+
+using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
 
 template <class DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
 struct IsStatus {
@@ -437,6 +433,9 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
   using Base = std::vector<DERIVEDSTATUS>;
   using Base::Base;
 
+  // for IO
+  GenericTrackedStatusVector() {}
+
   /** Conversion to a standard STL container */
   operator std::vector<DERIVEDSTATUS>() const {
     return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
@@ -448,20 +447,10 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
   }
 };
 
-using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
-
-// TODO: really should be values or something, not estimate as these can be
-// measurements OR values
-using StatusLandmarkEstimate = IsStatus<LandmarkStatus>::type;
-/// @brief A vector of StatusLandmarkEstimate
-using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
-
-using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
-/// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
-
-// TODO: refactor to all be simpler like this one ;)
-using KeypointDepthStatus = TrackedValueStatus<KeypointDepth>;
+/// @brief A vector of LandmarkStatus
+typedef GenericTrackedStatusVector<LandmarkStatus> StatusLandmarkVector;
+/// @brief A vector of KeypointStatus
+typedef GenericTrackedStatusVector<KeypointStatus> StatusKeypointVector;
 
 /**
  * @brief Map of key to an estimate containting a reference frame
@@ -660,3 +649,7 @@ inline std::string container_to_string(const Container& container,
 // struct traits : public io_traits<T> {};
 
 }  // namespace dyno
+
+template <typename T, int D>
+struct gtsam::traits<dyno::MeasurementWithCovariance<T, D>>
+    : public gtsam::Testable<dyno::MeasurementWithCovariance<T, D>> {};

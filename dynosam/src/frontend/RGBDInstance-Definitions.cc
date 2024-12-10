@@ -40,8 +40,8 @@ namespace dyno {
 
 GenericTrackedStatusVector<LandmarkKeypointStatus>
 collectLandmarkKeypointMeasurementsHelper(
-    const StatusLandmarkEstimates& landmarks,
-    const StatusKeypointMeasurements& keypoints) {
+    const StatusLandmarkVector& landmarks,
+    const StatusKeypointVector& keypoints) {
   CHECK_EQ(landmarks.size(), keypoints.size());
 
   GenericTrackedStatusVector<LandmarkKeypointStatus> collection;

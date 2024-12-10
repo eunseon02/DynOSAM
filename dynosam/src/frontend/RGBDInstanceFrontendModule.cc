@@ -314,13 +314,11 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const gtsam::Pose3& T_world_camera,
     const GroundTruthInputPacket::Optional& gt_packet,
     const DebugImagery::Optional& debug_imagery) {
-  StatusKeypointMeasurements static_keypoint_measurements;
-  StatusLandmarkEstimates static_landmarks;
+  StatusKeypointVector static_keypoint_measurements;
+  StatusLandmarkVector static_landmarks;
   for (const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
     const TrackletId tracklet_id = f->trackletId();
     const Keypoint kp = f->keypoint();
-    Landmark lmk_camera;
-    camera_->backProject(kp, f->depth(), &lmk_camera);
     CHECK(f->isStatic());
     CHECK(Feature::IsUsable(f));
 
@@ -330,16 +328,21 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
       continue;
     }
 
-    static_keypoint_measurements.push_back(
-        KeypointStatus::Static(kp, frame.getFrameId(), tracklet_id));
+    gtsam::Vector2 kp_sigmas;
+    kp_sigmas << 0.2, 0.2;
+    MeasurementWithCovariance<Keypoint> kp_measurement(kp, kp_sigmas);
+    MeasurementWithCovariance<Landmark> landmark_measurement(
+        vision_tools::backProjectAndCovariance(*f, *camera_, 0.2, 0.1));
+
+    static_keypoint_measurements.push_back(KeypointStatus::StaticInLocal(
+        kp_measurement, frame.getFrameId(), tracklet_id));
 
     static_landmarks.push_back(LandmarkStatus::StaticInLocal(
-        lmk_camera, frame.getFrameId(), tracklet_id,
-        LandmarkStatus::Method::MEASURED));
+        landmark_measurement, frame.getFrameId(), tracklet_id));
   }
 
-  StatusKeypointMeasurements dynamic_keypoint_measurements;
-  StatusLandmarkEstimates dynamic_landmarks;
+  StatusKeypointVector dynamic_keypoint_measurements;
+  StatusLandmarkVector dynamic_landmarks;
   for (const auto& [object_id, obs] : frame.object_observations_) {
     CHECK_EQ(object_id, obs.instance_label_);
     // TODO: add back in?
@@ -359,15 +362,18 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 
         const TrackletId tracklet_id = f->trackletId();
         const Keypoint kp = f->keypoint();
-        Landmark lmk_camera;
-        camera_->backProject(kp, f->depth(), &lmk_camera);
 
-        dynamic_keypoint_measurements.push_back(KeypointStatus::Dynamic(
-            kp, frame.frame_id_, tracklet_id, object_id));
+        gtsam::Vector2 kp_sigmas;
+        kp_sigmas << 0.2, 0.2;
+        MeasurementWithCovariance<Keypoint> kp_measurement(kp, kp_sigmas);
+        MeasurementWithCovariance<Landmark> landmark_measurement(
+            vision_tools::backProjectAndCovariance(*f, *camera_, 0.2, 0.1));
+
+        dynamic_keypoint_measurements.push_back(KeypointStatus::DynamicInLocal(
+            kp_measurement, frame.frame_id_, tracklet_id, object_id));
 
         dynamic_landmarks.push_back(LandmarkStatus::DynamicInLocal(
-            lmk_camera, frame.frame_id_, tracklet_id, object_id,
-            LandmarkStatus::Method::MEASURED));
+            landmark_measurement, frame.frame_id_, tracklet_id, object_id));
       }
     }
   }

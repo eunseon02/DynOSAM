@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -30,26 +30,11 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
+#include <gtsam/base/Matrix.h>
+#include <gtsam/base/Vector.h>
 
 namespace dyno {
 
-struct BackendOutputPacket {
-  DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
-
-  StatusLandmarkVector static_landmarks_;   // all frames?
-  StatusLandmarkVector dynamic_landmarks_;  // only this frame?
-  // LandmarkMap static_lmks_;
-  // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-  // StatusLandmarkEstimates initial_dynamic_lmks_;
-  // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-  gtsam::Pose3 T_world_camera_;
-  FrameId frame_id_;
-  Timestamp timestamp_;
-  ObjectPoseMap composed_object_poses;
-  gtsam::Pose3Vector optimized_poses_;
-
-  // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
-};
+struct VisualNoiseParams {};
 
 }  // namespace dyno
