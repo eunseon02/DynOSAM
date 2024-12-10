@@ -540,6 +540,47 @@ TEST(GroundTruthInputPacket, findAssociatedObjectWithPtr) {
   EXPECT_EQ(obj_other->frame_id_, 1);
 }
 
+TEST(SensorTypes, MeasurementWithCovarianceConstructionEmpty) {
+  MeasurementWithCovariance<Landmark> measurement;
+  EXPECT_FALSE(measurement.hasModel());
+}
+
+TEST(SensorTypes, MeasurementWithCovarianceConstructionMeasurement) {
+  Landmark lmk(10, 12.4, 0.001);
+  MeasurementWithCovariance<Landmark> measurement(lmk);
+  EXPECT_FALSE(measurement.hasModel());
+  EXPECT_EQ(measurement.measurement(), lmk);
+}
+
+TEST(SensorTypes, MeasurementWithCovarianceConstructionMeasurementAndSigmas) {
+  Landmark lmk(10, 12.4, 0.001);
+  gtsam::Vector3 sigmas;
+  sigmas << 0.1, 0.2, 0.3;
+  MeasurementWithCovariance<Landmark> measurement(lmk, sigmas);
+  EXPECT_TRUE(measurement.hasModel());
+  EXPECT_EQ(measurement.measurement(), lmk);
+
+  MeasurementWithCovariance<Landmark>::Covariance cov =
+      measurement.covariance();
+
+  MeasurementWithCovariance<Landmark>::Covariance expected_cov =
+      sigmas.array().pow(2).matrix().asDiagonal();
+  EXPECT_TRUE(gtsam::assert_equal(expected_cov, cov));
+}
+
+TEST(SensorTypes, MeasurementWithCovarianceConstructionMeasurementAndCov) {
+  Landmark lmk(10, 12.4, 0.001);
+  MeasurementWithCovariance<Landmark>::Covariance expected_cov;
+  expected_cov << 0.1, 0, 0, 0, 0.2, 0, 0, 0, 0.4;
+  MeasurementWithCovariance<Landmark> measurement(lmk, expected_cov);
+  EXPECT_TRUE(measurement.hasModel());
+  EXPECT_EQ(measurement.measurement(), lmk);
+
+  MeasurementWithCovariance<Landmark>::Covariance cov =
+      measurement.covariance();
+  EXPECT_TRUE(gtsam::assert_equal(expected_cov, cov));
+}
+
 TEST(JsonIO, ReferenceFrameValue) {
   ReferenceFrameValue<gtsam::Pose3> ref_frame(gtsam::Pose3::Identity(),
                                               ReferenceFrame::GLOBAL);
@@ -566,6 +607,42 @@ TEST(JsonIO, ObjectPoseGTIO) {
 
   auto object_pose_gt_2 = j.template get<ObjectPoseGT>();
   EXPECT_EQ(object_pose_gt, object_pose_gt_2);
+}
+
+TEST(JsonIO, MeasurementWithCovSigmas) {
+  using json = nlohmann::json;
+  Landmark lmk(10, 12.4, 0.001);
+  MeasurementWithCovariance<Landmark>::Covariance expected_cov;
+  expected_cov << 0.1, 0, 0, 0, 0.2, 0, 0, 0, 0.4;
+  MeasurementWithCovariance<Landmark> measurement(lmk, expected_cov);
+  json j = measurement;
+  auto measurements_load =
+      j.template get<MeasurementWithCovariance<Landmark>>();
+  EXPECT_TRUE(gtsam::assert_equal(measurements_load, measurement));
+}
+
+TEST(JsonIO, MeasurementWithCov) {
+  using json = nlohmann::json;
+  Landmark lmk(10, 12.4, 0.001);
+  gtsam::Vector3 sigmas;
+  sigmas << 0.1, 0.2, 0.3;
+  MeasurementWithCovariance<Landmark> measurement(lmk, sigmas);
+
+  json j = measurement;
+  auto measurements_load =
+      j.template get<MeasurementWithCovariance<Landmark>>();
+  EXPECT_TRUE(gtsam::assert_equal(measurements_load, measurement));
+}
+
+TEST(JsonIO, MeasurementWithNoCov) {
+  using json = nlohmann::json;
+  Landmark lmk(10, 12.4, 0.001);
+  MeasurementWithCovariance<Landmark> measurement(lmk);
+
+  json j = measurement;
+  auto measurements_load =
+      j.template get<MeasurementWithCovariance<Landmark>>();
+  EXPECT_TRUE(gtsam::assert_equal(measurements_load, measurement));
 }
 
 TEST(JsonIO, TrackedValueStatusKp) {

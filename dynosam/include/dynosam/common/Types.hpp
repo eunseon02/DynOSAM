@@ -101,29 +101,6 @@ using MotionMap =
     gtsam::FastMap<TrackletId,
                    Motion3>;  //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
-struct LandmarkKeypoint {
-  LandmarkKeypoint() = default;
-  LandmarkKeypoint(const Landmark& l, const Keypoint& kp)
-      : landmark(l), keypoint(kp) {}
-
-  Landmark landmark;
-  Keypoint keypoint;
-};
-
-/**
- * @brief Keypoint with depth
- *
- */
-struct KeypointDepth {
- public:
-  KeypointDepth() = default;
-  KeypointDepth(const Keypoint& p, const Depth& d) : keypoint(p), depth(d) {}
-
- public:
-  Keypoint keypoint;
-  Depth depth;
-};
-
 /**
  * @brief Get demangled class name
  *
@@ -219,6 +196,14 @@ class TrackedValueStatus {
 
   virtual ~TrackedValueStatus() = default;
 
+  template <typename U>
+  TrackedValueStatus<U> asType() const {
+    const U& new_measurement = static_cast<const U&>(this->value());
+    return TrackedValueStatus<U>(new_measurement, this->frameId(),
+                                 this->trackletId(), this->objectId(),
+                                 this->referenceFrame());
+  }
+
   const Value& value() const { return value_; }
   Value& value() { return value_; }
 
@@ -276,143 +261,6 @@ template <typename DERIVEDSTATUS, typename VALUE>
 inline constexpr bool IsDerivedTrackedValueStatus =
     std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
 
-/**
- * @brief Defines a single visual measurement with tracking label, object id,
- * frame id and measurement.
- *
- * @tparam T
- */
-template <typename T>
-struct VisualMeasurementStatus : public TrackedValueStatus<T> {
-  using Base = TrackedValueStatus<T>;
-  using Base::Value;
-  //! dimension of the measurement. Must have gtsam::dimension traits
-  constexpr static int dim = gtsam::traits<T>::dimension;
-
-  VisualMeasurementStatus() = default;
-  VisualMeasurementStatus(const Base& base)
-      : VisualMeasurementStatus(base.value(), base.frameId(), base.trackletId(),
-                                base.objectId(), base.referenceFrame()) {}
-
-  VisualMeasurementStatus(const T& m, FrameId frame_id, TrackletId tracklet_id,
-                          ObjectId label, ReferenceFrame reference_frame)
-      : Base(m, frame_id, tracklet_id, label, reference_frame) {}
-
-  inline static VisualMeasurementStatus Static(const T& m, FrameId frame_id,
-                                               TrackletId tracklet_id,
-                                               ReferenceFrame reference_frame) {
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
-                                   reference_frame);
-  }
-
-  inline static VisualMeasurementStatus Dynamic(
-      const T& m, FrameId frame_id, TrackletId tracklet_id, ObjectId label,
-      ReferenceFrame reference_frame) {
-    CHECK(label != background_label);
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
-                                   reference_frame);
-  }
-
-  inline static VisualMeasurementStatus StaticInLocal(const T& m,
-                                                      FrameId frame_id,
-                                                      TrackletId tracklet_id) {
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
-                                   ReferenceFrame::LOCAL);
-  }
-
-  inline static VisualMeasurementStatus DynamicInLocal(const T& m,
-                                                       FrameId frame_id,
-                                                       TrackletId tracklet_id,
-                                                       ObjectId label) {
-    CHECK(label != background_label);
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
-                                   ReferenceFrame::LOCAL);
-  }
-
-  inline static VisualMeasurementStatus StaticInGlobal(const T& m,
-                                                       FrameId frame_id,
-                                                       TrackletId tracklet_id) {
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, background_label,
-                                   ReferenceFrame::GLOBAL);
-  }
-
-  inline static VisualMeasurementStatus DynamicInGLobal(const T& m,
-                                                        FrameId frame_id,
-                                                        TrackletId tracklet_id,
-                                                        ObjectId label) {
-    CHECK(label != background_label);
-    return VisualMeasurementStatus(m, frame_id, tracklet_id, label,
-                                   ReferenceFrame::GLOBAL);
-  }
-};
-
-/**
- * @brief Defines a measurement with associated covariance matrix.
- *
- * We define the dimensions of this type and provide an equals function to make
- * it compatible with gtsam::traits<T>::dimension and gtsam::traits<T>::Equals.
- *
- * //TODO: maybe change covariance to just gtsam::NoiseModel?
- *
- * @tparam T measurement type
- * @tparam D dimension of the measurement. Used to construct the covariance
- * matrix.
- */
-template <typename T, int D = gtsam::traits<T>::dimension>
-struct MeasurementWithCovariance {
-  using This = MeasurementWithCovariance<T, D>;
-  using Covariance = Eigen::Matrix<double, D, D>;
-  using Sigmas = Eigen::Matrix<double, D, 1>;
-  //! Need to have dimension to satisfy gtsam::dimemsions
-  enum { dimension = D };
-  T measurement;
-  Covariance covariance;
-
-  MeasurementWithCovariance() = default;
-  MeasurementWithCovariance(const T& m) : measurement(m), covariance() {}
-  MeasurementWithCovariance(const T& m, const Covariance& cov)
-      : measurement(m), covariance(cov) {}
-  MeasurementWithCovariance(const T& m, const Sigmas& sigmas)
-      : measurement(m), covariance(sigmas.matrix().asDiagonal()) {}
-  MeasurementWithCovariance(const std::pair<T, Covariance>& pair)
-      : MeasurementWithCovariance(pair.first, pair.second) {}
-
-  operator const T&() const { return measurement; }
-  operator const Covariance&() const { return covariance; }
-
-  friend std::ostream& operator<<(std::ostream& os,
-                                  const This& measurement_with_cov) {
-    os << "m: " << measurement_with_cov.measurement
-       << ", cov: " << measurement_with_cov.covariance;
-    return os;
-  }
-
-  inline void print(const std::string& s = "") const {
-    std::cout << s << *this << std::endl;
-  }
-
-  inline bool equals(const MeasurementWithCovariance& other,
-                     double tol = 1e-8) const {
-    return gtsam::traits<T>::Equals(measurement, other.measurement, tol) &&
-           gtsam::traits<Covariance>::Equals(covariance, other.covariance, tol);
-  }
-};
-
-/// @brief Alias to a visual measurement with a fixed-sized covariance matrix.
-/// @tparam T Measurement type (e.g. 2D keypoint, 3D landmark)
-template <typename T>
-using VisualMeasurementWithCovStatus =
-    VisualMeasurementStatus<MeasurementWithCovariance<T>>;
-
-/// @brief Alias for a landmark measurement with 3x3 covariance.
-typedef VisualMeasurementWithCovStatus<Landmark> LandmarkStatus;
-/// @brief Alias for a keypoint measurement with 2x2 covariance.
-typedef VisualMeasurementWithCovStatus<Keypoint> KeypointStatus;
-/// @brief Alias for a depth measurement with scalar covariance.
-typedef VisualMeasurementWithCovStatus<Depth> DepthStatus;
-
-using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
-
 template <class DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
 struct IsStatus {
   static_assert(IsDerivedTrackedValueStatus<DERIVEDSTATUS, VALUE>,
@@ -446,11 +294,6 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
     return *this;
   }
 };
-
-/// @brief A vector of LandmarkStatus
-typedef GenericTrackedStatusVector<LandmarkStatus> StatusLandmarkVector;
-/// @brief A vector of KeypointStatus
-typedef GenericTrackedStatusVector<KeypointStatus> StatusKeypointVector;
 
 /**
  * @brief Map of key to an estimate containting a reference frame
@@ -650,6 +493,4 @@ inline std::string container_to_string(const Container& container,
 
 }  // namespace dyno
 
-template <typename T, int D>
-struct gtsam::traits<dyno::MeasurementWithCovariance<T, D>>
-    : public gtsam::Testable<dyno::MeasurementWithCovariance<T, D>> {};
+#include "dynosam/common/SensorModels.hpp"

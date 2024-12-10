@@ -290,17 +290,30 @@ template <typename T>
 struct adl_serializer<dyno::MeasurementWithCovariance<T>> {
   static void to_json(json& j,
                       const dyno::MeasurementWithCovariance<T>& value) {
-    j["measurement"] = value.measurement;
-    j["covariance"] = value.covariance;
+    j["measurement"] = value.measurement();
+    if (value.hasModel()) {
+      j["covariance"] = value.covariance();
+    }
   }
   static void from_json(const json& j,
                         dyno::MeasurementWithCovariance<T>& value) {
     T measurement = j["measurement"].template get<T>();
-    typename dyno::MeasurementWithCovariance<T>::Covariance cov =
-        j["covariance"]
-            .template get<
-                typename dyno::MeasurementWithCovariance<T>::Covariance>();
-    value = dyno::MeasurementWithCovariance<T>(measurement, cov);
+
+    // check if the json has a covariance value, if it does not it means the
+    // original object did not have a sensor model. We should then use the
+    // measurement only constructor to ennsure the new model does not have a
+    // model eitehr and hasModel() returns false!
+    if (j.contains("covariance")) {
+      typename dyno::MeasurementWithCovariance<T>::Covariance cov =
+          j["covariance"]
+              .template get<
+                  typename dyno::MeasurementWithCovariance<T>::Covariance>();
+      value = dyno::MeasurementWithCovariance<T>(measurement, cov);
+      return;
+    } else {
+      // measurement only constructor
+      value = dyno::MeasurementWithCovariance<T>(measurement);
+    }
   }
 };
 

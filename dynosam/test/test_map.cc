@@ -41,17 +41,16 @@
 using namespace dyno;
 
 TEST(Map, basicAddOnlyStatic) {
-  GenericTrackedStatusVector<VisualMeasurementStatus<Keypoint>> measurements;
+  //   GenericTrackedStatusVector<VisualMeasurementStatus<Keypoint>>
+  //   measurements;
+
+  StatusKeypointVector measurements;
 
   TrackletIds expected_tracklets;
   // 10 measurements with unique tracklets at frame 0
   for (size_t i = 0; i < 10; i++) {
-    auto keypoint_with_cov =
-        dyno_testing::makeStatusKeypointMeasurement(i, background_label, 0);
-
-    measurements.push_back(VisualMeasurementStatus<Keypoint>(
-        static_cast<const TrackedValueStatus<Keypoint>&>(keypoint_with_cov)));
-
+    measurements.push_back(
+        dyno_testing::makeStatusKeypointMeasurement(i, background_label, 0));
     expected_tracklets.push_back(i);
   }
 
