@@ -328,9 +328,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
       continue;
     }
 
-    gtsam::Vector2 kp_sigmas;
-    kp_sigmas << 0.2, 0.2;
-    MeasurementWithCovariance<Keypoint> kp_measurement(kp, kp_sigmas);
+    MeasurementWithCovariance<Keypoint> kp_measurement(kp);
     MeasurementWithCovariance<Landmark> landmark_measurement(
         vision_tools::backProjectAndCovariance(*f, *camera_, 0.2, 0.1));
 
@@ -363,9 +361,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
         const TrackletId tracklet_id = f->trackletId();
         const Keypoint kp = f->keypoint();
 
-        gtsam::Vector2 kp_sigmas;
-        kp_sigmas << 0.2, 0.2;
-        MeasurementWithCovariance<Keypoint> kp_measurement(kp, kp_sigmas);
+        MeasurementWithCovariance<Keypoint> kp_measurement(kp);
         MeasurementWithCovariance<Landmark> landmark_measurement(
             vision_tools::backProjectAndCovariance(*f, *camera_, 0.2, 0.1));
 

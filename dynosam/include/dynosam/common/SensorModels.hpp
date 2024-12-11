@@ -190,13 +190,24 @@ class MeasurementWithCovariance {
   gtsam::SharedGaussian model_{nullptr};
 };
 
+/**
+ * @brief Struct containing landmark and keypoint measurements (with covariance)
+ * Landmark is constructed from the depth measurement and the associated
+ * keypoint.
+ *
+ * Used to construct the final measurement information to be passed to the
+ * backend and can be obtained from an RGBD style sensor
+ *
+ */
 struct LandmarkKeypoint {
   LandmarkKeypoint() = default;
   LandmarkKeypoint(const MeasurementWithCovariance<Landmark>& l,
                    const MeasurementWithCovariance<Keypoint>& kp)
       : landmark(l), keypoint(kp) {}
 
+  //! Landmark measurement with covariance
   MeasurementWithCovariance<Landmark> landmark;
+  //! Keypoint measurement with covariance
   MeasurementWithCovariance<Keypoint> keypoint;
 };
 
