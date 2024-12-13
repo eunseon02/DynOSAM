@@ -217,7 +217,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
   update_params.do_backtrack =
-      false;  // apparently this is v important for making the results == ICRA
+      true;  // apparently this is v important for making the results == ICRA
 
   {
     LOG(INFO) << "Starting updateStaticObservations";
@@ -242,7 +242,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
   LOG(INFO) << "Starting any updates";
 
-  bool incremental = true;
+  bool incremental = false;
   if (incremental) {
     LOG(INFO) << "Updating incremental";
     // const auto old_keys = smoother_->getLinearizationPoint().keys();

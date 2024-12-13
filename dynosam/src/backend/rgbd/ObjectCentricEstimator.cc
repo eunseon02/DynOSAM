@@ -669,6 +669,10 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   const auto frame_node_k_1 = context.frame_node_k_1;
   const auto frame_node_k = context.frame_node_k;
 
+  // if(frame_node_k_1->getId() % 2 == 0) {
+  //   return;
+  // }
+
   auto theta_accessor = this->accessorFromTheta();
 
   gtsam::Key point_key = this->makeDynamicKey(context.getTrackletId());
@@ -732,17 +736,17 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
   if (context.is_starting_motion_frame) {
     // add factor at k-1
-    // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-    //     frame_node_k_1->makePoseKey(),  // pose key at previous frames,
-    //     object_motion_key_k_1, point_key,
-    //     lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-    //     dynamic_point_noise);
-    const gtsam::Pose3 X_world =
-        getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
-    new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+    new_factors.emplace_shared<ObjectCentricMotionFactor>(
+        frame_node_k_1->makePoseKey(),  // pose key at previous frames,
         object_motion_key_k_1, point_key,
-        lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
+        lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
         dynamic_point_noise);
+    // const gtsam::Pose3 X_world =
+    //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
+    // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+    //     object_motion_key_k_1, point_key,
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark, X_world, L_0,
+    //     dynamic_point_noise);
 
     // new_factors.emplace_shared<AuxillaryPFactor>(
     //      object_motion_key_k_1, point_key,
@@ -760,18 +764,18 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   }
 
   // add factor at k
-  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
-  //     object_motion_key_k, point_key,
-  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-  //     dynamic_point_noise);
-
-  const gtsam::Pose3 X_world =
-      getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
-  new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+  new_factors.emplace_shared<ObjectCentricMotionFactor>(
+      frame_node_k->makePoseKey(),  // pose key at previous frames,
       object_motion_key_k, point_key,
-      lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
+      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
       dynamic_point_noise);
+
+  // const gtsam::Pose3 X_world =
+  //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
+  // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
+  //     object_motion_key_k, point_key,
+  //     lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
+  //     dynamic_point_noise);
 
   // new_factors.emplace_shared<AuxillaryPFactor>(
   //        object_motion_key_k, point_key,

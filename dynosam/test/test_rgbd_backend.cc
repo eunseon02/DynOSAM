@@ -144,7 +144,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
   const double H_R_sigma = 0.1;
   const double H_t_sigma = 0.2;
-  const double dynamic_point_sigma = 0.1;
+  const double dynamic_point_sigma = 0.001;
 
   dyno_testing::RGBDScenario::NoiseParams noise_params;
   noise_params.H_R_sigma = H_R_sigma;
@@ -156,8 +156,8 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
       noise_params);
 
   // add one obect
-  const size_t num_points = 10;
-  const size_t obj1_overlap = 4;
+  const size_t num_points = 3;
+  const size_t obj1_overlap = 2;
   const size_t obj2_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -179,7 +179,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
               num_points, obj2_overlap));
 
   scenario.addObjectBody(1, object1);
-  scenario.addObjectBody(2, object2);
+  //   scenario.addObjectBody(2, object2);
 
   //   SETDEBUG("IncrementalFixedLagSmoother update", true);
   //   CHECK(gtsam::isDebugVersion());
@@ -205,7 +205,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.evaluateNonlinearError = true;
-  isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
+  isam2_params.factorization = gtsam::ISAM2Params::Factorization::CHOLESKY;
   // isam2_params.relinearizeSkip = 1;
   gtsam::ISAM2 isam2(isam2_params);
   //   gtsam::NonlinearISAM isam(1, gtsam::EliminateQR);
@@ -341,7 +341,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
                                         additionalKeys.end());
 
     gtsam::ISAM2UpdateParams update_params;
-    update_params.noRelinKeys = noRelinKeys;
+    // update_params.noRelinKeys = noRelinKeys;
     // update_params.constrainedKeys = constrained_keys;
     // update_params.extraReelimKeys = additionalMarkedKeys;
 
@@ -433,7 +433,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
     // LOG(INFO) << "Formulation error after: " << graph.error(opt_values);
   };
 
-  for (size_t i = 0; i < 10; i++) {
+  for (size_t i = 0; i < 15; i++) {
     dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
     std::tie(output_gt, output_noisy) = scenario.getOutput(i);
 
@@ -448,6 +448,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   }
 
   gtsam::NonlinearFactorGraph full_graph = backend.new_updater_->getGraph();
+  gtsam::Values initial_estimate = backend.new_updater_->getTheta();
   full_graph.saveGraph(
       dyno::getOutputFilePath("construct_simple_graph_test.dot"),
       dyno::DynoLikeKeyFormatter);
@@ -461,6 +462,16 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   backend.new_updater_->updateTheta(opt_values);
   backend.new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
   backend.new_updater_->logBackendFromMap(backend_info);
+
+  dyno::NonlinearFactorGraphManager nlfgm(full_graph, initial_estimate);
+  auto options =
+      dyno::factor_graph_tools::DrawBlockJacobiansOptions::makeDynoSamOptions();
+  options.desired_size = cv::Size(1200, 700);
+  cv::Mat block_jacobians =
+      nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD, options);
+
+  cv::imshow("Block Jacobians", block_jacobians);
+  cv::waitKey(0);
 }
 
 TEST(RGBDBackendModule, testCliques) {

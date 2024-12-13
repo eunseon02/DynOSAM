@@ -150,7 +150,8 @@ void Formulation<MAP>::addOdometry(FrameId frame_id_k,
   // keep track of the new factors added in this function
   // these are then appended to the internal factors_ and new_factors
   // TODO: put somewhere else?
-  if (true) {  // if(FLAGS_use_vo_factor) {
+  // if (true) {
+  if (FLAGS_use_vo_factor) {
     gtsam::NonlinearFactorGraph internal_new_factors;
 
     factor_graph_tools::addBetweenFactor(frame_id_k_1, frame_id_k, odom,

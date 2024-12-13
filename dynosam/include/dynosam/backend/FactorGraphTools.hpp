@@ -393,7 +393,7 @@ struct DrawBlockJacobiansOptions {
 
   bool draw_label = true;    // if true, the labels for each vertical block (ie,
                              // the variable names) will be draw atop each block
-  int text_box_height = 30;  // text box for label
+  int text_box_height = 50;  // text box for label
   gtsam::KeyFormatter label_formatter =
       gtsam::DefaultKeyFormatter;  // function used to generate the label, if
                                    // draw_label== true
@@ -428,7 +428,7 @@ struct DrawBlockJacobiansOptions {
     dyno_sam_options.label_formatter = DynoLikeKeyFormatter;
 
     auto dyno_sam_colour_selector = [](gtsam::Key key) {
-      return Color::uniqueId((size_t)key);
+      return Color::uniqueId((size_t)gtsam::Symbol(key).chr()).bgra();
     };
 
     dyno_sam_options.colour_selector = dyno_sam_colour_selector;
