@@ -32,6 +32,7 @@
 #include <gtest/gtest.h>
 #include <gtsam/base/numericalDerivative.h>
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 
 #include <exception>
@@ -305,7 +306,11 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
 
   gtsam::SymmetricBlockMatrix actualReduced =
       factor.createReducedMatrix(values);
+
+  LOG(INFO) << "N blocks " << actualReduced.nBlocks();
+
   gtsam::Matrix adjoint_view = actualReduced.selfadjointView();
+  LOG(INFO) << "adjoint_view " << adjoint_view;
 
   SmartFactor::GBlocks Gs;
   SmartFactor::FBlocks Fs;
@@ -367,3 +372,77 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
   // LOG(INFO) << "adjoint_view:\n" << adjoint_view;
   EXPECT_TRUE(gtsam::assert_equal(schur, adjoint_view, 1E-5));
 }
+
+gtsam::Point3 perturbCameraAndMotion(const gtsam::Point3& point_l,
+                                     const gtsam::Pose3& L_s,
+                                     gtsam::Pose3& motion, gtsam::Pose3& pose,
+                                     double sigma = 0.2) {
+  motion = utils::perturbWithNoise(motion, sigma);
+  pose = utils::perturbWithNoise(motion, sigma);
+  return pose.inverse() * motion * L_s * (point_l);
+}
+
+TEST(SmartMotionFactor, testSimpleOptimise) {
+  using SmartFactor = dyno::SmartMotionFactor<3, gtsam::Pose3, gtsam::Pose3>;
+
+  gtsam::Pose3 pose1 = gtsam::Pose3::Identity();
+  gtsam::Pose3 pose2(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                     gtsam::Point3(0.05, -0.10, 0.20));
+  gtsam::Pose3 L_s = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
+  gtsam::Pose3 motion1 = gtsam::Pose3::Identity();
+  gtsam::Pose3 motion2 = utils::createRandomAroundIdentity<gtsam::Pose3>(3.0);
+  gtsam::Point3 point(3.0, 0, 1.2);
+
+  double sigma = 0.2;
+
+  // measurements have explicity noisy since we puerturb both motions and poses
+  // however the noisy is not propogated correctly since we do not add sigma
+  // noisy to the measurements
+  gtsam::Point3 measurement1 =
+      perturbCameraAndMotion(point, L_s, motion1, pose1, sigma);
+  gtsam::Point3 measurement2 =
+      perturbCameraAndMotion(point, L_s, motion2, pose2, sigma);
+
+  gtsam::Key pose_key1(1);
+  gtsam::Key motion_key1(2);
+
+  gtsam::Key pose_key2(3);
+  gtsam::Key motion_key2(4);
+  gtsam::Values values;
+  values.insert(pose_key1, pose1);
+  values.insert(motion_key1, motion1);
+  values.insert(pose_key2, pose2);
+  values.insert(motion_key2, motion2);
+
+  SmartFactor::shared_ptr factor(new SmartFactor(
+      L_s, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
+
+  factor->add(measurement1, motion_key1, pose_key1);
+  factor->add(measurement2, motion_key2, pose_key2);
+
+  gtsam::NonlinearFactorGraph graph;
+  graph.addPrior<gtsam::Pose3>(motion_key1, gtsam::Pose3::Identity(),
+                               gtsam::noiseModel::Isotropic::Sigma(6, 1e-5));
+  graph.add(factor);
+
+  gtsam::LevenbergMarquardtParams lmParams;
+  lmParams.relativeErrorTol = 1e-8;
+  lmParams.absoluteErrorTol = 0;
+  lmParams.maxIterations = 20;
+
+  gtsam::Values result;
+  gtsam::LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
+  result = optimizer.optimize();
+}
+
+// TEST(SmartMotionFactor, LostTriangulation3D) {
+
+//   gtsam::Pose3 pose1 = gtsam::Pose3::Identity();
+//   gtsam::Pose3 pose2(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+//                      gtsam::Point3(0.05, -0.10, 0.20));
+
+//   gtsam::Point3 point(3.0, 0, 1.2);
+//   gtsam::Point3 measurement1 = pose1.inverse() * point;
+//   gtsam::Point3 measurement2 = pose2.inverse() * point;
+
+// }

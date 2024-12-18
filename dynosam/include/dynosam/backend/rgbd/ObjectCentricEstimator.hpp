@@ -80,8 +80,9 @@ struct MotionFactorTraits {
   using Motion = MOTION;
   using Pose = POSE;
 
-  using Motions = std::vector<Motion>;
-  using Poses = std::vector<Pose>;
+  using Motions = std::vector<Motion, Eigen::aligned_allocator<Motion>>;
+  using Poses = std::vector<Pose, Eigen::aligned_allocator<Pose>>;
+
   //! Measurement dimension
   using Z = Eigen::Matrix<double, ZDim, 1>;
   using ZVector = std::vector<Z, Eigen::aligned_allocator<Z>>;
@@ -108,6 +109,11 @@ struct MotionFactorTraits {
   using GFBlocks = std::vector<MatrixGFD, Eigen::aligned_allocator<MatrixGFD>>;
 };
 
+struct SmartMotionFactorParams {
+  //! Threshold to decide whether to re-triangulate
+  double retriangulation_threshold = 1e-5;
+};
+
 // should be object centric smart factor... :)
 template <size_t DIM, typename MOTION, typename POSE>
 class SmartMotionFactor : public gtsam::NonlinearFactor,
@@ -116,6 +122,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   using Base = gtsam::NonlinearFactor;
   using This = SmartMotionFactor<DIM, MOTION, POSE>;
   using MotionTraits = MotionFactorTraits<DIM, MOTION, POSE>;
+  using shared_ptr = boost::shared_ptr<This>;
 
   static constexpr size_t ZDim = MotionTraits::ZDim;
   static constexpr size_t HDim = MotionTraits::HDim;
@@ -168,6 +175,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     }
 
     this->measured_.push_back(measured);
+
     this->keys_.push_back(motion_key);
     this->keys_.push_back(pose_key);
     this->motion_keys_.push_back(motion_key);
@@ -176,19 +184,6 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
 
   /// Return the 2D measurements (ZDim, in general).
   const ZVector& measured() const { return measured_; }
-
-  // double error(const gtsam::Values& c) override const {
-  //   if (active(c)) {
-  //     const Vector b = unwhitenedError(c);
-  //     check(noiseModel_, b.size());
-  //     if (noiseModel_)
-  //       return noiseModel_->loss(noiseModel_->squaredMahalanobisDistance(b));
-  //     else
-  //       return 0.5 * b.squaredNorm();
-  //   } else {
-  //     return 0.0;
-  //   }
-  // }
 
   size_t numMeasurements() const { return this->measured_.size(); }
 
@@ -361,7 +356,6 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   gtsam::SymmetricBlockMatrix createReducedMatrix(
       const Motions& motions, const Poses& poses, const double lambda = 0.0,
       bool diagonalDamping = false) const {
-    // TODO: reorderKeys()!
     // trinagulate safe -> get point which is used when getting the Jacobians
     // TODO: can we use the LOST values etc by making the cam pose: G = X.inv()
     // * H like we do for reprojection RANSAC? no degeneracy as we are 3D?
@@ -412,8 +406,33 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   createHessianFactor(const Motions& motions, const Poses& poses,
                       const double lambda = 0.0,
                       bool diagonalDamping = false) const {
-    // cash money!!
-    return nullptr;
+    const size_t m = this->numMeasurements();
+    constexpr static auto HessianDim = MotionTraits::HessianDim;
+
+    // if (params_.degeneracyMode == ZERO_ON_DEGENERACY && !result_) {
+    if (!result_) {
+      // gtsam::Matrix b = gtsam::Matrix::Zero(ZDim * num_measurements, 1);
+      // gtsam::Matrix g = gtsam::Matrix::Zero(HessianDim * num_measurements,
+      // 1); gtsam::Matrix G = gtsam::Matrix::Zero(HessianDim *
+      // num_measurements, HessianDim * num_measurements);
+
+      // gtsam::Matrix augmented_information(HessianDim * num_measurements + 1,
+      // HessianDim * num_measurements + 1);
+      gtsam::Matrix augmented_information =
+          gtsam::Matrix::Zero(HessianDim * m + 1, HessianDim * m + 1);
+      // augmented_information << G, g, g.transpose(), b.squaredNorm();
+
+      return boost::make_shared<gtsam::RegularHessianFactor<HessianDim>>(
+          this->keys_, constructSymmetricBlockMatrix(m, augmented_information));
+
+    }
+
+    else {
+      gtsam::SymmetricBlockMatrix augmented_hessian =
+          createReducedMatrix(motions, poses, lambda, diagonalDamping);
+      return boost::make_shared<gtsam::RegularHessianFactor<HessianDim>>(
+          this->keys_, augmented_hessian);
+    }
   }
 
   //  private:
@@ -448,6 +467,18 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     b = noise_model_->whiten(b);
   }
 
+  std::optional<gtsam::Point3> triangulateSafe(const Motions& motions,
+                                               const Poses& poses) const {
+    if (numMeasurements() < 2) {
+      return {};
+    }
+
+    // what if result is {}?
+    bool retriangulate = decideIfTriangulate(motions, poses);
+    if (retriangulate) {
+    }
+  }
+
   // template <size_t N = ZDim, typename = std::enable_if_t<N==3>>
   // gtsam::Vector reprojectionError(const Motions& motions, const Poses& poses,
   // const gtsam::Point3& point_l, GBlocks* Gs, FBlocks* Fs, EBlocks* Es) const
@@ -461,8 +492,9 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   // { throw std::runtime_error("Not implemented N==2!!"); }
 
   gtsam::Vector reprojectionError(const Motions& motions, const Poses& poses,
-                                  const gtsam::Point3& point_l, GBlocks* Gs,
-                                  FBlocks* Fs, EBlocks* Es) const {
+                                  const gtsam::Point3& point_l,
+                                  GBlocks* Gs = nullptr, FBlocks* Fs = nullptr,
+                                  EBlocks* Es = nullptr) const {
     CHECK_EQ(motions.size(), poses.size());
     const auto measurements = measured();
     CHECK_EQ(motions.size(), measurements.size());
@@ -525,6 +557,62 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     return b;
   }
 
+  bool decideIfTriangulate(const Motions& motions, const Poses& poses) const {
+    // Several calls to linearize will be done from the same linearization
+    // point, hence it is not needed to re-triangulate. Note that this is not
+    // yet "selecting linearization", that will come later, and we only check if
+    // the current linearization is the "same" (up to tolerance) w.r.t. the last
+    // time we triangulated the point.
+    CHECK_EQ(motions.size(), poses.size());
+    const auto measurements = measured();
+    CHECK_EQ(motions.size(), measurements.size());
+
+    const size_t m = measurements.size();
+
+    // sanity check: this should never fail!
+    CHECK_EQ(camera_poses_triangulation_.size(),
+             object_motions_triangulation_.size());
+
+    bool retriangulate = false;
+
+    // Definitely true if we do not have a previous linearization point or the
+    // new linearization point includes more poses.
+    // Only check against poses since we know motions and poses have the same
+    // size and the cached poses/motions should have the same size
+    if (camera_poses_triangulation_.empty() ||
+        poses.size() != camera_poses_triangulation_.size())
+      retriangulate = true;
+
+    // Otherwise, check poses and motions against cache.
+    if (!retriangulate) {
+      for (size_t i = 0; i < poses.size(); i++) {
+        if (!poses[i].equals(camera_poses_triangulation_[i],
+                             params_.retriangulation_threshold) ||
+            !motions[i].equals(object_motions_triangulation_[i],
+                               params_.retriangulation_threshold)) {
+          retriangulate =
+              true;  // at least two poses are different, hence we retriangulate
+          break;
+        }
+      }
+    }
+
+    // Store the current poses used for triangulation if we will re-triangulate.
+    if (retriangulate) {
+      camera_poses_triangulation_.clear();
+      camera_poses_triangulation_.reserve(m);
+
+      object_motions_triangulation_.clear();
+      object_motions_triangulation_.reserve(m);
+      for (size_t i = 0; i < m; i++) {
+        camera_poses_triangulation_.push_back(poses[i]);
+        object_motions_triangulation_.push_back(motions[i]);
+      }
+    }
+
+    return retriangulate;
+  }
+
   // TODO: should actually check that Es is the size of the measurements
   // Pull into base class to have static and non static versions
   static void EVectorToMatrix(const EBlocks& Es, gtsam::Matrix& E) {
@@ -548,8 +636,8 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
       const MatrixFD& Fi = Fs.at(i);
       MatrixGFD GFi;
 
-      LOG(INFO) << "Gi:\n " << Gi;
-      LOG(INFO) << "Fi:\n " << Fi;
+      // LOG(INFO) << "Gi:\n " << Gi;
+      // LOG(INFO) << "Fi:\n " << Fi;
       // gtsam::print(Fi, "Fi ");
 
       // concat blocks horizontally
@@ -557,7 +645,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
       GFi.block(0, HDim, ZDim, XDim) = Fi;
       GFs[i] = GFi;
 
-      LOG(INFO) << "GFs[i]:\n " << GFs[i];
+      // LOG(INFO) << "GFs[i]:\n " << GFs[i];
 
       // gtsam::print(GFs[i], "GFs[i] ");
     }
@@ -565,23 +653,43 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
 
   static constexpr int N = 3;  // point size //only used for schur compliment?
 
-  static gtsam::SymmetricBlockMatrix SchurComplement(
-      const GFBlocks& GFs, const gtsam::Matrix& E,
-      const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
-    // a single point is observed in m cameras
-    size_t m = GFs.size();
-
+  static gtsam::SymmetricBlockMatrix constructSymmetricBlockMatrix(
+      size_t m, std::optional<gtsam::Matrix> M = {}) {
     // Create a SymmetricBlockMatrix (augmented hessian, with extra row/column
     // with info vector)
-    // size_t M1 = ND * m + 1;
     size_t M1 = HessianDim * m + 1;
     std::vector<Eigen::DenseIndex> dims(m +
                                         1);  // this also includes the b term
     // vertical dimensions of ATA
     std::fill(dims.begin(), dims.end() - 1, HessianDim);
     dims.back() = 1;
-    gtsam::SymmetricBlockMatrix augmentedHessian(dims,
-                                                 gtsam::Matrix::Zero(M1, M1));
+
+    if (M) {
+      // check sizes
+      if (M->rows() != M1 || M->cols() != M1) {
+        std::stringstream ss;
+        ss << "Symmetric Block Matrix construction failed: input"
+              " augmented hessian has incorrect size ("
+           << M->rows() << " x " << M->cols()
+           << ")"
+              " when it should be a sqaure ("
+           << M1 << " x " << M1 << ")";
+        throw std::runtime_error(ss.str());
+      } else {
+        return gtsam::SymmetricBlockMatrix(dims, *M);
+      }
+    }
+
+    return gtsam::SymmetricBlockMatrix(dims, gtsam::Matrix::Zero(M1, M1));
+  }
+
+  static gtsam::SymmetricBlockMatrix SchurComplement(
+      const GFBlocks& GFs, const gtsam::Matrix& E,
+      const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
+    // a single point is observed in m cameras
+    size_t m = GFs.size();
+    gtsam::SymmetricBlockMatrix augmentedHessian =
+        constructSymmetricBlockMatrix(m);
 
     // Blockwise Schur complement
     for (size_t i = 0; i < m; i++) {  // for each camera
@@ -623,6 +731,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
 
  protected:
   const gtsam::Pose3 L_s0_;
+  SmartMotionFactorParams params_;
 
   // TODO: not used
   //  Cache for Fblocks, to avoid a malloc ever time we re-linearize
@@ -636,7 +745,11 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   gtsam::KeyVector motion_keys_;
   gtsam::KeyVector pose_keys_;
 
+  // making this mutable seems to break things... :)
   std::optional<gtsam::Point3> result_;
+  mutable Poses camera_poses_triangulation_;  //! current triangulation poses
+  mutable Motions
+      object_motions_triangulation_;  //! current triangulation object motions
 };
 
 struct ObjectCentricProperties {
