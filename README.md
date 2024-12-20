@@ -224,7 +224,7 @@ In the case of motion logs, the frame id is the __to__ motion, such that the mot
 
 ## Results and Metrics
 
-The DynoSAM framework comes with automated [evaluation tools](./dynosam_utils/src/evaluation/) that run as part of the pipeline. This can be run with the`--run_analysis` argument when using `eval_launch.py`. The evaluation module will look for a valid dynosam results folder in the provided output directory and will run evaluations _per prefix found_ in the folder. This enables one folder to contain multiple sets of log files, each defined with a different prefix, i.e for one dataset, multiple configurations of the back-end can be run and logged to the same folder, as long as the prefix is different.
+The DynoSAM framework comes with automated [evaluation tools](./dynosam_utils/dynosam_utils//evaluation/) that run as part of the pipeline. This can be run with the`--run_analysis` argument when using `eval_launch.py`. The evaluation module will look for a valid dynosam results folder in the provided output directory and will run evaluations _per prefix found_ in the folder. This enables one folder to contain multiple sets of log files, each defined with a different prefix, i.e for one dataset, multiple configurations of the back-end can be run and logged to the same folder, as long as the prefix is different.
 
 From the logged files the evaluation suite will produce ATE and RPE results for visual odometry and AME, RME and RPE results for objects. See our TRO paper for more details on these metrics. Per-frame numerical errors are logged in __*results.pdf__ with error plots for each metric as well as plots of the object and camera trajectory additionally included.
 
@@ -238,7 +238,7 @@ From the logged files the evaluation suite will produce ATE and RPE results for 
 
 A full summary of numerical results are also generated in __result_tables.pdf__. This file includes all metrics for all sets of dynosam results found. The per-object error (for each metric) is recorded, as is the mean error over all objects for a particular metric.
 
-The `DatasetEvaluator` does most of the heavy lifting and can be found in the [evaluation_lib.py](./dynosam_utils/src/evaluation/evaluation_lib.py) module. As shown in some of the other evaluation scripts (e.g [sliding_window_vs_batch_error_plot.py](./dynosam_utils/src/sliding_window_vs_batch_error_plot.py)) we can use the tools and classes defined to do more complex evaluation and visualisation.
+The `DatasetEvaluator` does most of the heavy lifting and can be found in the [evaluation_lib.py](./dynosam_utils/dynosam_utils/evaluation/evaluation_lib.py) module. As shown in some of the other evaluation scripts (e.g [sliding_window_vs_batch_error_plot.py](./dynosam_utils/src/sliding_window_vs_batch_error_plot.py)) we can use the tools and classes defined to do more complex evaluation and visualisation.
 
 # 5. Program Structure and Modules
 

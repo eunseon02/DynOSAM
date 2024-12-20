@@ -17,7 +17,6 @@ from dynosam_utils.evaluation.filesystem_utils import DataFiles, read_csv
 import dynosam_utils.evaluation.core.plotting as plotting
 
 from dynosam_utils.evaluation.tools import (
-    so3_from_euler,
     common_entries,
     transform_camera_trajectory_to_world,
     camera_coordinate_to_world,
@@ -29,6 +28,7 @@ from dynosam_utils.evaluation.tools import (
 )
 
 import dynosam_utils.evaluation.tools as tools
+import dynosam_utils.evaluation.core as core
 
 
 logger = logging.getLogger("dynosam_eval")
@@ -279,7 +279,7 @@ class MotionErrorEvaluator(Evaluator):
             )
 
             fig = plt.figure(figsize=(11,8))
-            tools.plot_trajectory_error(
+            core.plotting.plot_trajectory_error(
                 fig,
                 object_motion_traj,
                 object_motion_traj_ref,
@@ -423,7 +423,7 @@ class MotionErrorEvaluator(Evaluator):
         # plot object poses
         plot_mode = evo_plot.PlotMode.xyz
         ax = fig_all_object_traj.add_subplot(111, projection="3d")
-        tools.plot_object_trajectories(
+        core.plotting.plot_object_trajectories(
             fig_all_object_traj,
             object_trajectories,
             object_trajectories_ref,
@@ -446,7 +446,7 @@ class MotionErrorEvaluator(Evaluator):
 
         # plot reconsructed (calibrated) object poses
         fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
-        tools.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        core.plotting.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
         fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
         ax = fig_all_object_traj_calibrated.gca()
         trajectory_helper.set_ax_limits(ax, evo_plot.PlotMode.xyz)
@@ -768,11 +768,11 @@ class MapPlotter3D(Evaluator):
             object_trajectory = self._object_eval.make_object_trajectory(object_id)
 
             if object_trajectory and plot_velocities:
-                tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
+                core.plotting.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
         # all_traj["Camera"] = camera_traj
 
-        tools.plot_object_trajectories(map_fig, {"Camera":camera_traj},
+        core.plotting.plot_object_trajectories(map_fig, {"Camera":camera_traj},
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,
@@ -878,7 +878,7 @@ class MapPlotter3D(Evaluator):
         # for (_, data), object_colour in zip(object_points.items(), colour_list):
         #     ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
-        tools.plot_object_trajectories(map_fig, all_traj,
+        core.plotting.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
                                     #    plot_axis_est=True,

@@ -81,6 +81,7 @@ class RME(APE):
 
         super().process_data(processed_data)
 
+    # TODO: this has a bug in it somehow!!
     @staticmethod
     def sync_object_motion_and_pose(data: TrajPair, max_diff = 0.01):
         # sync so that we get object motions from i to N

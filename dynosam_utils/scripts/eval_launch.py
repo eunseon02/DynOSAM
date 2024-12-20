@@ -37,7 +37,7 @@ def parser():
     evaluation_opts.add_argument("-n", "--name",
                                  help="Name of the experiment to run. This will be appended to the output_path file"
                                  " such that the output file path will be output_path/name",
-                                 default="test")
+                                 default="")
 
     evaluation_opts.add_argument("-a", "--run_analysis",
                                  help="Runs analysis on the output files, expected to be found in the output_path/name folder ",

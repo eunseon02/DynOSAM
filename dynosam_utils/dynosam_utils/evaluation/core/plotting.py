@@ -8,17 +8,15 @@ import evo.core.transformations
 import numpy as np
 from matplotlib.figure import Figure
 from evo.core.lie_algebra import se3
-from evo.core.trajectory import PosePath3D
 from matplotlib.axes import Axes
 import gtsam
 
 from dynosam_utils.evaluation.formatting_utils import *
+from dynosam_utils.evaluation.tools import ObjectMotionTrajectory
 
 
 # apparently this ordereed needed
 import matplotlib.pyplot as plt
-import mpl_toolkits
-from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d import proj3d
 from matplotlib.patches import FancyArrowPatch
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
@@ -27,7 +25,6 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 import evo.tools.plot as evo_plot
 import evo.core.trajectory as evo_trajectory
-import evo.core.lie_algebra as evo_lie_algebra
 from evo.core.metrics import PE
 
 import evo
@@ -316,6 +313,148 @@ class ObjectTrajectoryPlotter(object):
 
     def _get_next_colour(self) -> Any:
         return  next(self._colours_itr)
+
+
+
+# modification of evo.trajectories
+# so much going on in this function - refactor and comment!!!!
+def plot_object_trajectories(
+        fig: Figure,
+        obj_trajectories: typing.Dict[str, evo_trajectory.PosePath3D],
+        obj_trajectories_ref: Optional[typing.Dict[str, evo_trajectory.PosePath3D]] = None,
+        plot_mode=evo_plot.PlotMode.xy,
+        title: str = "",
+        subplot_arg: int = 111,
+        plot_start_end_markers: bool = False,
+        length_unit: evo_plot.Unit = evo_plot.Unit.meters,
+        **kwargs) -> Axes:
+
+    return ObjectTrajectoryPlotter().plot(
+        fig,
+        obj_trajectories,
+        obj_trajectories_ref,
+        plot_mode,
+        title,
+        subplot_arg,
+        plot_start_end_markers,
+        length_unit,
+        **kwargs)
+
+
+def plot_trajectory_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, motion_ref: evo_trajectory.PoseTrajectory3D, label:str):
+    assert motion_est.num_poses == motion_ref.num_poses
+
+    import evo.core.metrics as metrics
+    ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
+    data = (motion_ref, motion_est)
+    ape_E.process_data(data)
+
+    rot_error = []
+    trans_error = []
+    for E in ape_E.E:
+        E_se3 = gtsam.Pose3(E)
+        E_trans = E_se3.translation()
+        E_rot = E_se3.rotation()
+        rx, ry, rz =  np.degrees(E_rot.rpy())
+
+        trans_error.append(E_trans)
+        rot_error.append(np.array([rx, ry, rz]))
+
+    rot_error = np.array(rot_error)
+    trans_error = np.array(trans_error)
+
+    rot_error_axes = fig.add_subplot(211)
+    trans_error_axes = fig.add_subplot(212)
+
+    rot_error_axes.set_title(f"Rotation Error ({label})", fontweight="bold")
+    trans_error_axes.set_title(f"Translation Error ({label})", fontweight="bold")
+
+
+    set_clean_background(rot_error_axes)
+    set_clean_background(trans_error_axes)
+    trans_error_axes.margins(0.001)
+    rot_error_axes.margins(0.001)
+
+
+    rot_error_axes.plot(rot_error[:,0], label="rx", color=get_nice_red())
+    rot_error_axes.plot(rot_error[:,1], label="ry", color=get_nice_green())
+    rot_error_axes.plot(rot_error[:,2], label="rz", color=get_nice_blue())
+
+    trans_error_axes.plot(trans_error[:,0], label="tx", color=get_nice_red())
+    trans_error_axes.plot(trans_error[:,1], label="ty", color=get_nice_green())
+    trans_error_axes.plot(trans_error[:,2], label="tz", color=get_nice_blue())
+
+    trans_error_axes.set_xlabel("Frame Index [-]")
+    rot_error_axes.set_xlabel("Frame Index [-]")
+
+    trans_error_axes.set_ylabel("$E_t$(m)", fontsize=19)
+    rot_error_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=19)
+
+    rot_error_axes.legend(loc='upper left')
+    trans_error_axes.legend(loc='upper left')
+
+    fig.tight_layout(pad=0.5)
+
+
+# fix from here https://github.com/matplotlib/matplotlib/issues/21688
+# TODO: clean up
+class Arrow3D(FancyArrowPatch):
+    def __init__(self, xs, ys, zs, *args, **kwargs):
+        super().__init__((0,0), (0,0), *args, **kwargs)
+        self._verts3d = xs, ys, zs
+
+    def do_3d_projection(self, renderer=None):
+        xs3d, ys3d, zs3d = self._verts3d
+        xs, ys, zs = proj3d.proj_transform(xs3d, ys3d, zs3d, self.axes.M)
+        self.set_positions((xs[0],ys[0]),(xs[1],ys[1]))
+
+        return np.min(zs)
+
+
+#TODO: plotmode?
+# TODO: outdoor vs indoor presets
+# or just the ObjectMotionTrajectory
+def plot_velocities(
+        ax: Axes,
+        object_trajectory: ObjectMotionTrajectory,
+        color = 'r'):
+
+    def draw_arrow(ax, xs, ys, zs, color):
+        arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=15, lw=3)
+        # arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=8, lw=1)
+        ax.add_artist(arrow)
+
+    for (pose_k_1, motion_k) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
+        if pose_k_1 is None or motion_k is None:
+            continue
+        I =  evo.core.transformations.identity_matrix()
+        R_motion =  evo.core.transformations.identity_matrix()
+        # ensure homogenous
+        R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+
+        t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+        t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
+
+        # make homogenous
+        t_motion = np.insert(t_motion, 3, 1)
+        t_pose = np.insert(t_pose, 3, 1)
+
+        # # implement ^o_Ad_B = (I - ^o_AR_B)^o_ot_A + ^o_At_B from Chirikjian
+        # velocity = (I - R_motion) @ t_pose + t_motion
+        # from VDO-SLAM
+        velocity = t_motion - (I - R_motion) @ t_pose
+
+        start = t_pose
+        end = t_pose +  20.0 *velocity
+        # end = t_pose +  3.0 *velocity
+        draw_arrow(ax, (start[0], end[0]), (start[1], end[1]), (start[2], end[2]), color)
+
+        # arrow_length_ratio
+        # ax.quiver(t_pose[0], t_pose[1], t_pose[2], velocity[0], velocity[1], velocity[2], length=5.0, normalize=False, color="red", pivot='tail')
+
+
+
+
 
 
 def draw_camera_frustum(ax: Axes,
