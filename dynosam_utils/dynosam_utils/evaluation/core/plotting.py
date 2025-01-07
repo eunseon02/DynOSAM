@@ -340,7 +340,7 @@ def plot_object_trajectories(
         length_unit,
         **kwargs)
 
-
+# plot AME error
 def plot_trajectory_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, motion_ref: evo_trajectory.PoseTrajectory3D, label:str):
     assert motion_est.num_poses == motion_ref.num_poses
 

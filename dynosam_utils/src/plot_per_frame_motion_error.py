@@ -13,8 +13,8 @@ import gtsam
 import matplotlib.pyplot as plt
 
 # Reset all rcParams to their default values
-# plt.rcdefaults()
-startup_plotting(65)
+plt.rcdefaults()
+startup_plotting(50)
 
 
 plt.rcParams["lines.linewidth"] = 4.0
@@ -60,8 +60,8 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
     motion_eval = dataset_evaluator.create_motion_error_evaluator(data_files)
 
-    for object_id, object_motion_traj_est, object_motion_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
-    # for object_id, object_motion_traj_est, object_pose_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_poses_traj_ref):
+    # for object_id, object_motion_traj_est, object_motion_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
+    for object_id, object_motion_traj_est, object_pose_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_poses_traj_ref):
         if object_motion_traj_est.num_poses < 5:
             continue
 
@@ -75,6 +75,7 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         # fig.set_size_inches(15, 15) # for KITTI
         fig.set_size_inches(15, 11)  # for OMD
 
+
         if suptitle:
             fig.suptitle(f"Object {object_id}", fontweight="bold")
         rot_error_axes.margins(0.001)
@@ -86,23 +87,22 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         trans_error_axes.set_ylabel("$E_t$(m)")
         trans_error_axes.set_xlabel("Frame Index [-]")
 
-
         rme_E = eval_metrics.RME(eval_metrics.PoseRelation.full_transformation)
 
         # print(object_motion_traj_est.timestamps)
         # print(object_pose_traj_ref.timestamps)
         # # copied from tools.plot_trajectory_error
         # import evo.core.metrics as metrics
-        ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
-        # data = (object_pose_traj_ref,object_motion_traj_est)
+        # ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
+        data = (object_pose_traj_ref,object_motion_traj_est)
 
-        data = (object_motion_traj_ref,object_motion_traj_est)
+        # data = (object_motion_traj_ref,object_motion_traj_est)
         # eval_metrics.RME.sync_object_motion_and_pose(data)
-        ape_E.process_data(data)
+        rme_E.process_data(data)
 
         rot_error = []
         trans_error = []
-        for E in ape_E.E[:-5]:
+        for E in rme_E.E[:-5]:
             E_se3 = gtsam.Pose3(E)
             E_trans = E_se3.translation()
             E_rot = E_se3.rotation()
@@ -122,7 +122,6 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         trans_error_axes.plot(trans_error[:,0], label="x", color=get_nice_red(), **kwargs)
         trans_error_axes.plot(trans_error[:,1], label="y", color=get_nice_green(), **kwargs)
         trans_error_axes.plot(trans_error[:,2], label="z", color=get_nice_blue(), **kwargs)
-
 
         # smart_legend(rot_error_axes)
         # smart_legend(trans_error_axes)
@@ -169,10 +168,10 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
         set_axes_equal(frontend_rot_axes, backend_rot_axes)
         set_axes_equal(frontend_trans_axes, backend_trans_axes)
 
-        fig_frontend.tight_layout(pad=0.9)
-        fig_backend.tight_layout(pad=0.9)
-        # fig_frontend.tight_layout()
-        # fig_backend.tight_layout()
+        # fig_frontend.tight_layout(pad=0.9)
+        # fig_backend.tight_layout(pad=0.9)
+        fig_frontend.tight_layout()
+        fig_backend.tight_layout()
 
 
 
@@ -184,8 +183,8 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
 
 
 # these are the ones we actually used
-make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
-# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+# make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
+make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
 
 
 
