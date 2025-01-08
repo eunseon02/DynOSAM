@@ -104,11 +104,6 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   GenericTrackedStatusVector<LandmarkKeypointStatus>
   collectDynamicLandmarkKeypointMeasurements() const;
 
-  // GenericTrackedStatusVector<KeypointDepthStatus>
-  // collectStaticKeypointDepthMeasurements() const;
-  // GenericTrackedStatusVector<KeypointDepthStatus>
-  // collectDynamicKeypointDepthMeasurements() const;
-
   /**
    * @brief Checks if an object id exists within the frontend output
    *

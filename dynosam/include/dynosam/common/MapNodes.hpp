@@ -410,10 +410,6 @@ class ObjectNode : public MapNodeBase<MEASUREMENT> {
   // the subset of lmks at this requested frame
   LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(
       FrameId frame_id) const;
-
-  /// @brief A pair of Const LandmarkNodePtr's
-  using LandmarkNodePair = std::pair<const LandmarkNodePtr<MEASUREMENT>,
-                                     const LandmarkNodePtr<MEASUREMENT>>;
 };
 
 struct InvalidLandmarkQuery : public DynosamException {

@@ -204,7 +204,6 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
       // graph.error(values);
       gtsam::LevenbergMarquardtParams opt_params;
-      // if(VLOG_IS_ON(20))
       opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
       const auto theta = new_updater_->getTheta();
