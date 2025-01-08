@@ -114,7 +114,7 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
             sliding_ape_rot.process_data(sliding_data)
 
 
-            assert sliding_ape_trans.error.shape == batch_ape_trans.error.shape, (sliding_ape_trans.error.shape, batch_ape_trans.error.shape)
+            # assert sliding_ape_trans.error.shape == batch_ape_trans.error.shape, (sliding_ape_trans.error.shape, batch_ape_trans.error.shape)
             # assert sliding_ape_trans.error.shape[0] == len(common_timestamps), (sliding_ape_trans.error.shape[0],  len(common_timestamps))
 
             # update common timestamps to the ones produced by the error metric
@@ -174,7 +174,7 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
         # ax = trans_fig.gca()
         trans_axes.plot(batch_errors_timestamp, batch_errors_t, label="Batch")
         # trans_axes.set_ylabel("$E_t$(m)", fontsize=23)
-        trans_axes.set_ylabel("$AME_t$(m)")
+        trans_axes.set_ylabel("$E_t$(m)")
 
 
         trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding")
@@ -187,7 +187,7 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
 
 
         # rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
-        rot_axes.set_ylabel("$AME_r$(\N{degree sign})")
+        rot_axes.set_ylabel("$E_r$(\N{degree sign})")
         # rot_axes.set_xlabel("Frame Index [-]")
         # rot_axes.set_title("Batch vs. Sliding Window: AME$_r$ Error Comparison", fontweight="bold",  fontsize=23)
         rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Batch")

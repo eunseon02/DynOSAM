@@ -11,6 +11,9 @@ import sys
 import gtsam
 
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+
 
 # Reset all rcParams to their default values
 plt.rcdefaults()
@@ -50,7 +53,12 @@ plt.rcParams["lines.linewidth"] = 4.0
 # plt.rcParams['legend.fontsize']=14
 
 
-def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objects:List[int], suptitle:bool = True, **kwargs):
+def make_plot_all_objects(
+        prefix,
+        dataset_evaluator:eval.DatasetEvaluator,
+        objects:List[int],
+        suptitle:bool = True,
+        **kwargs):
     data_files = dataset_evaluator.make_data_files(prefix)
 
 
@@ -70,11 +78,9 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
             continue
 
 
-        fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True)
-
+        fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True, layout="constrained")
         # fig.set_size_inches(15, 15) # for KITTI
-        fig.set_size_inches(15, 11)  # for OMD
-
+        # fig.set_size_inches(15, 11)  # for OMD
 
         if suptitle:
             fig.suptitle(f"Object {object_id}", fontweight="bold")
@@ -86,6 +92,7 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         trans_error_axes.margins(0.001)
         trans_error_axes.set_ylabel("$E_t$(m)")
         trans_error_axes.set_xlabel("Frame Index [-]")
+
 
         rme_E = eval_metrics.RME(eval_metrics.PoseRelation.full_transformation)
 
@@ -102,7 +109,7 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
         rot_error = []
         trans_error = []
-        for E in rme_E.E[:-5]:
+        for E in rme_E.E[:-10]:
             E_se3 = gtsam.Pose3(E)
             E_trans = E_se3.translation()
             E_rot = E_se3.rotation()
@@ -173,6 +180,8 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
         fig_frontend.tight_layout()
         fig_backend.tight_layout()
 
+        return (fig_frontend, frontend_rot_axes, frontend_trans_axes), (fig_backend, backend_rot_axes, backend_trans_axes)
+
 
 
 
@@ -183,8 +192,9 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
 
 
 # these are the ones we actually used
-# make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
-make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+# omd_frontend, omd_backend = make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
+kitti_frontend, kitti_backend = make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+
 
 
 

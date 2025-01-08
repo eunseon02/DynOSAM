@@ -69,26 +69,33 @@ class RME(APE):
         if len(data) != 2:
             raise MetricsException(
                 "please provide data tuple as: (traj_pose_ref, traj_motion_est)")
-        # traj_pose_ref, traj_motion_est = RME.sync_object_motion_and_pose(data)
-        traj_pose_ref, traj_motion_est = data
+        traj_pose_k_1_ref, traj_pose_k_ref, traj_motion_est = RME.sync_object_motion_and_pose(data)
 
-        # if traj_pose_ref.num_poses - 1 != traj_motion_est.num_poses:
-        #     raise MetricsException(
-        #         f"Reference pose data must have one more entry than estimated motion data: pose {traj_pose_ref.num_poses} vs. motion {traj_motion_est.num_poses}")
+        def traj_as_tuple(traj: traj.PoseTrajectory3D):
+            timestamps = traj.timestamps
+            poses = traj.poses_se3
+            return zip(timestamps, poses)
 
-        object_poses_ref = traj_pose_ref.poses_se3
-        object_motions_ref = traj_motion_est.poses_se3
+
 
         # we have designed the sync_object_motion_and_pose to return the pose data in the from k-1 to N and the motion data k to N
         object_motion_L = []
         object_motion_L_gt = []
-        for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses_ref[:-1], object_poses_ref[1:], object_motions_ref[1:]):
+        for pose_tuple_k_1, pose_tuple_k, motion_tuple_k in zip(traj_as_tuple(traj_pose_k_1_ref), traj_as_tuple(traj_pose_k_ref), traj_as_tuple(traj_motion_est)):
+
+            pose_timestamp_k_1, object_pose_k_1 = pose_tuple_k_1
+            pose_timestamp_k, object_pose_k = pose_tuple_k
+            motion_timestamp_k, object_motion_k = motion_tuple_k
+
+            assert motion_timestamp_k == pose_timestamp_k
+            assert pose_timestamp_k_1 == motion_timestamp_k - 1
+
             object_motion_L.append(lie.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
             object_motion_L_gt.append(lie.se3())
 
         # update internal timestamps
         # -1 on timestamps so that the size matches the size of the motion error (ie. k...N)
-        self.timestamps = np.array(traj_motion_est.timestamps[:-1])
+        self.timestamps = np.array(traj_motion_est.timestamps)
 
         # print(f"len object motion L {len(object_motion_L)} len traj motion timestamps {len(traj_motion_est.timestamps)}")
 
@@ -99,7 +106,82 @@ class RME(APE):
 
         super().process_data(processed_data)
 
+        print(self.error.shape)
+
         assert self.error.shape == self.timestamps.shape, ( self.error.shape, self.timestamps.shape)
+
+    # @staticmethod
+    # def sync_object_motion_and_pose(data: TrajPair, max_diff = 0.01):
+    #     # sync so that we get object motions from i to N
+    #     # and object poses from i-1 to N (inclusive)
+    #     traj_pose_ref, traj_motion_est = data
+
+    #     # takes copies
+    #     traj_pose_ref = reduce_to_largest_strictly_ascending_range(traj_pose_ref)
+    #     traj_motion_est = reduce_to_largest_strictly_ascending_range(traj_motion_est)
+
+    #     traj_pose_ref_sync, traj_motion_est_sync = sync.associate_trajectories(traj_pose_ref, traj_motion_est,max_diff=max_diff)
+
+    #     # print("h1 ",traj_pose_ref_sync.timestamps)
+    #     # print("h2", traj_motion_est_sync.timestamps)
+
+    #     # check if the first timestamp in the pose is less than or equal to the timestamp in the motion
+    #     if traj_pose_ref_sync.timestamps[0] >= traj_motion_est_sync.timestamps[0]:
+    #         found_index = None
+    #         # search through the motion traj to find the first one that is greater than the first pose of this one
+    #         for i in range(1, len(traj_motion_est_sync.timestamps)):  # Start from the second element
+    #             if traj_motion_est_sync.timestamps[i] >= traj_pose_ref_sync.timestamps[0]:
+    #                 found_index = i
+    #                 break
+
+    #         if found_index is None:
+    #             raise ValueError("No pose in trajectory traj_pose_ref exists before the start of trajectory traj_motion_est.")
+
+    #         print(f" FI {found_index} pose t { traj_pose_ref_sync.timestamps[0]} motion t {traj_motion_est_sync.timestamps[found_index]}")
+    #         # seems to be a bug in the code here....
+    #         # Grab the last available pose before B's start timestamp
+    #         extra_pose_index = found_index-1
+    #         print(extra_pose_index)
+
+    #         extra_pose_timestamp = traj_pose_ref_sync.timestamps[extra_pose_index]
+    #         print(f"Extra pose timestamp {extra_pose_timestamp}")
+    #         extra_pose_pose = traj_motion_est_sync.poses_se3[extra_pose_index]
+
+    #         traj_motion_est_sync.reduce_to_time_range(traj_motion_est_sync.timestamps[found_index], traj_motion_est_sync.timestamps[-1])
+    #         traj_pose_ref_sync.reduce_to_time_range(traj_pose_ref_sync.timestamps[found_index], traj_pose_ref_sync.timestamps[-1])
+
+
+    #     else:
+    #         # Find the minimum timestamp of trajectory B for normal adjustment
+    #         min_timestamp =  traj_motion_est.timestamps[0]
+    #         filtered_indices_traj_pose = np.where(traj_pose_ref.timestamps < min_timestamp)[0]
+
+    #         if len(filtered_indices_traj_pose) == 0:
+    #             raise ValueError("No pose in trajectory traj_pose_ref exists before the start of trajectory traj_motion_est.")
+
+    #         # Grab the last pose from the filtered part of A (which will be the extra one)
+    #         extra_pose_index = filtered_indices_traj_pose[-1]
+
+
+    #         # Grab the last pose from the filtered part of traj pose (which will be the extra one)
+    #         extra_pose_timestamp = traj_pose_ref_sync.timestamps[extra_pose_index]
+    #         extra_pose_pose = traj_pose_ref_sync.poses_se3[extra_pose_index]
+
+
+    #     # Filter A and B to the synchronized region (with one extra in A)
+    #     synced_timestamps_traj_pose = np.concatenate(([extra_pose_timestamp], traj_pose_ref_sync.timestamps))
+    #     synced_poses_traj_pose = np.concatenate(([extra_pose_pose], traj_pose_ref_sync.poses_se3))
+
+    #     traj_pose_ref_sync = traj.PoseTrajectory3D(poses_se3=synced_poses_traj_pose, timestamps=synced_timestamps_traj_pose)
+
+    #     valid, result = traj_pose_ref_sync.check()
+    #     assert valid, (result, traj_pose_ref_sync.timestamps)
+
+    #     print(traj_pose_ref_sync.timestamps)
+    #     print(traj_motion_est_sync.timestamps)
+
+    #     return (traj_pose_ref_sync, traj_motion_est_sync)
+
 
     @staticmethod
     def sync_object_motion_and_pose(data: TrajPair, max_diff = 0.01):
@@ -107,68 +189,56 @@ class RME(APE):
         # and object poses from i-1 to N (inclusive)
         traj_pose_ref, traj_motion_est = data
 
-        # takes copies
-        traj_pose_ref = reduce_to_largest_strictly_ascending_range(traj_pose_ref)
-        traj_motion_est = reduce_to_largest_strictly_ascending_range(traj_motion_est)
-
         traj_pose_ref_sync, traj_motion_est_sync = sync.associate_trajectories(traj_pose_ref, traj_motion_est,max_diff=max_diff)
 
-        # print("h1 ",traj_pose_ref_sync.timestamps)
-        # print("h2", traj_motion_est_sync.timestamps)
+        pose_timestamps = traj_pose_ref_sync.timestamps
+        motion_timestamps = traj_motion_est_sync.timestamps
 
-        # check if the first timestamp in the pose is less than or equal to the timestamp in the motion
-        if traj_pose_ref_sync.timestamps[0] >= traj_motion_est_sync.timestamps[0]:
-            found_index = None
-            # search through the motion traj to find the first one that is greater than the first pose of this one
-            for i in range(1, len(traj_motion_est_sync.timestamps)):  # Start from the second element
-                if traj_motion_est_sync.timestamps[i] >= traj_pose_ref_sync.timestamps[0]:
-                    found_index = i
-                    break
+        poses = traj_pose_ref_sync.poses_se3
+        motions = traj_motion_est_sync.poses_se3
 
-            if found_index is None:
-                raise ValueError("No pose in trajectory traj_pose_ref exists before the start of trajectory traj_motion_est.")
+        traj_pose_ref_tuple = list(zip(pose_timestamps, poses))
+        traj_motion_est_tuple = list(zip(motion_timestamps, motions))
 
-            print(f" FI {found_index} pose t { traj_pose_ref_sync.timestamps[0]} motion t {traj_motion_est_sync.timestamps[found_index]}")
-            # seems to be a bug in the code here....
-            # Grab the last available pose before B's start timestamp
-            extra_pose_index = found_index-1
-            print(extra_pose_index)
+        assert len(traj_pose_ref_tuple) == len(traj_motion_est_tuple)
 
-            extra_pose_timestamp = traj_pose_ref_sync.timestamps[extra_pose_index]
-            print(f"Extra pose timestamp {extra_pose_timestamp}")
-            extra_pose_pose = traj_motion_est_sync.poses_se3[extra_pose_index]
+        traj_pose_t_k_indices = set()
+        traj_pose_t_k_1_indices = set() # this is also the motion times
+        # assumes timestamps are actually FRAMES!!!!!
+        for index, (motion_tuple, pose_tuple) in enumerate(zip(traj_motion_est_tuple, traj_pose_ref_tuple)):
+            if index == 0:
+                continue
+            else:
+                prev_index = index - 1
+                assert prev_index >= 0
+                prev_pose_frame = traj_pose_ref_tuple[prev_index][0]
+                curr_pose_frame = pose_tuple[0]
+                curr_motion_frame = motion_tuple[0]
 
-            traj_motion_est_sync.reduce_to_time_range(traj_motion_est_sync.timestamps[found_index], traj_motion_est_sync.timestamps[-1])
-            traj_pose_ref_sync.reduce_to_time_range(traj_pose_ref_sync.timestamps[found_index], traj_pose_ref_sync.timestamps[-1])
+                assert curr_pose_frame == curr_motion_frame
+
+                # print(f"prev_pose_frame {prev_pose_frame} curr_motion_frame {curr_motion_frame} ")
+
+                # is previous and in current frame id
+                if prev_pose_frame == curr_motion_frame - 1:
+                    traj_pose_t_k_indices.add(index)
+                    traj_pose_t_k_1_indices.add(prev_index)
+
+        # remove duplicates based on frameid
+        traj_pose_t_k_indices = list(traj_pose_t_k_indices)
+        traj_pose_t_k_1_indices = list(traj_pose_t_k_1_indices)
+
+        # reduce to the acutal id's we want
+        traj_pose_ref_sync_k = copy.deepcopy(traj_pose_ref_sync)
+        traj_pose_ref_sync_k.reduce_to_ids(traj_pose_t_k_indices)
+
+        traj_pose_ref_sync_k_1 = copy.deepcopy(traj_pose_ref_sync)
+        traj_pose_ref_sync_k_1.reduce_to_ids(traj_pose_t_k_1_indices)
+
+        traj_motion_est_sync = copy.deepcopy(traj_motion_est_sync)
+        traj_motion_est_sync.reduce_to_ids(traj_pose_t_k_indices)
+
+        assert traj_pose_ref_sync_k_1.num_poses == traj_pose_ref_sync_k.num_poses == traj_motion_est_sync.num_poses
 
 
-        else:
-            # Find the minimum timestamp of trajectory B for normal adjustment
-            min_timestamp =  traj_motion_est.timestamps[0]
-            filtered_indices_traj_pose = np.where(traj_pose_ref.timestamps < min_timestamp)[0]
-
-            if len(filtered_indices_traj_pose) == 0:
-                raise ValueError("No pose in trajectory traj_pose_ref exists before the start of trajectory traj_motion_est.")
-
-            # Grab the last pose from the filtered part of A (which will be the extra one)
-            extra_pose_index = filtered_indices_traj_pose[-1]
-
-
-            # Grab the last pose from the filtered part of traj pose (which will be the extra one)
-            extra_pose_timestamp = traj_pose_ref_sync.timestamps[extra_pose_index]
-            extra_pose_pose = traj_pose_ref_sync.poses_se3[extra_pose_index]
-
-
-        # Filter A and B to the synchronized region (with one extra in A)
-        synced_timestamps_traj_pose = np.concatenate(([extra_pose_timestamp], traj_pose_ref_sync.timestamps))
-        synced_poses_traj_pose = np.concatenate(([extra_pose_pose], traj_pose_ref_sync.poses_se3))
-
-        traj_pose_ref_sync = traj.PoseTrajectory3D(poses_se3=synced_poses_traj_pose, timestamps=synced_timestamps_traj_pose)
-
-        valid, result = traj_pose_ref_sync.check()
-        assert valid, (result, traj_pose_ref_sync.timestamps)
-
-        print(traj_pose_ref_sync.timestamps)
-        print(traj_motion_est_sync.timestamps)
-
-        return (traj_pose_ref_sync, traj_motion_est_sync)
+        return (traj_pose_ref_sync_k_1, traj_pose_ref_sync_k, traj_motion_est_sync)

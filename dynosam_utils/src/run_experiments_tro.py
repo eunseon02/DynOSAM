@@ -280,12 +280,54 @@ if __name__ == '__main__':
     #     "--use_full_batch_opt=false"
     # )
 
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     "--use_full_batch_opt=true"
+    # )
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003_far_origin",
+    #     "--v=20"
+    # )
+
     run_both_backend(
         run_kitti_sequence,
-        "/root/data/vdo_slam/kitti/kitti/0000/",
-        "kitti_0000",
+        "/root/data/vdo_slam/kitti/kitti/0003/",
+        "kitti_0003_far_origin",
         "--use_full_batch_opt=true"
     )
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004_far_origin",
+    #     "--use_full_batch_opt=true",
+    # )
+
+
+
+    # run_both_backend(
+    #     run_kitti_sequence,
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000_far_origin",
+    #     "--use_full_batch_opt=true",
+    # )
+
+    # prep_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_far_origin",
+    #     "--use_dynamic_track=false",
+    #     "--ending_frame=150",
+    #     "--semantic_mask_step_size=15")
+
+    # run_both_backend(
+    #     run_omd_sequence,
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_far_origin",
+    #     "--use_full_batch_opt=true")
 
 
     # run_both_backend(
