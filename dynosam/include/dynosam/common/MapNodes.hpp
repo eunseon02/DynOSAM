@@ -63,21 +63,17 @@ class MapNodeBase {
   virtual int getId() const = 0;
   virtual std::string toString() const = 0;
 
-  // TODO: not used
-  template <typename ValueType>
-  std::optional<ValueType> queryMap(gtsam::Key key) const;
-
  protected:
   std::shared_ptr<Map<MEASUREMENT>> map_ptr_;
 };
 
-// TODO: unused due to circular dependancies
-template <typename NODE>
-struct IsMapNode {
-  using UnderlyingType =
-      typename NODE::element_type;  // how to check NODE is a shared_ptr?
-  static_assert(std::is_base_of_v<MapNodeBase, UnderlyingType>);
-};
+// // TODO: unused due to circular dependancies
+// template <typename NODE>
+// struct IsMapNode {
+//   using UnderlyingType =
+//       typename NODE::element_type;  // how to check NODE is a shared_ptr?
+//   static_assert(std::is_base_of_v<MapNodeBase, UnderlyingType>);
+// };
 
 template <typename NODE>
 struct MapNodePtrComparison {
@@ -86,7 +82,13 @@ struct MapNodePtrComparison {
   }
 };
 
-// TODO:assume Node is a shared_ptr to a MapNodeType -> enforce later!!!
+/**
+ * @brief Data structuring for fast access of map nodes, sorted by their id.
+ * We use a set to prevent objects being added multiple times.
+ *
+ * @tparam NODE Must be a pointer to a MapNodeBase (or equivalent concept with a
+ * getId()) function.
+ */
 template <typename NODE>
 class FastMapNodeSet
     : public std::set<
@@ -481,18 +483,9 @@ class LandmarkNode : public MapNodeBase<MEASUREMENT> {
   void add(FrameNodePtr<MEASUREMENT> frame_node,
            const MEASUREMENT& measurement);
 
-  // THROWS exception when wrong type... is there a cleaner way to handle this?
-  // TODO: there are some tests
-  //  StateQuery<Landmark> getStaticLandmarkEstimate() const;
-  //  StateQuery<Landmark> getDynamicLandmarkEstimate(FrameId frame_id) const;
-
   gtsam::Key makeStaticKey() const;
   gtsam::Key makeDynamicKey(FrameId frame_id) const;
   DynamicPointSymbol makeDynamicSymbol(FrameId frame_id) const;
-
-  // bool appendStaticLandmarkEstimate(StatusLandmarkEstimates& estimates)
-  // const; bool appendDynamicLandmarkEstimate(StatusLandmarkEstimates&
-  // estimates, FrameId frame_id) const;
 
  private:
  protected:

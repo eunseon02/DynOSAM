@@ -2,22 +2,28 @@
  *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
@@ -35,15 +41,14 @@
 // taken with inspiration from
 // https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/utils/ThreadsafeQueue.h
 template <typename T>
-class ThreadsafeQueueBase
-{
-protected:
+class ThreadsafeQueueBase {
+ protected:
   typedef std::queue<std::shared_ptr<T>> InternalQueue;
   explicit ThreadsafeQueueBase();
 
   virtual ~ThreadsafeQueueBase() = default;
 
-public:
+ public:
   /** \brief Push by value. Returns false if the queue has been shutdown.
    * Not optimal, since it will make two move operations.
    * But it does the job: see Item 41 Effective Modern C++
@@ -94,13 +99,9 @@ public:
    */
   virtual std::shared_ptr<T> pop() = 0;
 
-  int size()
-  {
-    return data_queue_.size();
-  }
+  int size() { return data_queue_.size(); }
 
-  void shutdown()
-  {
+  void shutdown() {
     std::unique_lock<std::mutex> mlock(mutex_);
     // Even if the shared variable is atomic, it must be modified under the
     // mutex in order to correctly publish the modification to the waiting
@@ -110,13 +111,9 @@ public:
     data_cond_.notify_all();
   }
 
-  inline bool isShutdown()
-  {
-    return shutdown_;
-  }
+  inline bool isShutdown() { return shutdown_; }
 
-  void resume()
-  {
+  void resume() {
     std::unique_lock<std::mutex> mlock(mutex_);
     // Even if the shared variable is atomic, it must be modified under the
     // mutex in order to correctly publish the modification to the waiting
@@ -129,15 +126,13 @@ public:
   /** \brief Checks if the queue is empty.
    * the state of the queue might change right after this query.
    */
-  bool empty() const
-  {
+  bool empty() const {
     std::lock_guard<std::mutex> lk(mutex_);
     return data_queue_.empty();
   }
 
   // TODO: not tested
-  void clear()
-  {
+  void clear() {
     std::lock_guard<std::mutex> lk(mutex_);
     InternalQueue empty;
     std::swap(data_queue_, empty);
@@ -146,13 +141,12 @@ public:
   /** \brief Checks if the queue is shutdown.
    * the state of the queue might change right after this query.
    */
-  bool isShutdown() const
-  {
+  bool isShutdown() const {
     std::lock_guard<std::mutex> lk(mutex_);
     return shutdown_;
   }
 
-protected:
+ protected:
   mutable std::mutex mutex_;  //! mutable for empty() and copy-constructor.
   InternalQueue data_queue_;
   std::condition_variable data_cond_;
@@ -160,9 +154,8 @@ protected:
 };
 
 template <typename T>
-class ThreadsafeQueue : public ThreadsafeQueueBase<T>
-{
-public:
+class ThreadsafeQueue : public ThreadsafeQueueBase<T> {
+ public:
   using Type = T;
   using TQB = ThreadsafeQueueBase<T>;
   explicit ThreadsafeQueue(size_t queue_size_ = -1);
@@ -226,7 +219,9 @@ public:
    */
   std::shared_ptr<T> pop() override;
 
-private:
+  bool popAll(std::vector<T>& data, size_t duration_ms = 0u);
+
+ private:
   using TQB::data_cond_;
   using TQB::data_queue_;
   using TQB::mutex_;
@@ -236,28 +231,22 @@ private:
 };
 
 template <typename T>
-ThreadsafeQueueBase<T>::ThreadsafeQueueBase() : mutex_(), data_queue_(), data_cond_(), shutdown_(false)
-{
-}
+ThreadsafeQueueBase<T>::ThreadsafeQueueBase()
+    : mutex_(), data_queue_(), data_cond_(), shutdown_(false) {}
 
 template <typename T>
-ThreadsafeQueue<T>::ThreadsafeQueue(size_t queue_size_) : ThreadsafeQueueBase<T>(), queue_size(queue_size_)
-{
-}
+ThreadsafeQueue<T>::ThreadsafeQueue(size_t queue_size_)
+    : ThreadsafeQueueBase<T>(), queue_size(queue_size_) {}
 
 template <typename T>
-bool ThreadsafeQueue<T>::push(T new_value)
-{
-  if (shutdown_)
-    return false;  // atomic, no lock needed.
+bool ThreadsafeQueue<T>::push(T new_value) {
+  if (shutdown_) return false;  // atomic, no lock needed.
   std::shared_ptr<T> data(std::make_shared<T>(std::move(new_value)));
   std::unique_lock<std::mutex> lk(mutex_);
 
-  if (queue_size > 0)
-  {
+  if (queue_size > 0) {
     // greater than or equal?
-    while (data_queue_.size() >= queue_size)
-    {
+    while (data_queue_.size() >= queue_size) {
       data_queue_.pop();
     }
   }
@@ -270,16 +259,16 @@ bool ThreadsafeQueue<T>::push(T new_value)
 }
 
 template <typename T>
-bool ThreadsafeQueue<T>::pushBlockingIfFull(T new_value, size_t max_queue_size)
-{
-  if (shutdown_)
-    return false;  // atomic, no lock needed.
+bool ThreadsafeQueue<T>::pushBlockingIfFull(T new_value,
+                                            size_t max_queue_size) {
+  if (shutdown_) return false;  // atomic, no lock needed.
   std::shared_ptr<T> data(std::make_shared<T>(std::move(new_value)));
   std::unique_lock<std::mutex> lk(mutex_);
   // Wait until the queue has space or shutdown requested.
-  data_cond_.wait(lk, [this, max_queue_size] { return data_queue_.size() < max_queue_size || shutdown_; });
-  if (shutdown_)
-    return false;
+  data_cond_.wait(lk, [this, max_queue_size] {
+    return data_queue_.size() < max_queue_size || shutdown_;
+  });
+  if (shutdown_) return false;
   data_queue_.push(data);
   lk.unlock();  // Unlock before notify.
   data_cond_.notify_one();
@@ -288,14 +277,12 @@ bool ThreadsafeQueue<T>::pushBlockingIfFull(T new_value, size_t max_queue_size)
 }
 
 template <typename T>
-bool ThreadsafeQueue<T>::popBlocking(T& value)
-{
+bool ThreadsafeQueue<T>::popBlocking(T& value) {
   std::unique_lock<std::mutex> lk(mutex_);
   // Wait until there is data in the queue or shutdown requested.
   data_cond_.wait(lk, [this] { return !data_queue_.empty() || shutdown_; });
   // Return false in case shutdown is requested.
-  if (shutdown_)
-    return false;
+  if (shutdown_) return false;
   value = std::move(*data_queue_.front());
   data_queue_.pop();
   lk.unlock();  // Unlock before notify.
@@ -304,12 +291,10 @@ bool ThreadsafeQueue<T>::popBlocking(T& value)
 }
 
 template <typename T>
-std::shared_ptr<T> ThreadsafeQueue<T>::popBlocking()
-{
+std::shared_ptr<T> ThreadsafeQueue<T>::popBlocking() {
   std::unique_lock<std::mutex> lk(mutex_);
   data_cond_.wait(lk, [this] { return !data_queue_.empty() || shutdown_; });
-  if (shutdown_)
-    return std::shared_ptr<T>(nullptr);
+  if (shutdown_) return std::shared_ptr<T>(nullptr);
   std::shared_ptr<T> result = data_queue_.front();
   data_queue_.pop();
   lk.unlock();  // Unlock before notify.
@@ -318,29 +303,25 @@ std::shared_ptr<T> ThreadsafeQueue<T>::popBlocking()
 }
 
 template <typename T>
-bool ThreadsafeQueue<T>::popBlockingWithTimeout(T& value, size_t duration_ms)
-{
+bool ThreadsafeQueue<T>::popBlockingWithTimeout(T& value, size_t duration_ms) {
   std::unique_lock<std::mutex> lk(mutex_);
   // Wait until there is data in the queue, shutdown is requested, or
   // the given time is elapsed...
-  data_cond_.wait_for(lk, std::chrono::milliseconds(duration_ms), [this] { return !data_queue_.empty() || shutdown_; });
+  data_cond_.wait_for(lk, std::chrono::milliseconds(duration_ms),
+                      [this] { return !data_queue_.empty() || shutdown_; });
   // Return false in case shutdown is requested or the queue is empty (in which
   // case, a timeout has happened).
-  if (shutdown_ || data_queue_.empty())
-    return false;
+  if (shutdown_ || data_queue_.empty()) return false;
   value = std::move(*data_queue_.front());
   data_queue_.pop();
   return true;
 }
 
 template <typename T>
-bool ThreadsafeQueue<T>::pop(T& value)
-{
-  if (shutdown_)
-    return false;
+bool ThreadsafeQueue<T>::pop(T& value) {
+  if (shutdown_) return false;
   std::unique_lock<std::mutex> lk(mutex_);
-  if (data_queue_.empty())
-    return false;
+  if (data_queue_.empty()) return false;
   value = std::move(*data_queue_.front());
   data_queue_.pop();
   lk.unlock();  // Unlock before notify.
@@ -349,16 +330,36 @@ bool ThreadsafeQueue<T>::pop(T& value)
 }
 
 template <typename T>
-std::shared_ptr<T> ThreadsafeQueue<T>::pop()
-{
-  if (shutdown_)
-    return std::shared_ptr<T>(nullptr);
+std::shared_ptr<T> ThreadsafeQueue<T>::pop() {
+  if (shutdown_) return std::shared_ptr<T>(nullptr);
   std::unique_lock<std::mutex> lk(mutex_);
-  if (data_queue_.empty())
-    return std::shared_ptr<T>(nullptr);
+  if (data_queue_.empty()) return std::shared_ptr<T>(nullptr);
   std::shared_ptr<T> result = data_queue_.front();
   data_queue_.pop();
   lk.unlock();  // Unlock before notify.
   data_cond_.notify_one();
   return result;
+}
+
+// TODO: no tests and no popBlockingALL!!!
+template <typename T>
+bool ThreadsafeQueue<T>::popAll(std::vector<T>& data, size_t duration_ms) {
+  std::unique_lock<std::mutex> lk(mutex_);
+  data.clear();
+  // Wait until there is data in the queue, shutdown is requested, or
+  // the given time is elapsed...
+  data_cond_.wait_for(lk, std::chrono::milliseconds(duration_ms),
+                      [this] { return !data_queue_.empty() || shutdown_; });
+
+  while (!data_queue_.empty()) {
+    if (shutdown_) {
+      break;
+    }
+
+    T value = std::move(*data_queue_.front());
+    data.push_back(value);
+    data_queue_.pop();
+  }
+
+  return !data.empty();
 }

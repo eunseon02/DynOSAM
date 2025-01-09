@@ -52,6 +52,7 @@ DEFINE_string(
     "Path to the folder containing the yaml files with the VIO parameters.");
 
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
+#include "dynosam/dataprovider/OMDDataProvider.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
 int main(int argc, char* argv[]) {

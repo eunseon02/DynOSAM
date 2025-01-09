@@ -154,7 +154,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         ImageToDisplay("tracks", debug_imagery.tracking_image));
 
   debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
-  debug_imagery.input_images = constructTrackingImages(image_container);
+
+  const ImageContainer& processed_image_container = frame->image_container_;
+  debug_imagery.rgb_viz = ImageType::RGBMono::toRGB(
+      processed_image_container.get<ImageType::RGBMono>());
+  debug_imagery.flow_viz = ImageType::OpticalFlow::toRGB(
+      processed_image_container.get<ImageType::OpticalFlow>());
+  debug_imagery.mask_viz = ImageType::MotionMask::toRGB(
+      processed_image_container.get<ImageType::MotionMask>());
+  debug_imagery.depth_viz = ImageType::Depth::toRGB(
+      processed_image_container.get<ImageType::Depth>());
 
   RGBDInstanceOutputPacket::Ptr output =
       constructOutput(*frame, motion_estimates, frame->T_world_camera_,
@@ -219,6 +228,9 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
       auto flow_opt_result = flow_optimizer.optimizeAndUpdate<CalibrationType>(
           frame_k_1, frame_k, result.inliers, result.best_result);
       frame_k->T_world_camera_ = flow_opt_result.best_result.refined_pose;
+      VLOG(15) << "Refined camera pose with optical flow - error before: "
+               << flow_opt_result.error_before.value_or(NaN)
+               << " error_after: " << flow_opt_result.error_after.value_or(NaN);
     }
     return true;
   } else {
@@ -250,7 +262,6 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(
            << result.inliers.size() + result.outliers.size() << '\n'
            << "\t- # inliers: " << result.inliers.size() << '\n'
            << "\t- # outliers: " << result.outliers.size() << '\n';
-
   // sanity check
   // if valid, remove outliers and add to motion estimation
   if (result.status == TrackingStatus::VALID) {

@@ -109,8 +109,7 @@ void FrontendDisplayRos::spinOnce(
   if (frontend_output->gt_packet_ && frontend_output->debug_imagery_) {
     const auto& debug_imagery = *frontend_output->debug_imagery_;
     // TODO: put tracking images back into frontend output
-    const cv::Mat& rgb_image =
-        debug_imagery.input_images.get<ImageType::RGBMono>();
+    const cv::Mat& rgb_image = debug_imagery.rgb_viz;
     publishGroundTruthInfo(frontend_output->getTimestamp(),
                            frontend_output->gt_packet_.value(), rgb_image);
   }

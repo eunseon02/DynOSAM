@@ -196,6 +196,28 @@ class TrackedValueStatus {
 
   virtual ~TrackedValueStatus() = default;
 
+  /**
+   * @brief Allows the casting of the internal value type to another using
+   * static casting.
+   *
+   * This allows sub measurements to be extracted if T has explict cast
+   * operators. e.g. struct Foo { operator Bar&(); }
+   *
+   * we can use as type to construct a TrackedValueStatus<Bar> from
+   * TrackedValueStatus<Foo>: TrackedValueStatus<Foo> foo(...);
+   * TrackedValueStatus<Bar> bar = foo.asType<Bar>();
+   *
+   * This will copy over all the meta-data (e.g. frame id, label etc) but
+   * replace the value with the cast Boo type. This is only possible since Foo
+   * contains an operator for Bar, allowing static casting to work.
+   *
+   * This function exists to allow nested data-types for VALUE to be used, where
+   * each sub-value can be extracted using asType(), as long as the casting
+   * operating works.
+   *
+   * @tparam U
+   * @return TrackedValueStatus<U>
+   */
   template <typename U>
   TrackedValueStatus<U> asType() const {
     const U& new_measurement = static_cast<const U&>(this->value());
@@ -204,17 +226,67 @@ class TrackedValueStatus {
                                  this->referenceFrame());
   }
 
+  /**
+   * @brief Get value. Const version.
+   *
+   * @return const Value&
+   */
   const Value& value() const { return value_; }
+
+  /**
+   * @brief Get value. Reference version.
+   *
+   * @return Value&
+   */
   Value& value() { return value_; }
 
+  /**
+   * @brief Get tracklet id (i) for this status.
+   *
+   * @return TrackletId
+   */
   TrackletId trackletId() const { return tracklet_id_; }
+
+  /**
+   * @brief Get object id (j) for this status.
+   *
+   * @return ObjectId
+   */
   ObjectId objectId() const { return label_; }
+
+  /**
+   * @brief Get frame id (k) for this status.
+   *
+   * @return FrameId
+   */
   FrameId frameId() const { return frame_id_; }
 
+  /**
+   * @brief Get the reference frame the value is in. Const version.
+   *
+   * @return const ReferenceFrame&
+   */
   const ReferenceFrame& referenceFrame() const { return value_; }
+
+  /**
+   * @brief Get the reference frame the value is in.
+   *
+   * @return ReferenceFrame&
+   */
   ReferenceFrame& referenceFrame() { return value_; }
 
+  /**
+   * @brief Get the full reference frame and value.
+   *
+   * @return ReferenceFrameValue<Value>&
+   */
   ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
+
+  /**
+   * @brief Get the full reference frame and value. Const version.
+   *
+   * @return const ReferenceFrameValue<Value>&
+   */
   const ReferenceFrameValue<Value>& referenceFrameValue() const {
     return value_;
   }
@@ -234,6 +306,12 @@ class TrackedValueStatus {
     return os;
   }
 
+  /**
+   * @brief Returns true if the object lavel is equal to dyno::background_label.
+   *
+   * @return true
+   * @return false
+   */
   inline bool isStatic() const { return label_ == background_label; }
 
   /**

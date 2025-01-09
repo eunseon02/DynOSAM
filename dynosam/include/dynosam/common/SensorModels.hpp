@@ -52,15 +52,40 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
   //! dimension of the measurement. Must have gtsam::dimension traits
   constexpr static int dim = gtsam::traits<T>::dimension;
 
+  /// @brief Default constructor for IO
   VisualMeasurementStatus() = default;
+
+  /**
+   * @brief Construct a new Visual Measurement Status from the Base type
+   *
+   * @param base TrackedValueStatus<T>
+   */
   VisualMeasurementStatus(const Base& base)
       : VisualMeasurementStatus(base.value(), base.frameId(), base.trackletId(),
                                 base.objectId(), base.referenceFrame()) {}
 
+  /**
+   * @brief Construct a new Visual Measurement Status object
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @param label ObjectId
+   * @param reference_frame ReferenceFrame
+   */
   VisualMeasurementStatus(const T& m, FrameId frame_id, TrackletId tracklet_id,
                           ObjectId label, ReferenceFrame reference_frame)
       : Base(m, frame_id, tracklet_id, label, reference_frame) {}
 
+  /**
+   * @brief Constructs a static Visual Measurement Status.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @param reference_frame ReferenceFrame
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus Static(const T& m, FrameId frame_id,
                                                TrackletId tracklet_id,
                                                ReferenceFrame reference_frame) {
@@ -68,6 +93,15 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
                                    reference_frame);
   }
 
+  /**
+   * @brief Constructs a dynamic Visual Measurement Status.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @param reference_frame ReferenceFrame
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus Dynamic(
       const T& m, FrameId frame_id, TrackletId tracklet_id, ObjectId label,
       ReferenceFrame reference_frame) {
@@ -76,6 +110,14 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
                                    reference_frame);
   }
 
+  /**
+   * @brief Constructs a static Visual Measurement Status in the local frame.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus StaticInLocal(const T& m,
                                                       FrameId frame_id,
                                                       TrackletId tracklet_id) {
@@ -83,6 +125,14 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
                                    ReferenceFrame::LOCAL);
   }
 
+  /**
+   * @brief Constructs a dynamic Visual Measurement Status in the local frame.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus DynamicInLocal(const T& m,
                                                        FrameId frame_id,
                                                        TrackletId tracklet_id,
@@ -92,6 +142,14 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
                                    ReferenceFrame::LOCAL);
   }
 
+  /**
+   * @brief Constructs a static Visual Measurement Status in the global frame.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus StaticInGlobal(const T& m,
                                                        FrameId frame_id,
                                                        TrackletId tracklet_id) {
@@ -99,6 +157,14 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
                                    ReferenceFrame::GLOBAL);
   }
 
+  /**
+   * @brief Constructs a dynamic Visual Measurement Status in the global frame.
+   *
+   * @param m const T&
+   * @param frame_id FrameId
+   * @param tracklet_id TrackletId
+   * @return VisualMeasurementStatus
+   */
   inline static VisualMeasurementStatus DynamicInGLobal(const T& m,
                                                         FrameId frame_id,
                                                         TrackletId tracklet_id,
@@ -111,8 +177,13 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
 
 /**
  * @brief Defines a measurement with associated covariance matrix.
- * This type can also be used to represent an estimate with associated marginal
- * covariance
+ *
+ * Depending on the context, this model can either represent the uncertainty on
+ * a measurement or the marginal covariance of an estimate. In the latter
+ * context, the name "Measurement"WithCovariance is misleading (as it would not
+ * be a measurement), so to all state-estimation people I profusely apologise.
+ *
+ * The covariance can be optionallty provided.
  *
  * We define the dimensions of this type and provide an equals function to make
  * it compatible with gtsam::traits<T>::dimension and gtsam::traits<T>::Equals.
@@ -160,6 +231,9 @@ class MeasurementWithCovariance {
       return Covariance::Zero();
     }
   }
+
+  /// @brief Very important to have these cast operators so we can use
+  /// Base::asType to cast to the internal data.
 
   operator const T&() const { return measurement(); }
   operator Covariance() const { return covariance(); }
