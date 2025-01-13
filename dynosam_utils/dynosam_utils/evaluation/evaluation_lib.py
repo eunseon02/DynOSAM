@@ -293,10 +293,6 @@ class MotionErrorEvaluator(Evaluator):
         return results_per_object
 
     def _compute_motion_in_L_errors(self, object_id, object_motion_traj, plots: Optional[evo_plot.PlotCollection] = None) -> Dict:
-        # PUT INTO L
-        object_motion_L = []
-        object_motion_L_gt = []
-
         if object_id not in self._object_poses_traj_ref:
             logger.warning(f"{object_id} not found for object pose ground truth. Skipping RME calculation")
             return None
@@ -321,7 +317,7 @@ class MotionErrorEvaluator(Evaluator):
 
         data = (object_poses_ref_traj, object_motion_traj_est)
         rme_trans = dyno_metrics.RME(metrics.PoseRelation.translation_part)
-        rme_rot = dyno_metrics.RME(metrics.PoseRelation.translation_part)
+        rme_rot = dyno_metrics.RME(metrics.PoseRelation.rotation_angle_deg)
 
         rme_trans.process_data(data)
         rme_rot.process_data(data)
