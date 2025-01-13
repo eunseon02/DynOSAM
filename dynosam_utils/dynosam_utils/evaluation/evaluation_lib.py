@@ -15,6 +15,7 @@ import copy
 
 from dynosam_utils.evaluation.filesystem_utils import DataFiles, read_csv
 import dynosam_utils.evaluation.core.plotting as plotting
+import dynosam_utils.evaluation.core.metrics as dyno_metrics
 
 from dynosam_utils.evaluation.tools import (
     common_entries,
@@ -240,9 +241,9 @@ class MotionErrorEvaluator(Evaluator):
         for object_id, object_traj, object_traj_ref in common_entries(self._object_motions_traj, self._object_motions_traj_ref):
 
             # motion errors in W
-            absolute_motion_errors = self._compute_motion_in_W_errors(object_id, object_traj, object_traj_ref, plot_collection)
+            absolute_motion_errors = self._compute_motion_in_W_errors(object_id, object_traj, object_traj_ref)
             # motion errors in L
-            relatvive_motion_errors = self._compute_motion_in_L_errors(object_id, object_traj)
+            relatvive_motion_errors = self._compute_motion_in_L_errors(object_id, object_traj, plot_collection)
 
 
             # expect results to already have results["objects"][id] prepared
@@ -279,7 +280,7 @@ class MotionErrorEvaluator(Evaluator):
             )
 
             fig = plt.figure(figsize=(11,8))
-            core.plotting.plot_trajectory_error(
+            core.plotting.plot_ame_error(
                 fig,
                 object_motion_traj,
                 object_motion_traj_ref,
@@ -302,39 +303,56 @@ class MotionErrorEvaluator(Evaluator):
 
         # ground truth object poses
         object_poses_ref_traj = self._object_poses_traj_ref[object_id]
+        object_motion_traj_est = object_motion_traj
 
-        object_poses = object_poses_ref_traj.poses_se3
+        # object_poses = object_poses_ref_traj.poses_se3
 
-        for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_motion_traj.poses_se3[1:]):
-            object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
-            object_motion_L_gt.append(lie_algebra.se3())
+        # for object_pose_k_1, object_pose_k, object_motion_k in zip(object_poses[:-1], object_poses[1:], object_motion_traj.poses_se3[1:]):
+        #     object_motion_L.append(lie_algebra.se3_inverse(object_pose_k) @ object_motion_k @ object_pose_k_1)
+        #     object_motion_L_gt.append(lie_algebra.se3())
 
-        # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
-        object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L), timestamps=object_motion_traj.timestamps[1:])
-        object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L_gt), timestamps=object_motion_traj.timestamps[1:])
+        # # for motion_L, motion_L_ref in zip(object_motion_L, object_motion_L_gt):
+        # object_traj_in_L = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L), timestamps=object_motion_traj.timestamps[1:])
+        # object_traj_in_L_ref = trajectory.PoseTrajectory3D(poses_se3=np.array(object_motion_L_gt), timestamps=object_motion_traj.timestamps[1:])
 
-        # only interested in APE as this matches our error metrics
-        ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
-        ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
+        # # only interested in APE as this matches our error metrics
+        # ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
+        # ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
 
-        data = (object_traj_in_L_ref, object_traj_in_L)
-        ape_trans.process_data(data)
-        ape_rot.process_data(data)
+        data = (object_poses_ref_traj, object_motion_traj_est)
+        rme_trans = dyno_metrics.RME(metrics.PoseRelation.translation_part)
+        rme_rot = dyno_metrics.RME(metrics.PoseRelation.translation_part)
+
+        rme_trans.process_data(data)
+        rme_rot.process_data(data)
 
         results_per_object = {}
-        results_per_object["ape_translation"] = ape_trans.get_all_statistics()
-        results_per_object["ape_rotation"] = ape_rot.get_all_statistics()
+        results_per_object["ape_translation"] = rme_trans.get_all_statistics()
+        results_per_object["ape_rotation"] = rme_rot.get_all_statistics()
 
         if plots is not None:
             plots.add_figure(
                 f"Object_Motion_L_translation_{object_id}",
-                plotting.plot_metric(ape_trans, f"RME Translation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+                plotting.plot_metric(rme_trans, f"RME Translation Error: {object_id}", x_axis=rme_trans.timestamps)
             )
 
             plots.add_figure(
                 f"Object_Motion_L_rotation_{object_id}",
-                plotting.plot_metric(ape_rot, f"RME Rotation Error: {object_id}", x_axis=object_traj_in_L.timestamps)
+                plotting.plot_metric(rme_rot, f"RME Rotation Error: {object_id}", x_axis=rme_rot.timestamps)
             )
+
+            rme_full = dyno_metrics.RME(metrics.PoseRelation.full_transformation)
+            rme_full.process_data(data)
+
+            fig = plt.figure(figsize=(11,8))
+            core.plotting.plot_per_frame_error(
+                fig,
+                rme_full,
+                f"RME Object {object_id}"
+            )
+            plots.add_figure(
+                f"Object RME {object_id}",
+                fig)
 
         return results_per_object
 

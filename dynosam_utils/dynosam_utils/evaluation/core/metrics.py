@@ -1,4 +1,4 @@
-from evo.core.metrics import APE, PoseRelation, PathPair, MetricsException
+from evo.core.metrics import PE, RPE, APE, PoseRelation, MetricsException
 import evo.core.lie_algebra as lie
 import evo.core.trajectory as traj
 import evo.core.sync as sync
@@ -97,16 +97,12 @@ class RME(APE):
         # -1 on timestamps so that the size matches the size of the motion error (ie. k...N)
         self.timestamps = np.array(traj_motion_est.timestamps)
 
-        # print(f"len object motion L {len(object_motion_L)} len traj motion timestamps {len(traj_motion_est.timestamps)}")
-
         object_traj_in_L = traj.PoseTrajectory3D(poses_se3=np.array(object_motion_L), timestamps=self.timestamps)
         object_traj_in_L_ref = traj.PoseTrajectory3D(poses_se3=np.array(object_motion_L_gt), timestamps=self.timestamps)
 
         processed_data = (object_traj_in_L_ref, object_traj_in_L)
 
         super().process_data(processed_data)
-
-        print(self.error.shape)
 
         assert self.error.shape == self.timestamps.shape, ( self.error.shape, self.timestamps.shape)
 

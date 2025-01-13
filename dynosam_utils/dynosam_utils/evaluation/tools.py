@@ -360,8 +360,6 @@ class ObjectMotionTrajectory(object):
 
 
 
-
-
 def sync_and_align_trajectories(traj_est: Union[evo_trajectory.PosePath3D, evo_trajectory.PoseTrajectory3D],
                                 traj_ref: Union[evo_trajectory.PosePath3D, evo_trajectory.PoseTrajectory3D],
                                 discard_n_end_poses=-1,

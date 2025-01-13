@@ -13,6 +13,7 @@ import gtsam
 
 from dynosam_utils.evaluation.formatting_utils import *
 from dynosam_utils.evaluation.tools import ObjectMotionTrajectory
+import dynosam_utils.evaluation.core.metrics as dynosam_metrics
 
 
 # apparently this ordereed needed
@@ -340,18 +341,29 @@ def plot_object_trajectories(
         length_unit,
         **kwargs)
 
-# plot AME error
-def plot_trajectory_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, motion_ref: evo_trajectory.PoseTrajectory3D, label:str):
+
+def plot_ame_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, motion_ref: evo_trajectory.PoseTrajectory3D, label:str):
     assert motion_est.num_poses == motion_ref.num_poses
 
-    import evo.core.metrics as metrics
-    ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
+    ape_E = dynosam_metrics.AME(dynosam_metrics.PoseRelation.full_transformation)
     data = (motion_ref, motion_est)
     ape_E.process_data(data)
 
+    plot_per_frame_error(fig, ape_E, label)
+
+# needs to be RPE so we can check for pose
+def plot_per_frame_error(fig: Figure, errors:  dynosam_metrics.RPE , label:str):
+
+    if len(errors.E) == 0:
+        print(f"Cannot plot per frame error as metric {errors} is empty!")
+        return
+
+    # check result is full transformation
+    assert errors.E[0].shape == (4,4), ("Error must be a full transformation!")
+
     rot_error = []
     trans_error = []
-    for E in ape_E.E:
+    for E in errors.E:
         E_se3 = gtsam.Pose3(E)
         E_trans = E_se3.translation()
         E_rot = E_se3.rotation()
