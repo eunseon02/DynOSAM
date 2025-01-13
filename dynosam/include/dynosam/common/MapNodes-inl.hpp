@@ -114,15 +114,6 @@ FrameNode<MEASUREMENT>::getDynamicMeasurements() const {
 }
 
 template <typename MEASUREMENT>
-StatusLandmarkVector FrameNode<MEASUREMENT>::getLandmarkEstimates() const {
-  StatusLandmarkVector static_landmarks = getStaticMeasurements();
-  StatusLandmarkVector dynamic_landmarks = getDynamicMeasurements();
-  static_landmarks.insert(static_landmarks.end(), dynamic_landmarks.begin(),
-                          dynamic_landmarks.end());
-  return static_landmarks;
-}
-
-template <typename MEASUREMENT>
 std::vector<typename FrameNode<MEASUREMENT>::LandmarkMeasurementPair>
 FrameNode<MEASUREMENT>::getDynamicMeasurements(ObjectId object_id) const {
   std::vector<LandmarkMeasurementPair> measurements;
