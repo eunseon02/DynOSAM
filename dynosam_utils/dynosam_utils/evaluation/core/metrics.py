@@ -51,7 +51,7 @@ class AME(APE):
                  pose_relation: PoseRelation = PoseRelation.translation_part):
         super().__init__(pose_relation)
 
-
+# In the paper this is defined as Motion Error (ME)
 class RME(APE):
     def __init__(self,
                  pose_relation: PoseRelation = PoseRelation.translation_part):

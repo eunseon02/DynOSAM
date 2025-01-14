@@ -473,23 +473,6 @@ class MotionErrorEvaluator(Evaluator):
             "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
         )
 
-    # def _process_velocity(self,plot_collection: evo_plot.PlotCollection, results: Dict):
-    #     for object_id, _, _ in common_entries(self._object_poses_traj, self._object_poses_traj_ref):
-    #         object_trajectory_est = self.make_object_trajectory(object_id)
-    #         object_trajectory_ref = self.make_object_ref_trajectory(object_id)
-
-    #         if object_trajectory_est and object_trajectory_ref:
-    #             est_velocity = object_trajectory_est.calculate_velocity()
-    #             ref_velocity = object_trajectory_ref.calculate_velocity()
-
-
-    #             fig_velocity =plt.figure(figsize=(8,8))
-    #             ax = fig_velocity.gca()
-    #             tools.plot_velocity_error(ax,est_velocity, ref_velocity, plot_xyz=True)
-    #             plot_collection.add_figure(
-    #                 f"Obj Velocity {object_id}", fig_velocity
-    #             )
-
 
 
     @staticmethod
