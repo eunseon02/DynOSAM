@@ -102,6 +102,20 @@ All the cmdline functionality can be replicated programtically using python in o
 See [run_experiments_tro.py](./dynosam_utils/src/run_experiments_tro.py) for examples.
 
 
+## Tests
+We use [gtest](https://github.com/google/googletest) for unit testing. This is installed automagically. When building with ROS, all tests will go into the install folder.
+
+To run the unit tests: build the code, navigate inside the `install` folder and run the tests. Both `dynosam` and `dynosam_ros` packages come with unit tests.
+
+We provide a useful script to make running tests easier. Run
+```
+ros2 run dynosam_ros run_dynosam_gtest.py
+```
+from anywhere on the system to run tests. The unit tests for a particular package (ie. `dynosam` and `dynosam_ros`) can be specified using the `--package` argumement. This script forwards all arguments to the test executable so that GFLAGS can still be used e.g.
+```
+run dynosam_ros run_dynosam_gtest.py --package=dynosam_ros --gtest_filter=TestConcepts*
+```
+
 ## Datasets
 
 We provide a number of data providers which process datasets into the input format specified by DynoSAM which includes input images for the pipeline and ground truth data for evaluation.
