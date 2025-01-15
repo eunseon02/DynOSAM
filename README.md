@@ -11,6 +11,9 @@ DynoSAM is a Stereo/RGB-D Visual Odometry pipeline for Dynamic SLAM and estiamte
 
 DynoSAM current provides full-batch and sliding-window optimisation procedures and is integrated with ROS2.
 
+## Publication
+Paper citation coming soon...
+
 
 ## Related Publication
 
