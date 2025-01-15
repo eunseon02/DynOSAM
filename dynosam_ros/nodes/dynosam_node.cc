@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -28,20 +28,44 @@
  *   SOFTWARE.
  */
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
-#include <gtest/gtest.h>
 
+#include "dynosam_ros/PipelineRos.hpp"
+#include "dynosam_ros/Utils.hpp"
+#include "rclcpp/executor.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-int main(int argc, char** argv) {
-  rclcpp::init(argc, argv);
-  ::testing::InitGoogleTest(&argc, argv);
-  google::InitGoogleLogging(argv[0]);
+DEFINE_bool(show_dyno_args, false,
+            "Show all loaded DynoSAM args (YAML and gflag) and exit");
 
-  FLAGS_logtostderr = 1;
-  FLAGS_colorlogtostderr = 1;
-  FLAGS_log_prefix = 1;
-  FLAGS_v = 1;
-  google::ParseCommandLineFlags(&argc, &argv, true);
-  return RUN_ALL_TESTS();
+int main(int argc, char* argv[]) {
+  auto non_ros_args = dyno::initRosAndLogging(argc, argv);
+
+  rclcpp::NodeOptions options;
+  options.arguments(non_ros_args);
+  options.use_intra_process_comms(true);
+
+  rclcpp::executors::SingleThreadedExecutor exec;
+  auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
+
+  if (FLAGS_show_dyno_args) {
+    const dyno::DynoParams& params = ros_pipeline->getDynoParams();
+    params.printAllParams(true);
+    rclcpp::shutdown();
+    return 0;
+  } else {
+    ros_pipeline->initalisePipeline();
+  }
+
+  exec.add_node(ros_pipeline);
+  while (rclcpp::ok()) {
+    if (!ros_pipeline->spinOnce()) {
+      break;
+    }
+    exec.spin_some();
+  }
+
+  ros_pipeline.reset();
+  return 0;
 }

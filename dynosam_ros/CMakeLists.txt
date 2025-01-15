@@ -105,17 +105,12 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
-# install(DIRECTORY
-#   config
-#   DESTINATION share/${PROJECT_NAME}
-# )
-
 
 #install python scripts/modules
 ament_python_install_package(${PROJECT_NAME})
 
 #####exec test#########
-add_executable(dynosam_node src/dynosam_node.cc)
+add_executable(dynosam_node nodes/dynosam_node.cc)
 target_link_libraries(dynosam_node
   ${PROJECT_NAME}
   ${PCL_LIBRARIES}
@@ -129,7 +124,7 @@ install(TARGETS
 
 
 
-add_executable(dynosam_experiments_node src/backend_experiments_node.cc)
+add_executable(dynosam_experiments_node nodes/backend_experiments_node.cc)
 target_link_libraries(dynosam_experiments_node
   ${PROJECT_NAME}
   ${PCL_LIBRARIES}
@@ -142,6 +137,24 @@ dynosam_experiments_node
   DESTINATION lib/${PROJECT_NAME})
 
 
+add_executable(dynosam_dataset_node nodes/dataset_node.cc)
+target_link_libraries(dynosam_dataset_node
+  ${PROJECT_NAME}
+  ${PCL_LIBRARIES}
+)
+
+ament_target_dependencies(dynosam_dataset_node "rclcpp" "std_msgs" "dynosam")
+
+install(TARGETS
+dynosam_dataset_node
+  DESTINATION lib/${PROJECT_NAME})
+
+
+    # Install Python executables
+install(PROGRAMS
+scripts/run_dynosam_gtest.py
+DESTINATION lib/${PROJECT_NAME}
+)
 
 
 if(BUILD_TESTING)
