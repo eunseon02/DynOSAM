@@ -48,7 +48,9 @@
 /** \mainpage C++ API documentation
  *  DynoSAM is a C++ library for Dynamic Visual SLAM.
  *
- * TODO: add link back to project page when it is live....
+ * See:
+ *  - <a href="https://acfr-rpg.github.io/DynOSAM/">DynoSAM Project Page</a>
+ *  - <a href="https://github.com/ACFR-RPG/DynOSAM">Github</a>
  *
  */
 
