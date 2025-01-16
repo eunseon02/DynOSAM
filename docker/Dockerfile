@@ -33,6 +33,8 @@ RUN apt-get install ros-humble-vision-opencv
 # other deps
 RUN apt-get install libpng++-dev/focal nlohmann-json3-dev/focal
 
+RUN python3 -m pip install pylatex evo setuptools pre-commit scipy argcomplete black pre-commit
+
 
 WORKDIR /root/
 

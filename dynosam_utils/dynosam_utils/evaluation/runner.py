@@ -4,8 +4,6 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 
 from ament_index_python.packages import get_package_share_directory
 
-import dynosam_utils.evaluation.evaluation_lib as eval
-
 import logging as log
 import errno
 from shutil import rmtree, move
@@ -142,6 +140,7 @@ def run(parsed_args, unknown_args):
 
     if run_analysis:
         log.info("Running analysis...")
+        import dynosam_utils.evaluation.evaluation_lib as eval
         evaluator =  eval.DatasetEvaluator(output_folder_path, parsed_args)
         evaluator.run_analysis()
 
