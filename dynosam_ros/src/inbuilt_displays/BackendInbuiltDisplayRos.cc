@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/BackendDisplayRos.hpp"
+#include "dynosam_ros/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
 
 #include <glog/logging.h>
 #include <pcl_conversions/pcl_conversions.h>
@@ -41,9 +41,9 @@
 
 namespace dyno {
 
-BackendDisplayRos::BackendDisplayRos(const DisplayParams params,
-                                     rclcpp::Node::SharedPtr node)
-    : DisplayRos(params, node) {
+BackendInbuiltDisplayRos::BackendInbuiltDisplayRos(const DisplayParams params,
+                                                   rclcpp::Node::SharedPtr node)
+    : InbuiltDisplayCommon(params, node) {
   // const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
   static_tracked_points_pub_ =
       node->create_publisher<sensor_msgs::msg::PointCloud2>("static_cloud", 1);
@@ -71,7 +71,7 @@ BackendDisplayRos::BackendDisplayRos(const DisplayParams params,
       node->create_publisher<nav_msgs::msg::Path>("odom_path", 2);
 }
 
-void BackendDisplayRos::spinOnce(
+void BackendInbuiltDisplayRos::spinOnce(
     const BackendOutputPacket::ConstPtr& backend_output) {
   publishPointCloud(static_tracked_points_pub_,
                     backend_output->static_landmarks_,

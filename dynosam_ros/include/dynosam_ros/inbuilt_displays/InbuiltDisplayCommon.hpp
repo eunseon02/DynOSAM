@@ -47,10 +47,11 @@
 
 namespace dyno {
 
-class DisplayRos {
+class InbuiltDisplayCommon {
  public:
-  DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node);
-  virtual ~DisplayRos() = default;
+  InbuiltDisplayCommon(const DisplayParams& params,
+                       rclcpp::Node::SharedPtr node);
+  virtual ~InbuiltDisplayCommon() = default;
 
   using PointCloud2 = sensor_msgs::msg::PointCloud2;
   using MarkerArray =

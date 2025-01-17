@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/DisplayRos.hpp"
+#include "dynosam_ros/inbuilt_displays/InbuiltDisplayCommon.hpp"
 
 #include <pcl/common/centroid.h>
 #include <pcl/common/common.h>
@@ -41,15 +41,11 @@
 
 namespace dyno {
 
-DisplayRos::DisplayRos(const DisplayParams& params,
-                       rclcpp::Node::SharedPtr node)
-    : params_(params), node_(node) {
-  // camera_frustrum_pub_ =
-  // node_->create_publisher<visualization_msgs::msg::MarkerArray>("odom_frustrum",
-  // 1);
-}
+InbuiltDisplayCommon::InbuiltDisplayCommon(const DisplayParams& params,
+                                           rclcpp::Node::SharedPtr node)
+    : params_(params), node_(node) {}
 
-CloudPerObject DisplayRos::publishPointCloud(
+CloudPerObject InbuiltDisplayCommon::publishPointCloud(
     PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,
     const gtsam::Pose3& T_world_camera) {
   pcl::PointCloud<pcl::PointXYZRGB> cloud;
@@ -87,18 +83,18 @@ CloudPerObject DisplayRos::publishPointCloud(
   return clouds_per_obj;
 }
 
-void DisplayRos::publishOdometry(OdometryPub::SharedPtr pub,
-                                 const gtsam::Pose3& T_world_camera,
-                                 Timestamp timestamp) {
+void InbuiltDisplayCommon::publishOdometry(OdometryPub::SharedPtr pub,
+                                           const gtsam::Pose3& T_world_camera,
+                                           Timestamp timestamp) {
   nav_msgs::msg::Odometry odom_msg;
   utils::convertWithHeader(T_world_camera, odom_msg, timestamp,
                            params_.world_frame_id_, params_.camera_frame_id_);
   pub->publish(odom_msg);
 }
 
-void DisplayRos::publishOdometryPath(PathPub::SharedPtr pub,
-                                     const gtsam::Pose3Vector& poses,
-                                     Timestamp latest_timestamp) {
+void InbuiltDisplayCommon::publishOdometryPath(PathPub::SharedPtr pub,
+                                               const gtsam::Pose3Vector& poses,
+                                               Timestamp latest_timestamp) {
   nav_msgs::msg::Path path;
   for (const gtsam::Pose3& odom : poses) {
     geometry_msgs::msg::PoseStamped pose_stamped;
@@ -112,7 +108,7 @@ void DisplayRos::publishOdometryPath(PathPub::SharedPtr pub,
   pub->publish(path);
 }
 
-void DisplayRos::publishObjectPositions(
+void InbuiltDisplayCommon::publishObjectPositions(
     MarkerArrayPub::SharedPtr pub, const ObjectPoseMap& object_positions,
     FrameId frame_id, Timestamp latest_timestamp,
     const std::string& prefix_marker_namespace, bool draw_labels,
@@ -172,12 +168,10 @@ void DisplayRos::publishObjectPositions(
   pub->publish(object_pose_marker_array);
 }
 
-void DisplayRos::publishObjectPaths(MarkerArrayPub::SharedPtr pub,
-                                    const ObjectPoseMap& object_positions,
-                                    FrameId frame_id,
-                                    Timestamp latest_timestamp,
-                                    const std::string& prefix_marker_namespace,
-                                    const int min_poses) {
+void InbuiltDisplayCommon::publishObjectPaths(
+    MarkerArrayPub::SharedPtr pub, const ObjectPoseMap& object_positions,
+    FrameId frame_id, Timestamp latest_timestamp,
+    const std::string& prefix_marker_namespace, const int min_poses) {
   visualization_msgs::msg::MarkerArray object_path_marker_array;
   static visualization_msgs::msg::Marker delete_marker;
   delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
@@ -261,7 +255,7 @@ void DisplayRos::publishObjectPaths(MarkerArrayPub::SharedPtr pub,
   pub->publish(object_path_marker_array);
 }
 
-void DisplayRos::publishObjectBoundingBox(
+void InbuiltDisplayCommon::publishObjectBoundingBox(
     MarkerArrayPub::SharedPtr aabb_pub, MarkerArrayPub::SharedPtr obb_pub,
     const CloudPerObject& cloud_per_object, Timestamp timestamp,
     const std::string& prefix_marker_namespace) {
@@ -281,7 +275,7 @@ void DisplayRos::publishObjectBoundingBox(
   if (obb_pub) aabb_pub->publish(obb_markers);
 }
 
-void DisplayRos::createAxisMarkers(
+void InbuiltDisplayCommon::createAxisMarkers(
     const gtsam::Pose3& pose, MarkerArray& axis_markers, Timestamp timestamp,
     const cv::Scalar& colour, const std::string& frame, const std::string& ns,
     double length, double radius) {
@@ -329,7 +323,7 @@ void DisplayRos::createAxisMarkers(
   axis_markers.markers.push_back(make_cylinder(z_pose));
 }
 
-void DisplayRos::constructBoundingBoxeMarkers(
+void InbuiltDisplayCommon::constructBoundingBoxeMarkers(
     const CloudPerObject& cloud_per_object, MarkerArray& aabb_markers,
     MarkerArray& obb_markers, Timestamp timestamp,
     const std::string& prefix_marker_namespace) {
@@ -428,7 +422,7 @@ void DisplayRos::constructBoundingBoxeMarkers(
   }
 }
 
-DisplayRos::MarkerArray DisplayRos::createCameraMarker(
+InbuiltDisplayCommon::MarkerArray InbuiltDisplayCommon::createCameraMarker(
     const gtsam::Pose3& T_world_x, Timestamp timestamp, const std::string& ns,
     const cv::Scalar& colour, double marker_scale) {
   auto transform_odom_to =

@@ -12,7 +12,8 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 
-# # Find Julia
+option(ENABLE_DYNAMIC_SLAM_INTERFACES "Use dynamic_slam_interfaces" OFF)
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 find_package(ament_cmake REQUIRED)
@@ -41,17 +42,14 @@ include_directories(
 )
 
 
-# build library
-add_library(${PROJECT_NAME} SHARED
+
+set(SRC_FILES
   src/PipelineRos.cc
-  src/FrontendDisplayRos.cc
-  src/BackendDisplayRos.cc
   src/RosUtils.cc
-  src/DisplayRos.cc
   src/Utils.cc
 )
 
-ament_target_dependencies(${PROJECT_NAME}
+set(TARGET_DEPS
   rclcpp
   std_msgs
   sensor_msgs
@@ -65,6 +63,32 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_ros
 )
 
+set(TARGET_EXPORT_DEPS
+  rclcpp
+  std_msgs
+  sensor_msgs
+  dynosam
+)
+
+if(ENABLE_DYNAMIC_SLAM_INTERFACES)
+  find_package(dynamic_slam_interfaces REQUIRED)
+  message(WARNING "dynamic_slam_interfaces will be used")
+  add_definitions(-DUSE_DYNAMIC_SLAM_INTERFACES)
+  list(APPEND TARGET_DEPS dynamic_slam_interfaces)
+  list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
+else()
+  message(WARNING "dynamic_slam_interfaces will be not used")
+  list(APPEND SRC_FILES src/inbuilt_displays/BackendInbuiltDisplayRos.cc src/inbuilt_displays/InbuiltDisplayCommon.cc src/inbuilt_displays/FrontendInbuiltDisplayRos.cc)
+
+endif()
+
+# build library
+add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
+
+ament_target_dependencies(${PROJECT_NAME}
+  ${TARGET_DEPS}
+)
+
 target_link_libraries(${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   glog
@@ -75,9 +99,7 @@ ament_export_libraries(${PROJECT_NAME}
   gflags
 )
 
-ament_export_dependencies(rclcpp std_msgs sensor_msgs
-dynosam
-)
+ament_export_dependencies(${TARGET_EXPORT_DEPS})
 
 
 target_include_directories(${PROJECT_NAME}
