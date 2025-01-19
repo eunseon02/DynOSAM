@@ -289,6 +289,7 @@ if(BUILD_TESTING)
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/internal/simulator.cc
+    test/test_object_centric.cc
     # test/test_landmark_quadric_factor.cc
     test/test_tools.cc
     test/test_map.cc

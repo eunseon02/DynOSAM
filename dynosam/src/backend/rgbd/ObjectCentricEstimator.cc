@@ -37,6 +37,17 @@
 
 namespace dyno {
 
+gtsam::Point3 projectToObject(const gtsam::Pose3& X_k,
+                              const gtsam::Pose3& s0_H_k_world,
+                              const gtsam::Pose3& L_s0,
+                              const gtsam::Point3 Z_k) {
+  gtsam::Pose3 k_H_s0_k = (L_s0.inverse() * s0_H_k_world * L_s0).inverse();
+  gtsam::Pose3 L_k = s0_H_k_world * L_s0;
+  gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
+  gtsam::Point3 projected_m_object = L_s0.inverse() * k_H_s0_W * X_k * Z_k;
+  return projected_m_object;
+}
+
 gtsam::Vector ObjectCentricMotionFactor::evaluateError(
     const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
     const gtsam::Point3& point_object, boost::optional<gtsam::Matrix&> J1,
@@ -90,6 +101,84 @@ gtsam::Vector ObjectCentricMotionFactor::residual(
   // put map_point_world into local camera coordinate
   gtsam::Point3 map_point_camera = camera_pose.inverse() * map_point_world;
   return map_point_camera - measurement;
+}
+
+gtsam::Vector StructurelessObjectCentricMotionFactor2::evaluateError(
+    const gtsam::Pose3& X_k_1, const gtsam::Pose3& H_k_1,
+    const gtsam::Pose3& X_k, const gtsam::Pose3& H_k,
+    boost::optional<gtsam::Matrix&> J1, boost::optional<gtsam::Matrix&> J2,
+    boost::optional<gtsam::Matrix&> J3,
+    boost::optional<gtsam::Matrix&> J4) const {
+  if (J1) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative41<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Pose3, gtsam::Pose3>(
+            std::bind(&StructurelessObjectCentricMotionFactor2::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4, Z_k_1_,
+                      Z_k_, L_0_),
+            X_k_1, H_k_1, X_k, H_k);
+    *J1 = J;
+  }
+
+  if (J1) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative41<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Pose3, gtsam::Pose3>(
+            std::bind(&StructurelessObjectCentricMotionFactor2::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4, Z_k_1_,
+                      Z_k_, L_0_),
+            X_k_1, H_k_1, X_k, H_k);
+    *J1 = J;
+  }
+
+  if (J2) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative42<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Pose3, gtsam::Pose3>(
+            std::bind(&StructurelessObjectCentricMotionFactor2::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4, Z_k_1_,
+                      Z_k_, L_0_),
+            X_k_1, H_k_1, X_k, H_k);
+    *J2 = J;
+  }
+
+  if (J3) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative43<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Pose3, gtsam::Pose3>(
+            std::bind(&StructurelessObjectCentricMotionFactor2::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4, Z_k_1_,
+                      Z_k_, L_0_),
+            X_k_1, H_k_1, X_k, H_k);
+    *J3 = J;
+  }
+
+  if (J4) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative44<gtsam::Vector3, gtsam::Pose3, gtsam::Pose3,
+                                     gtsam::Pose3, gtsam::Pose3>(
+            std::bind(&StructurelessObjectCentricMotionFactor2::residual,
+                      std::placeholders::_1, std::placeholders::_2,
+                      std::placeholders::_3, std::placeholders::_4, Z_k_1_,
+                      Z_k_, L_0_),
+            X_k_1, H_k_1, X_k, H_k);
+    *J4 = J;
+  }
+
+  return residual(X_k_1, H_k_1, X_k, H_k, Z_k_1_, Z_k_, L_0_);
+}
+
+gtsam::Vector StructurelessObjectCentricMotionFactor2::residual(
+    const gtsam::Pose3& X_k_1, const gtsam::Pose3& H_k_1,
+    const gtsam::Pose3& X_k, const gtsam::Pose3& H_k,
+    const gtsam::Point3& Z_k_1, const gtsam::Point3& Z_k,
+    const gtsam::Pose3& L_0) {
+  return projectToObject(X_k_1, H_k_1, L_0, Z_k_1) -
+         projectToObject(X_k, H_k, L_0, Z_k);
 }
 
 class ObjectCentricSmoothing
@@ -728,7 +817,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     //      theta_accessor->query<Landmark>(point_key),
     //      lmk_L0_init
     //  );
-    new_values.insert(point_key, lmk_L0_init);
+    // new_values.insert(point_key, lmk_L0_init);
     result.updateAffectedObject(frame_node_k_1->frame_id,
                                 context.getObjectId());
   }
@@ -736,11 +825,13 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
   if (context.is_starting_motion_frame) {
     // add factor at k-1
-    new_factors.emplace_shared<ObjectCentricMotionFactor>(
-        frame_node_k_1->makePoseKey(),  // pose key at previous frames,
-        object_motion_key_k_1, point_key,
-        lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-        dynamic_point_noise);
+    // ------ good motion factor/////
+    // new_factors.emplace_shared<ObjectCentricMotionFactor>(
+    //     frame_node_k_1->makePoseKey(),  // pose key at previous frames,
+    //     object_motion_key_k_1, point_key,
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
+    //     dynamic_point_noise);
+
     // const gtsam::Pose3 X_world =
     //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
     // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
@@ -764,9 +855,17 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   }
 
   // add factor at k
-  new_factors.emplace_shared<ObjectCentricMotionFactor>(
-      frame_node_k->makePoseKey(),  // pose key at previous frames,
-      object_motion_key_k, point_key,
+  // ------ good motion factor/////
+  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
+  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
+  //     object_motion_key_k, point_key,
+  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
+  //     dynamic_point_noise);
+
+  new_factors.emplace_shared<StructurelessObjectCentricMotionFactor2>(
+      frame_node_k_1->makePoseKey(), object_motion_key_k_1,
+      frame_node_k->makePoseKey(), object_motion_key_k,
+      lmk_node->getMeasurement(frame_node_k_1).landmark,
       lmk_node->getMeasurement(frame_node_k).landmark, L_0,
       dynamic_point_noise);
 

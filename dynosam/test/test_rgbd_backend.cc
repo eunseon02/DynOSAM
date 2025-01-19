@@ -142,8 +142,8 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
   // TODO: how can we do 1 point but with lots of overlap (even infinity
   // overlap?)
 
-  const double H_R_sigma = 0.1;
-  const double H_t_sigma = 0.2;
+  const double H_R_sigma = 0.01;
+  const double H_t_sigma = 0.02;
   const double dynamic_point_sigma = 0.001;
 
   dyno_testing::RGBDScenario::NoiseParams noise_params;
@@ -156,7 +156,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
       noise_params);
 
   // add one obect
-  const size_t num_points = 3;
+  const size_t num_points = 20;
   const size_t obj1_overlap = 2;
   const size_t obj2_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
@@ -179,7 +179,7 @@ TEST(RGBDBackendModule, constructSimpleGraph) {
               num_points, obj2_overlap));
 
   scenario.addObjectBody(1, object1);
-  //   scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(2, object2);
 
   //   SETDEBUG("IncrementalFixedLagSmoother update", true);
   //   CHECK(gtsam::isDebugVersion());

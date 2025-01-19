@@ -39,6 +39,11 @@
 
 namespace dyno {
 
+gtsam::Point3 projectToObject(const gtsam::Pose3& X_k,
+                              const gtsam::Pose3& s0_H_k_world,
+                              const gtsam::Pose3& L_s0,
+                              const gtsam::Point3 Z_k);
+
 class ObjectCentricMotionFactor
     : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
                                       gtsam::Point3> {
@@ -71,6 +76,46 @@ class ObjectCentricMotionFactor
                                 const gtsam::Pose3& motion,
                                 const gtsam::Point3& point_object,
                                 const gtsam::Point3& measurement,
+                                const gtsam::Pose3& L_0);
+};
+
+class StructurelessObjectCentricMotionFactor2
+    : public gtsam::NoiseModelFactor4<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3,
+                                      gtsam::Pose3> {
+ public:
+  typedef boost::shared_ptr<StructurelessObjectCentricMotionFactor2> shared_ptr;
+  typedef StructurelessObjectCentricMotionFactor2 This;
+  typedef gtsam::NoiseModelFactor4<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3,
+                                   gtsam::Pose3>
+      Base;
+
+  gtsam::Point3 Z_k_1_;
+  gtsam::Point3 Z_k_;
+  gtsam::Pose3 L_0_;
+
+  StructurelessObjectCentricMotionFactor2(
+      gtsam::Key X_k_1_key, gtsam::Key H_k_1_key, gtsam::Key X_k_key,
+      gtsam::Key H_k_key, const gtsam::Point3& Z_k_1, const gtsam::Point3& Z_k,
+      const gtsam::Pose3& L_0, gtsam::SharedNoiseModel model)
+      : Base(model, X_k_1_key, H_k_1_key, X_k_key, H_k_key),
+        Z_k_1_(Z_k_1),
+        Z_k_(Z_k),
+        L_0_(L_0) {}
+
+  gtsam::Vector evaluateError(
+      const gtsam::Pose3& X_k_1, const gtsam::Pose3& H_k_1,
+      const gtsam::Pose3& X_k, const gtsam::Pose3& H_k,
+      boost::optional<gtsam::Matrix&> J1 = boost::none,
+      boost::optional<gtsam::Matrix&> J2 = boost::none,
+      boost::optional<gtsam::Matrix&> J3 = boost::none,
+      boost::optional<gtsam::Matrix&> J4 = boost::none) const override;
+
+  static gtsam::Vector residual(const gtsam::Pose3& X_k_1,
+                                const gtsam::Pose3& H_k_1,
+                                const gtsam::Pose3& X_k,
+                                const gtsam::Pose3& H_k,
+                                const gtsam::Point3& Z_k_1,
+                                const gtsam::Point3& Z_k,
                                 const gtsam::Pose3& L_0);
 };
 
