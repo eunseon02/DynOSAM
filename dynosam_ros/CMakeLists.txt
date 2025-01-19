@@ -47,6 +47,7 @@ set(SRC_FILES
   src/PipelineRos.cc
   src/RosUtils.cc
   src/Utils.cc
+  src/displays/DisplaysCommon.cc
 )
 
 set(TARGET_DEPS
@@ -70,15 +71,26 @@ set(TARGET_EXPORT_DEPS
   dynosam
 )
 
+
 if(ENABLE_DYNAMIC_SLAM_INTERFACES)
-  find_package(dynamic_slam_interfaces REQUIRED)
   message(WARNING "dynamic_slam_interfaces will be used")
   add_definitions(-DUSE_DYNAMIC_SLAM_INTERFACES)
   list(APPEND TARGET_DEPS dynamic_slam_interfaces)
   list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
 else()
   message(WARNING "dynamic_slam_interfaces will be not used")
-  list(APPEND SRC_FILES src/inbuilt_displays/BackendInbuiltDisplayRos.cc src/inbuilt_displays/InbuiltDisplayCommon.cc src/inbuilt_displays/FrontendInbuiltDisplayRos.cc)
+  list(APPEND SRC_FILES 
+    src/displays/inbuilt_displays/BackendInbuiltDisplayRos.cc 
+    src/displays/inbuilt_displays/InbuiltDisplayCommon.cc 
+    src/displays/inbuilt_displays/FrontendInbuiltDisplayRos.cc)
+
+    # to remove
+    find_package(dynamic_slam_interfaces REQUIRED)
+    list(APPEND TARGET_DEPS dynamic_slam_interfaces)
+    list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
+
+    list(APPEND SRC_FILES 
+    src/displays/dynamic_slam_displays/DynamicSlamDisplaysCommon.cc)
 
 endif()
 

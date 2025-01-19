@@ -29,6 +29,7 @@
  */
 #pragma once
 
+#include "dynosam_ros/displays/DisplaysCommon.hpp"
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <dynosam/common/Camera.hpp>
@@ -53,14 +54,6 @@ class InbuiltDisplayCommon {
                        rclcpp::Node::SharedPtr node);
   virtual ~InbuiltDisplayCommon() = default;
 
-  using PointCloud2 = sensor_msgs::msg::PointCloud2;
-  using MarkerArray =
-      visualization_msgs::msg::MarkerArray;  //! Typedef for MarkerArray msg
-
-  using PointCloud2Pub = rclcpp::Publisher<sensor_msgs::msg::PointCloud2>;
-  using OdometryPub = rclcpp::Publisher<nav_msgs::msg::Odometry>;
-  using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
-  using MarkerArrayPub = rclcpp::Publisher<MarkerArray>;
 
   virtual CloudPerObject publishPointCloud(
       PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,

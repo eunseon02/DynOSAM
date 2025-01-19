@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"
 
 #include <cv_bridge/cv_bridge.h>
 #include <glog/logging.h>

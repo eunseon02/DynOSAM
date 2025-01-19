@@ -33,7 +33,7 @@
 #include <dynosam/visualizer/Display.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
-#include "dynosam_ros/inbuilt_displays/InbuiltDisplayCommon.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/InbuiltDisplayCommon.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "rclcpp/rclcpp.hpp"

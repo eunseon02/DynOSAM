@@ -36,7 +36,7 @@
 #include <opencv4/opencv2/videoio.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
-#include "dynosam_ros/inbuilt_displays/InbuiltDisplayCommon.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/InbuiltDisplayCommon.hpp"
 #include "image_transport/image_transport.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"

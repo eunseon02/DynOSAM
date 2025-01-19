@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
 
 #include <glog/logging.h>
 #include <pcl_conversions/pcl_conversions.h>

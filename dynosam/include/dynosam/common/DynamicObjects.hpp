@@ -59,6 +59,9 @@ struct DynamicObjectObservation {
   inline bool hasBoundingBox() const { return !bounding_box_.empty(); }
 };
 
+
+// gtsam::Vector3 calculateBodyMotion
+
 using DynamicObjectObservations = std::vector<DynamicObjectObservation>;
 
 enum PropogateType {

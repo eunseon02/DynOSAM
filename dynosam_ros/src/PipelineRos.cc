@@ -39,7 +39,7 @@
 #include <dynosam/visualizer/OpenCVFrontendDisplay.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
-#include "dynosam_ros/DisplaysImpl.hpp"
+#include "dynosam_ros/displays/DisplaysImpl.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
 #include "rclcpp/parameter.hpp"
 

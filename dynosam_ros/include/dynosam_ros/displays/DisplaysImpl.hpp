@@ -8,8 +8,8 @@
 #ifdef USE_DYNAMIC_SLAM_INTERFACES
 
 #else
-#include "dynosam_ros/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
-#include "dynosam_ros/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"
 
 namespace dyno {
 typedef FrontendInbuiltDisplayRos FrontendDisplayRos;
