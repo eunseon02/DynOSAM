@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -27,9 +27,9 @@
  THE
  *   SOFTWARE.
  */
+
 #pragma once
 
-#include "dynosam_ros/displays/DisplaysCommon.hpp"
 #include <pcl_conversions/pcl_conversions.h>
 
 #include <dynosam/common/Camera.hpp>
@@ -39,6 +39,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/displays/DisplaysCommon.hpp"
 #include "image_transport/image_transport.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
@@ -53,7 +54,6 @@ class InbuiltDisplayCommon {
   InbuiltDisplayCommon(const DisplayParams& params,
                        rclcpp::Node::SharedPtr node);
   virtual ~InbuiltDisplayCommon() = default;
-
 
   virtual CloudPerObject publishPointCloud(
       PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,

@@ -59,8 +59,16 @@ struct DynamicObjectObservation {
   inline bool hasBoundingBox() const { return !bounding_box_.empty(); }
 };
 
-
-// gtsam::Vector3 calculateBodyMotion
+/**
+ * @brief Calculate the local body velocity given the motion in world from k-1
+ * to k and the object pose at k-1. This returns the body velocity at k-1.
+ *
+ * @param w_k_1_H_k const gtsam::Pose3&
+ * @param w_L_k_1 const gtsam::Pose3&
+ * @return gtsam::Vector3
+ */
+gtsam::Vector3 calculateBodyMotion(const gtsam::Pose3& w_k_1_H_k,
+                                   const gtsam::Pose3& w_L_k_1);
 
 using DynamicObjectObservations = std::vector<DynamicObjectObservation>;
 
