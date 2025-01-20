@@ -771,6 +771,11 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   const gtsam::Key object_motion_key_k_1 =
       frame_node_k_1->makeObjectMotionKey(context.getObjectId());
 
+  // LOG(INFO) << "Dynamic point update context tracklet " <<
+  // context.getTrackletId() << " object id " << context.getObjectId() << " "
+  //   << DynoLikeKeyFormatter(object_motion_key_k_1) << " " <<
+  //   DynoLikeKeyFormatter(object_motion_key_k);
+
   gtsam::Pose3 L_0;
   FrameId s0;
   std::tie(s0, L_0) = getL0(context.getObjectId(), frame_node_k_1->getId());
@@ -850,9 +855,18 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     //           point_key, lmk_node->getMeasurement(frame_node_k_1).landmark,
     //           dynamic_point_noise);
 
-    result.updateAffectedObject(frame_node_k_1->frame_id,
-                                context.getObjectId());
+    // result.updateAffectedObject(frame_node_k_1->frame_id,
+    //                             context.getObjectId());
   }
+  new_factors.emplace_shared<StructurelessObjectCentricMotionFactor2>(
+      frame_node_k_1->makePoseKey(), object_motion_key_k_1,
+      frame_node_k->makePoseKey(), object_motion_key_k,
+      lmk_node->getMeasurement(frame_node_k_1).landmark,
+      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
+      dynamic_point_noise);
+
+  result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
+  result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
   // add factor at k
   // ------ good motion factor/////
@@ -861,13 +875,6 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   //     object_motion_key_k, point_key,
   //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
   //     dynamic_point_noise);
-
-  new_factors.emplace_shared<StructurelessObjectCentricMotionFactor2>(
-      frame_node_k_1->makePoseKey(), object_motion_key_k_1,
-      frame_node_k->makePoseKey(), object_motion_key_k,
-      lmk_node->getMeasurement(frame_node_k_1).landmark,
-      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-      dynamic_point_noise);
 
   // const gtsam::Pose3 X_world =
   //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
@@ -919,6 +926,9 @@ void ObjectCentricFormulation::objectUpdateContext(
   auto frame_node_k = context.frame_node_k;
   const gtsam::Key object_motion_key_k =
       frame_node_k->makeObjectMotionKey(context.getObjectId());
+
+  LOG(INFO) << "Object update context "
+            << DynoLikeKeyFormatter(object_motion_key_k);
 
   auto theta_accessor = this->accessorFromTheta();
   const auto frame_id = context.getFrameId();
@@ -1102,8 +1112,8 @@ void ObjectCentricFormulation::objectUpdateContext(
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getL0(
     ObjectId object_id, FrameId frame_id) {
   if (L0_.exists(object_id)) {
-    LOG(INFO) << "Getting L0 from cache " << object_id << " SE(3) "
-              << L0_.at(object_id).second;
+    // LOG(INFO) << "Getting L0 from cache " << object_id << " SE(3) "
+    //           << L0_.at(object_id).second;
     return L0_.at(object_id);
   }
 

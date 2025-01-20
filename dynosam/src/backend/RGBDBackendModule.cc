@@ -121,8 +121,9 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
-  isam2_params.relinearizeSkip = 2;
+  // isam2_params.relinearizeSkip = 2;
   isam2_params.keyFormatter = DynoLikeKeyFormatter;
+  isam2_params.enablePartialRelinearizationCheck = true;
   isam2_params.evaluateNonlinearError = true;
   smoother_ = std::make_unique<gtsam::ISAM2>(isam2_params);
   fixed_lag_smoother_ =
