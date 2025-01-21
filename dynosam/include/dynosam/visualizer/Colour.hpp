@@ -78,14 +78,14 @@ struct RGBA {
   template <typename U>
   RGBA(const RGBA<U>& other) {
     // check if we need to go up (1 -> 255) or down (255 -> 1)
-    constexpr auto other_max = RGBA<U>::max();
+    constexpr T other_max = static_cast<T>(RGBA<U>::max());
 
     // this is lower than other so we need to normalize using other max
     if constexpr (this->max() < other_max) {
-      this->r = is_zero(other.r) ? 0 : static_cast<T>(other.r / other_max);
-      this->g = is_zero(other.g) ? 0 : static_cast<T>(other.g / other_max);
-      this->b = is_zero(other.b) ? 0 : static_cast<T>(other.b / other_max);
-      this->a = is_zero(other.a) ? 0 : static_cast<T>(other.a / other_max);
+      this->r = is_zero(other.r) ? 0 : static_cast<T>(other.r) / other_max;
+      this->g = is_zero(other.g) ? 0 : static_cast<T>(other.g) / other_max;
+      this->b = is_zero(other.b) ? 0 : static_cast<T>(other.b) / other_max;
+      this->a = is_zero(other.a) ? 0 : static_cast<T>(other.a) / other_max;
       CHECK_LE(this->a, max());
     }
     // this is higher than other so we need to normalize using this max

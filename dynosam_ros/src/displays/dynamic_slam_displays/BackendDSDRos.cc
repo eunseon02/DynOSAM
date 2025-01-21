@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -28,15 +28,15 @@
  *   SOFTWARE.
  */
 
-#pragma once
-
-#include <string>
+#include "dynosam_ros/displays/dynamic_slam_displays/BackendDSDRos.hpp"
 
 namespace dyno {
 
-struct DisplayParams {
-  std::string world_frame_id = "world";
-  std::string camera_frame_id = "camera";
-};
+BackendDSDRos::BackendDSDRos(const DisplayParams params,
+                             rclcpp::Node::SharedPtr node)
+    : BackendDisplay(), DSDRos(params, node) {}
+
+void BackendDSDRos::spinOnce(
+    const BackendOutputPacket::ConstPtr& backend_output) {}
 
 }  // namespace dyno

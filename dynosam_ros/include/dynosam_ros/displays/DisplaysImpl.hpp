@@ -32,6 +32,14 @@
 
 #ifdef USE_DYNAMIC_SLAM_INTERFACES
 
+#include "dynosam_ros/displays/dynamic_slam_displays/BackendDSDRos.hpp"
+#include "dynosam_ros/displays/dynamic_slam_displays/FrontendDSDRos.hpp"
+
+namespace dyno {
+typedef FrontendDSDRos FrontendDisplayRos;
+typedef BackendDSDRos BackendDisplayRos;
+}  // namespace dyno
+
 #else
 #include "dynosam_ros/displays/inbuilt_displays/BackendInbuiltDisplayRos.hpp"
 #include "dynosam_ros/displays/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"

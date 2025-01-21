@@ -12,7 +12,7 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 
-option(ENABLE_DYNAMIC_SLAM_INTERFACES "Use dynamic_slam_interfaces" OFF)
+option(ENABLE_DYNAMIC_SLAM_INTERFACES "Use dynamic_slam_interfaces" ON)
 
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
@@ -75,22 +75,23 @@ set(TARGET_EXPORT_DEPS
 if(ENABLE_DYNAMIC_SLAM_INTERFACES)
   message(WARNING "dynamic_slam_interfaces will be used")
   add_definitions(-DUSE_DYNAMIC_SLAM_INTERFACES)
+
+  find_package(dynamic_slam_interfaces REQUIRED)
   list(APPEND TARGET_DEPS dynamic_slam_interfaces)
   list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
+
+  list(APPEND SRC_FILES
+    src/displays/dynamic_slam_displays/DSDCommonRos.cc
+    src/displays/dynamic_slam_displays/FrontendDSDRos.cc
+    src/displays/dynamic_slam_displays/BackendDSDRos.cc)
+
 else()
   message(WARNING "dynamic_slam_interfaces will be not used")
-  list(APPEND SRC_FILES 
-    src/displays/inbuilt_displays/BackendInbuiltDisplayRos.cc 
-    src/displays/inbuilt_displays/InbuiltDisplayCommon.cc 
+  list(APPEND SRC_FILES
+    src/displays/inbuilt_displays/BackendInbuiltDisplayRos.cc
+    src/displays/inbuilt_displays/InbuiltDisplayCommon.cc
     src/displays/inbuilt_displays/FrontendInbuiltDisplayRos.cc)
 
-    # to remove
-    find_package(dynamic_slam_interfaces REQUIRED)
-    list(APPEND TARGET_DEPS dynamic_slam_interfaces)
-    list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
-
-    list(APPEND SRC_FILES 
-    src/displays/dynamic_slam_displays/DynamicSlamDisplaysCommon.cc)
 
 endif()
 

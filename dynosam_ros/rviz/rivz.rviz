@@ -14,6 +14,7 @@ Panels:
         - /Frontend1/Odometry1/Shape1
         - /Ground Truth1
         - /Ground Truth1/Odometry (GT)1/Shape1
+        - /ObjectOdometry1
       Splitter Ratio: 0.5833333134651184
     Tree Height: 637
   - Class: rviz_common/Selection
@@ -528,6 +529,43 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /dynosam/frontend/object_bbx_viz
       Value: false
+    - Axes Length: 1
+      Axes Radius: 0.10000000149011612
+      Class: rviz_dynamic_slam_plugins/ObjectOdometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 100
+      Name: ObjectOdometry
+      Show Object Label: true
+      Show Only Final Pose: true
+      Show Velocity: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /dynosam/frontend/ground_truth/object_odometry
+      Trajectory:
+        Buffer Length: 1
+        Diameter: 0.20000000298023224
+        Line Style: Billboards
+        Value: true
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -574,25 +612,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 29.66068458557129
+      Distance: 35.62208557128906
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.6208198070526123
-        Y: -0.41407883167266846
-        Z: 1.3196595907211304
+        X: 3.6244301795959473
+        Y: 10.512846946716309
+        Z: 2.9900920391082764
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.0797970294952393
+      Pitch: 0.7547972798347473
       Target Frame: robot
       Value: Orbit (rviz_default_plugins)
-      Yaw: 3.245318651199341
+      Yaw: 3.435321092605591
     Saved: ~
 Window Geometry:
   Displays:

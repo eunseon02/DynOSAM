@@ -74,8 +74,8 @@ bool dyno::convert(const RGBA<float>& colour, std_msgs::msg::ColorRGBA& msg) {
 }
 
 template <>
-bool dyno::convert(const Color& pose, std_msgs::msg::ColorRGBA& msg) {
-  convert(RGBA<float>(pose), msg);
+bool dyno::convert(const Color& colour, std_msgs::msg::ColorRGBA& msg) {
+  convert(RGBA<float>(colour), msg);
 }
 
 template <>
@@ -120,7 +120,7 @@ bool dyno::convert(const gtsam::Pose3& pose, nav_msgs::msg::Odometry& odom) {
 }
 
 template <>
-bool dyno::convert(geometry_msgs::msg::Pose& pose,
+bool dyno::convert(const geometry_msgs::msg::Pose& pose,
                    geometry_msgs::msg::Transform& transform) {
   transform.translation.x = pose.position.x;
   transform.translation.y = pose.position.y;
