@@ -33,6 +33,7 @@
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
+#include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/BackendParams.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"

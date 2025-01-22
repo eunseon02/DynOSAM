@@ -49,20 +49,20 @@ InbuiltDisplayCommon::InbuiltDisplayCommon(const DisplayParams& params,
 CloudPerObject InbuiltDisplayCommon::publishPointCloud(
     PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,
     const gtsam::Pose3& T_world_camera) {
-  return DisplayCommon::publishPointCloud(pub, landmarks, T_world_camera, params_.world_frame_id_);
+  return DisplayCommon::publishPointCloud(pub, landmarks, T_world_camera, params_.world_frame_id);
 }
 
 void InbuiltDisplayCommon::publishOdometry(OdometryPub::SharedPtr pub,
                                            const gtsam::Pose3& T_world_camera,
                                            Timestamp timestamp) {
   DisplayCommon::publishOdometry(pub, T_world_camera, timestamp,
-                           params_.world_frame_id_, params_.camera_frame_id_);
+                           params_.world_frame_id, params_.camera_frame_id);
 }
 
 void InbuiltDisplayCommon::publishOdometryPath(PathPub::SharedPtr pub,
                                                const gtsam::Pose3Vector& poses,
                                                Timestamp latest_timestamp) {
-  DisplayCommon::publishOdometryPath(pub, poses, latest_timestamp, params_.world_frame_id_);
+  DisplayCommon::publishOdometryPath(pub, poses, latest_timestamp, params_.world_frame_id);
 }
 
 void InbuiltDisplayCommon::publishObjectPositions(
@@ -89,7 +89,7 @@ void InbuiltDisplayCommon::publishObjectPositions(
     // assume
     // object centroid per frame
     visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = params_.world_frame_id_;
+    marker.header.frame_id = params_.world_frame_id;
     marker.ns = prefix_marker_namespace + "_object_positions";
     marker.id = object_id;
     marker.type = visualization_msgs::msg::Marker::SPHERE;
@@ -408,7 +408,7 @@ MarkerArray InbuiltDisplayCommon::createCameraMarker(
   visualization_msgs::msg::Marker marker;
 
   // the marker will be displayed in frame_id
-  marker.header.frame_id = params_.world_frame_id_;
+  marker.header.frame_id = params_.world_frame_id;
   marker.header.stamp = ros_time;
   marker.ns = ns;
   marker.action = 0;

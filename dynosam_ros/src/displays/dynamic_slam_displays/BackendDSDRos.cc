@@ -37,6 +37,14 @@ BackendDSDRos::BackendDSDRos(const DisplayParams params,
     : BackendDisplay(), DSDRos(params, node) {}
 
 void BackendDSDRos::spinOnce(
-    const BackendOutputPacket::ConstPtr& backend_output) {}
+    const BackendOutputPacket::ConstPtr& backend_output) {
+
+    //publish vo and path
+    constexpr static bool kPublishOdomAsTf = false;
+    this->publishVisualOdometry(frontend_output->T_world_camera_,
+                                frontend_output->getTimestamp(),
+                                kPublishOdomAsTf);
+
+}
 
 }  // namespace dyno

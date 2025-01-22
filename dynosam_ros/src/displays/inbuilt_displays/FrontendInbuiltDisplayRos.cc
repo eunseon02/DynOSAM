@@ -303,7 +303,7 @@ void FrontendInbuiltDisplayRos::processRGBDOutputpacket(
 
     // object_motions_msg.header.seq = current_frame_id;
     object_motions_msg.header.stamp = node_->now();
-    object_motions_msg.header.frame_id = params_.world_frame_id_;
+    object_motions_msg.header.frame_id = params_.world_frame_id;
 
     for (const auto& [object_id, current_obj_motion] : obj_motions) {
       geometry_msgs::msg::PoseStamped current_obj_motion_msg;
@@ -491,13 +491,13 @@ void FrontendInbuiltDisplayRos::publishOdometry(
                                         timestamp);
   geometry_msgs::msg::TransformStamped t;
   // utils::convertWithHeader(T_world_camera, t, timestamp,
-  // params_.world_frame_id_, params_.camera_frame_id_); Send the transformation
+  // params_.world_frame_id, params_.camera_frame_id_); Send the transformation
   dyno::convert<gtsam::Pose3, geometry_msgs::msg::TransformStamped>(
       T_world_camera, t);
 
   t.header.stamp = node_->now();
-  t.header.frame_id = params_.world_frame_id_;
-  t.child_frame_id = params_.camera_frame_id_;
+  t.header.frame_id = params_.world_frame_id;
+  t.child_frame_id = params_.camera_frame_id;
 
   tf_broadcaster_->sendTransform(t);
 }

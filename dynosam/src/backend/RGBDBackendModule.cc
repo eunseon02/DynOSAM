@@ -165,6 +165,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
 RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
+  const Timestamp timestamp = input->getTimestamp();
   LOG(INFO) << "Running backend " << frame_k;
   CHECK_EQ(spin_state_.frame_id, frame_k);
 
@@ -253,20 +254,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   new_updater_->accessorFromTheta()->postUpdateCallback(
       backend_info);  // force update every time (slow! and just for testing)
 
-  auto backend_output = std::make_shared<BackendOutputPacket>();
-  backend_output->timestamp_ = input->getTimestamp();
-  backend_output->frame_id_ = input->getFrameId();
-  backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
-  backend_output->static_landmarks_ = accessor->getFullStaticMap();
-  backend_output->dynamic_landmarks_ =
-      accessor->getDynamicLandmarkEstimates(frame_k);
-
-  for (FrameId frame_id : map_->getFrameIds()) {
-    backend_output->optimized_poses_.push_back(
-        accessor->getSensorPose(frame_id).get());
-  }
-
-  backend_output->composed_object_poses = accessor->getObjectPoses();
+  BackendOutputPacket::Ptr backend_output = constructOutputPacket(frame_k, timestamp);
 
   debug_info_ = DebugInfo();
 
@@ -420,23 +408,30 @@ RGBDBackendModule::makeUpdater() {
   }
 }
 
-// TODO: these functions can go in base
-void RGBDBackendModule::saveGraph(const std::string& file) {
-  // TODO: must be careful as there could be inconsistencies between the graph
-  // in the optimzier, and the graph in the map
-  // TODO:
-  //  gtsam::NonlinearFactorGraph graph = map_->getGraph();
-  //  // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
-  //  graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(FrameId frame_k, Timestamp timestamp) const {
+  CHECK_NOTNULL(new_updater_);
+  return RGBDBackendModule::constructOutputPacket(new_updater_, frame_k, timestamp);
 }
-void RGBDBackendModule::saveTree(const std::string& file) {
-  // auto incremental_optimizer = safeCast<Optimizer<Landmark>,
-  // IncrementalOptimizer<Landmark>>(optimizer_); if(incremental_optimizer) {
-  //     auto smoother = incremental_optimizer->getSmoother();
-  //     smoother.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
-  //     // smoother.getISAM2().saveGraph(getOutputFilePath(file),
-  //     DynoLikeKeyFormatter);
-  // }
+
+BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k, Timestamp timestamp) {
+  auto accessor = new_updater_->accessorFromTheta();
+
+  auto backend_output = std::make_shared<BackendOutputPacket>();
+  backend_output->timestamp_ = timestamp;
+  backend_output->frame_id_ = frame_k;
+  backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
+  backend_output->static_landmarks_ = accessor->getFullStaticMap();
+  backend_output->dynamic_landmarks_ =
+      accessor->getDynamicLandmarkEstimates(frame_k);
+
+  for (FrameId frame_id : map_->getFrameIds()) {
+    backend_output->optimized_poses_.push_back(
+        accessor->getSensorPose(frame_id).get());
+  }
+
+  backend_output->composed_object_poses = accessor->getObjectPoses();
+  return backend_output;
 }
+
 
 }  // namespace dyno
