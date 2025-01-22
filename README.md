@@ -12,9 +12,24 @@ DynoSAM is a Stereo/RGB-D Visual Odometry pipeline for Dynamic SLAM and estiamte
 DynoSAM current provides full-batch and sliding-window optimisation procedures and is integrated with ROS2.
 
 ## Publication
-Paper citation coming soon...
+The offical code used for our paper:
+- [Jesse Morris](https://jessemorris.github.io/), Yiduo Wang, Mikolaj Kliniewski, Viorela Ila, [*DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM*](h[ttps://arxiv.org/abs/2312.04031](https://arxiv.org/pdf/2501.11893)), Arxiv.  Submitted Transactions on Robotics (T-RO) Visual SLAM Special Issue (2025).
 
+We kindly ask to cite our paper if you find this work useful:
 
+```bibtex
+
+@misc{morris2025dynosam,
+      title={DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM}, 
+      author={Jesse Morris and Yiduo Wang and Mikolaj Kliniewski and Viorela Ila},
+      year={2025},
+      eprint={2501.11893},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2501.11893}, 
+}
+
+```
 ## Related Publication
 
 DynoSAM was build as a culmination of several works:
