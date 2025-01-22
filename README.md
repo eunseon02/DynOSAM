@@ -13,7 +13,7 @@ DynoSAM current provides full-batch and sliding-window optimisation procedures a
 
 ## Publication
 The offical code used for our paper:
-- [Jesse Morris](https://jessemorris.github.io/), Yiduo Wang, Mikolaj Kliniewski, Viorela Ila, [*DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM*](h[ttps://arxiv.org/abs/2312.04031](https://arxiv.org/pdf/2501.11893)), Arxiv.  Submitted Transactions on Robotics (T-RO) Visual SLAM Special Issue (2025).
+- [Jesse Morris](https://jessemorris.github.io/), Yiduo Wang, Mikolaj Kliniewski, Viorela Ila, [*DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM*](https://arxiv.org/pdf/2501.11893), Arxiv.  Submitted Transactions on Robotics (T-RO) Visual SLAM Special Issue (2025).
 
 We kindly ask to cite our paper if you find this work useful:
 
@@ -30,7 +30,7 @@ We kindly ask to cite our paper if you find this work useful:
 }
 
 ```
-## Related Publication
+## Related Publications
 
 DynoSAM was build as a culmination of several works:
 
@@ -40,10 +40,13 @@ DynoSAM was build as a culmination of several works:
 
 ## Demo
 
+Example output running on the Oxford Multimotion Dataset (OMD, _swinging_4_unconstrained_).
+
 <div align="center">
   <img src="./docs/media/omd-demo.gif"/>
 </div>
 
+> NOTE: this visualisation was generated using playback and is does not reflect the realtime output of our system.
 
 # 1. Installtion
 
@@ -66,13 +69,16 @@ DynoSAM is currently built within the ROS2 infrastructure (if there is enough in
 
 We provide a development [Dockerfile](./docker/Dockerfile) that will install all dependancies but expects DynoSAM to be cloned locally. The associated [container creation](./docker/create_container.sh) will then mount the local DynoSAM folder into the container along with local results/dataset folders.
 
-> NOTE: there are some minor issues with the current dockerfile which will be fixed in-time.
+> NOTE: there are some minor issues with the current dockerfile which will be fixed intime.
 
 The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages.
 
-More detailed instructions are fonud here: [Insallation instructions](./docs/media/INSTALL.md)
+More detailed instructions are found here: [Insallation instructions](./docs/media/INSTALL.md)
 
 # 2. Usage
+
+## Documentation
+We auto generate [Doxygen code docs](https://acfr-rpg.github.io/DynOSAM/doxygen/) for all classes in DynoSAM. The code docs are up-to-date with the _main_ branch. 
 
 ## Running and Configuration
 
@@ -307,7 +313,7 @@ All transform types (e.g. poses $X$ and motions $H$) are implemented using `gtsa
 > NOTE: I was very inconsistent with my variable naming through this code, mainly becuase I did not find a good way to deal with the funky three-indexed notation very well. I am fixing this as I go ;)
 
 ### Modules
-The front-end and back-end's are implemented in associated subfolders.
+The front-end and back-ends are implemented in associated subfolders.
 
 
 __Front-end__
@@ -326,7 +332,7 @@ As per our key contributions, our back-end is structured to facilitate new imple
   - Integrates new observations into the graph and updates it accordingly.
   - It creates an `Acccessor` object which is used externally to extract and interact with the internal representation.
 
-- [`Accessor`](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathbf{O}_k$.
+- [`Accessor`](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathcal{O}_k$.
 
 Each formulation will need to derive from `Formulation` and define their own `Accessor`. The two formulations discussed in our paper are implemented as
   - [`WorldMotionFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
@@ -338,7 +344,7 @@ Each formulation will need to derive from `Formulation` and define their own `Ac
 We strongly encourage you to submit issues, feedback and potential improvements.
 We follow the branch, open PR, review, and merge workflow.
 
-As of Nov 2024 I still actively developing this project as part of my PhD at the [ACFR](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-robotics.html). Things may change but I will do my best to ensure versions are tagged etc... as a result I will also be happy to address all bugs and feature requests! Send 'em through!!
+As of Nov 2024 I am still actively developing this project as part of my PhD at the [ACFR](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-robotics.html). Things may change but I will do my best to ensure versions are tagged etc... as a result I will also be happy to address all bugs and feature requests! Send 'em through!!
 
 To contribute to this repo, make sure you have [pre-commit](https://pre-commit.com/) installed to enable checks.
 ```bash
