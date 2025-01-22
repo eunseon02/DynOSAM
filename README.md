@@ -94,7 +94,7 @@ The launch file will load all the GFLAG's from all .flag files found in the para
 ### Running with complex input
 For evaluation and more refined control over the input to the system we also provide an evaluation launch script and can be run as:
 ```
-run dynosam_utils eval_launch.py
+ros2 run dynosam_utils eval_launch.py
   --dataset_path <Path to dataset>
   --params_path <Absolute path to the params folder to run dynosam with>
   --launch_file <Wich dynosam launch file to run with!>
@@ -109,7 +109,7 @@ This script automated the process of running the evaluation suite (ie. `--run_an
 
 In addition to these arguments, this script takes all additional cmd-line arguments and parses them to the DynoSAM node, allowing any GFLAGS to be overwritten directly by specifying them in the commandline. e.g the dataset provider type can be specified as:
 ```
-run dynosam_utils eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
+ros2 run dynosam_utils eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
 ```
 This script will also construct the corresponding output folder (e.g. ouput_path/name) and make it, if it does not exist. In the aboce example, the program will make the folder _'/path/to/results/test/'_ and deposit all output logs in that folder.
 
