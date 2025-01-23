@@ -37,19 +37,23 @@ namespace dyno {
 struct BackendOutputPacket {
   DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
-  StatusLandmarkVector static_landmarks_;   // all frames?
-  StatusLandmarkVector dynamic_landmarks_;  // only this frame?
+  StatusLandmarkVector static_landmarks;   // all frames?
+  StatusLandmarkVector dynamic_landmarks;  // only this frame?
   // LandmarkMap static_lmks_;
   // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
   // StatusLandmarkEstimates initial_dynamic_lmks_;
   // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-  gtsam::Pose3 T_world_camera_;
-  FrameId frame_id_;
-  Timestamp timestamp_;
-  ObjectPoseMap composed_object_poses;
-  gtsam::Pose3Vector optimized_poses_;
+  gtsam::Pose3 T_world_camera;
+  FrameId frame_id;
+  Timestamp timestamp;
+  MotionEstimateMap optimized_object_motions;
+  ObjectPoseMap optimized_object_poses;
+  gtsam::Pose3Vector optimized_camera_poses;
 
-  // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+  inline FrameId getFrameId() const { return frame_id; }
+  inline Timestamp getTimestamp() const { return timestamp;  }
+  const gtsam::Pose3& pose() const { return T_world_camera; }
+
 };
 
 }  // namespace dyno

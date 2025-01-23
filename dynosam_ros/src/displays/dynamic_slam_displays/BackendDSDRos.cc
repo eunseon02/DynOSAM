@@ -41,9 +41,26 @@ void BackendDSDRos::spinOnce(
 
     //publish vo and path
     constexpr static bool kPublishOdomAsTf = false;
-    this->publishVisualOdometry(frontend_output->T_world_camera_,
-                                frontend_output->getTimestamp(),
+    this->publishVisualOdometry(backend_output->pose(),
+                                backend_output->getTimestamp(),
                                 kPublishOdomAsTf);
+    this->publishVisualOdometryPath(backend_output->optimized_camera_poses, backend_output->getTimestamp());
+
+    // publish static cloud
+    this->publishStaticPointCloud(backend_output->static_landmarks,
+                                    backend_output->pose());
+
+    // publish dynamic cloud
+    this->publishDynamicPointCloud(backend_output->dynamic_landmarks, backend_output->pose());
+
+    const auto& object_motions = backend_output->optimized_object_motions;
+    const auto& object_poses = backend_output->optimized_object_poses;
+
+    //publish objects
+    DSDTransport::Publisher object_poses_publisher = dsd_transport_.addObjectInfo(
+        object_motions, object_poses, params_.world_frame_id,
+        backend_output->getFrameId(), backend_output->getTimestamp());
+    object_poses_publisher.publishObjectOdometry();
 
 }
 

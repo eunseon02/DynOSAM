@@ -49,11 +49,6 @@ BackendInbuiltDisplayRos::BackendInbuiltDisplayRos(const DisplayParams params,
       node->create_publisher<sensor_msgs::msg::PointCloud2>("static_cloud", 1);
   dynamic_tracked_points_pub_ =
       node->create_publisher<sensor_msgs::msg::PointCloud2>("dynamic_cloud", 1);
-  // dynamic_initial_points_pub_ =
-  // node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_initial",
-  // 1); new_scaled_dynamic_points_pub_ =
-  // node->create_publisher<sensor_msgs::msg::PointCloud2>("~/backend/dynamic_newly_scaled",
-  // 1);
 
   odometry_pub_ = node->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
   object_pose_pub_ =
@@ -74,27 +69,27 @@ BackendInbuiltDisplayRos::BackendInbuiltDisplayRos(const DisplayParams params,
 void BackendInbuiltDisplayRos::spinOnce(
     const BackendOutputPacket::ConstPtr& backend_output) {
   publishPointCloud(static_tracked_points_pub_,
-                    backend_output->static_landmarks_,
-                    backend_output->T_world_camera_);
+                    backend_output->static_landmarks,
+                    backend_output->pose());
   CloudPerObject clouds_per_obj = publishPointCloud(
-      dynamic_tracked_points_pub_, backend_output->dynamic_landmarks_,
-      backend_output->T_world_camera_);
+      dynamic_tracked_points_pub_, backend_output->dynamic_landmarks,
+      backend_output->pose());
 
   publishObjectBoundingBox(object_aabb_pub_, nullptr, /* no Obb publisher */
                            clouds_per_obj, utils::fromRosTime(node_->now()),
                            "backend");
   publishObjectPositions(
-      object_pose_pub_, backend_output->composed_object_poses,
-      backend_output->frame_id_, backend_output->timestamp_, "backend");
+      object_pose_pub_, backend_output->optimized_object_poses,
+      backend_output->getFrameId(), backend_output->getTimestamp(), "backend");
 
   publishObjectPaths(
-      object_pose_path_pub_, backend_output->composed_object_poses,
-      backend_output->frame_id_, backend_output->timestamp_, "backend", 60);
+      object_pose_path_pub_, backend_output->optimized_object_poses,
+      backend_output->getFrameId(), backend_output->getTimestamp(), "backend", 60);
 
   {
     nav_msgs::msg::Odometry odom_msg;
-    utils::convertWithHeader(backend_output->T_world_camera_, odom_msg,
-                             backend_output->timestamp_, "world", "camera");
+    utils::convertWithHeader(backend_output->pose(), odom_msg,
+                             backend_output->getTimestamp(), "world", "camera");
     odometry_pub_->publish(odom_msg);
   }
 
@@ -102,14 +97,14 @@ void BackendInbuiltDisplayRos::spinOnce(
     nav_msgs::msg::Path odom_path_msg;
 
     for (const gtsam::Pose3& T_world_camera :
-         backend_output->optimized_poses_) {
+         backend_output->optimized_camera_poses) {
       // optimized camera traj
       geometry_msgs::msg::PoseStamped pose_stamped;
       utils::convertWithHeader(T_world_camera, pose_stamped,
-                               backend_output->timestamp_, "world");
+                               backend_output->getTimestamp(), "world");
 
       static std_msgs::msg::Header header;
-      header.stamp = utils::toRosTime(backend_output->timestamp_);
+      header.stamp = utils::toRosTime(backend_output->getTimestamp());
       header.frame_id = "world";
       odom_path_msg.header = header;
       odom_path_msg.poses.push_back(pose_stamped);

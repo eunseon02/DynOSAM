@@ -44,6 +44,10 @@ Tested on Ubuntu 20.04
 - [Glog](http://rpg.ifi.uzh.ch/docs/glog.html), [Gflags](https://gflags.github.io/gflags/)
 - [Gtest](https://github.com/google/googletest/blob/master/googletest/docs/primer.md) (installed automagically)
 - [config_utilities](https://github.com/MIT-SPARK/config_utilities)
+- [dynamic_slam_interfaces](https://github.com/ACFR-RPG/dynamic_slam_interfaces) (Required by default. Can be optionally made not a requirement. See Insallation instructions below)
+
+External dependancies (for visualization) not required for compilation. 
+- [rviz_dynamic_slam_plugins](https://github.com/ACFR-RPG/rviz_dynamic_slam_plugins) (Plugin to display custom `dynamic_slam_interfaces` messages which are advertised by default.)
 
 
 ## Installation Instructions
@@ -55,7 +59,25 @@ We provide a development [Dockerfile](./docker/Dockerfile) that will install all
 
 The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages.
 
-More detailed instructions are fonud here: [Insallation instructions](./docs/media/INSTALL.md)
+More detailed instructions are found here: [Insallation instructions](./docs/media/INSTALL.md)
+
+```
+# Finally compile
+cd ros_ws && colcon build
+
+# Refresh workspace
+source ~/ros_ws/install/setup.bash
+```
+
+`dynamic_slam_interfaces` is a require dependacy by default. This package is used to include custom messages that represet the state of each dynamic object per frame and is used by the ROS publishers. 
+
+To disable this dependancy compile the code as
+```
+colcon build --cmake-args -DENABLE_DYNAMIC_SLAM_INTERFACES=OFF
+```
+By default `ENABLE_DYNAMIC_SLAM_INTERFACES=ON` in the [CMakeLists.txt](./dynosam_ros/CMakeLists.txt). This CMake option will additionally change the _visualisation_ (and the output topics) used by DynoSAM. See the Visualisation section below.
+
+
 
 # 2. Usage
 
@@ -150,6 +172,14 @@ The required dataset loader can be specified by setting `--data_provider_type=2`
 Access [raw dataset](https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/) and extract in a folder. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
 
 The required dataset loader can be specified by setting `--data_provider_type=1`
+
+
+## ROS Visualisation
+All 3D visualisation in DynoSAM is done using RVIZ. Camera pose and point clouds are vizualised using standard ROS messages. Visualising the objects is more complex and we provide two different ways to do this which can be controlled at compile time using the cmake flag `-DENABLE_DYNAMIC_SLAM_INTERFACES=ON/OFF`
+
+1. (`ON`, now default) Usage of the custom `dynamic_slam_interfaces::msg::ObjectOdometry` (in [dynamic_slam_interfaces](https://github.com/ACFR-RPG/dynamic_slam_interfaces)) to publish to current state of the each object per frame. Our custom RVIZ plugin [rviz_dynamic_slam_plugins](https://github.com/ACFR-RPG/rviz_dynamic_slam_plugins) can be used to visualize this message type. The object id, current pose, velocity, path etc... will be shown for each object. This is the preferred method of visualisation.  By setting `-DENABLE_DYNAMIC_SLAM_INTERFACES=ON` the [dynamic_slam_displays](./dynosam_ros/include/dynosam_ros/displays/dynamic_slam_displays/) is conditionally compiled. 
+2. (`OFF`) Instead of using the custom messages, standard ROS visualisation messages are used instead to display the state of each object (object id, current pose...). This is more complex and results in many more advertised topics to achieve a similar (and less flexible) display than using the custom plugin/interface combination. 
+
 
 # 2. Image Pre-processing
 DynoSAM requires input image data in the form:

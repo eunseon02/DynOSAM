@@ -414,22 +414,25 @@ BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(FrameId frame_
 }
 
 BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k, Timestamp timestamp) {
-  auto accessor = new_updater_->accessorFromTheta();
+  auto accessor = formulation->accessorFromTheta();
 
   auto backend_output = std::make_shared<BackendOutputPacket>();
-  backend_output->timestamp_ = timestamp;
-  backend_output->frame_id_ = frame_k;
-  backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
-  backend_output->static_landmarks_ = accessor->getFullStaticMap();
-  backend_output->dynamic_landmarks_ =
+  backend_output->timestamp = timestamp;
+  backend_output->frame_id = frame_k;
+  backend_output->T_world_camera = accessor->getSensorPose(frame_k).get();
+  backend_output->static_landmarks = accessor->getFullStaticMap();
+  backend_output->optimized_object_motions = accessor->getObjectMotions(frame_k);
+  backend_output->dynamic_landmarks =
       accessor->getDynamicLandmarkEstimates(frame_k);
 
-  for (FrameId frame_id : map_->getFrameIds()) {
-    backend_output->optimized_poses_.push_back(
+
+  auto map = formulation->map();
+  for (FrameId frame_id : map->getFrameIds()) {
+    backend_output->optimized_camera_poses.push_back(
         accessor->getSensorPose(frame_id).get());
   }
 
-  backend_output->composed_object_poses = accessor->getObjectPoses();
+  backend_output->optimized_object_poses = accessor->getObjectPoses();
   return backend_output;
 }
 
