@@ -56,7 +56,7 @@ using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
 using MarkerArrayPub = rclcpp::Publisher<MarkerArray>;
 
 /**
- * @brief Common stateless (free) functions for all ROS displays
+ * @brief Common stateless (free) functions for all ROS displays.
  *
  */
 struct DisplayCommon {
