@@ -39,6 +39,7 @@
 #include <dynosam/visualizer/OpenCVFrontendDisplay.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/RosUtils.hpp"
 #include "dynosam_ros/displays/DisplaysImpl.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
 #include "rclcpp/parameter.hpp"
@@ -74,22 +75,25 @@ std::string DynoNode::searchForPathWithParams(const std::string& param_name,
                                               const std::string& default_path,
                                               const std::string& description) {
   // check if we've alrady declared this param
-  if (!this->has_parameter(param_name)) {
-    auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
-    param_desc.description = description;
+  const std::string path = ParameterConstructor(
 
-    this->declare_parameter(param_name, default_path, param_desc);
-  }
+      )
+      // if (!this->has_parameter(param_name)) {
+      //   auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
+      //   param_desc.description = description;
 
-  std::string path;
-  if (this->get_parameter(param_name, path)) {
-    return path;
-  } else {
-    throw std::runtime_error("ROS param `" + param_name +
-                             "` expected but not found");
-  }
+      //   this->declare_parameter(param_name, default_path, param_desc);
+      // }
 
-  throwExceptionIfPathInvalid(path);
+      // std::string path;
+      // if (this->get_parameter(param_name, path)) {
+      //   return path;
+      // } else {
+      //   throw std::runtime_error("ROS param `" + param_name +
+      //                            "` expected but not found");
+      // }
+
+      throwExceptionIfPathInvalid(path);
   return path;
 }
 

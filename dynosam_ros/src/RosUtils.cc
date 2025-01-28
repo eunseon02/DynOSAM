@@ -27,6 +27,7 @@
  THE
  *   SOFTWARE.
  */
+#include "dynosam_ros/RosUtils.hpp"
 
 #include <gtsam/geometry/Pose3.h>
 
@@ -156,19 +157,143 @@ bool dyno::convert(const gtsam::Pose3& pose,
 }
 
 namespace dyno {
-namespace utils {
 
-Timestamp fromRosTime(const rclcpp::Time& time) {
-  Timestamp timestamp;
-  convert(time, timestamp);
-  return timestamp;
+std::ostream& operator<<(std::ostream& stream, const ParameterDetails& param) {
+  stream << (std::string)param;
+  return stream;
 }
 
-rclcpp::Time toRosTime(Timestamp timestamp) {
-  rclcpp::Time time;
-  convert(timestamp, time);
-  return time;
+std::ostream& operator<<(std::ostream& stream, const rclcpp::Parameter& param) {
+  stream << param.get_name() << ": " << param.value_to_string() << " ("
+         << param.get_type_name() << ")";
+  return stream;
 }
 
-}  // namespace utils
+const std::string& ParameterDetails::name() const {
+  return default_parameter_.get_name();
+}
+
+std::string ParameterDetails::node_name() const { return node_->get_name(); }
+
+rclcpp::Parameter ParameterDetails::get() const {
+  return this->get_param(this->default_parameter_);
+}
+
+std::string ParameterDetails::get(const char* default_value) const {
+  return this->get_param<std::string>(
+      rclcpp::Parameter(this->name(), std::string(default_value)));
+}
+
+std::string ParameterDetails::get(const std::string& default_value) const {
+  return this->get_param<std::string>(
+      rclcpp::Parameter(this->name(), default_value));
+}
+
+ParameterDetails::operator std::string() const {
+  std::stringstream ss;
+  ss << "[ name: " << this->name();
+  ss << " value: " << this->get().value_to_string();
+  ss << " description: " << description_.description << "]";
+  return ss.str();
+}
+
+ParameterDetails::ParameterDetails(
+    rclcpp::Node* node, const rclcpp::Parameter& parameter,
+    const rcl_interfaces::msg::ParameterDescriptor& description)
+    : node_(node), default_parameter_(parameter), description_(description) {
+  declare();
+}
+
+rclcpp::Parameter ParameterDetails::get_param(
+    const rclcpp::Parameter& default_param) const {
+  const bool is_set = isSet();
+  bool has_default = default_param.get_type() != rclcpp::PARAMETER_NOT_SET;
+
+  if (!is_set) {
+    // if no default value we treat a not set parameter as a error as the use
+    // MUST override it via runtime configuration
+    if (!has_default) {
+      throw InvalidDefaultParameter(this->name());
+    } else {
+      return default_param;
+    }
+  }
+  return node_->get_parameter(this->name());
+}
+
+void ParameterDetails::declare() {
+  // only declare if needed
+  if (!node_->has_parameter(this->name())) {
+    const rclcpp::ParameterValue default_value =
+        default_parameter_.get_parameter_value();
+    const rclcpp::ParameterValue effective_value =
+        node_->declare_parameter(this->name(), default_value, description_);
+    (void)effective_value;
+  }
+
+  // add the param subscriber if we dont have one!!
+  // if(!param_subscriber_) {
+  //   param_subscriber_ =
+  //   std::make_shared<rclcpp::ParameterEventHandler>(node_);
+
+  //   auto cb = [&](const rclcpp::Parameter& new_parameter) {
+  //       node_->set_parameter(new_parameter);
+  //       //should check same type?
+  //       CHECK_EQ(new_parameter.get_name(), this->name());
+
+  //       property_handler_.update(this->name(),new_parameter);
+  //   };
+  //   //callback handler must be set and remain in scope for the cb's to
+  //   trigger cb_handle_ =
+  //   param_subscriber_->add_parameter_callback(this->name(), cb);
+  // }
+}
+
+ParameterConstructor::ParameterConstructor(rclcpp::Node::SharedPtr node,
+                                           const std::string& name)
+    : ParameterConstructor(node.get(), name) {}
+
+ParameterConstructor::ParameterConstructor(rclcpp::Node* node,
+                                           const std::string& name)
+    : node_(node), parameter_(name) {
+  CHECK_NOTNULL(node_);
+  parameter_descriptor_.name = name;
+  parameter_descriptor_.dynamic_typing = true;
+
+  ParameterDetails ParameterConstructor::finish() const {
+    return ParameterDetails(node_, parameter_, parameter_descriptor_);
+  }
+
+  ParameterConstructor& ParameterConstructor::description(
+      const std::string& description) {
+    parameter_descriptor_.description = description;
+    return *this;
+  }
+
+  ParameterConstructor& ParameterConstructor::read_only(bool read_only) {
+    parameter_descriptor_.read_only = read_only;
+    return *this;
+  }
+
+  ParameterConstructor& ParameterConstructor::parameter_description(
+      const rcl_interfaces::msg::ParameterDescriptor& parameter_description) {
+    parameter_descriptor_ = parameter_description;
+    return *this;
+  }
+
+  namespace utils {
+
+  Timestamp fromRosTime(const rclcpp::Time& time) {
+    Timestamp timestamp;
+    convert(time, timestamp);
+    return timestamp;
+  }
+
+  rclcpp::Time toRosTime(Timestamp timestamp) {
+    rclcpp::Time time;
+    convert(timestamp, time);
+    return time;
+  }
+
+  }  // namespace utils
 }  // namespace dyno
