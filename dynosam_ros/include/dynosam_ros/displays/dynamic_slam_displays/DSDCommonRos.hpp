@@ -53,6 +53,9 @@ using ObjectOdometryMap = gtsam::FastMap<std::string, ObjectOdometry>;
  * messages.
  * DSD is shorthand for Dynamic SLAM Display.
  *
+ * Contains an ObjectOdometry publisher on the topic "object_odometry" and a
+ * tf2_ros::TransformBroadcaster to broadcast the object odometry TF.
+ *
  */
 class DSDTransport {
  public:
@@ -88,7 +91,6 @@ class DSDTransport {
    * Functionality for publishing the object odom's themselves and broadcasting
    * their position on the tf tree using the object current pose is addionally
    * included.
-   *
    *
    */
   class Publisher {
@@ -185,7 +187,19 @@ class DSDTransport {
 };
 
 /**
- * @brief Shorthand for Dynamic Slam Display ROS
+ * @brief Shorthand for Dynamic Slam Display ROS.
+ *
+ * Facilitates publishing to the following topics:
+ *  - Visual odometry: "odometry"
+ *  - Visual odometry path: "odometry_path"
+ *  - Static point cloud: "static_cloud"
+ *  - Dynamic point cloud: "dynamid_cloud"
+ *
+ * Additionally cointains a tf2_ros::TransformBroadcaster to broadcast the
+ * visual odometry TF and a DSDTransport to publish the object odometry.
+ *
+ * The namespace of the topic is dependant on the effective namespace of the
+ * node parsed in via the constructor.
  *
  */
 class DSDRos {
