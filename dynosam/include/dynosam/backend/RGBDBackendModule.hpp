@@ -63,10 +63,6 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
   using SpinReturn = Base::SpinReturn;
 
-  // TODO: move to optimizer and put into pipeline manager where we know the
-  // type and bind write output to shutdown procedure
-  void saveGraph(const std::string& file = "rgbd_graph.dot");
-  void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
 
   std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph> constructGraph(
       FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior,
@@ -154,6 +150,9 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
                                       double& error_after);
 
   Formulation<RGBDMap>::UniquePtr makeUpdater();
+
+  BackendOutputPacket::Ptr constructOutputPacket(FrameId frame_k, Timestamp timestamp) const;
+  static BackendOutputPacket::Ptr constructOutputPacket(const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k, Timestamp timestamp);
 
  public:
   Camera::Ptr camera_;

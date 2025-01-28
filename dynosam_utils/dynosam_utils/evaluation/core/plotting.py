@@ -36,6 +36,54 @@ from copy import deepcopy
 import typing
 import math
 
+# Nic Barbara
+def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
+    """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
+    """
+    if tex_backend:
+        try:
+            plt.rcParams.update({
+                    "text.usetex": True,
+                    "font.family": "serif",
+                    "font.serif": ["Computer Modern Roman"],
+                    "text.latex.unicode": True
+                    })
+        except:
+            print("WARNING: LaTeX backend not configured properly. Not using.")
+            plt.rcParams.update({"font.family": "serif",
+                    "font.serif": ["Computer Modern Roman"],
+                        })
+
+    # Default settings
+    plt.rcParams.update({
+        "lines.linewidth": line_width,
+
+        "axes.grid" : True,
+        "axes.grid.which": "major",
+        "axes.linewidth": 0.5,
+        "axes.prop_cycle": cycler("color", prop_cycle()),
+
+        "errorbar.capsize": 2.5,
+
+        "grid.linewidth": 0.25,
+        "grid.alpha": 0.5,
+
+        "legend.framealpha": 0.7,
+        "legend.edgecolor": [1,1,1],
+
+        "savefig.dpi": output_dpi,
+        "savefig.format": 'pdf'
+    })
+
+    # Change default font sizes.
+    plt.rc('font', size=font_size)
+    plt.rc('axes', titlesize=font_size)
+    plt.rc('axes', labelsize=font_size)
+    plt.rc('xtick', labelsize=0.8*font_size)
+    plt.rc('ytick', labelsize=0.8*font_size)
+    plt.rc('legend', fontsize=0.8*font_size)
+
+
 def plot_metric(metric: PE, plot_title="", figsize=(8,8), fig = None, x_axis=None):
     """ Adds a metric plot to a plot collection.
 

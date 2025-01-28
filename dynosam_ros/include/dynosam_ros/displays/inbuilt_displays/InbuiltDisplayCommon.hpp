@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -27,6 +27,7 @@
  THE
  *   SOFTWARE.
  */
+
 #pragma once
 
 #include <pcl_conversions/pcl_conversions.h>
@@ -38,6 +39,7 @@
 #include <sensor_msgs/msg/point_cloud2.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/displays/DisplaysCommon.hpp"
 #include "image_transport/image_transport.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "nav_msgs/msg/path.hpp"
@@ -47,19 +49,11 @@
 
 namespace dyno {
 
-class DisplayRos {
+class InbuiltDisplayCommon {
  public:
-  DisplayRos(const DisplayParams& params, rclcpp::Node::SharedPtr node);
-  virtual ~DisplayRos() = default;
-
-  using PointCloud2 = sensor_msgs::msg::PointCloud2;
-  using MarkerArray =
-      visualization_msgs::msg::MarkerArray;  //! Typedef for MarkerArray msg
-
-  using PointCloud2Pub = rclcpp::Publisher<sensor_msgs::msg::PointCloud2>;
-  using OdometryPub = rclcpp::Publisher<nav_msgs::msg::Odometry>;
-  using PathPub = rclcpp::Publisher<nav_msgs::msg::Path>;
-  using MarkerArrayPub = rclcpp::Publisher<MarkerArray>;
+  InbuiltDisplayCommon(const DisplayParams& params,
+                       rclcpp::Node::SharedPtr node);
+  virtual ~InbuiltDisplayCommon() = default;
 
   virtual CloudPerObject publishPointCloud(
       PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,

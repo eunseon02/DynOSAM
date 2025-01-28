@@ -388,8 +388,8 @@ using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
 
 /**
- * @brief Generic mapping of Object Id -> FrameId -> Value within a nested
- * gtsam::FastMap structure. This is a common datastrcture used for object's to
+ * @brief Generic mapping of Object Id to FrameId to VALUE within a nested
+ * gtsam::FastMap structure. This is a common datastrcture used to
  * store temporal information about each object.
  *
  * We call it ObjectCentric map as we order by ObjectId first.
@@ -443,11 +443,11 @@ class GenericObjectCentricMap
   }
 
   const Value& at(ObjectId object_id, FrameId frame_id) const {
-    return atImpl(this, object_id, frame_id);
+    return atImpl<const This, const Value&>(this, object_id, frame_id);
   }
 
   Value& at(ObjectId object_id, FrameId frame_id) {
-    return atImpl(const_cast<const This*>(this), object_id, frame_id);
+    return atImpl<This, Value&>(const_cast<This*>(this), object_id, frame_id);
   }
 
   /**
@@ -468,14 +468,15 @@ class GenericObjectCentricMap
   }
 
  private:
-  template <typename Container>
-  static auto& atImpl(Container* container, ObjectId object_id,
-                      FrameId frame_id) {
+  template <typename Container, typename Return>
+  static Return atImpl(Container* container, ObjectId object_id,
+                       FrameId frame_id) {
     size_t out_of_range_flag;
-    const bool result = existsImpl(object_id, frame_id, out_of_range_flag);
+    const bool result =
+        container->existsImpl(object_id, frame_id, out_of_range_flag);
     if (result) {
       CHECK_EQ(out_of_range_flag, 2u);
-      return container->at(object_id)[frame_id];
+      return container->at(object_id).at(frame_id);
     } else {
       std::stringstream ss;
       ss << "Index out of range: "

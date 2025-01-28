@@ -84,7 +84,8 @@ def run_tests_for_package(package_name, unknown_args):
         print(f"No executables found on test path {tests_path}. Skipping running tests...")
         return -1
 
-    # run tests
+
+    # # run tests
     for exec in executables:
         run_executable(exec, unknown_args)
 
@@ -103,7 +104,6 @@ if __name__ == "__main__":
     )
 
     args, unknown_args = parser.parse_known_args()
-
     possible_packages = ["dynosam", "dynosam_ros"]
 
     if args.package == "all":

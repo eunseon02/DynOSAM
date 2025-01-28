@@ -28,7 +28,8 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/DisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/InbuiltDisplayCommon.hpp"
+#include "dynosam_ros/displays/DisplaysCommon.hpp"
 
 #include <pcl/common/centroid.h>
 #include <pcl/common/common.h>
@@ -41,78 +42,30 @@
 
 namespace dyno {
 
-DisplayRos::DisplayRos(const DisplayParams& params,
-                       rclcpp::Node::SharedPtr node)
-    : params_(params), node_(node) {
-  // camera_frustrum_pub_ =
-  // node_->create_publisher<visualization_msgs::msg::MarkerArray>("odom_frustrum",
-  // 1);
-}
+InbuiltDisplayCommon::InbuiltDisplayCommon(const DisplayParams& params,
+                                           rclcpp::Node::SharedPtr node)
+    : params_(params), node_(node) {}
 
-CloudPerObject DisplayRos::publishPointCloud(
+CloudPerObject InbuiltDisplayCommon::publishPointCloud(
     PointCloud2Pub::SharedPtr pub, const StatusLandmarkVector& landmarks,
     const gtsam::Pose3& T_world_camera) {
-  pcl::PointCloud<pcl::PointXYZRGB> cloud;
-
-  CloudPerObject clouds_per_obj;
-
-  for (const auto& status_estimate : landmarks) {
-    Landmark lmk_world = status_estimate.value();
-    const ObjectId object_id = status_estimate.objectId();
-    if (status_estimate.referenceFrame() == ReferenceFrame::LOCAL) {
-      lmk_world = T_world_camera * status_estimate.value();
-    } else if (status_estimate.referenceFrame() == ReferenceFrame::OBJECT) {
-      throw DynosamException(
-          "Cannot display object point in the object reference frame");
-    }
-
-    pcl::PointXYZRGB pt;
-    if (status_estimate.isStatic()) {
-      // publish static lmk's as white
-      pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), 0, 0, 0);
-    } else {
-      const cv::Scalar colour = Color::uniqueId(object_id);
-      pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0),
-                            colour(1), colour(2));
-    }
-    cloud.points.push_back(pt);
-    clouds_per_obj[object_id].push_back(pt);
-  }
-
-  sensor_msgs::msg::PointCloud2 pc2_msg;
-  pcl::toROSMsg(cloud, pc2_msg);
-  pc2_msg.header.frame_id = params_.world_frame_id_;
-  pub->publish(pc2_msg);
-
-  return clouds_per_obj;
+  return DisplayCommon::publishPointCloud(pub, landmarks, T_world_camera, params_.world_frame_id);
 }
 
-void DisplayRos::publishOdometry(OdometryPub::SharedPtr pub,
-                                 const gtsam::Pose3& T_world_camera,
-                                 Timestamp timestamp) {
-  nav_msgs::msg::Odometry odom_msg;
-  utils::convertWithHeader(T_world_camera, odom_msg, timestamp,
-                           params_.world_frame_id_, params_.camera_frame_id_);
-  pub->publish(odom_msg);
+void InbuiltDisplayCommon::publishOdometry(OdometryPub::SharedPtr pub,
+                                           const gtsam::Pose3& T_world_camera,
+                                           Timestamp timestamp) {
+  DisplayCommon::publishOdometry(pub, T_world_camera, timestamp,
+                           params_.world_frame_id, params_.camera_frame_id);
 }
 
-void DisplayRos::publishOdometryPath(PathPub::SharedPtr pub,
-                                     const gtsam::Pose3Vector& poses,
-                                     Timestamp latest_timestamp) {
-  nav_msgs::msg::Path path;
-  for (const gtsam::Pose3& odom : poses) {
-    geometry_msgs::msg::PoseStamped pose_stamped;
-    utils::convertWithHeader(odom, pose_stamped, latest_timestamp,
-                             params_.world_frame_id_);
-    path.poses.push_back(pose_stamped);
-  }
-
-  path.header.stamp = utils::toRosTime(latest_timestamp);
-  path.header.frame_id = params_.world_frame_id_;
-  pub->publish(path);
+void InbuiltDisplayCommon::publishOdometryPath(PathPub::SharedPtr pub,
+                                               const gtsam::Pose3Vector& poses,
+                                               Timestamp latest_timestamp) {
+  DisplayCommon::publishOdometryPath(pub, poses, latest_timestamp, params_.world_frame_id);
 }
 
-void DisplayRos::publishObjectPositions(
+void InbuiltDisplayCommon::publishObjectPositions(
     MarkerArrayPub::SharedPtr pub, const ObjectPoseMap& object_positions,
     FrameId frame_id, Timestamp latest_timestamp,
     const std::string& prefix_marker_namespace, bool draw_labels,
@@ -136,7 +89,7 @@ void DisplayRos::publishObjectPositions(
     // assume
     // object centroid per frame
     visualization_msgs::msg::Marker marker;
-    marker.header.frame_id = params_.world_frame_id_;
+    marker.header.frame_id = params_.world_frame_id;
     marker.ns = prefix_marker_namespace + "_object_positions";
     marker.id = object_id;
     marker.type = visualization_msgs::msg::Marker::SPHERE;
@@ -172,12 +125,10 @@ void DisplayRos::publishObjectPositions(
   pub->publish(object_pose_marker_array);
 }
 
-void DisplayRos::publishObjectPaths(MarkerArrayPub::SharedPtr pub,
-                                    const ObjectPoseMap& object_positions,
-                                    FrameId frame_id,
-                                    Timestamp latest_timestamp,
-                                    const std::string& prefix_marker_namespace,
-                                    const int min_poses) {
+void InbuiltDisplayCommon::publishObjectPaths(
+    MarkerArrayPub::SharedPtr pub, const ObjectPoseMap& object_positions,
+    FrameId frame_id, Timestamp latest_timestamp,
+    const std::string& prefix_marker_namespace, const int min_poses) {
   visualization_msgs::msg::MarkerArray object_path_marker_array;
   static visualization_msgs::msg::Marker delete_marker;
   delete_marker.action = visualization_msgs::msg::Marker::DELETEALL;
@@ -261,7 +212,7 @@ void DisplayRos::publishObjectPaths(MarkerArrayPub::SharedPtr pub,
   pub->publish(object_path_marker_array);
 }
 
-void DisplayRos::publishObjectBoundingBox(
+void InbuiltDisplayCommon::publishObjectBoundingBox(
     MarkerArrayPub::SharedPtr aabb_pub, MarkerArrayPub::SharedPtr obb_pub,
     const CloudPerObject& cloud_per_object, Timestamp timestamp,
     const std::string& prefix_marker_namespace) {
@@ -281,7 +232,7 @@ void DisplayRos::publishObjectBoundingBox(
   if (obb_pub) aabb_pub->publish(obb_markers);
 }
 
-void DisplayRos::createAxisMarkers(
+void InbuiltDisplayCommon::createAxisMarkers(
     const gtsam::Pose3& pose, MarkerArray& axis_markers, Timestamp timestamp,
     const cv::Scalar& colour, const std::string& frame, const std::string& ns,
     double length, double radius) {
@@ -329,7 +280,7 @@ void DisplayRos::createAxisMarkers(
   axis_markers.markers.push_back(make_cylinder(z_pose));
 }
 
-void DisplayRos::constructBoundingBoxeMarkers(
+void InbuiltDisplayCommon::constructBoundingBoxeMarkers(
     const CloudPerObject& cloud_per_object, MarkerArray& aabb_markers,
     MarkerArray& obb_markers, Timestamp timestamp,
     const std::string& prefix_marker_namespace) {
@@ -428,7 +379,7 @@ void DisplayRos::constructBoundingBoxeMarkers(
   }
 }
 
-DisplayRos::MarkerArray DisplayRos::createCameraMarker(
+MarkerArray InbuiltDisplayCommon::createCameraMarker(
     const gtsam::Pose3& T_world_x, Timestamp timestamp, const std::string& ns,
     const cv::Scalar& colour, double marker_scale) {
   auto transform_odom_to =
@@ -457,7 +408,7 @@ DisplayRos::MarkerArray DisplayRos::createCameraMarker(
   visualization_msgs::msg::Marker marker;
 
   // the marker will be displayed in frame_id
-  marker.header.frame_id = params_.world_frame_id_;
+  marker.header.frame_id = params_.world_frame_id;
   marker.header.stamp = ros_time;
   marker.ns = ns;
   marker.action = 0;

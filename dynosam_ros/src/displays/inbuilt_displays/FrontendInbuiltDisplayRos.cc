@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam_ros/FrontendDisplayRos.hpp"
+#include "dynosam_ros/displays/inbuilt_displays/FrontendInbuiltDisplayRos.hpp"
 
 #include <cv_bridge/cv_bridge.h>
 #include <glog/logging.h>
@@ -50,9 +50,9 @@
 
 namespace dyno {
 
-FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params,
-                                       rclcpp::Node::SharedPtr node)
-    : DisplayRos(params, node) {
+FrontendInbuiltDisplayRos::FrontendInbuiltDisplayRos(
+    const DisplayParams params, rclcpp::Node::SharedPtr node)
+    : InbuiltDisplayCommon(params, node) {
   const rclcpp::QoS& sensor_data_qos = rclcpp::SensorDataQoS();
   tracking_image_pub_ =
       image_transport::create_publisher(node.get(), "tracking_image");
@@ -96,11 +96,11 @@ FrontendDisplayRos::FrontendDisplayRos(const DisplayParams params,
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*node_);
 }
 
-FrontendDisplayRos::~FrontendDisplayRos() {
+FrontendInbuiltDisplayRos::~FrontendInbuiltDisplayRos() {
   if (video_writer_) video_writer_->release();
 }
 
-void FrontendDisplayRos::spinOnce(
+void FrontendInbuiltDisplayRos::spinOnce(
     const FrontendOutputPacketBase::ConstPtr& frontend_output) {
   // TODO: does frontend or backend publish tf transform?
   if (frontend_output->debug_imagery_)
@@ -135,7 +135,7 @@ void FrontendDisplayRos::spinOnce(
   }
 }
 
-void FrontendDisplayRos::processRGBDOutputpacket(
+void FrontendInbuiltDisplayRos::processRGBDOutputpacket(
     const RGBDInstanceOutputPacket::ConstPtr& rgbd_frontend_output) {
   CHECK(rgbd_frontend_output);
   publishPointCloud(static_tracked_points_pub_,
@@ -303,7 +303,7 @@ void FrontendDisplayRos::processRGBDOutputpacket(
 
     // object_motions_msg.header.seq = current_frame_id;
     object_motions_msg.header.stamp = node_->now();
-    object_motions_msg.header.frame_id = params_.world_frame_id_;
+    object_motions_msg.header.frame_id = params_.world_frame_id;
 
     for (const auto& [object_id, current_obj_motion] : obj_motions) {
       geometry_msgs::msg::PoseStamped current_obj_motion_msg;
@@ -485,23 +485,24 @@ void FrontendDisplayRos::processRGBDOutputpacket(
   }
 }
 
-void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera,
-                                         Timestamp timestamp) {
-  DisplayRos::publishOdometry(odometry_pub_, T_world_camera, timestamp);
+void FrontendInbuiltDisplayRos::publishOdometry(
+    const gtsam::Pose3& T_world_camera, Timestamp timestamp) {
+  InbuiltDisplayCommon::publishOdometry(odometry_pub_, T_world_camera,
+                                        timestamp);
   geometry_msgs::msg::TransformStamped t;
   // utils::convertWithHeader(T_world_camera, t, timestamp,
-  // params_.world_frame_id_, params_.camera_frame_id_); Send the transformation
+  // params_.world_frame_id, params_.camera_frame_id_); Send the transformation
   dyno::convert<gtsam::Pose3, geometry_msgs::msg::TransformStamped>(
       T_world_camera, t);
 
   t.header.stamp = node_->now();
-  t.header.frame_id = params_.world_frame_id_;
-  t.child_frame_id = params_.camera_frame_id_;
+  t.header.frame_id = params_.world_frame_id;
+  t.child_frame_id = params_.camera_frame_id;
 
   tf_broadcaster_->sendTransform(t);
 }
 
-// void FrontendDisplayRos::publishOdometryPath(const gtsam::Pose3&
+// void FrontendInbuiltDisplayRos::publishOdometryPath(const gtsam::Pose3&
 // T_world_camera, Timestamp timestamp) {
 //     geometry_msgs::msg::PoseStamped pose_stamped;
 //     utils::convertWithHeader(T_world_camera, pose_stamped, timestamp,
@@ -517,7 +518,8 @@ void FrontendDisplayRos::publishOdometry(const gtsam::Pose3& T_world_camera,
 
 // }
 
-void FrontendDisplayRos::publishDebugImage(const DebugImagery& debug_imagery) {
+void FrontendInbuiltDisplayRos::publishDebugImage(
+    const DebugImagery& debug_imagery) {
   if (debug_imagery.tracking_image.empty()) return;
 
   // cv::Mat resized_image;
@@ -532,7 +534,7 @@ void FrontendDisplayRos::publishDebugImage(const DebugImagery& debug_imagery) {
 
 // TODO: lots of repeated code with this funyction and publishObjectPositions -
 // need to functionalise
-void FrontendDisplayRos::publishGroundTruthInfo(
+void FrontendInbuiltDisplayRos::publishGroundTruthInfo(
     Timestamp timestamp, const GroundTruthInputPacket& gt_packet,
     const cv::Mat& rgb) {
   // odometry gt
