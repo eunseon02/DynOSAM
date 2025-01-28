@@ -79,9 +79,17 @@ TEST(RosTraits, testParamTypes) {
             rcl_interfaces::msg::ParameterType::PARAMETER_DOUBLE_ARRAY);
 }
 
-TEST(ParameterConstructor, defaultConstruction) {
+TEST(ParameterConstructor, defaultConstructionShared) {
   auto node = std::make_shared<rclcpp::Node>("test_node");
   ParameterConstructor pc(node, "test_param");
+  const rclcpp::ParameterValue &pc_as_value = pc;
+  EXPECT_EQ(pc_as_value.get_type(), rclcpp::PARAMETER_NOT_SET);
+  EXPECT_EQ(pc.name(), "test_param");
+}
+
+TEST(ParameterConstructor, defaultConstructionRawP) {
+  auto node = std::make_shared<rclcpp::Node>("test_node");
+  ParameterConstructor pc(node.get(), "test_param");
   const rclcpp::ParameterValue &pc_as_value = pc;
   EXPECT_EQ(pc_as_value.get_type(), rclcpp::PARAMETER_NOT_SET);
   EXPECT_EQ(pc.name(), "test_param");
@@ -119,11 +127,17 @@ TEST(ParameterConstructor, testFinishWithDefault) {
 
 TEST(ParameterConstructor, testFinishWithoutDefault) {
   auto node = std::make_shared<rclcpp::Node>("test_node");
-  ParameterDetails detail = ParameterConstructor(node, "test_param")
-                                .description("a test")
-                                .read_only(true)
-                                .finish();
-  EXPECT_THROW({ detail.get(); }, InvalidDefaultParameter);
+  ParameterDetails detail_shared = ParameterConstructor(node, "test_param")
+                                       .description("a test")
+                                       .read_only(true)
+                                       .finish();
+  EXPECT_THROW({ detail_shared.get(); }, InvalidDefaultParameter);
+
+  ParameterDetails detail_raw = ParameterConstructor(node.get(), "test_param")
+                                    .description("a test")
+                                    .read_only(true)
+                                    .finish();
+  EXPECT_THROW({ detail_raw.get(); }, InvalidDefaultParameter);
 }
 
 TEST(ParameterConstructor, testFinishWithoutDefaultButOverwrite) {
@@ -193,6 +207,28 @@ TEST(ParameterDetails, testGetParamWithOverrides) {
   EXPECT_THROW(
       { ParameterConstructor(node, "parameter_wrong_type", 10).finish(); },
       rclcpp::exceptions::InvalidParameterTypeException);
+}
+
+TEST(ParameterDetails, testGetParamWithMutableString) {
+  rclcpp::NodeOptions no;
+  no.parameter_overrides({
+      {"param", "value"},
+  });
+
+  auto node = std::make_shared<rclcpp::Node>("test_node", no);
+
+  struct Params {
+    std::string value = "a";
+  };
+
+  Params params;
+  // this tests the case where the ValueT type is not a const& and we can still
+  // use it!!
+  params.value = ParameterConstructor(node, "param", params.value)
+                     .finish()
+                     .get<std::string>();
+  // test the value is in the override not the default one
+  EXPECT_EQ(params.value, "value");
 }
 
 TEST(ParameterDetails, testGetWithNoOverridesWithDefault) {

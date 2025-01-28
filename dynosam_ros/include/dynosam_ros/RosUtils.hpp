@@ -128,7 +128,8 @@ class InvalidDefaultParameter : public DynosamException {
                           const std::string &custom_message = std::string())
       : DynosamException(
             "Missing required param " + missing_param +
-            " which must set at runtime by the user (e.g. via a config file)" +
+            " which must set at runtime by the user (e.g. via a config file or "
+            "via launch configurations)" +
             (custom_message.empty() ? "" : std::string(": " + custom_message))),
         missing_param_(missing_param),
         custom_message_(custom_message) {}
@@ -480,5 +481,10 @@ template <>
 struct dyno::traits<rclcpp::ParameterValue>
     : dyno::internal::RosParameterType<
           rcl_interfaces::msg::ParameterType::PARAMETER_NOT_SET> {};
+
+template <>
+struct dyno::traits<std::string>
+    : dyno::internal::RosParameterType<
+          rcl_interfaces::msg::ParameterType::PARAMETER_STRING> {};
 
 #include "dynosam_ros/RosUtils-inl.hpp"

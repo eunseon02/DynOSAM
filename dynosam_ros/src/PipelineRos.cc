@@ -75,25 +75,13 @@ std::string DynoNode::searchForPathWithParams(const std::string& param_name,
                                               const std::string& default_path,
                                               const std::string& description) {
   // check if we've alrady declared this param
-  const std::string path = ParameterConstructor(
-
-      )
-      // if (!this->has_parameter(param_name)) {
-      //   auto param_desc = rcl_interfaces::msg::ParameterDescriptor{};
-      //   param_desc.description = description;
-
-      //   this->declare_parameter(param_name, default_path, param_desc);
-      // }
-
-      // std::string path;
-      // if (this->get_parameter(param_name, path)) {
-      //   return path;
-      // } else {
-      //   throw std::runtime_error("ROS param `" + param_name +
-      //                            "` expected but not found");
-      // }
-
-      throwExceptionIfPathInvalid(path);
+  // use non-default version so that ParameterConstructor throws exception if no
+  // parameter is provided on the param server
+  const std::string path = ParameterConstructor(this, param_name)
+                               .description(description)
+                               .finish()
+                               .get<std::string>();
+  throwExceptionIfPathInvalid(path);
   return path;
 }
 
@@ -106,7 +94,22 @@ void DynoPipelineManagerRos::initalisePipeline() {
 
   auto params = getDynoParams();
 
-  DisplayParams display_params{};
+  // setup display params
+  DisplayParams display_params;
+  display_params.camera_frame_id =
+      ParameterConstructor(this, "camera_frame_id",
+                           display_params.camera_frame_id)
+          .description(
+              "ROS frame id for the camera (ie. the measured odometry)")
+          .finish()
+          .get<std::string>();
+  display_params.world_frame_id =
+      ParameterConstructor(this, "world_frame_id",
+                           display_params.world_frame_id)
+          .description("ROS frame id for the static workd frame (ie. odometry)")
+          .finish()
+          .get<std::string>();
+
   auto frontend_display = std::make_shared<dyno::FrontendDisplayRos>(
       display_params, this->create_sub_node("frontend"));
   auto backend_display = std::make_shared<dyno::BackendDisplayRos>(

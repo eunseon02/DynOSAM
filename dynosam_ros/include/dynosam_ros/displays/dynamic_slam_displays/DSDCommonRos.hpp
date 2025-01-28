@@ -31,6 +31,7 @@
 #pragma once
 
 #include <dynosam/common/Types.hpp>
+#include <dynosam/utils/Macros.hpp>
 
 #include "dynamic_slam_interfaces/msg/object_odometry.hpp"
 #include "dynosam_ros/Display-Definitions.hpp"
@@ -55,14 +56,17 @@ using ObjectOdometryMap = gtsam::FastMap<std::string, ObjectOdometry>;
  */
 class DSDTransport {
  public:
+  DYNO_POINTER_TYPEDEFS(DSDTransport)
+
   DSDTransport(rclcpp::Node::SharedPtr node);
 
   /**
    * @brief Construct object id tf link from an object id.
-   * This will be used as the link in the ROS tf tree and as the child frame id for the object odometry. 
-   * 
+   * This will be used as the link in the ROS tf tree and as the child frame id
+   * for the object odometry.
+   *
    * @param object_id ObjectId
-   * @return std::string 
+   * @return std::string
    */
   static std::string constructObjectFrameLink(ObjectId object_id);
 
@@ -78,41 +82,43 @@ class DSDTransport {
       FrameId frame_id_k, Timestamp timestamp_k,
       const std::string& frame_id_link);
 
-    /**
-     * @brief Nested Publisher that publishes all the object odometries for a single frame/timestamp.
-     * Object odometries are set on construction. Functionality for publishing the object odom's themselves and
-     * broadcasting their position on the tf tree using the object current pose is addionally included.
-     *
-     * 
-     */
+  /**
+   * @brief Nested Publisher that publishes all the object odometries for a
+   * single frame/timestamp. Object odometries are set on construction.
+   * Functionality for publishing the object odom's themselves and broadcasting
+   * their position on the tf tree using the object current pose is addionally
+   * included.
+   *
+   *
+   */
   class Publisher {
    public:
     /**
      * @brief Publish the contained object odometries.
-     * 
+     *
      */
     void publishObjectOdometry();
 
     /**
      * @brief Broadcast the transform of each object using their pose.
-     * Transforms will be constructed between the Publisher::frame_id_link_ 
+     * Transforms will be constructed between the Publisher::frame_id_link_
      * and object frame link (as the child_frame_id).
-     * 
+     *
      */
     void publishObjectTransforms();
 
     /**
      * @brief Get the frame id
-     * 
-     * @return FrameId 
+     *
+     * @return FrameId
      */
     inline FrameId getFrameId() const { return frame_id_; }
     inline Timestamp getTimestamp() const { return timestamp_; }
 
     /**
      * @brief Get the (tf) frame id used as the parent of the tree.
-     * 
-     * @return const std::string& 
+     *
+     * @return const std::string&
      */
     inline const std::string& getFrameIdLink() const { return frame_id_link_; }
 
@@ -130,15 +136,18 @@ class DSDTransport {
 
     /**
      * @brief Construct a new Publisher object.
-     * Upon construction the publisher will broadcast to the 'object_odometry' topic
-     * under the effective namespace of the provided node.
-     * 
+     * Upon construction the publisher will broadcast to the 'object_odometry'
+     * topic under the effective namespace of the provided node.
+     *
      * @param node rclcpp::Node::SharedPtr
-     * @param object_odom_publisher ObjectOdometryPub::SharedPtr Object odom publisher to share between all Publishers.
-     * @param tf_broadcaster std::shared_ptr<tf2_ros::TransformBroadcaster> TF broadcaster to share between all Publishers.
+     * @param object_odom_publisher ObjectOdometryPub::SharedPtr Object odom
+     * publisher to share between all Publishers.
+     * @param tf_broadcaster std::shared_ptr<tf2_ros::TransformBroadcaster> TF
+     * broadcaster to share between all Publishers.
      * @param motions const MotionEstimateMap& estimated motions at time (k)
      * @param poses const ObjectPoseMap& poses at time (... to k)
-     * @param frame_id_link const std::string& parent tf tree link (e.g. odom/world.)
+     * @param frame_id_link const std::string& parent tf tree link (e.g.
+     * odom/world.)
      * @param frame_id FrameId current frame (k)
      * @param timestamp Timestamp
      */
@@ -151,16 +160,18 @@ class DSDTransport {
   };
 
   /**
-   * @brief Create a object odometry Publisher given object state (motion and pose)
-   * information for a given frame (k). The resulting publisher can then be used to published ObjectOdometry messages
-   * and update the tf tree with the object poses w.r.t to the parent frame id link.
-   * 
+   * @brief Create a object odometry Publisher given object state (motion and
+   * pose) information for a given frame (k). The resulting publisher can then
+   * be used to published ObjectOdometry messages and update the tf tree with
+   * the object poses w.r.t to the parent frame id link.
+   *
    * @param motions_k const MotionEstimateMap& estimated motions at time (k)
    * @param poses const ObjectPoseMap& poses at time (... to k)
-   * @param frame_id_link const std::string& parent tf tree link (e.g. odom/world.)
+   * @param frame_id_link const std::string& parent tf tree link (e.g.
+   * odom/world.)
    * @param frame_id FrameId current frame (k)
    * @param timestamp Timestamp
-   * @return Publisher 
+   * @return Publisher
    */
   Publisher addObjectInfo(const MotionEstimateMap& motions_k,
                           const ObjectPoseMap& poses,

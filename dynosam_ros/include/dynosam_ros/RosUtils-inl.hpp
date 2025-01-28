@@ -90,7 +90,7 @@ template <typename ValueTypeT>
 ParameterConstructor::ParameterConstructor(rclcpp::Node::SharedPtr node,
                                            const std::string &name,
                                            ValueTypeT value)
-    : ParameterConstructor<ValueTypeT>(node.get(), name, value) {}
+    : ParameterConstructor(node.get(), name, value) {}
 
 template <typename ValueTypeT>
 ParameterConstructor::ParameterConstructor(rclcpp::Node *node,

@@ -34,15 +34,25 @@
 
 #include <dynosam/utils/SafeCast.hpp>
 
+#include "dynosam_ros/RosUtils.hpp"
+
 namespace dyno {
 
 FrontendDSDRos::FrontendDSDRos(const DisplayParams params,
                                rclcpp::Node::SharedPtr node)
-    : FrontendDisplay(),
-      DSDRos(params, node),
-      dsd_ground_truth_transport_(node->create_sub_node("ground_truth")) {
+    : FrontendDisplay(), DSDRos(params, node) {
   tracking_image_pub_ =
       image_transport::create_publisher(node.get(), "tracking_image");
+
+  auto ground_truth_node = node->create_sub_node("ground_truth");
+  dsd_ground_truth_transport_ =
+      std::make_unique<DSDTransport>(ground_truth_node);
+  vo_ground_truth_publisher_ =
+      ground_truth_node->create_publisher<nav_msgs::msg::Odometry>("odometry",
+                                                                   1);
+  vo_path_ground_truth_publisher_ =
+      ground_truth_node->create_publisher<nav_msgs::msg::Path>("odometry_path",
+                                                               1);
 }
 
 void FrontendDSDRos::spinOnce(
@@ -84,6 +94,8 @@ void FrontendDSDRos::tryPublishGroundTruth(
 
   const DebugImagery& debug_imagery = *frontend_output->debug_imagery_;
   const cv::Mat& rgb_image = debug_imagery.rgb_viz;
+  const auto timestamp = frontend_output->getTimestamp();
+  const auto frame_id = frontend_output->getFrameId();
 
   if (rgb_image.empty()) return;
 
@@ -111,10 +123,34 @@ void FrontendDSDRos::tryPublishGroundTruth(
 
   // will this result in confusing tf's since the gt object and estimated
   // objects use the same link?
-  DSDTransport::Publisher publisher = dsd_ground_truth_transport_.addObjectInfo(
-      motions, poses, params_.world_frame_id, frontend_output->getFrameId(),
-      frontend_output->getTimestamp());
+  DSDTransport::Publisher publisher =
+      dsd_ground_truth_transport_->addObjectInfo(
+          motions, poses, params_.world_frame_id, frame_id, timestamp);
   publisher.publishObjectOdometry();
+
+  // publish ground truth odom
+  const gtsam::Pose3& T_world_camera = gt_packet.X_world_;
+  nav_msgs::msg::Odometry odom_msg;
+  utils::convertWithHeader(T_world_camera, odom_msg, timestamp,
+                           params_.world_frame_id, params_.camera_frame_id);
+  vo_ground_truth_publisher_->publish(odom_msg);
+
+  // odom path gt
+  // make static variable since we dont build up the path anywhere else
+  // and just append the last gt camera pose to the path msg
+  static nav_msgs::msg::Path gt_odom_path_msg;
+  static std_msgs::msg::Header header;
+
+  geometry_msgs::msg::PoseStamped pose_stamped;
+  utils::convertWithHeader(T_world_camera, pose_stamped, timestamp,
+                           params_.world_frame_id);
+
+  header.stamp = utils::toRosTime(timestamp);
+  header.frame_id = params_.world_frame_id;
+  gt_odom_path_msg.header = header;
+  gt_odom_path_msg.poses.push_back(pose_stamped);
+
+  vo_path_ground_truth_publisher_->publish(gt_odom_path_msg);
 }
 void FrontendDSDRos::tryPublishVisualOdometry(
     const FrontendOutputPacketBase::ConstPtr& frontend_output) {

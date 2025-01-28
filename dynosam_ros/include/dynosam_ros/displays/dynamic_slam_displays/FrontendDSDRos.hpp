@@ -64,9 +64,12 @@ class FrontendDSDRos : public FrontendDisplay, DSDRos {
 
  private:
   //! Transport for ground truth publishing
-  DSDTransport dsd_ground_truth_transport_;
+  DSDTransport::UniquePtr dsd_ground_truth_transport_;
   //! Image Transport for tracking image
   image_transport::Publisher tracking_image_pub_;
+
+  OdometryPub::SharedPtr vo_ground_truth_publisher_;
+  PathPub::SharedPtr vo_path_ground_truth_publisher_;
 };
 
 }  // namespace dyno

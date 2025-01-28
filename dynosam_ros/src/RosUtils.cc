@@ -259,41 +259,42 @@ ParameterConstructor::ParameterConstructor(rclcpp::Node* node,
   CHECK_NOTNULL(node_);
   parameter_descriptor_.name = name;
   parameter_descriptor_.dynamic_typing = true;
+}
 
-  ParameterDetails ParameterConstructor::finish() const {
-    return ParameterDetails(node_, parameter_, parameter_descriptor_);
-  }
+ParameterDetails ParameterConstructor::finish() const {
+  return ParameterDetails(node_, parameter_, parameter_descriptor_);
+}
 
-  ParameterConstructor& ParameterConstructor::description(
-      const std::string& description) {
-    parameter_descriptor_.description = description;
-    return *this;
-  }
+ParameterConstructor& ParameterConstructor::description(
+    const std::string& description) {
+  parameter_descriptor_.description = description;
+  return *this;
+}
 
-  ParameterConstructor& ParameterConstructor::read_only(bool read_only) {
-    parameter_descriptor_.read_only = read_only;
-    return *this;
-  }
+ParameterConstructor& ParameterConstructor::read_only(bool read_only) {
+  parameter_descriptor_.read_only = read_only;
+  return *this;
+}
 
-  ParameterConstructor& ParameterConstructor::parameter_description(
-      const rcl_interfaces::msg::ParameterDescriptor& parameter_description) {
-    parameter_descriptor_ = parameter_description;
-    return *this;
-  }
+ParameterConstructor& ParameterConstructor::parameter_description(
+    const rcl_interfaces::msg::ParameterDescriptor& parameter_description) {
+  parameter_descriptor_ = parameter_description;
+  return *this;
+}
 
-  namespace utils {
+namespace utils {
 
-  Timestamp fromRosTime(const rclcpp::Time& time) {
-    Timestamp timestamp;
-    convert(time, timestamp);
-    return timestamp;
-  }
+Timestamp fromRosTime(const rclcpp::Time& time) {
+  Timestamp timestamp;
+  convert(time, timestamp);
+  return timestamp;
+}
 
-  rclcpp::Time toRosTime(Timestamp timestamp) {
-    rclcpp::Time time;
-    convert(timestamp, time);
-    return time;
-  }
+rclcpp::Time toRosTime(Timestamp timestamp) {
+  rclcpp::Time time;
+  convert(timestamp, time);
+  return time;
+}
 
-  }  // namespace utils
+}  // namespace utils
 }  // namespace dyno
