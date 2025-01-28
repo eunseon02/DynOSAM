@@ -20,13 +20,13 @@ We kindly ask to cite our paper if you find this work useful:
 ```bibtex
 
 @misc{morris2025dynosam,
-      title={DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM}, 
+      title={DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM},
       author={Jesse Morris and Yiduo Wang and Mikolaj Kliniewski and Viorela Ila},
       year={2025},
       eprint={2501.11893},
       archivePrefix={arXiv},
       primaryClass={cs.RO},
-      url={https://arxiv.org/abs/2501.11893}, 
+      url={https://arxiv.org/abs/2501.11893},
 }
 
 ```
@@ -78,7 +78,7 @@ More detailed instructions are found here: [Insallation instructions](./docs/med
 # 2. Usage
 
 ## Documentation
-We auto generate [Doxygen code docs](https://acfr-rpg.github.io/DynOSAM/doxygen/) for all classes in DynoSAM. The code docs are up-to-date with the _main_ branch. 
+We auto generate [Doxygen code docs](https://acfr-rpg.github.io/DynOSAM/doxygen/) for all classes in DynoSAM. The code docs are up-to-date with the _main_ branch.
 
 ## Running and Configuration
 
@@ -146,15 +146,16 @@ We provide a number of data providers which process datasets into the input form
 
 We are currently working on providing datasets to process live data, along-side pre-processing modules which will be available soon.
 
+[Download](https://unisyd-my.sharepoint.com/:f:/g/personal/jesse_morris_sydney_edu_au/EhK53_rmAqRDtHslS9HEuwwByFpR2oX59A_CKQTKrc9dAA?e=nbmM8h) processed version of the KITTI tracking and OMD sequences. The other sequences were used in their raw form.
+
 ### i. KITTI Tracking Dataset
 We use a modified version of the KITTI tracking dataset which includes ground truth motion data, as well dense optical-flow, depth and segmentation masks.
-TODO:
 
 The required dataset loader can be specified by setting `--data_provider_type=0`
 
 ### ii. Oxford Multimotion Dataset (OMD)
 Raw data can be downloaded from the [project page](https://robotic-esp.com/datasets/omd/).
-For our 2024 T-RO paper we used a modified version of the dataset which can be downloaded here. (TODO) which is associated with the current dataloader.
+For our 2024 T-RO paper we used a modified version of the dataset which can be downloaded from the above link.
 
 C++ code to parse the raw dataset (although not used) is also provided and the code used to pre-process the dataset (as optical flow and segmentation masks are not provided in the raw dataset) will also be provided soon.
 
