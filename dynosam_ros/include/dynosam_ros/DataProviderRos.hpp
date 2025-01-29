@@ -30,12 +30,14 @@
 
 #pragma once
 
+#include <dynosam/common/ImageTypes.hpp>
 #include <dynosam/dataprovider/DataProvider.hpp>
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "cv_bridge/cv_bridge.h"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
+#include "rclcpp/wait_set.hpp"
 #include "sensor_msgs/image_encodings.hpp"
 #include "sensor_msgs/msg/image.hpp"
 
@@ -55,12 +57,45 @@ class DataProviderRos : public DataProvider {
   const cv::Mat readMaskRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
 
+  template <class Rep = int64_t, class Period = std::milli>
+  const CameraParams& waitAndSetCameraParams(
+      const std::string& topic = "image/camera_info",
+      const std::chrono::duration<Rep, Period>& time_to_wait =
+          std::chrono::duration<Rep, Period>(-1)) {
+    // rclcpp::wait_for_message<
+  }
+
+  CameraParams::Optional getCameraParams() const override;
+
  protected:
   const cv_bridge::CvImageConstPtr readRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
 
+  template <typename IMAGETYPE>
+  const cv::Mat convertRosImage(
+      const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
+    const cv_bridge::CvImageConstPtr cvb_image = readRosImage(img_msg);
+
+    try {
+      const cv::Mat img = cvb_image->image;
+      image_traits<IMAGETYPE>::validate(img);
+      return img;
+
+    } catch (const InvalidImageTypeException& exception) {
+      RCLCPP_FATAL_STREAM(node_->get_logger(),
+                          image_traits<IMAGETYPE>::name()
+                              << " Image msg was of the wrong type (validate "
+                                 "failed with exception "
+                              << exception.what() << "). "
+                              << "ROS encoding type used was "
+                              << cvb_image->encoding);
+      rclcpp::shutdown();
+    }
+  }
+
  protected:
   rclcpp::Node::SharedPtr node_;
+  CameraParams::Optional camera_params_;
 };
 
 }  // namespace dyno

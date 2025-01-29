@@ -44,6 +44,12 @@ class OnlineDataProviderRos : public DataProviderRos {
  public:
   OnlineDataProviderRos(rclcpp::Node::SharedPtr node);
 
+  int datasetSize() const override { return -1; }
+
+  bool spin() override;
+  void shutdown() override;
+  void connect();
+
  private:
   using SyncPolicy = message_filters::sync_policies::ExactTime<
       sensor_msgs::msg::Image, sensor_msgs::msg::Image, sensor_msgs::msg::Image,
@@ -56,6 +62,8 @@ class OnlineDataProviderRos : public DataProviderRos {
       const sensor_msgs::msg::Image::ConstSharedPtr &mask_msg);
 
  private:
+  FrameId frame_id_;
+
   message_filters::Subscriber<sensor_msgs::msg::Image> rgb_image_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> depth_image_sub_;
   message_filters::Subscriber<sensor_msgs::msg::Image> flow_image_sub_;

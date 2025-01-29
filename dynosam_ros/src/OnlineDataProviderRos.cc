@@ -30,15 +30,40 @@
 
 #include "dynosam_ros/OnlineDataProviderRos.hpp"
 
+#include "dynosam_ros/RosUtils.hpp"
+
 namespace dyno {
 
 OnlineDataProviderRos::OnlineDataProviderRos(rclcpp::Node::SharedPtr node)
-    : DataProviderRos(node) {
+    : DataProviderRos(node), frame_id_(0u) {
+  // shutdown is in the base DataProvider class
+  connect();
+  CHECK_EQ(shutdown_, false);
+}
+
+bool OnlineDataProviderRos::spin() { return !shutdown_; }
+
+void OnlineDataProviderRos::shutdown() {
+  shutdown_ = true;
+  // shutdown synchronizer
+  RCLCPP_INFO_STREAM(node_->get_logger(),
+                     "Shutting down OnlineDataProviderRos");
+  if (sync_) sync_.reset();
+
+  rgb_image_sub_.unsubscribe();
+  depth_image_sub_.unsubscribe();
+  flow_image_sub_.unsubscribe();
+  mask_image_sub_.unsubscribe();
+}
+
+void OnlineDataProviderRos::connect() {
   rclcpp::Node *node_ptr = node_.get();
   rgb_image_sub_.subscribe(node_ptr, "image/rgb");
   depth_image_sub_.subscribe(node_ptr, "image/depth");
   flow_image_sub_.subscribe(node_ptr, "image/flow");
   mask_image_sub_.subscribe(node_ptr, "image/mask");
+
+  if (sync_) sync_.reset();
 
   static constexpr size_t kQueueSize = 20u;
   sync_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(
@@ -51,17 +76,44 @@ OnlineDataProviderRos::OnlineDataProviderRos(rclcpp::Node::SharedPtr node)
 
   RCLCPP_INFO_STREAM(
       node_->get_logger(),
-      "OnlineDataProviderRos has been started. Subscribed to image topics: "
+      "OnlineDataProviderRos has been connected. Subscribed to image topics: "
           << rgb_image_sub_.getSubscriber()->get_topic_name() << " "
           << depth_image_sub_.getSubscriber()->get_topic_name() << " "
           << flow_image_sub_.getSubscriber()->get_topic_name() << " "
           << mask_image_sub_.getSubscriber()->get_topic_name() << ".");
+
+  shutdown_ = false;
 }
 
 void OnlineDataProviderRos::imageSyncCallback(
     const sensor_msgs::msg::Image::ConstSharedPtr &rgb_msg,
     const sensor_msgs::msg::Image::ConstSharedPtr &depth_msg,
     const sensor_msgs::msg::Image::ConstSharedPtr &flow_msg,
-    const sensor_msgs::msg::Image::ConstSharedPtr &mask_msg) {}
+    const sensor_msgs::msg::Image::ConstSharedPtr &mask_msg) {
+  if (!image_container_callback_) {
+    RCLCPP_ERROR_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
+                          "Image Sync callback triggered but "
+                          "image_container_callback_ is not registered!");
+    return;
+  }
+
+  const cv::Mat rgb = readRgbRosImage(rgb_msg);
+  const cv::Mat depth = readRgbRosImage(depth_msg);
+  const cv::Mat flow = readRgbRosImage(flow_msg);
+  const cv::Mat mask = readRgbRosImage(mask_msg);
+
+  const Timestamp timestamp = utils::fromRosTime(rgb_msg->header.stamp);
+  const FrameId frame_id = frame_id_;
+  frame_id_++;
+
+  ImageContainer::Ptr image_container = ImageContainer::Create(
+      timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+      ImageWrapper<ImageType::Depth>(depth),
+      ImageWrapper<ImageType::OpticalFlow>(flow),
+      ImageWrapper<ImageType::MotionMask>(mask));
+  CHECK(image_container);
+  // trigger callback to send data to the DataInterface!
+  image_container_callback_(image_container);
+}
 
 }  // namespace dyno

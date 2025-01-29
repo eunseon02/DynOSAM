@@ -54,6 +54,7 @@ class InvalidImageTypeException : public DynosamException {
 
 template <typename IMAGETYPE>
 struct image_traits_impl {
+  using type = IMAGETYPE;
   constexpr static int OpenCVType = IMAGETYPE::OpenCVType;
   static void validate(const cv::Mat& input) { IMAGETYPE::validate(input); }
   static std::string name() { return IMAGETYPE::name(); }

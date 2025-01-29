@@ -38,30 +38,28 @@
 
 namespace dyno {
 
-DataProviderRos::DataProviderRos(rclcpp::Node::SharedPtr node) : node_(node) {}
+DataProviderRos::DataProviderRos(rclcpp::Node::SharedPtr node)
+    : DataProvider(), node_(node) {}
 
 const cv::Mat DataProviderRos::readRgbRosImage(
     const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
-  const cv_bridge::CvImageConstPtr cvb_image = readRosImage(img_msg);
-
-  // attempt to use image as is
-  const cv::Mat img = cvb_image->image;
-
-  try {
-    image_traits<ImageType::RGBMono>::validate(img);
-  } catch (const InvalidImageTypeException& exception) {
-    RCLCPP_WARN(node_->get_logger(), "RGB Image msg was of the wrong type: %s",
-                exception.what());
-  }
-  return img;
+  return convertRosImage<ImageType::RGBMono>(img_msg);
 }
 
 const cv::Mat DataProviderRos::readDepthRosImage(
-    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {}
+    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
+  return convertRosImage<ImageType::Depth>(img_msg);
+}
+
 const cv::Mat DataProviderRos::readFlowRosImage(
-    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {}
+    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
+  return convertRosImage<ImageType::OpticalFlow>(img_msg);
+}
+
 const cv::Mat DataProviderRos::readMaskRosImage(
-    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {}
+    const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
+  return convertRosImage<ImageType::MotionMask>(img_msg);
+}
 
 const cv_bridge::CvImageConstPtr DataProviderRos::readRosImage(
     const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {
