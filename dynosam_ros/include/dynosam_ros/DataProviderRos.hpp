@@ -65,7 +65,9 @@ class DataProviderRos : public DataProvider {
     // rclcpp::wait_for_message<
   }
 
-  CameraParams::Optional getCameraParams() const override;
+  CameraParams::Optional getCameraParams() const override {
+    return camera_params_;
+  }
 
  protected:
   const cv_bridge::CvImageConstPtr readRosImage(

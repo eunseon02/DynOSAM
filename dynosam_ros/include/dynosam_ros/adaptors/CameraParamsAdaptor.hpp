@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <glog/logging.h>
+
 #include <dynosam/common/CameraParams.hpp>
 
 #include "rclcpp/type_adapter.hpp"
@@ -45,24 +47,41 @@ struct rclcpp::TypeAdapter<dyno::CameraParams, sensor_msgs::msg::CameraInfo> {
                                      ros_message_type& destination) {
     // intrisincs
     const cv::Mat& K = source.getCameraMatrix();
-    std::copy(K.begin<double>(), K.end<double>(), desination.k.begin());
+    std::copy(K.begin<double>(), K.end<double>(), destination.k.begin());
 
     // distortion
-    destination.d =
-        std::vector<double>(source.getDistortionCoeffs().begin<double>(),
-                            source.getDistortionCoeffs().end<double>());
+    const cv::Mat& D = source.getDistortionCoeffs();
+    destination.d.resize(D.total());
+    destination.d = std::vector<double>(D.begin<double>(), D.end<double>());
 
     destination.height = source.ImageHeight();
-    destimation.width = source.ImageWidth();
+    destination.width = source.ImageWidth();
 
-    // TODO: NO DISTORTION_MODEL
+    std::string camera_model;
+    CHECK(dyno::CameraParams::distortionModelToString(
+        source.getDistortionModel(), destination.distortion_model,
+        camera_model));
+    (void)camera_model;
   }
 
   static void convert_to_custom(const ros_message_type& source,
                                 custom_type& destination) {
-    CameraParams::IntrinsicsCoeffs intrinsics(source.k.begin(), source.k.end());
-    CameraParams::DistortionCoeffs distortion(source.d.begin(), source.d.end());
+    // bit gross but cv::Mat does not accept a const void* for data (which
+    // source.k.data()) is so to ensure the data is safe (ie. rather than doing
+    // a const conversion), I decide to copy the data into std::vector and then
+    // copy into cv::Mat. this is inefficient but this conversion happens so
+    // rarely and the data pakcet is tiny...
+    std::vector<double> k_vector(source.k.begin(), source.k.end());
+    cv::Mat K(3, 3, CV_64F, std::data(k_vector));
+    dyno::CameraParams::IntrinsicsCoeffs intrinsics;
+    // TODO: should make this a constructor...
+    dyno::CameraParams::convertKMatrixToIntrinsicsCoeffs(K, intrinsics);
+    dyno::CameraParams::DistortionCoeffs distortion(source.d.begin(),
+                                                    source.d.end());
+    cv::Size size(source.width, source.height);
+    const std::string& distortion_model = source.distortion_model;
 
-    cv::Size size(source.width, source, height);
+    destination =
+        dyno::CameraParams(intrinsics, distortion, size, distortion_model);
   }
 };
