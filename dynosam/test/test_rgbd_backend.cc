@@ -434,6 +434,177 @@ TEST(RGBDBackendModule, smallKITTIDataset) {
 //   cv::waitKey(0);
 // }
 
+TEST(RGBDBackendModule, testObjectCentricFormulations) {
+  dyno_testing::ScenarioBody::Ptr camera =
+      std::make_shared<dyno_testing::ScenarioBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3::Identity(),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.1, 0.0),
+                           gtsam::Point3(0.1, 0.05, 0))));
+  // needs to be at least 3 overlap so we can meet requirements in graph
+  // TODO: how can we do 1 point but with lots of overlap (even infinity
+  // overlap?)
+
+  const double H_R_sigma = 0.05;
+  const double H_t_sigma = 0.08;
+  const double dynamic_point_sigma = 0.1;
+
+  dyno_testing::RGBDScenario::NoiseParams noise_params;
+  noise_params.H_R_sigma = H_R_sigma;
+  noise_params.H_t_sigma = H_t_sigma;
+  noise_params.dynamic_point_sigma = dynamic_point_sigma;
+
+  dyno_testing::RGBDScenario scenario(
+      camera, std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5),
+      noise_params);
+
+  // add one obect
+  const size_t num_points = 200;
+  const size_t obj1_overlap = 3;
+  const size_t obj2_overlap = 5;
+  const size_t obj3_overlap = 4;
+  dyno_testing::ObjectBody::Ptr object1 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
+                           gtsam::Point3(0.2, 0, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj1_overlap));
+
+  dyno_testing::ObjectBody::Ptr object2 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(1, 0.4, 0.1)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj2_overlap));
+
+  dyno_testing::ObjectBody::Ptr object3 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.2, 0.1),
+                           gtsam::Point3(1.1, 0.2, 1.2)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
+                           gtsam::Point3(0.2, 0.3, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj3_overlap));
+
+  scenario.addObjectBody(1, object1);
+  scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(3, object3);
+
+  dyno::BackendParams backend_params;
+  backend_params.useLogger(false);
+  backend_params.min_dynamic_obs_ = 3u;
+  backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
+
+  struct RunIncrementalTest {
+    struct Data {
+      dyno::RGBDBackendModule::Ptr backend;
+      std::shared_ptr<gtsam::ISAM2> isam2;
+      gtsam::Values opt_values;
+    };
+
+    void addBackend(dyno::RGBDBackendModule::Ptr backend) {
+      std::shared_ptr<Data> data = std::make_shared<Data>();
+
+      gtsam::ISAM2Params isam2_params;
+      isam2_params.evaluateNonlinearError = true;
+      isam2_params.factorization = gtsam::ISAM2Params::Factorization::CHOLESKY;
+      data->isam2 = std::make_shared<gtsam::ISAM2>(isam2_params);
+
+      backend->callback =
+          [data](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
+                 dyno::FrameId frame_id, const gtsam::Values& new_values,
+                 const gtsam::NonlinearFactorGraph& new_factors) -> void {
+        LOG(INFO) << "Running isam2 update " << frame_id << " for formulation "
+                  << formulation->getFullyQualifiedName();
+        CHECK_NOTNULL(data);
+        CHECK_NOTNULL(data->isam2);
+        gtsam::ISAM2Result result;
+        {
+          dyno::utils::TimingStatsCollector timer(
+              "isam2_oc_test_update." + formulation->getFullyQualifiedName());
+          result = data->isam2->update(new_factors, new_values);
+        }
+
+        LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
+                  << " error after " << result.getErrorAfter();
+        data->opt_values = data->isam2->calculateEstimate();
+
+        if (!data->isam2->empty()) {
+          dyno::factor_graph_tools::saveBayesTree(
+              *data->isam2,
+              dyno::getOutputFilePath(
+                  "oc_bayes_tree_" + std::to_string(frame_id) + "_" +
+                  formulation->getFullyQualifiedName() + ".dot"),
+              dyno::DynoLikeKeyFormatter);
+        }
+      };
+
+      data->backend = backend;
+      datas.push_back(data);
+    }
+
+    void processAll(dyno::RGBDInstanceOutputPacket::Ptr output_packet) {
+      for (auto d : datas) {
+        d->backend->spinOnce(output_packet);
+      }
+    }
+
+    void finishAll() {
+      for (auto& d : datas) {
+        auto backend = d->backend;
+        dyno::BackendMetaData backend_info;
+        backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+            backend_info);
+        backend->new_updater_->logBackendFromMap(backend_info);
+
+        backend_info.suffix = "isam_opt";
+        backend->new_updater_->updateTheta(d->opt_values);
+        backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+            backend_info);
+        backend->new_updater_->logBackendFromMap(backend_info);
+      }
+    }
+
+    std::vector<std::shared_ptr<Data>> datas;
+  };
+
+  RunIncrementalTest tester;
+  tester.addBackend(std::make_shared<dyno::RGBDBackendModule>(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::ObjectCentric));
+
+  tester.addBackend(std::make_shared<dyno::RGBDBackendModule>(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::OC_SD));
+
+  tester.addBackend(std::make_shared<dyno::RGBDBackendModule>(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::OC_D));
+
+  tester.addBackend(std::make_shared<dyno::RGBDBackendModule>(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::OC_S));
+
+  for (size_t i = 0; i < 40; i++) {
+    dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
+    std::tie(output_gt, output_noisy) = scenario.getOutput(i);
+
+    tester.processAll(output_noisy);
+  }
+
+  tester.finishAll();
+  dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
+  dyno::writeStatisticsModuleSummariesToFile();
+}
+
 TEST(RGBDBackendModule, testObjectCentric) {
   // make camera with a constant motion model starting at zero
   dyno_testing::ScenarioBody::Ptr camera =
@@ -447,9 +618,9 @@ TEST(RGBDBackendModule, testObjectCentric) {
   // TODO: how can we do 1 point but with lots of overlap (even infinity
   // overlap?)
 
-  const double H_R_sigma = 0.01;
-  const double H_t_sigma = 0.02;
-  const double dynamic_point_sigma = 0.001;
+  const double H_R_sigma = 0.1;
+  const double H_t_sigma = 0.2;
+  const double dynamic_point_sigma = 0.01;
 
   dyno_testing::RGBDScenario::NoiseParams noise_params;
   noise_params.H_R_sigma = H_R_sigma;
@@ -484,29 +655,16 @@ TEST(RGBDBackendModule, testObjectCentric) {
               num_points, obj2_overlap));
 
   scenario.addObjectBody(1, object1);
-  //   scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(2, object2);
 
-  //   SETDEBUG("IncrementalFixedLagSmoother update", true);
-  //   CHECK(gtsam::isDebugVersion());
-  //   CHECK(ISDEBUG("IncrementalFixedLagSmoother update"));
   dyno::BackendParams backend_params;
   backend_params.useLogger(false);
   backend_params.min_dynamic_obs_ = 3u;
   backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
 
-  //   dyno::FormulationHooks hooks;
-  //   hooks.ground_truth_packets_request = [&scenario] () ->
-  //   std::optional<GroundTruthPacketMap> {
-  //     return scenario.getGroundTruths();
-  //   };
-
-  //   hooks.backend_params_request = [&] () -> const BackendParams& {
-  //     return backend_params;
-  //   };
-
-  dyno::RGBDBackendModule backend(
-      backend_params, dyno_testing::makeDefaultCameraPtr(),
-      dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
+  dyno::RGBDBackendModule backend(backend_params,
+                                  dyno_testing::makeDefaultCameraPtr(),
+                                  dyno::RGBDBackendModule::UpdaterType::OC_SD);
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.evaluateNonlinearError = true;

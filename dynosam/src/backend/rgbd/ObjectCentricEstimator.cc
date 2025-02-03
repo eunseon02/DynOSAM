@@ -48,6 +48,18 @@ gtsam::Point3 projectToObject(const gtsam::Pose3& X_k,
   return projected_m_object;
 }
 
+gtsam::Vector3 ObjectCentricMotion::residual(const gtsam::Pose3& X_k,
+                                             const gtsam::Pose3& s0_H_k_world,
+                                             const gtsam::Point3& m_L,
+                                             const gtsam::Point3& Z_k,
+                                             const gtsam::Pose3& L_0) {
+  // apply transform to put map point into world via its motion
+  gtsam::Point3 m_world_k = s0_H_k_world * (L_0 * m_L);
+  // put map_point_world into local camera coordinate
+  gtsam::Point3 m_camera_k = X_k.inverse() * m_world_k;
+  return m_camera_k - Z_k;
+}
+
 gtsam::Vector ObjectCentricMotionFactor::evaluateError(
     const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
     const gtsam::Point3& point_object, boost::optional<gtsam::Matrix&> J1,
@@ -92,15 +104,70 @@ gtsam::Vector ObjectCentricMotionFactor::evaluateError(
   return residual(camera_pose, motion, point_object, measurement_, L_0_);
 }
 
-gtsam::Vector ObjectCentricMotionFactor::residual(
-    const gtsam::Pose3& camera_pose, const gtsam::Pose3& motion,
-    const gtsam::Point3& point_object, const gtsam::Point3& measurement,
+gtsam::Vector DecoupledObjectCentricMotionFactor::evaluateError(
+    const gtsam::Pose3& s0_H_k_world, const gtsam::Point3& m_L,
+    boost::optional<gtsam::Matrix&> J1,
+    boost::optional<gtsam::Matrix&> J2) const {
+  auto reordered_resiudal = [&](const gtsam::Pose3& s0_H_k_world,
+                                const gtsam::Point3& m_L) {
+    return residual(X_k_, s0_H_k_world, m_L, Z_k_, L_0_);
+  };
+
+  if (J1) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative21<gtsam::Vector3, gtsam::Pose3,
+                                     gtsam::Point3>(reordered_resiudal,
+                                                    s0_H_k_world, m_L);
+    *J1 = J;
+  }
+
+  if (J2) {
+    Eigen::Matrix<double, 3, 3> J =
+        gtsam::numericalDerivative22<gtsam::Vector3, gtsam::Pose3,
+                                     gtsam::Point3>(reordered_resiudal,
+                                                    s0_H_k_world, m_L);
+    *J2 = J;
+  }
+
+  return reordered_resiudal(s0_H_k_world, m_L);
+}
+
+gtsam::Vector StructurelessObjectCentricMotion2::residual(
+    const gtsam::Pose3& X_k_1, const gtsam::Pose3& H_k_1,
+    const gtsam::Pose3& X_k, const gtsam::Pose3& H_k,
+    const gtsam::Point3& Z_k_1, const gtsam::Point3& Z_k,
     const gtsam::Pose3& L_0) {
-  // apply transform to put map point into world via its motion
-  gtsam::Point3 map_point_world = motion * (L_0 * point_object);
-  // put map_point_world into local camera coordinate
-  gtsam::Point3 map_point_camera = camera_pose.inverse() * map_point_world;
-  return map_point_camera - measurement;
+  return projectToObject(X_k_1, H_k_1, L_0, Z_k_1) -
+         projectToObject(X_k, H_k, L_0, Z_k);
+}
+
+gtsam::Vector StructurelessDecoupledObjectCentricMotion::evaluateError(
+    const gtsam::Pose3& H_k_1, const gtsam::Pose3& H_k,
+    boost::optional<gtsam::Matrix&> J1,
+    boost::optional<gtsam::Matrix&> J2) const {
+  // use lambda to create residual with arguments and variables
+  auto reordered_resiudal = [&](const gtsam::Pose3& H_k_1,
+                                const gtsam::Pose3& H_k) -> gtsam::Vector3 {
+    return residual(X_k_1_, H_k_1, X_k_, H_k, Z_k_1_, Z_k_, L_0_);
+  };
+
+  if (J1) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative21<gtsam::Vector3, gtsam::Pose3,
+                                     gtsam::Pose3>(reordered_resiudal, H_k_1,
+                                                   H_k);
+    *J1 = J;
+  }
+
+  if (J2) {
+    Eigen::Matrix<double, 3, 6> J =
+        gtsam::numericalDerivative22<gtsam::Vector3, gtsam::Pose3,
+                                     gtsam::Pose3>(reordered_resiudal, H_k_1,
+                                                   H_k);
+    *J2 = J;
+  }
+
+  return reordered_resiudal(H_k_1, H_k);
 }
 
 gtsam::Vector StructurelessObjectCentricMotionFactor2::evaluateError(
@@ -172,15 +239,6 @@ gtsam::Vector StructurelessObjectCentricMotionFactor2::evaluateError(
   return residual(X_k_1, H_k_1, X_k, H_k, Z_k_1_, Z_k_, L_0_);
 }
 
-gtsam::Vector StructurelessObjectCentricMotionFactor2::residual(
-    const gtsam::Pose3& X_k_1, const gtsam::Pose3& H_k_1,
-    const gtsam::Pose3& X_k, const gtsam::Pose3& H_k,
-    const gtsam::Point3& Z_k_1, const gtsam::Point3& Z_k,
-    const gtsam::Pose3& L_0) {
-  return projectToObject(X_k_1, H_k_1, L_0, Z_k_1) -
-         projectToObject(X_k, H_k, L_0, Z_k);
-}
-
 class ObjectCentricSmoothing
     : public gtsam::NoiseModelFactor3<gtsam::Pose3, gtsam::Pose3,
                                       gtsam::Pose3> {
@@ -245,167 +303,6 @@ class ObjectCentricSmoothing
 
     return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(),
                                               relative_motion);
-  }
-};
-
-// here motion is P = X.inverse() * H
-class AuxillaryPFactor
-    : public gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3> {
- public:
-  typedef boost::shared_ptr<AuxillaryPFactor> shared_ptr;
-  typedef AuxillaryPFactor This;
-  typedef gtsam::NoiseModelFactor2<gtsam::Pose3, gtsam::Point3> Base;
-
-  gtsam::Point3 measurement_;
-  gtsam::Pose3 L_0_;
-
-  AuxillaryPFactor(gtsam::Key motion, gtsam::Key point_object,
-                   const gtsam::Point3& measurement, const gtsam::Pose3& L_0,
-                   gtsam::SharedNoiseModel model)
-      : Base(model, motion, point_object),
-        measurement_(measurement),
-        L_0_(L_0) {}
-
-  gtsam::Vector evaluateError(
-      const gtsam::Pose3& P, const gtsam::Point3& point_object,
-      boost::optional<gtsam::Matrix&> J1 = boost::none,
-      boost::optional<gtsam::Matrix&> J2 = boost::none) const override {
-    if (J1) {
-      // error w.r.t to P
-      Eigen::Matrix<double, 3, 6> df_dP =
-          gtsam::numericalDerivative21<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Point3>(
-              std::bind(&AuxillaryPFactor::residual, std::placeholders::_1,
-                        std::placeholders::_2, measurement_, L_0_),
-              P, point_object);
-      *J1 = df_dP;
-    }
-
-    if (J2) {
-      // error w.r.t to point in local
-      Eigen::Matrix<double, 3, 3> df_dm =
-          gtsam::numericalDerivative22<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Point3>(
-              std::bind(&AuxillaryPFactor::residual, std::placeholders::_1,
-                        std::placeholders::_2, measurement_, L_0_),
-              P, point_object);
-      *J2 = df_dm;
-    }
-
-    return residual(P, point_object, measurement_, L_0_);
-  }
-
-  static gtsam::Vector residual(const gtsam::Pose3& P,
-                                const gtsam::Point3& point_object,
-                                const gtsam::Point3& measurement,
-                                const gtsam::Pose3& L_0) {
-    return measurement - P * L_0 * point_object;
-  }
-};
-
-class AuxillaryTransformFactor
-    : public gtsam::NoiseModelFactor4<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3,
-                                      gtsam::Pose3> {
- public:
-  typedef boost::shared_ptr<AuxillaryTransformFactor> shared_ptr;
-  typedef AuxillaryTransformFactor This;
-  typedef gtsam::NoiseModelFactor4<gtsam::Pose3, gtsam::Pose3, gtsam::Pose3,
-                                   gtsam::Pose3>
-      Base;
-
-  const gtsam::Point3 Z_previous_;
-  const gtsam::Point3 Z_current_;
-
-  AuxillaryTransformFactor(gtsam::Key X_previous, gtsam::Key P_previous,
-                           gtsam::Key X_current, gtsam::Key P_current,
-                           const gtsam::Point3& Z_previous,
-                           const gtsam::Point3& Z_current,
-                           gtsam::SharedNoiseModel model)
-      : Base(model, X_previous, P_previous, X_current, P_current),
-        Z_previous_(Z_previous),
-        Z_current_(Z_current) {}
-
-  gtsam::Vector evaluateError(
-      const gtsam::Pose3& X_previous, const gtsam::Pose3& P_previous,
-      const gtsam::Pose3& X_current, const gtsam::Pose3& P_current,
-      boost::optional<gtsam::Matrix&> J1 = boost::none,
-      boost::optional<gtsam::Matrix&> J2 = boost::none,
-      boost::optional<gtsam::Matrix&> J3 = boost::none,
-      boost::optional<gtsam::Matrix&> J4 = boost::none) const override {
-    if (J1) {
-      // error w.r.t to X_prev
-      Eigen::Matrix<double, 3, 6> df_dX_prev =
-          gtsam::numericalDerivative41<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Pose3,
-                                       gtsam::Pose3>(
-              std::bind(&AuxillaryTransformFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::placeholders::_4,
-                        Z_previous_, Z_current_),
-              X_previous, P_previous, X_current, P_current);
-      *J1 = df_dX_prev;
-    }
-
-    if (J2) {
-      // error w.r.t to P_prev
-      Eigen::Matrix<double, 3, 6> df_dP_prev =
-          gtsam::numericalDerivative42<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Pose3,
-                                       gtsam::Pose3>(
-              std::bind(&AuxillaryTransformFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::placeholders::_4,
-                        Z_previous_, Z_current_),
-              X_previous, P_previous, X_current, P_current);
-      *J2 = df_dP_prev;
-    }
-
-    if (J3) {
-      // error w.r.t to X_curr
-      Eigen::Matrix<double, 3, 6> df_dX_curr =
-          gtsam::numericalDerivative43<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Pose3,
-                                       gtsam::Pose3>(
-              std::bind(&AuxillaryTransformFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::placeholders::_4,
-                        Z_previous_, Z_current_),
-              X_previous, P_previous, X_current, P_current);
-      *J3 = df_dX_curr;
-    }
-
-    if (J4) {
-      // error w.r.t to P_curr
-      Eigen::Matrix<double, 3, 6> df_dP_curr =
-          gtsam::numericalDerivative44<gtsam::Vector3, gtsam::Pose3,
-                                       gtsam::Pose3, gtsam::Pose3,
-                                       gtsam::Pose3>(
-              std::bind(&AuxillaryTransformFactor::residual,
-                        std::placeholders::_1, std::placeholders::_2,
-                        std::placeholders::_3, std::placeholders::_4,
-                        Z_previous_, Z_current_),
-              X_previous, P_previous, X_current, P_current);
-      *J4 = df_dP_curr;
-    }
-
-    return residual(X_previous, P_previous, X_current, P_current, Z_previous_,
-                    Z_current_);
-  }
-
-  static gtsam::Vector residual(const gtsam::Pose3& X_previous,
-                                const gtsam::Pose3& P_previous,
-                                const gtsam::Pose3& X_current,
-                                const gtsam::Pose3& P_current,
-                                const gtsam::Point3& Z_previous,
-                                const gtsam::Point3& Z_current) {
-    // gtsam::Pose3 H_current = X_current * P_current;
-    // gtsam::Pose3 H_previous = X_previous * P_previous;
-    gtsam::Pose3 H_current = X_current * P_current;
-    gtsam::Pose3 H_previous = X_previous * P_previous;
-    gtsam::Pose3 prev_H_current = H_current * H_previous.inverse();
-    gtsam::Point3 m_previous_world = X_previous * Z_previous;
-    gtsam::Point3 m_current_world = X_current * Z_current;
-    return m_current_world - prev_H_current * m_previous_world;
   }
 };
 
@@ -816,13 +713,10 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
 
     // initalise value //cannot initalise again the same -> it depends where L_0
     // is created, no?
-    //  Landmark lmk_L0;
-    //  getSafeQuery(
-    //      lmk_L0,
-    //      theta_accessor->query<Landmark>(point_key),
-    //      lmk_L0_init
-    //  );
-    // new_values.insert(point_key, lmk_L0_init);
+    Landmark lmk_L0;
+    getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
+                 lmk_L0_init);
+    new_values.insert(point_key, lmk_L0);
     result.updateAffectedObject(frame_node_k_1->frame_id,
                                 context.getObjectId());
   }
@@ -831,11 +725,11 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
   if (context.is_starting_motion_frame) {
     // add factor at k-1
     // ------ good motion factor/////
-    // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-    //     frame_node_k_1->makePoseKey(),  // pose key at previous frames,
-    //     object_motion_key_k_1, point_key,
-    //     lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
-    //     dynamic_point_noise);
+    new_factors.emplace_shared<ObjectCentricMotionFactor>(
+        frame_node_k_1->makePoseKey(),  // pose key at previous frames,
+        object_motion_key_k_1, point_key,
+        lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
+        dynamic_point_noise);
 
     // const gtsam::Pose3 X_world =
     //     getInitialOrLinearizedSensorPose(frame_node_k_1->frame_id);
@@ -858,42 +752,14 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     // result.updateAffectedObject(frame_node_k_1->frame_id,
     //                             context.getObjectId());
   }
-  new_factors.emplace_shared<StructurelessObjectCentricMotionFactor2>(
-      frame_node_k_1->makePoseKey(), object_motion_key_k_1,
-      frame_node_k->makePoseKey(), object_motion_key_k,
-      lmk_node->getMeasurement(frame_node_k_1).landmark,
-      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-      dynamic_point_noise);
-
-  result.updateAffectedObject(frame_node_k_1->frame_id, context.getObjectId());
-  result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 
   // add factor at k
   // ------ good motion factor/////
-  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
-  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
-  //     object_motion_key_k, point_key,
-  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-  //     dynamic_point_noise);
-
-  // const gtsam::Pose3 X_world =
-  //     getInitialOrLinearizedSensorPose(frame_node_k->frame_id);
-  // new_factors.emplace_shared<ObjectCentricMotionOnlyFactor>(
-  //     object_motion_key_k, point_key,
-  //     lmk_node->getMeasurement(frame_node_k).landmark, X_world, L_0,
-  //     dynamic_point_noise);
-
-  // new_factors.emplace_shared<AuxillaryPFactor>(
-  //        object_motion_key_k, point_key,
-  //        lmk_node->getMeasurement(frame_node_k).landmark, L_0,
-  //       landmark_motion_noise
-  //   );
-
-  //  new_factors.emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3,
-  //  Landmark>>(
-  //             frame_node_k->makePoseKey(),  // pose key for this frame
-  //             point_key, lmk_node->getMeasurement(frame_node_k).landmark,
-  //             dynamic_point_noise);
+  new_factors.emplace_shared<ObjectCentricMotionFactor>(
+      frame_node_k->makePoseKey(),  // pose key at previous frames,
+      object_motion_key_k, point_key,
+      lmk_node->getMeasurement(frame_node_k).landmark, L_0,
+      dynamic_point_noise);
 
   result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 

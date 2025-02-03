@@ -39,6 +39,7 @@
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/backend/rgbd/impl/ObjectCentricFormulations.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
@@ -509,6 +510,19 @@ RGBDBackendModule::makeUpdater() {
   } else if (updater_type_ == UpdaterType::ObjectCentric) {
     LOG(INFO) << "Using ObjectCentric";
     return std::make_unique<ObjectCentricFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
+  } else if (updater_type_ == UpdaterType::OC_SD) {
+    LOG(INFO) << "Using ObjectCentric Structureless Decoupled";
+    return std::make_unique<
+        keyframe_object_centric::StructurelessDecoupledFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
+  } else if (updater_type_ == UpdaterType::OC_D) {
+    LOG(INFO) << "Using ObjectCentric Decoupled";
+    return std::make_unique<keyframe_object_centric::DecoupledFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
+  } else if (updater_type_ == UpdaterType::OC_S) {
+    LOG(INFO) << "Using ObjectCentric Structurless";
+    return std::make_unique<keyframe_object_centric::StructurlessFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
   } else {
     CHECK(false) << "Not implemented";

@@ -50,10 +50,19 @@ using RGBDBackendModuleTraits =
 
 class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
  public:
+  DYNO_POINTER_TYPEDEFS(RGBDBackendModule)
+
   using Base = BackendModuleType<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
-  enum UpdaterType { MotionInWorld = 0, LLWorld = 1, ObjectCentric = 2 };
+  enum UpdaterType {
+    MotionInWorld = 0,
+    LLWorld = 1,
+    ObjectCentric = 2,
+    OC_SD = 3,
+    OC_D = 4,
+    OC_S = 5
+  };
 
   RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
                     const UpdaterType& updater_type,
