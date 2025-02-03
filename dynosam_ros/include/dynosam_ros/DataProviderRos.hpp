@@ -30,14 +30,16 @@
 
 #pragma once
 
+#include <dynosam/common/Exceptions.hpp>
 #include <dynosam/common/ImageTypes.hpp>
 #include <dynosam/dataprovider/DataProvider.hpp>
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "cv_bridge/cv_bridge.h"
+#include "dynosam_ros/adaptors/CameraParamsAdaptor.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_options.hpp"
-#include "rclcpp/wait_set.hpp"
+#include "rclcpp/wait_for_message.hpp"
 #include "sensor_msgs/image_encodings.hpp"
 #include "sensor_msgs/msg/image.hpp"
 
@@ -59,10 +61,30 @@ class DataProviderRos : public DataProvider {
 
   template <class Rep = int64_t, class Period = std::milli>
   const CameraParams& waitAndSetCameraParams(
-      const std::string& topic = "image/camera_info",
       const std::chrono::duration<Rep, Period>& time_to_wait =
-          std::chrono::duration<Rep, Period>(-1)) {
-    // rclcpp::wait_for_message<
+          std::chrono::duration<Rep, Period>(-1),
+      const std::string& topic = "image/camera_info") {
+    RCLCPP_INFO_STREAM(node_->get_logger(),
+                       "Waiting for camera params on topic: " << topic);
+    // it seems rclcpp::Adaptors do not work yet with wait for message
+    sensor_msgs::msg::CameraInfo camera_info;
+    if (rclcpp::wait_for_message<sensor_msgs::msg::CameraInfo, Rep, Period>(
+            camera_info, node_, topic, time_to_wait)) {
+      using Adaptor =
+          rclcpp::TypeAdapter<dyno::CameraParams, sensor_msgs::msg::CameraInfo>;
+      CameraParams camera_params;
+      Adaptor::convert_to_custom(camera_info, camera_params);
+      RCLCPP_INFO_STREAM(node_->get_logger(), "Received camera params: "
+                                                  << camera_params.toString());
+      camera_params_ = camera_params;
+      return *camera_params_;
+    } else {
+      const auto milliseconds =
+          std::chrono::duration_cast<std::chrono::milliseconds>(time_to_wait);
+      throw DynosamException("Failed to receive camera params on topic " +
+                             topic + " (waited with timeout " +
+                             std::to_string(milliseconds.count()) + " ms).");
+    }
   }
 
   CameraParams::Optional getCameraParams() const override {
@@ -92,6 +114,7 @@ class DataProviderRos : public DataProvider {
                               << "ROS encoding type used was "
                               << cvb_image->encoding);
       rclcpp::shutdown();
+      return cv::Mat();
     }
   }
 

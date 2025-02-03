@@ -40,9 +40,15 @@
 
 namespace dyno {
 
+struct OnlineDataProviderRosParams {
+  bool wait_for_camera_params{true};
+  int32_t camera_params_timeout{-1};
+};
+
 class OnlineDataProviderRos : public DataProviderRos {
  public:
-  OnlineDataProviderRos(rclcpp::Node::SharedPtr node);
+  OnlineDataProviderRos(rclcpp::Node::SharedPtr node,
+                        const OnlineDataProviderRosParams &params);
 
   int datasetSize() const override { return -1; }
 

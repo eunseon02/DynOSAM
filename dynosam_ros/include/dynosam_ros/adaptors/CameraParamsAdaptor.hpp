@@ -85,3 +85,6 @@ struct rclcpp::TypeAdapter<dyno::CameraParams, sensor_msgs::msg::CameraInfo> {
         dyno::CameraParams(intrinsics, distortion, size, distortion_model);
   }
 };
+
+RCLCPP_USING_CUSTOM_TYPE_AS_ROS_MESSAGE_TYPE(dyno::CameraParams,
+                                             sensor_msgs::msg::CameraInfo);

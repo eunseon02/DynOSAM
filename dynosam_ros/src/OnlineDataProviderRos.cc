@@ -34,9 +34,14 @@
 
 namespace dyno {
 
-OnlineDataProviderRos::OnlineDataProviderRos(rclcpp::Node::SharedPtr node)
+OnlineDataProviderRos::OnlineDataProviderRos(
+    rclcpp::Node::SharedPtr node, const OnlineDataProviderRosParams &params)
     : DataProviderRos(node), frame_id_(0u) {
-  // shutdown is in the base DataProvider class
+  if (params.wait_for_camera_params) {
+    waitAndSetCameraParams(
+        std::chrono::milliseconds(params.camera_params_timeout));
+  }
+
   connect();
   CHECK_EQ(shutdown_, false);
 }
@@ -58,6 +63,7 @@ void OnlineDataProviderRos::shutdown() {
 
 void OnlineDataProviderRos::connect() {
   rclcpp::Node *node_ptr = node_.get();
+  CHECK_NOTNULL(node_ptr);
   rgb_image_sub_.subscribe(node_ptr, "image/rgb");
   depth_image_sub_.subscribe(node_ptr, "image/depth");
   flow_image_sub_.subscribe(node_ptr, "image/flow");
