@@ -459,18 +459,22 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
           // this should DEFINITELY be in the map, as long as we update the
           // values in the map everyy time
-          StateQuery<gtsam::Pose3> T_world_camera_k_1_query =
-              accessor->getSensorPose(query_frame_node_k_1->frame_id);
-          CHECK(T_world_camera_k_1_query)
-              << "Failed cam pose query at frame "
-              << query_frame_node_k_1->frame_id
-              << ". This may happen if the map_ is not updated every iteration "
-                 "OR something is wrong with the tracking...";
+          // StateQuery<gtsam::Pose3> T_world_camera_k_1_query =
+          //     accessor->getSensorPose(query_frame_node_k_1->frame_id);
+
+          // CHECK(T_world_camera_k_1_query)
+          //     << "Failed cam pose query at frame "
+          //     << query_frame_node_k_1->frame_id
+          //     << ". This may happen if the map_ is not updated every
+          //     iteration "
+          //        "OR something is wrong with the tracking...";
+          // const gtsam::Pose3 T_world_camera_k_1 =
+          //     T_world_camera_k_1_query.get();
           const gtsam::Pose3 T_world_camera_k_1 =
-              T_world_camera_k_1_query.get();
+              getInitialOrLinearizedSensorPose(query_frame_node_k_1->frame_id);
 
           gtsam::Pose3 T_world_camera_k =
-              getInitialOrLinearizedSensorPose(query_frame_node_k_1->frame_id);
+              getInitialOrLinearizedSensorPose(query_frame_node_k->frame_id);
 
           PointUpdateContextType point_context;
           point_context.lmk_node = obj_lmk_node;
@@ -588,10 +592,9 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
 template <typename MAP>
 void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
-  // BackendLogger::UniquePtr logger = makeFullyQualifiedLogger();
   // TODO:
   std::string logger_prefix = this->loggerPrefix();
-  const std::string suffix = backend_info.suffix;
+  const std::string suffix = backend_info.logging_suffix;
 
   // add suffix to name if required
   if (!suffix.empty()) {
@@ -602,9 +605,12 @@ void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
 
   typename Map::Ptr map = this->map();
   auto accessor = this->accessorFromTheta();
-  CHECK(hooks_.ground_truth_packets_request);
-  const auto ground_truth_packets = hooks_.ground_truth_packets_request();
-  const auto& backend_params = hooks_.backend_params_request();
+
+  CHECK(hooks().ground_truth_packets_request);
+  const auto ground_truth_packets = hooks().ground_truth_packets_request();
+
+  CHECK_NOTNULL(backend_info.backend_params);
+  const auto& backend_params = *backend_info.backend_params;
 
   const ObjectPoseMap object_pose_map = accessor->getObjectPoses();
 

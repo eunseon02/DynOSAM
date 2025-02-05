@@ -141,11 +141,7 @@ RGBDBackendModule::~RGBDBackendModule() {
   LOG(INFO) << "Destructing RGBDBackendModule";
 
   if (base_params_.use_logger_) {
-    // hack to make sure things are updated!!
-    BackendMetaData backend_info;
-    // backend_info.params = base_params_;
-    // backend_info.ground_truth_packets = this->getGroundTruthPackets();
-
+    auto backend_info = createBackendMetadata();
     new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
     new_updater_->logBackendFromMap(backend_info);
   }
@@ -344,8 +340,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
   utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
                                     ".post_update");
-  BackendMetaData backend_info;
-  // backend_info.params = base_params_;
+  BackendMetaData backend_info = createBackendMetadata();
   new_updater_->accessorFromTheta()->postUpdateCallback(
       backend_info);  // force update every time (slow! and just for testing)
 
@@ -485,18 +480,9 @@ RGBDBackendModule::makeUpdater() {
   // TODO: why are we copying params over???
   formulation_params.min_static_observations = base_params_.min_static_obs_;
   formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
-  formulation_params.suffix = FLAGS_updater_suffix;  // TODO: depricate!!!
   formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
 
-  FormulationHooks hooks;
-  hooks.ground_truth_packets_request =
-      [&]() -> std::optional<GroundTruthPacketMap> {
-    return this->getGroundTruthPackets();
-  };
-
-  hooks.backend_params_request = [&]() -> const BackendParams& {
-    return base_params_;
-  };
+  FormulationHooks hooks = createFormulationHooks();
 
   if (updater_type_ == UpdaterType::MotionInWorld) {
     LOG(INFO) << "Using MotionInWorld";
@@ -527,6 +513,26 @@ RGBDBackendModule::makeUpdater() {
   } else {
     CHECK(false) << "Not implemented";
   }
+}
+
+BackendMetaData RGBDBackendModule::createBackendMetadata() const {
+  // TODO: cache?
+  BackendMetaData backend_info;
+  backend_info.logging_suffix = FLAGS_updater_suffix;
+  backend_info.backend_params = &base_params_;
+  return backend_info;
+}
+
+FormulationHooks RGBDBackendModule::createFormulationHooks() const {
+  // TODO: cache?
+  FormulationHooks hooks;
+
+  hooks.ground_truth_packets_request =
+      [&]() -> std::optional<GroundTruthPacketMap> {
+    return this->getGroundTruthPackets();
+  };
+
+  return hooks;
 }
 
 // TODO: these functions can go in base

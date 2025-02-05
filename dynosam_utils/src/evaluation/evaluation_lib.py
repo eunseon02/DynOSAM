@@ -742,6 +742,7 @@ class MapPlotter3D(Evaluator):
 
 
         camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
+        camera_traj_ref = copy.deepcopy(self._camera_eval.camera_pose_traj_ref)
         object_trajs = copy.deepcopy(self._object_eval.object_poses_traj)
 
         trajectory_helper = TrajectoryHelper()
@@ -776,7 +777,9 @@ class MapPlotter3D(Evaluator):
                 tools.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
 
-        tools.plot_object_trajectories(map_fig, {"Camera":camera_traj},
+        tools.plot_object_trajectories(map_fig,
+                                       {"Camera":camera_traj},
+                                       {"Camera Ref": camera_traj_ref},
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,

@@ -67,8 +67,7 @@ EstimateMap<ObjectId, gtsam::Pose3> WorldMotionAccessor::getObjectPoses(
   return object_poses;
 }
 
-void WorldMotionAccessor::postUpdateCallback(
-    const BackendMetaData& backend_info) {
+void WorldMotionAccessor::postUpdateCallback(const BackendMetaData&) {
   // this is pretty slow!!
   // update object_pose_cache_ with new values
   // this means we have to start again at the first frame and update all the

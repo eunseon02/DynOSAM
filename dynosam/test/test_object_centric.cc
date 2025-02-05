@@ -7,7 +7,7 @@
 #include <gtest/gtest.h>
 #include <gtsam/base/debug.h>
 
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/factors/ObjectCentricFactors.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "internal/helpers.hpp"
 #include "internal/simulator.hpp"

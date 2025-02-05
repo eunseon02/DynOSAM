@@ -659,7 +659,7 @@ TEST(JsonIO, GroundTruthPacketMapIO) {
   using json = nlohmann::json;
   json j = gt_packet_map;
 
-  auto gt_packet_map_2 = j.template get<GroundTruthPacketMap>();
+  GroundTruthPacketMap gt_packet_map_2 = j.template get<GroundTruthPacketMap>();
   EXPECT_EQ(gt_packet_map, gt_packet_map_2);
 }
 

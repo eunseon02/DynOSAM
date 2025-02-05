@@ -60,6 +60,8 @@ class DecoupledFormulation : public ObjectCentricFormulation {
   DYNO_POINTER_TYPEDEFS(DecoupledFormulation)
 
   using Base = ObjectCentricFormulation;
+  using Base::Map;
+
   DecoupledFormulation(const FormulationParams& params, typename Map::Ptr map,
                        const NoiseModels& noise_models,
                        const FormulationHooks& hooks)

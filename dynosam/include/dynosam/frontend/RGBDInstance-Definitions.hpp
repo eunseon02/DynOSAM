@@ -1,167 +1,174 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/vision/Frame.hpp"
-#include "dynosam/frontend/FrontendOutputPacket.hpp"
-#include "dynosam/utils/OpenCVUtils.hpp"
-#include "dynosam/logger/Logger.hpp"
-
-#include "dynosam/common/PointCloudProcess.hpp"
+#include <glog/logging.h>
 
 #include <pcl/impl/point_types.hpp>
 
-#include <glog/logging.h>
+#include "dynosam/common/PointCloudProcess.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/FrontendOutputPacket.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
 
 namespace dyno {
 
-//forward from Tracker
+// forward from Tracker
 struct FeatureTrackerInfo;
 
 struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
+ public:
+  DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
 
-public:
-    DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
+  const StatusLandmarkEstimates static_landmarks_;   //! in the camera frame
+  const StatusLandmarkEstimates dynamic_landmarks_;  //! in the camera frame
+  // TODO: handle with variant!!!!
+  const MotionEstimateMap
+      estimated_motions_;  //! Estimated motions in the world frame
+  const ObjectPoseMap propogated_object_poses_;  //! Propogated poses using the
+                                                 //! esimtate from the frontend
+  const gtsam::Pose3Vector
+      camera_poses_;  //! Vector of ego-motion poses (drawn everytime)
 
-    const StatusLandmarkEstimates static_landmarks_; //! in the camera frame
-    const StatusLandmarkEstimates dynamic_landmarks_; //! in the camera frame
-    const MotionEstimateMap estimated_motions_; //! Estimated motions in the world frame
-    const ObjectPoseMap propogated_object_poses_; //! Propogated poses using the esimtate from the frontend
-    const gtsam::Pose3Vector camera_poses_; //! Vector of ego-motion poses (drawn everytime)
+  RGBDInstanceOutputPacket(
+      const StatusKeypointMeasurements& static_keypoint_measurements,
+      const StatusKeypointMeasurements& dynamic_keypoint_measurements,
+      const StatusLandmarkEstimates& static_landmarks,
+      const StatusLandmarkEstimates& dynamic_landmarks,
+      const gtsam::Pose3 T_world_camera, const Timestamp timestamp,
+      const FrameId frame_id, const MotionEstimateMap& estimated_motions,
+      const ObjectPoseMap propogated_object_poses = {},
+      const gtsam::Pose3Vector camera_poses = {},
+      const Camera::Ptr camera = nullptr,
+      const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
+      const DebugImagery::Optional& debug_imagery = std::nullopt)
+      : FrontendOutputPacketBase(
+            FrontendType::kRGBD, static_keypoint_measurements,
+            dynamic_keypoint_measurements, T_world_camera, timestamp, frame_id,
+            camera, gt_packet, debug_imagery),
+        static_landmarks_(static_landmarks),
+        dynamic_landmarks_(dynamic_landmarks),
+        estimated_motions_(estimated_motions),
+        propogated_object_poses_(propogated_object_poses),
+        camera_poses_(camera_poses) {
+    // they need to be the same size as we expect a 1-to-1 relation between the
+    // keypoint and the landmark (which acts as an initalisation point)
+    CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());
+    CHECK_EQ(dynamic_landmarks_.size(), dynamic_keypoint_measurements_.size());
 
-    RGBDInstanceOutputPacket(
-        const StatusKeypointMeasurements& static_keypoint_measurements,
-        const StatusKeypointMeasurements& dynamic_keypoint_measurements,
-        const StatusLandmarkEstimates& static_landmarks,
-        const StatusLandmarkEstimates& dynamic_landmarks,
-        const gtsam::Pose3 T_world_camera,
-        const Timestamp timestamp,
-        const FrameId frame_id,
-        const MotionEstimateMap& estimated_motions,
-        const ObjectPoseMap propogated_object_poses = {},
-        const gtsam::Pose3Vector camera_poses = {},
-        const Camera::Ptr camera = nullptr,
-        const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
-        const DebugImagery::Optional& debug_imagery = std::nullopt
-    )
-    :
-    FrontendOutputPacketBase(
-        FrontendType::kRGBD,
-        static_keypoint_measurements,
-        dynamic_keypoint_measurements,
-        T_world_camera,
-        timestamp,
-        frame_id,
-        camera,
-        gt_packet,
-        debug_imagery),
-    static_landmarks_(static_landmarks),
-    dynamic_landmarks_(dynamic_landmarks),
-    estimated_motions_(estimated_motions),
-    propogated_object_poses_(propogated_object_poses),
-    camera_poses_(camera_poses)
-    {
-        //they need to be the same size as we expect a 1-to-1 relation between the keypoint and the landmark (which acts as an initalisation point)
-        CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());
-        CHECK_EQ(dynamic_landmarks_.size(), dynamic_keypoint_measurements_.size());
+    object_clouds_ = groupObjectCloud(dynamic_landmarks_, T_world_camera_);
+    for (const auto& [object_id, this_object_cloud] : object_clouds_) {
+      pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr =
+          pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>(
+              this_object_cloud);
+      // ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
 
-        object_clouds_ = groupObjectCloud(dynamic_landmarks_, T_world_camera_);
-        for (const auto& [object_id, this_object_cloud] : object_clouds_){
-            pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>(this_object_cloud);
-            // ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
-
-            //TODO: currently axis-aligned bounding box (not orientated bbx)
-            ObjectBBX this_object_bbx = findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
-            object_bbxes_.insert2(object_id, this_object_bbx);
-        }
+      // TODO: currently axis-aligned bounding box (not orientated bbx)
+      ObjectBBX this_object_bbx =
+          findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
+      object_bbxes_.insert2(object_id, this_object_bbx);
     }
+  }
 
-    GenericTrackedStatusVector<LandmarkKeypointStatus> collectStaticLandmarkKeypointMeasurements() const;
-    GenericTrackedStatusVector<LandmarkKeypointStatus> collectDynamicLandmarkKeypointMeasurements() const;
+  GenericTrackedStatusVector<LandmarkKeypointStatus>
+  collectStaticLandmarkKeypointMeasurements() const;
+  GenericTrackedStatusVector<LandmarkKeypointStatus>
+  collectDynamicLandmarkKeypointMeasurements() const;
 
-    // GenericTrackedStatusVector<KeypointDepthStatus> collectStaticKeypointDepthMeasurements() const;
-    // GenericTrackedStatusVector<KeypointDepthStatus> collectDynamicKeypointDepthMeasurements() const;
+  // GenericTrackedStatusVector<KeypointDepthStatus>
+  // collectStaticKeypointDepthMeasurements() const;
+  // GenericTrackedStatusVector<KeypointDepthStatus>
+  // collectDynamicKeypointDepthMeasurements() const;
 
+  /**
+   * @brief Checks if an object id exists within the frontend output
+   *
+   * Actually looks in the map of objectids -> object_clouds_, does not check
+   * the status keypoints/landmarks for this id.
+   *
+   * @param object_id
+   * @return true
+   * @return false
+   */
+  inline bool hasObject(ObjectId object_id) const {
+    return object_clouds_.exists(object_id);
+  }
 
-    /**
-     * @brief Checks if an object id exists within the frontend output
-     *
-     * Actually looks in the map of objectids -> object_clouds_, does not check the status keypoints/landmarks for this
-     * id.
-     *
-     * @param object_id
-     * @return true
-     * @return false
-     */
-    inline bool hasObject(ObjectId object_id) const { return object_clouds_.exists(object_id); }
+  const pcl::PointCloud<pcl::PointXYZRGB>& getDynamicObjectPointCloud(
+      ObjectId object_id) const {
+    CHECK(hasObject(object_id))
+        << "Cannot get dynamic object as id missing: " << object_id;
+    return object_clouds_.at(object_id);
+  }
 
-    const pcl::PointCloud<pcl::PointXYZRGB>& getDynamicObjectPointCloud(ObjectId object_id) const  {
-        CHECK(hasObject(object_id)) << "Cannot get dynamic object as id missing: " << object_id;
-        return object_clouds_.at(object_id);
-    }
+  const ObjectBBX& getDynamicObjectBBX(ObjectId object_id) const {
+    CHECK(hasObject(object_id))
+        << "Cannot get dynamic object bbx as id missing: " << object_id;
+    return object_bbxes_.at(object_id);
+  }
 
-    const ObjectBBX& getDynamicObjectBBX(ObjectId object_id) const {
-        CHECK(hasObject(object_id)) << "Cannot get dynamic object bbx as id missing: " << object_id;
-        return object_bbxes_.at(object_id);
-    }
+  const CloudPerObject& getObjectClouds() const { return object_clouds_; }
 
-    const CloudPerObject& getObjectClouds() const {
-        return object_clouds_;
-    }
+  const BbxPerObject& getObjectBbxes() const { return object_bbxes_; }
 
-    const BbxPerObject& getObjectBbxes() const {
-        return object_bbxes_;
-    }
+  bool operator==(const RGBDInstanceOutputPacket& other) const {
+    return static_cast<const FrontendOutputPacketBase&>(*this) ==
+               static_cast<const FrontendOutputPacketBase&>(other) &&
+           static_landmarks_ == other.static_landmarks_ &&
+           dynamic_landmarks_ == other.dynamic_landmarks_;
+    // TODO: no estimated_motions_, propogated_object_poses_... becuase of
+    // gtsam...
+  }
 
-
-    bool operator==(const RGBDInstanceOutputPacket& other) const {
-        return static_cast<const FrontendOutputPacketBase&>(*this) == static_cast<const FrontendOutputPacketBase&>(other) &&
-            static_landmarks_ == other.static_landmarks_ &&
-            dynamic_landmarks_ == other.dynamic_landmarks_;
-            //TODO: no estimated_motions_, propogated_object_poses_... becuase of gtsam...
-    }
-
-private:
-    CloudPerObject object_clouds_; //! Point clouds per object extracted from dynamic_landmarks_ in the world frame
-    BbxPerObject object_bbxes_; //! Bounding boxes per object extracted from the object_clouds_
-
+ private:
+  CloudPerObject object_clouds_;  //! Point clouds per object extracted from
+                                  //! dynamic_landmarks_ in the world frame
+  BbxPerObject object_bbxes_;  //! Bounding boxes per object extracted from the
+                               //! object_clouds_
 };
 
-
-//write to file on destructor
+// write to file on destructor
 class RGBDFrontendLogger : public EstimationModuleLogger {
-public:
-    DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)
-    RGBDFrontendLogger();
-    virtual ~RGBDFrontendLogger();
+ public:
+  DYNO_POINTER_TYPEDEFS(RGBDFrontendLogger)
+  RGBDFrontendLogger();
+  virtual ~RGBDFrontendLogger();
 
-    void logTrackingLengthHistogram(const Frame::Ptr frame);
+  void logTrackingLengthHistogram(const Frame::Ptr frame);
 
-private:
-    std::string tracking_length_hist_file_name_;
-    json tracklet_length_json_;
+ private:
+  std::string tracking_length_hist_file_name_;
+  json tracklet_length_json_;
 };
 
-} //dymo
+}  // namespace dyno

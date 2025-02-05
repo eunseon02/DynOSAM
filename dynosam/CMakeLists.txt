@@ -127,12 +127,14 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/rgbd/WorldPoseEstimator.cc
   src/backend/rgbd/ObjectCentricEstimator.cc
   src/backend/rgbd/impl/ObjectCentricFormulations.cc
+  src/backend/rgbd/impl/DecoupledObjectSAM.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
   src/factors/ObjectKinematicFactor.cc
   src/factors/LandmarkMotionPoseFactor.cc
   src/factors/LandmarkPoseSmoothingFactor.cc
+  src/factors/ObjectCentricFactors.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineParams.cc

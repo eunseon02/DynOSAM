@@ -450,20 +450,26 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   const double H_t_sigma = 0.08;
   const double dynamic_point_sigma = 0.1;
 
+  const double X_R_sigma = 0.05;
+  const double X_t_sigma = 0.03;
+
   dyno_testing::RGBDScenario::NoiseParams noise_params;
   noise_params.H_R_sigma = H_R_sigma;
   noise_params.H_t_sigma = H_t_sigma;
   noise_params.dynamic_point_sigma = dynamic_point_sigma;
+  noise_params.X_R_sigma = X_R_sigma;
+  noise_params.X_t_sigma = X_t_sigma;
 
   dyno_testing::RGBDScenario scenario(
-      camera, std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(7, 5),
+      camera,
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(25, 15),
       noise_params);
 
   // add one obect
-  const size_t num_points = 200;
-  const size_t obj1_overlap = 3;
-  const size_t obj2_overlap = 5;
-  const size_t obj3_overlap = 4;
+  const size_t num_points = 10;
+  const size_t obj1_overlap = 5;
+  const size_t obj2_overlap = 4;
+  const size_t obj3_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
@@ -502,6 +508,8 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   backend_params.useLogger(false);
   backend_params.min_dynamic_obs_ = 3u;
   backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
+  backend_params.odometry_rotation_sigma_ = X_R_sigma;
+  backend_params.odometry_translation_sigma_ = X_t_sigma;
 
   struct RunIncrementalTest {
     struct Data {
@@ -526,20 +534,27 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
                   << formulation->getFullyQualifiedName();
         CHECK_NOTNULL(data);
         CHECK_NOTNULL(data->isam2);
+        auto isam = data->isam2;
         gtsam::ISAM2Result result;
         {
           dyno::utils::TimingStatsCollector timer(
               "isam2_oc_test_update." + formulation->getFullyQualifiedName());
-          result = data->isam2->update(new_factors, new_values);
+          result = isam->update(new_factors, new_values);
         }
 
         LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
                   << " error after " << result.getErrorAfter();
-        data->opt_values = data->isam2->calculateEstimate();
+        data->opt_values = isam->calculateEstimate();
 
-        if (!data->isam2->empty()) {
+        isam->getFactorsUnsafe().saveGraph(
+            dyno::getOutputFilePath("isam_graph_" + std::to_string(frame_id) +
+                                    "_" + formulation->getFullyQualifiedName() +
+                                    ".dot"),
+            dyno::DynoLikeKeyFormatter);
+
+        if (!isam->empty()) {
           dyno::factor_graph_tools::saveBayesTree(
-              *data->isam2,
+              *isam,
               dyno::getOutputFilePath(
                   "oc_bayes_tree_" + std::to_string(frame_id) + "_" +
                   formulation->getFullyQualifiedName() + ".dot"),
@@ -565,7 +580,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
             backend_info);
         backend->new_updater_->logBackendFromMap(backend_info);
 
-        backend_info.suffix = "isam_opt";
+        backend_info.logging_suffix = "isam_opt";
         backend->new_updater_->updateTheta(d->opt_values);
         backend->new_updater_->accessorFromTheta()->postUpdateCallback(
             backend_info);
@@ -593,7 +608,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
       backend_params, dyno_testing::makeDefaultCameraPtr(),
       dyno::RGBDBackendModule::UpdaterType::OC_S));
 
-  for (size_t i = 0; i < 40; i++) {
+  for (size_t i = 0; i < 20; i++) {
     dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
     std::tie(output_gt, output_noisy) = scenario.getOutput(i);
 
@@ -921,7 +936,7 @@ TEST(RGBDBackendModule, testObjectCentric) {
   backend.new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
   backend.new_updater_->logBackendFromMap(backend_info);
 
-  backend_info.suffix = "LM_opt";
+  backend_info.logging_suffix = "LM_opt";
   backend.new_updater_->updateTheta(opt_values);
   backend.new_updater_->accessorFromTheta()->postUpdateCallback(backend_info);
   backend.new_updater_->logBackendFromMap(backend_info);

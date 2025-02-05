@@ -30,7 +30,7 @@
 
 #include "dynosam/backend/rgbd/impl/ObjectCentricFormulations.hpp"
 
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"  //only for now as this is where the factors are!!
+#include "dynosam/factors/ObjectCentricFactors.hpp"
 
 namespace dyno {
 namespace keyframe_object_centric {
@@ -57,7 +57,8 @@ void StructurelessDecoupledFormulation::dynamicPointUpdateCallback(
 
   gtsam::Pose3 L_0;
   FrameId s0;
-  std::tie(s0, L_0) = getL0(context.getObjectId(), frame_node_k_1->getId());
+  std::tie(s0, L_0) =
+      getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
 
   new_factors.emplace_shared<StructurelessDecoupledObjectCentricMotion>(
@@ -88,7 +89,8 @@ void DecoupledFormulation::dynamicPointUpdateCallback(
 
   gtsam::Pose3 L_0;
   FrameId s0;
-  std::tie(s0, L_0) = getL0(context.getObjectId(), frame_node_k_1->getId());
+  std::tie(s0, L_0) =
+      getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
   auto landmark_motion_noise = noise_models_.landmark_motion_noise;
 
   // TODO:this will not be the case with sliding/window as we reconstruct the
@@ -165,7 +167,8 @@ void StructurlessFormulation::dynamicPointUpdateCallback(
 
   gtsam::Pose3 L_0;
   FrameId s0;
-  std::tie(s0, L_0) = getL0(context.getObjectId(), frame_node_k_1->getId());
+  std::tie(s0, L_0) =
+      getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
 
   new_factors.emplace_shared<StructurelessObjectCentricMotionFactor2>(

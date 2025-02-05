@@ -71,6 +71,8 @@ class Accessor {
    * @brief Get an absolute object motion (_{k-1}^wH_k) from theta the requested
    * time-step (k) and object (j).
    *
+   * //TODO: enforce representation using Motion3ReferenceFrame?
+   *
    * @param frame_id FrameId
    * @param object_id ObjectId
    * @return StateQuery<gtsam::Pose3>

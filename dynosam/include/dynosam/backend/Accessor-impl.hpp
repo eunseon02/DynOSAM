@@ -67,8 +67,9 @@ MotionEstimateMap Accessor<MAP>::getObjectMotions(FrameId frame_id) const {
         this->getObjectMotion(frame_id, object_id);
     if (motion_query) {
       motion_estimates.insert2(
-          object_id, ReferenceFrameValue<Motion3>(motion_query.get(),
-                                                  ReferenceFrame::GLOBAL));
+          object_id, Motion3ReferenceFrame(
+                         motion_query.get(), Motion3ReferenceFrame::Style::F2F,
+                         ReferenceFrame::GLOBAL, frame_id - 1u, frame_id));
     }
   }
   return motion_estimates;

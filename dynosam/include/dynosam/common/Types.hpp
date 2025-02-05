@@ -188,6 +188,42 @@ struct ReferenceFrameValue {
   operator Estimate&() { return estimate_; }
   operator const Estimate&() const { return estimate_; }
   operator const ReferenceFrame&() const { return frame_; }
+
+  const ReferenceFrame& frame() const { return frame_; }
+};
+
+enum MotionRepresentationStyle {
+  F2F,  // frame-to-frame
+  KF    // keyframe representation of motion
+};
+
+template <typename E>
+struct MotionReferenceFrame : public ReferenceFrameValue<E> {
+  using This = MotionReferenceFrame<E>;
+  using Base = ReferenceFrameValue<E>;
+  using ConstEstimate = typename Base::ConstEstimate;
+
+  // forward the style ;)
+  using Style = MotionRepresentationStyle;
+
+  FrameId from_;
+  FrameId to_;
+  MotionRepresentationStyle style_;
+
+  inline FrameId from() const { return from_; }
+  inline FrameId to() const { return to_; }
+  inline const MotionRepresentationStyle& style() const { return style_; }
+  inline const ReferenceFrame& origin() const { return Base::frame_; }
+
+  MotionReferenceFrame() {}
+  MotionReferenceFrame(ConstEstimate& estimate, const Style& style,
+                       ReferenceFrame frame, FrameId from, FrameId to)
+      : Base(estimate, frame), style_(style), from_(from), to_(to) {}
+
+  // really for seralization
+  MotionReferenceFrame(const Base& base, const Style& style, FrameId from,
+                       FrameId to)
+      : Base(base), style_(style), from_(from), to_(to) {}
 };
 
 template <typename VALUE>
@@ -463,17 +499,24 @@ using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
 // TODO: refactor to all be simpler like this one ;)
 using KeypointDepthStatus = TrackedValueStatus<KeypointDepth>;
 
-/**
- * @brief Map of key to an estimate containting a reference frame
- *
- * @tparam Key
- * @tparam Estimate
- */
+/// @brief Map of key to an estimate containting a reference frame
+/// @tparam Key
+/// @tparam Estimate
 template <typename Key, typename Estimate>
 using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 
-/// @brief Map of object ids to ReferenceFrameValue's of motions
-using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
+/// @brief Map of key to a MotionReferenceFrame. Used specifically for motions.
+/// @tparam Key
+/// @tparam Estimate
+template <typename Key, typename Estimate>
+using MotionReferenceEstimateMap =
+    gtsam::FastMap<Key, MotionReferenceFrame<Estimate>>;
+
+/// @brief Map of object id's to MotionReferenceFrame with Motion3
+using MotionEstimateMap = MotionReferenceEstimateMap<ObjectId, Motion3>;
+
+/// @brief Alias of a MotionReferenceFrame using Motion3 (Pose3)
+using Motion3ReferenceFrame = MotionReferenceFrame<Motion3>;
 
 /**
  * @brief Generic mapping of Object Id -> FrameId -> Value within a nested

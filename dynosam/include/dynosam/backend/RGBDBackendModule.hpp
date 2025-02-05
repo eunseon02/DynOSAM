@@ -165,6 +165,9 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
   Formulation<RGBDMap>::UniquePtr makeUpdater();
 
+  BackendMetaData createBackendMetadata() const;
+  FormulationHooks createFormulationHooks() const;
+
  public:
   Camera::Ptr camera_;
   const UpdaterType updater_type_;

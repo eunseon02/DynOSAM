@@ -108,13 +108,11 @@ struct NoiseModels {
 };
 
 struct FormulationHooks {
-  using BackendParamsRequest = std::function<const BackendParams&()>;
   // Return copy? Should return reference? Maybe?
   using GroundTruthPacketsRequest =
       std::function<std::optional<GroundTruthPacketMap>()>;
 
   GroundTruthPacketsRequest ground_truth_packets_request;
-  BackendParamsRequest backend_params_request;
 };
 
 struct SharedFormulationData {
@@ -125,33 +123,15 @@ struct SharedFormulationData {
       : values(v), hooks(h) {}
 };
 
-// /**
-//  * @brief Internal back-end structure allowing Formulation/Accessors to get
-//  meta-data
-//  * about the backend via hooks
-//  *
-//  */
-// struct InternalBackendMetaData {
-
-//     using BackendParamsRequest = std::function<const BackendParams&()>;
-//     using GroundTruthPacketsRequest = std::function<const
-//     std::optional<GroundTruthPacketMap>&()>;
-
-//     struct Hooks {
-//         BackendParamsRequest backend_params_request;
-//         GroundTruthPacketsRequest ground_truth_packets_request;
-//     };
-
-//     Hooks hooks;
-
-// };
-
-// better to change to hook (or pointer?) and parse as config
-// TODO: clean up!??
 struct BackendMetaData {
-  // BackendParams params;
-  std::string suffix;
-  // std::optional<GroundTruthPacketMap> ground_truth_packets;
+  // TODO: should streamline this to only include what we actually need from the
+  // params
+  const BackendParams* backend_params;
+  //! Suffix that is used when logging data from a formulation
+  //! This is additional to the suffix specified in formulation params in case
+  //! further nameing specificity is needed; this is mostly helpful during
+  //! testing
+  std::string logging_suffix;
 };
 
 struct BackendSpinState {

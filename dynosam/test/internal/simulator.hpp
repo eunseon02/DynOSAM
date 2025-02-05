@@ -468,7 +468,10 @@ class RGBDScenario : public Scenario {
   struct NoiseParams {
     double H_R_sigma{0.0};
     double H_t_sigma{0.0};
+
+    //! rotation noise on relative camera motion
     double X_R_sigma{0.0};
+    //! translation noise on relative camera motion
     double X_t_sigma{0.0};
 
     double dynamic_point_sigma{0.0};
@@ -497,14 +500,27 @@ class RGBDScenario : public Scenario {
     gt_packet.frame_id_ = frame_id;
 
     MotionEstimateMap motions, noisy_motions;
-    const gtsam::Pose3 X_world = cameraPose(frame_id);
-    gt_packet.X_world_ = X_world;
+    const gtsam::Pose3 X_world_k = cameraPose(frame_id);
+    gt_packet.X_world_ = X_world_k;
 
-    gtsam::Vector6 pose_sigmas;
-    pose_sigmas.head<3>().setConstant(noise_params_.X_R_sigma);
-    pose_sigmas.tail<3>().setConstant(noise_params_.X_t_sigma);
-    const gtsam::Pose3 noisy_X_world =
-        dyno::utils::perturbWithNoise(X_world, pose_sigmas);
+    gtsam::Pose3 noisy_X_world_k;
+    if (frame_id > 0) {
+      // add noise on relative transformation of camera pose using gt poses to
+      // calculate gt realtive pose
+      const gtsam::Pose3 X_world_k_1 = cameraPose(frame_id - 1u);
+      const gtsam::Pose3 w_T_k_1_k = X_world_k_1.inverse() * X_world_k;
+
+      gtsam::Vector6 pose_sigmas;
+      pose_sigmas.head<3>().setConstant(noise_params_.X_R_sigma);
+      pose_sigmas.tail<3>().setConstant(noise_params_.X_t_sigma);
+      const gtsam::Pose3 noisy_w_T_k_1_k =
+          dyno::utils::perturbWithNoise(w_T_k_1_k, pose_sigmas);
+
+      CHECK(noisy_camera_poses_.exists(frame_id - 1u));
+      noisy_X_world_k = noisy_camera_poses_.at(frame_id - 1u) * noisy_w_T_k_1_k;
+    } else {
+      noisy_X_world_k = X_world_k;
+    }
 
     // tracklets should be uniqyue but becuase we use the DynamicPointSymbol
     // they only need to be unique per frame
@@ -521,9 +537,17 @@ class RGBDScenario : public Scenario {
         object_pose_gt.prev_H_current_world_ = H_world_k;
         gt_packet.object_poses_.push_back(object_pose_gt);
 
+        FrameId previous_frame;
+        if (frame_id > 0) {
+          previous_frame = frame_id - 1u;
+        } else {
+          previous_frame = 0u;  // hack? should actually skip this case
+        }
+
         motions.insert2(object_id,
-                        dyno::ReferenceFrameValue<gtsam::Pose3>(
-                            H_world_k, dyno::ReferenceFrame::GLOBAL));
+                        Motion3ReferenceFrame(
+                            H_world_k, Motion3ReferenceFrame::Style::F2F,
+                            ReferenceFrame::GLOBAL, previous_frame, frame_id));
 
         gtsam::Vector6 motion_sigmas;
         motion_sigmas.head<3>().setConstant(noise_params_.H_R_sigma);
@@ -531,14 +555,15 @@ class RGBDScenario : public Scenario {
         const gtsam::Pose3 noisy_H_world_k =
             dyno::utils::perturbWithNoise(H_world_k, motion_sigmas);
         noisy_motions.insert2(
-            object_id, dyno::ReferenceFrameValue<gtsam::Pose3>(
-                           noisy_H_world_k, dyno::ReferenceFrame::GLOBAL));
+            object_id, Motion3ReferenceFrame(
+                           noisy_H_world_k, Motion3ReferenceFrame::Style::F2F,
+                           ReferenceFrame::GLOBAL, previous_frame, frame_id));
 
         // convert to status vectors
         for (const TrackedPoint& tracked_p_world : points_world) {
           auto tracklet_id = tracked_p_world.first;
           auto p_world = tracked_p_world.second;
-          const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+          const gtsam::Point3 p_camera = X_world_k.inverse() * p_world;
           const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
               p_camera, noise_params_.dynamic_point_sigma);
 
@@ -572,7 +597,7 @@ class RGBDScenario : public Scenario {
     for (const TrackedPoint& tracked_p_world : static_points_world) {
       auto tracklet_id = tracked_p_world.first;
       auto p_world = tracked_p_world.second;
-      const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+      const gtsam::Point3 p_camera = X_world_k.inverse() * p_world;
       const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
           p_camera, noise_params_.static_point_sigma);
 
@@ -594,15 +619,16 @@ class RGBDScenario : public Scenario {
     }
 
     ground_truths_.insert2(frame_id, gt_packet);
+    noisy_camera_poses_.insert2(frame_id, noisy_X_world_k);
 
     return {
         std::make_shared<RGBDInstanceOutputPacket>(
             static_keypoint_measurements, dynamic_keypoint_measurements,
-            static_landmarks, dynamic_landmarks, X_world, frame_id, frame_id,
+            static_landmarks, dynamic_landmarks, X_world_k, frame_id, frame_id,
             motions, ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr, gt_packet),
         std::make_shared<RGBDInstanceOutputPacket>(
             static_keypoint_measurements, dynamic_keypoint_measurements,
-            noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world,
+            noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world_k,
             frame_id, frame_id, noisy_motions, ObjectPoseMap{},
             gtsam::Pose3Vector{}, nullptr, gt_packet)};
   }
@@ -612,6 +638,7 @@ class RGBDScenario : public Scenario {
  private:
   NoiseParams noise_params_;
   mutable GroundTruthPacketMap ground_truths_;
+  mutable gtsam::FastMap<FrameId, gtsam::Pose3> noisy_camera_poses_;
 };
 
 }  // namespace dyno_testing

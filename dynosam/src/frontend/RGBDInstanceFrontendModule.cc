@@ -69,6 +69,13 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   if (FLAGS_use_frontend_logger) {
     logger_ = std::make_unique<RGBDFrontendLogger>();
   }
+
+  gtsam::ISAM2Params isam2_params;
+  isam2_params.evaluateNonlinearError = true;
+
+  experimental_solver_ = std::make_unique<ObjectMotionSolverSAM>(
+      frontend_params.object_motion_solver_params, camera->getParams(),
+      isam2_params);
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -238,7 +245,8 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
   } else {
     // TODO: untested
     LOG(FATAL) << "Not tested";
-    result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1, frame_k);
+    // result = motion_solver_.geometricOutlierRejection3d3d(frame_k_1,
+    // frame_k);
   }
 
   VLOG(15) << (base_params_.use_ego_motion_pnp ? "3D2D" : "3D3D")
@@ -281,13 +289,14 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
 bool RGBDInstanceFrontendModule::solveObjectMotion(
     Frame::Ptr frame_k, Frame::Ptr frame_k_1, ObjectId object_id,
     MotionEstimateMap& motion_estimates) {
-  Pose3SolverResult result;
+  Motion3SolverResult result;
   if (base_params_.use_object_motion_pnp) {
     result = object_motion_solver_.geometricOutlierRejection3d2d(
         frame_k_1, frame_k, frame_k->T_world_camera_, object_id);
   } else {
-    result = object_motion_solver_.geometricOutlierRejection3d3d(
-        frame_k_1, frame_k, frame_k->T_world_camera_, object_id);
+    CHECK(false) << "Not implemented";
+    // result = object_motion_solver_.geometricOutlierRejection3d3d(
+    //     frame_k_1, frame_k, frame_k->T_world_camera_, object_id);
   }
 
   VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D")
@@ -306,9 +315,9 @@ bool RGBDInstanceFrontendModule::solveObjectMotion(
   // if valid, remove outliers and add to motion estimation
   if (result.status == TrackingStatus::VALID) {
     frame_k->dynamic_features_.markOutliers(result.outliers);
-    ReferenceFrameValue<Motion3> estimate(result.best_result,
-                                          ReferenceFrame::GLOBAL);
-    motion_estimates.insert({object_id, estimate});
+
+    // TODO: need to assert we have F2F motion?
+    motion_estimates.insert({object_id, result.best_result});
     return true;
   } else {
     return false;
@@ -320,44 +329,49 @@ void RGBDInstanceFrontendModule::solveObjectMotions(
     MotionEstimateMap& motion_estimates) {
   ObjectIds failed_object_tracks;
 
-  // if only 1 object, no point parallelising
-  if (motion_estimates.size() <= 1) {
-    for (const auto& [object_id, observations] :
-         frame_k->object_observations_) {
-      if (!solveObjectMotion(frame_k, frame_k_1, object_id, motion_estimates)) {
-        VLOG(5) << "Could not solve motion for object " << object_id
-                << " from frame " << frame_k_1->getFrameId() << " -> "
-                << frame_k->getFrameId();
-        failed_object_tracks.push_back(object_id);
-      }
-    }
-  } else {
-    std::mutex mutex;
-    // paralleilise the process of each function call.
-    tbb::parallel_for_each(
-        frame_k->object_observations_.begin(),
-        frame_k->object_observations_.end(),
-        [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) {
-          const auto object_id = pair.first;
-          if (!solveObjectMotion(frame_k, frame_k_1, object_id,
-                                 motion_estimates)) {
-            VLOG(5) << "Could not solve motion for object " << object_id
-                    << " from frame " << frame_k_1->getFrameId() << " -> "
-                    << frame_k->getFrameId();
+  // // if only 1 object, no point parallelising
+  // if (motion_estimates.size() <= 1) {
+  //   for (const auto& [object_id, observations] :
+  //        frame_k->object_observations_) {
+  //     if (!solveObjectMotion(frame_k, frame_k_1, object_id,
+  //     motion_estimates)) {
+  //       VLOG(5) << "Could not solve motion for object " << object_id
+  //               << " from frame " << frame_k_1->getFrameId() << " -> "
+  //               << frame_k->getFrameId();
+  //       failed_object_tracks.push_back(object_id);
+  //     }
+  //   }
+  // } else {
+  //   std::mutex mutex;
+  //   // paralleilise the process of each function call.
+  //   tbb::parallel_for_each(
+  //       frame_k->object_observations_.begin(),
+  //       frame_k->object_observations_.end(),
+  //       [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) {
+  //         const auto object_id = pair.first;
+  //         if (!solveObjectMotion(frame_k, frame_k_1, object_id,
+  //                                motion_estimates)) {
+  //           VLOG(5) << "Could not solve motion for object " << object_id
+  //                   << " from frame " << frame_k_1->getFrameId() << " -> "
+  //                   << frame_k->getFrameId();
 
-            std::lock_guard<std::mutex> lk(mutex);
-            failed_object_tracks.push_back(object_id);
-          }
-        });
-  }
+  //           std::lock_guard<std::mutex> lk(mutex);
+  //           failed_object_tracks.push_back(object_id);
+  //         }
+  //       });
+  // }
 
-  /// remove objects from the object observations list
-  // does not remove the features etc but stops the object being propogated to
-  // the backend as we loop over the object observations in the constructOutput
-  // function
-  for (auto object_id : failed_object_tracks) {
-    frame_k->object_observations_.erase(object_id);
-  }
+  // /// remove objects from the object observations list
+  // // does not remove the features etc but stops the object being propogated
+  // to
+  // // the backend as we loop over the object observations in the
+  // constructOutput
+  // // function
+  // for (auto object_id : failed_object_tracks) {
+  //   frame_k->object_observations_.erase(object_id);
+  // }
+
+  experimental_solver_->solve(frame_k, frame_k_1);
 }
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
