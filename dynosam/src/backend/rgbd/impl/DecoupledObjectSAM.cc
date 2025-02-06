@@ -32,8 +32,10 @@
 
 namespace dyno {
 
-DecoupledObjectSAM::DecoupledObjectSAM(ObjectId object_id,
-                                       const gtsam::ISAM2Params& isam_params)
+DecoupledObjectSAM::DecoupledObjectSAM(
+    ObjectId object_id, const NoiseModels& noise_models,
+    const FormulationHooks& formulation_hooks,
+    const gtsam::ISAM2Params& isam_params)
     : object_id_(object_id),
       map_(Map::create()),
       expected_style_(MotionRepresentationStyle::F2F) {
@@ -43,12 +45,9 @@ DecoupledObjectSAM::DecoupledObjectSAM(ObjectId object_id,
   // HACK for now so that we get object motions at every frame!!!?
   formulation_params.min_dynamic_observations = 1u;
 
-  NoiseModels noise_models;
-  FormulationHooks hooks;
-
   decoupled_formulation_ =
       std::make_shared<keyframe_object_centric::DecoupledFormulation>(
-          formulation_params, map_, noise_models, hooks);
+          formulation_params, map_, noise_models, formulation_hooks);
   accessor_ = decoupled_formulation_->accessorFromTheta();
 }
 
@@ -93,13 +92,19 @@ void DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
   UpdateObservationParams update_params;
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
+  LOG(INFO) << "DecoupledObjectSAM: Starting formulation update k=" << frame_k
+            << " j= " << object_id_;
   decoupled_formulation_->updateDynamicObservations(frame_k, new_values,
                                                     new_factors, update_params);
 
+  LOG(INFO) << "DecoupledObjectSAM: Starting smoother update k=" << frame_k
+            << " j= " << object_id_;
   result_ = smoother_->update(new_factors, new_values);
   estimate_ = smoother_->calculateEstimate();
 
   decoupled_formulation_->updateTheta(estimate_);
+  LOG(INFO) << "DecoupledObjectSAM: finished updateSmoother" << frame_k
+            << " j= " << object_id_;
 }
 
 }  // namespace dyno

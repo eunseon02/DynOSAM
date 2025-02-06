@@ -527,106 +527,9 @@ void ObjectCentricFormulation::objectUpdateContext(
         result.debug_info->getObjectInfo(context.getObjectId())
             .smoothing_factor_added = true;
     }
-
-    //   // // if(smoothing_added) {
-    //   // //     //TODO: add back in
-    //   // //     // object_debug_info.smoothing_factor_added = true;
-    //   // // }
   }
 
-  // //TODO: for now ignore the k-1'th frame on the first frame
-  // if(!context.has_motion_pair) {
-  //     return;
-  // }
-  // // return;
-
-  // auto frame_node_k = context.frame_node_k;
-  // const auto frame_id_k = context.getFrameId();
-  // const auto object_id = context.getObjectId();
-
-  // const gtsam::Key object_motion_key_k =
-  // frame_node_k->makeObjectMotionKey(context.getObjectId()); auto
-  // theta_accessor = this->accessorFromTheta();
-
-  // FrameId s0; //first frame of objects trajectory
-  // gtsam::Pose3 L0; //the fixed object frame in the world
-  // std::tie(s0, L0) = getOrConstructL0(object_id, frame_id_k);
-
-  // if(context.has_motion_pair) {
-  //     //attempt to init at k-1
-  //     if(!is_other_values_in_map.exists(object_motion_key_k)) {
-  //         // gtsam::Pose3 motion;
-  //         // gtsam::Pose3 motion;
-  //         gtsam::Pose3 motion =
-  //         computeInitialHFromFrontend(context.getObjectId(),
-  //         context.getFrameId()); new_values.insert(object_motion_key_k,
-  //         motion); is_other_values_in_map.insert2(object_motion_key_k, true);
-  //     }
-  // }
-
-  // //add value motion from s to k (if s==k, should be identity!)
-  //  if(!is_other_values_in_map.exists(object_motion_key_k)) {
-  //     // gtsam::Pose3 motion;
-  //     // gtsam::Pose3 motion;
-  //     gtsam::Pose3 motion =
-  //     computeInitialHFromFrontend(context.getObjectId(),
-  //     context.getFrameId()); new_values.insert(object_motion_key_k, motion);
-  //     is_other_values_in_map.insert2(object_motion_key_k, true);
-  // }
-
-  // //sanity check
-  // CHECK(point_contexts_.exists(object_id));
-  // for (const PointUpdateContextType& point_context :
-  // point_contexts_.at(object_id)) {
-  //     const auto context_frame_node_k = point_context.frame_node_k;
-  //     //colleced point contexts are at the right frame id
-  //     CHECK_EQ(context_frame_node_k->getId(), frame_id_k);
-  //     //collected points are on the right object
-  //     CHECK_EQ(point_context.getObjectId(), object_id);
-
-  //     const auto lmk_node = point_context.lmk_node;
-  //     gtsam::Key point_key =
-  //     this->makeDynamicKey(point_context.getTrackletId());
-
-  //     //add points
-
-  //     //ie new point
-  //     if(!isDynamicTrackletInMap(lmk_node)) {
-  //         is_dynamic_tracklet_in_map_.insert2(point_context.getTrackletId(),
-  //         true); CHECK(isDynamicTrackletInMap(lmk_node));
-
-  //         gtsam::Pose3 s0_H_k =
-  //         computeInitialHFromFrontend(context.getObjectId(),
-  //         context_frame_node_k->getId());
-  //         //measured point in camera frame
-  //         const gtsam::Point3 m_camera =
-  //         lmk_node->getMeasurement(context_frame_node_k).landmark; Landmark
-  //         lmk_L0_init = L0.inverse() * s0_H_k.inverse() *
-  //         point_context.X_k_measured * m_camera;
-
-  //         new_values.insert(point_key, lmk_L0_init);
-  //         if(result.debug_info)
-  //         result.debug_info->getObjectInfo(point_context.getObjectId()).num_new_dynamic_points++;
-
-  //         //TODO: update result?
-  //     }
-
-  //     //add factor
-  //     auto landmark_motion_noise = noise_models_.landmark_motion_noise;
-
-  //     new_factors.emplace_shared<ObjectCentricMotionFactor>(
-  //         context_frame_node_k->makePoseKey(), //pose key at previous frames,
-  //         object_motion_key_k,
-  //         point_key,
-  //         lmk_node->getMeasurement(context_frame_node_k).landmark,
-  //         L0,
-  //         landmark_motion_noise
-  //     );
-  //     result.updateAffectedObject(context_frame_node_k->frame_id,
-  //     point_context.getObjectId()); if(result.debug_info)
-  //     result.debug_info->getObjectInfo(point_context.getObjectId()).num_motion_factors++;
-
-  // }
+  LOG(INFO) << "Done objectUpdateContext";
 
   // clear point context for this object id
   point_contexts_.erase(object_id);
@@ -708,18 +611,21 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
   FrameId s0;
   std::tie(s0, L_0) = getOrConstructL0(object_id, frame_id);
 
-  Motion3ReferenceFrame initial_motion_frame;
-  CHECK(map()->hasInitialObjectMotion(frame_id, object_id,
-                                      &initial_motion_frame));
-  CHECK_EQ(initial_motion_frame.to(), frame_id);
-  CHECK_EQ(initial_motion_frame.frame(), ReferenceFrame::GLOBAL);
-
   CHECK_LE(s0, frame_id);
   if (frame_id == s0) {
     // same frame so motion between them should be identity!
     // except for rotation?
     return gtsam::Pose3::Identity();
   }
+
+  // only need an initial motion when k > s0
+  Motion3ReferenceFrame initial_motion_frame;
+  CHECK(
+      map()->hasInitialObjectMotion(frame_id, object_id, &initial_motion_frame))
+      << "Missing initial motion at k= " << frame_id << " j= " << object_id;
+  CHECK_EQ(initial_motion_frame.to(), frame_id);
+  CHECK_EQ(initial_motion_frame.frame(), ReferenceFrame::GLOBAL);
+
   if (frame_id - 1 == s0) {
     // a motion that takes us from k-1 to k where k-1 == s0
     return initial_motion_frame;

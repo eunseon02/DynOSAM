@@ -54,7 +54,9 @@ class DecoupledObjectSAM {
   template <typename DERIVEDSTATUS>
   using MeasurementStatusVector = Map::MeasurementStatusVector<DERIVEDSTATUS>;
 
-  DecoupledObjectSAM(ObjectId object_id, const gtsam::ISAM2Params& isam_params);
+  DecoupledObjectSAM(ObjectId object_id, const NoiseModels& noise_models,
+                     const FormulationHooks& formulation_hooks,
+                     const gtsam::ISAM2Params& isam_params);
 
   // what motion representation should this be in? GLOBAL? Do ne need a new
   // repsentation for KF object centric?
@@ -76,6 +78,9 @@ class DecoupledObjectSAM {
 
   Motion3ReferenceFrame getFrame2FrameMotion(FrameId frame_id) const;
   Motion3ReferenceFrame getKeyFramedMotion(FrameId frame_id) const;
+
+  // all frames
+  ObjectPoseMap getObjectPoses() const { return accessor_->getObjectPoses(); }
 
  private:
   template <typename DERIVEDSTATUS>

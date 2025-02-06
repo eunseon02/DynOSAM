@@ -161,7 +161,6 @@ enum KeyPointType { STATIC, DYNAMIC };
 
 enum ReferenceFrame { GLOBAL, LOCAL, OBJECT };
 
-// TODO: depricate and replace with the IndexedPose thing!!!
 /**
  * @brief Estimate with a reference frame and operator casting
  *
@@ -173,6 +172,7 @@ enum ReferenceFrame { GLOBAL, LOCAL, OBJECT };
 template <typename E>
 struct ReferenceFrameValue {
   using Estimate = E;
+  using This = ReferenceFrameValue<E>;
 
   using ConstEstimate =
       std::add_const_t<Estimate>;  //!	Const qualification of M. Regardless
@@ -190,6 +190,13 @@ struct ReferenceFrameValue {
   operator const ReferenceFrame&() const { return frame_; }
 
   const ReferenceFrame& frame() const { return frame_; }
+  const Estimate& estimate() const { return estimate_; }
+
+  friend std::ostream& operator<<(std::ostream& os, const This& t) {
+    os << type_name<Estimate>() << ": " << t.estimate() << "\n";
+    os << "frame: " << to_string(t.frame()) << "\n";
+    return os;
+  }
 };
 
 enum MotionRepresentationStyle {
@@ -224,6 +231,14 @@ struct MotionReferenceFrame : public ReferenceFrameValue<E> {
   MotionReferenceFrame(const Base& base, const Style& style, FrameId from,
                        FrameId to)
       : Base(base), style_(style), from_(from), to_(to) {}
+
+  friend std::ostream& operator<<(std::ostream& os, const This& t) {
+    os << static_cast<const Base&>(t);
+    os << "from: " << t.from() << "\n";
+    os << "to: " << t.to() << "\n";
+    os << "style : " << to_string(t.style()) << "\n";
+    return os;
+  }
 };
 
 template <typename VALUE>
@@ -579,6 +594,13 @@ class GenericObjectCentricMap
 
   Value& at(ObjectId object_id, FrameId frame_id) {
     return atImpl(const_cast<const This*>(this), object_id, frame_id);
+  }
+
+  This& operator+=(const This& rhs) {
+    for (const auto& [key, value] : rhs) {
+      this->operator[](key).insert(value.begin(), value.end());
+    }
+    return *this;
   }
 
   /**

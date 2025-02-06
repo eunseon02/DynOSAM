@@ -333,13 +333,36 @@ class EgoMotionSolver {
   const CameraParams camera_params_;
 };
 
-class ObjectMotionSovler : protected EgoMotionSolver {
+class ObjectMotionSolver {
  public:
-  DYNO_POINTER_TYPEDEFS(ObjectMotionSovler)
+  DYNO_POINTER_TYPEDEFS(ObjectMotionSolver)
+
+  ObjectMotionSolver() = default;
+  virtual ~ObjectMotionSolver() = default;
+
+  using Result = std::pair<MotionEstimateMap, ObjectPoseMap>;
+
+  virtual Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) = 0;
+
+ protected:
+};
+
+class ObjectMotionSovlerF2F : public ObjectMotionSolver,
+                              protected EgoMotionSolver {
+ public:
+  DYNO_POINTER_TYPEDEFS(ObjectMotionSovlerF2F)
+
+  //! Result from solve including the object motions and poses
+  using ObjectMotionSolver::Result;
 
   struct Params : public EgoMotionSolver::Params {
     bool refine_motion_with_joint_of = true;
     bool refine_motion_with_3d = true;
+
+    //! Hook to get the ground truth packet. Used when collecting the object
+    //! poses (on conditional) to ensure the first pose matches with the gt when
+    //! evaluation
+    FormulationHooks::GroundTruthPacketsRequest ground_truth_packets_request;
 
     OpticalFlowAndPoseOptimizer::Params joint_of_params =
         OpticalFlowAndPoseOptimizer::Params();
@@ -347,7 +370,10 @@ class ObjectMotionSovler : protected EgoMotionSolver {
         MotionOnlyRefinementOptimizer::Params();
   };
 
-  ObjectMotionSovler(const Params& params, const CameraParams& camera_params);
+  ObjectMotionSovlerF2F(const Params& params,
+                        const CameraParams& camera_params);
+
+  Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) override;
 
   Motion3SolverResult geometricOutlierRejection3d2d(
       Frame::Ptr frame_k_1, Frame::Ptr frame_k, const gtsam::Pose3& T_world_k,
@@ -366,20 +392,37 @@ class ObjectMotionSovler : protected EgoMotionSolver {
   //                         const gtsam::Pose3& T_world_k,
   //                         ObjectId object_id);
 
+  const ObjectMotionSovlerF2F::Params& objectMotionParams() const {
+    return object_motion_params;
+  }
+
+ private:
+  bool solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1, ObjectId object_id,
+                 MotionEstimateMap& motion_estimates);
+  const ObjectPoseMap& updatePoses(MotionEstimateMap& motion_estimates,
+                                   Frame::Ptr frame_k, Frame::Ptr frame_k_1);
+
+ private:
+  //! All object poses and updated by updatePoses at each iteration of sovle
+  ObjectPoseMap object_poses_;
+
  protected:
-  const ObjectMotionSovler::Params object_motion_params;
+  const ObjectMotionSovlerF2F::Params object_motion_params;
 };
 
-class ObjectMotionSolverSAM {
+class ObjectMotionSolverSAM : public ObjectMotionSolver {
  public:
   DYNO_POINTER_TYPEDEFS(ObjectMotionSolverSAM)
 
+  //! Result from solve including the object motions and poses
+  using ObjectMotionSolver::Result;
+
   ObjectMotionSolverSAM(
-      const ObjectMotionSovler::Params& geometric_motion_sovler_params,
+      const ObjectMotionSovlerF2F::Params& geometric_motion_sovler_params,
       const CameraParams& camera_params,
       const gtsam::ISAM2Params& isam2_params);
 
-  MotionEstimateMap solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1);
+  Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) override;
 
   void setRepresentationStyle(const MotionRepresentationStyle& style) {
     // TODO: lock
@@ -387,6 +430,8 @@ class ObjectMotionSolverSAM {
   }
 
  private:
+  ObjectPoseMap mergeObjectMaps() const;
+
   GenericTrackedStatusVector<LandmarkKeypointStatus> createMeasurementVector(
       Frame::Ptr frame, ObjectId object_id) const;
 
@@ -394,8 +439,7 @@ class ObjectMotionSolverSAM {
   const gtsam::ISAM2Params isam2_params_;
   mutable std::mutex mutex_;
   gtsam::FastMap<ObjectId, DecoupledObjectSAM::Ptr> sam_estimators_;
-  gtsam::FastMap<ObjectId, FrameId> last_updated_;
-  ObjectMotionSovler::Ptr geometric_solver_;
+  ObjectMotionSovlerF2F::Ptr geometric_solver_;
 
   MotionRepresentationStyle output_style_;
 };
@@ -404,7 +448,7 @@ void declare_config(OpticalFlowAndPoseOptimizer::Params& config);
 void declare_config(MotionOnlyRefinementOptimizer::Params& config);
 
 void declare_config(EgoMotionSolver::Params& config);
-void declare_config(ObjectMotionSovler::Params& config);
+void declare_config(ObjectMotionSovlerF2F::Params& config);
 
 }  // namespace dyno
 

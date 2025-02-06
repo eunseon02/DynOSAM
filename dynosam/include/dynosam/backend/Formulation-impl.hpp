@@ -457,19 +457,6 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
           ss << query_frame_node_k_1->frame_id << " "
              << query_frame_node_k->frame_id << "\n";
 
-          // this should DEFINITELY be in the map, as long as we update the
-          // values in the map everyy time
-          // StateQuery<gtsam::Pose3> T_world_camera_k_1_query =
-          //     accessor->getSensorPose(query_frame_node_k_1->frame_id);
-
-          // CHECK(T_world_camera_k_1_query)
-          //     << "Failed cam pose query at frame "
-          //     << query_frame_node_k_1->frame_id
-          //     << ". This may happen if the map_ is not updated every
-          //     iteration "
-          //        "OR something is wrong with the tracking...";
-          // const gtsam::Pose3 T_world_camera_k_1 =
-          //     T_world_camera_k_1_query.get();
           const gtsam::Pose3 T_world_camera_k_1 =
               getInitialOrLinearizedSensorPose(query_frame_node_k_1->frame_id);
 

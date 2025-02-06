@@ -51,11 +51,12 @@ class RGBDInstanceFrontendModule : public FrontendModule {
  private:
   Camera::Ptr camera_;
   EgoMotionSolver motion_solver_;
-  ObjectMotionSovler object_motion_solver_;
+  //   ObjectMotionSovlerF2F object_motion_solver_;
+  ObjectMotionSolver::UniquePtr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
 
-  ObjectMotionSolverSAM::UniquePtr experimental_solver_;
+  //   ObjectMotionSolverSAM::UniquePtr experimental_solver_;
 
  private:
   ImageValidationResult validateImageContainer(
@@ -80,12 +81,12 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    */
   bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
 
-  bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-                         ObjectId object_id,
-                         MotionEstimateMap& motion_estimates);
+  //   bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
+  //                          ObjectId object_id,
+  //                          MotionEstimateMap& motion_estimates);
 
-  void solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-                          MotionEstimateMap& motion_estimates);
+  //   void solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
+  //                           MotionEstimateMap& motion_estimates);
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
       const Frame& frame, const MotionEstimateMap& estimated_motions,
@@ -93,14 +94,16 @@ class RGBDInstanceFrontendModule : public FrontendModule {
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
       const DebugImagery::Optional& debug_imagery = std::nullopt);
 
-  // updates the object_poses_ map which is then sent to the viz via the output
-  // this updates the estimated trajectory of the object from a starting pont
-  // using the object motion to propofate the object pose
-  void propogateObjectPoses(const MotionEstimateMap& motion_estimates,
-                            FrameId frame_id);
-  // updates object poses
-  void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr,
-                           ObjectId object_id, FrameId frame_id);
+  //   // updates the object_poses_ map which is then sent to the viz via the
+  //   output
+  //   // this updates the estimated trajectory of the object from a starting
+  //   pont
+  //   // using the object motion to propofate the object pose
+  //   void propogateObjectPoses(const MotionEstimateMap& motion_estimates,
+  //                             FrameId frame_id);
+  //   // updates object poses
+  //   void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr,
+  //                            ObjectId object_id, FrameId frame_id);
 
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag

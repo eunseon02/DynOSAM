@@ -61,40 +61,7 @@ BackendModule::BackendModule(const BackendParams& params,
 }
 
 void BackendModule::setFactorParams(const BackendParams& backend_params) {
-  // set static noise
-  //  noise_models_.static_pixel_noise = gtsam::noiseModel::Isotropic::Sigma(2u,
-  //  backend_params.static_smart_projection_noise_sigma_);
-  //  CHECK(noise_models_.static_pixel_noise);
-
-  // set dynamic noise
-  //  noise_models_.dynamic_pixel_noise =
-  //  gtsam::noiseModel::Isotropic::Sigma(2u,
-  //  backend_params.dynamic_smart_projection_noise_sigma_);
-  //  CHECK(noise_models_.dynamic_pixel_noise);
-
-  gtsam::Vector6 odom_sigmas;
-  odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);
-  odom_sigmas.tail<3>().setConstant(backend_params.odometry_translation_sigma_);
-  noise_models_.odometry_noise =
-      gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
-  CHECK(noise_models_.odometry_noise);
-
-  noise_models_.initial_pose_prior =
-      gtsam::noiseModel::Isotropic::Sigma(6u, 0.000001);
-  CHECK(noise_models_.initial_pose_prior);
-
-  noise_models_.landmark_motion_noise = gtsam::noiseModel::Isotropic::Sigma(
-      3u, backend_params.motion_ternary_factor_noise_sigma_);
-  CHECK(noise_models_.landmark_motion_noise);
-
-  gtsam::Vector6 object_constant_vel_sigmas;
-  object_constant_vel_sigmas.head<3>().setConstant(
-      backend_params.constant_object_motion_rotation_sigma_);
-  object_constant_vel_sigmas.tail<3>().setConstant(
-      backend_params.constant_object_motion_translation_sigma_);
-  noise_models_.object_smoothing_noise =
-      gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
-  CHECK(noise_models_.object_smoothing_noise);
+  noise_models_ = NoiseModels::fromBackendParams(backend_params);
 }
 
 void BackendModule::validateInput(const BackendInputPacket::ConstPtr&) const {}

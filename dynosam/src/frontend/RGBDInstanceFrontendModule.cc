@@ -31,7 +31,6 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 
 #include <glog/logging.h>
-#include <tbb/tbb.h>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -59,9 +58,10 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     : FrontendModule(frontend_params, display_queue),
       camera_(camera),
       motion_solver_(frontend_params.ego_motion_solver_params,
-                     camera->getParams()),
-      object_motion_solver_(frontend_params.object_motion_solver_params,
-                            camera->getParams()) {
+                     camera->getParams()) {
+  // object_motion_solver_(frontend_params.object_motion_solver_params,
+  //                       camera->getParams()) {
+
   CHECK_NOTNULL(camera_);
   tracker_ =
       std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -73,9 +73,15 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   gtsam::ISAM2Params isam2_params;
   isam2_params.evaluateNonlinearError = true;
 
-  experimental_solver_ = std::make_unique<ObjectMotionSolverSAM>(
-      frontend_params.object_motion_solver_params, camera->getParams(),
-      isam2_params);
+  ObjectMotionSovlerF2F::Params object_motion_solver_params =
+      frontend_params.object_motion_solver_params;
+  // add ground truth hook
+  object_motion_solver_params.ground_truth_packets_request = [&]() {
+    return this->getGroundTruthPackets();
+  };
+
+  object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
+      object_motion_solver_params, camera->getParams(), isam2_params);
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -184,10 +190,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
 
   MotionEstimateMap motion_estimates;
-  solveObjectMotions(frame, previous_frame, motion_estimates);
+  std::tie(motion_estimates, object_poses_) =
+      object_motion_solver_->solve(frame, previous_frame);
+  // solveObjectMotions(frame, previous_frame, motion_estimates);
 
   // update the object_poses trajectory map which will be send to the viz
-  propogateObjectPoses(motion_estimates, frame->getFrameId());
+  // propogateObjectPoses(motion_estimates, frame->getFrameId());
 
   if (logger_) {
     auto ground_truths = this->getGroundTruthPackets();
@@ -286,94 +294,6 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
   }
 }
 
-bool RGBDInstanceFrontendModule::solveObjectMotion(
-    Frame::Ptr frame_k, Frame::Ptr frame_k_1, ObjectId object_id,
-    MotionEstimateMap& motion_estimates) {
-  Motion3SolverResult result;
-  if (base_params_.use_object_motion_pnp) {
-    result = object_motion_solver_.geometricOutlierRejection3d2d(
-        frame_k_1, frame_k, frame_k->T_world_camera_, object_id);
-  } else {
-    CHECK(false) << "Not implemented";
-    // result = object_motion_solver_.geometricOutlierRejection3d3d(
-    //     frame_k_1, frame_k, frame_k->T_world_camera_, object_id);
-  }
-
-  VLOG(15) << (base_params_.use_object_motion_pnp ? "3D2D" : "3D3D")
-           << " object motion estimate " << object_id << " at frame "
-           << frame_k->frame_id_
-           << (result.status == TrackingStatus::VALID ? " success "
-                                                      : " failure ")
-           << ":\n"
-           << "- Tracking Status: " << to_string(result.status) << '\n'
-           << "- Total Correspondences: "
-           << result.inliers.size() + result.outliers.size() << '\n'
-           << "\t- # inliers: " << result.inliers.size() << '\n'
-           << "\t- # outliers: " << result.outliers.size() << '\n';
-
-  // sanity check
-  // if valid, remove outliers and add to motion estimation
-  if (result.status == TrackingStatus::VALID) {
-    frame_k->dynamic_features_.markOutliers(result.outliers);
-
-    // TODO: need to assert we have F2F motion?
-    motion_estimates.insert({object_id, result.best_result});
-    return true;
-  } else {
-    return false;
-  }
-}
-
-void RGBDInstanceFrontendModule::solveObjectMotions(
-    Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-    MotionEstimateMap& motion_estimates) {
-  ObjectIds failed_object_tracks;
-
-  // // if only 1 object, no point parallelising
-  // if (motion_estimates.size() <= 1) {
-  //   for (const auto& [object_id, observations] :
-  //        frame_k->object_observations_) {
-  //     if (!solveObjectMotion(frame_k, frame_k_1, object_id,
-  //     motion_estimates)) {
-  //       VLOG(5) << "Could not solve motion for object " << object_id
-  //               << " from frame " << frame_k_1->getFrameId() << " -> "
-  //               << frame_k->getFrameId();
-  //       failed_object_tracks.push_back(object_id);
-  //     }
-  //   }
-  // } else {
-  //   std::mutex mutex;
-  //   // paralleilise the process of each function call.
-  //   tbb::parallel_for_each(
-  //       frame_k->object_observations_.begin(),
-  //       frame_k->object_observations_.end(),
-  //       [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) {
-  //         const auto object_id = pair.first;
-  //         if (!solveObjectMotion(frame_k, frame_k_1, object_id,
-  //                                motion_estimates)) {
-  //           VLOG(5) << "Could not solve motion for object " << object_id
-  //                   << " from frame " << frame_k_1->getFrameId() << " -> "
-  //                   << frame_k->getFrameId();
-
-  //           std::lock_guard<std::mutex> lk(mutex);
-  //           failed_object_tracks.push_back(object_id);
-  //         }
-  //       });
-  // }
-
-  // /// remove objects from the object observations list
-  // // does not remove the features etc but stops the object being propogated
-  // to
-  // // the backend as we loop over the object observations in the
-  // constructOutput
-  // // function
-  // for (auto object_id : failed_object_tracks) {
-  //   frame_k->object_observations_.erase(object_id);
-  // }
-
-  experimental_solver_->solve(frame_k, frame_k_1);
-}
-
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame, const MotionEstimateMap& estimated_motions,
     const gtsam::Pose3& T_world_camera,
@@ -448,55 +368,56 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
       gt_packet, debug_imagery);
 }
 
-void RGBDInstanceFrontendModule::propogateObjectPoses(
-    const MotionEstimateMap& motion_estimates, FrameId frame_id) {
-  gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+// void RGBDInstanceFrontendModule::propogateObjectPoses(
+//     const MotionEstimateMap& motion_estimates, FrameId frame_id) {
+//   gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
 
-  for (const auto& [object_id, motion_estimate] : motion_estimates) {
-    const auto frame_k_1 = tracker_->getPreviousFrame();
-    const auto frame_k = tracker_->getCurrentFrame();
+//   for (const auto& [object_id, motion_estimate] : motion_estimates) {
+//     const auto frame_k_1 = tracker_->getPreviousFrame();
+//     const auto frame_k = tracker_->getCurrentFrame();
 
-    auto object_points = FeatureFilterIterator(
-        const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
-        [object_id, &frame_k](const Feature::Ptr& f) -> bool {
-          return Feature::IsUsable(f) && f->objectId() == object_id &&
-                 frame_k->exists(f->trackletId()) &&
-                 frame_k->isFeatureUsable(f->trackletId());
-        });
+//     auto object_points = FeatureFilterIterator(
+//         const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+//         [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+//           return Feature::IsUsable(f) && f->objectId() == object_id &&
+//                  frame_k->exists(f->trackletId()) &&
+//                  frame_k->isFeatureUsable(f->trackletId());
+//         });
 
-    gtsam::Point3 centroid_k_1(0, 0, 0);
-    gtsam::Point3 centroid_k(0, 0, 0);
-    size_t count = 0;
-    for (const auto& feature : object_points) {
-      gtsam::Point3 lmk_k_1 =
-          frame_k_1->backProjectToCamera(feature->trackletId());
-      centroid_k_1 += lmk_k_1;
+//     gtsam::Point3 centroid_k_1(0, 0, 0);
+//     gtsam::Point3 centroid_k(0, 0, 0);
+//     size_t count = 0;
+//     for (const auto& feature : object_points) {
+//       gtsam::Point3 lmk_k_1 =
+//           frame_k_1->backProjectToCamera(feature->trackletId());
+//       centroid_k_1 += lmk_k_1;
 
-      gtsam::Point3 lmk_k = frame_k->backProjectToCamera(feature->trackletId());
-      centroid_k += lmk_k;
+//       gtsam::Point3 lmk_k =
+//       frame_k->backProjectToCamera(feature->trackletId()); centroid_k +=
+//       lmk_k;
 
-      count++;
-    }
+//       count++;
+//     }
 
-    centroid_k_1 /= count;
-    centroid_k /= count;
+//     centroid_k_1 /= count;
+//     centroid_k /= count;
 
-    centroid_k_1 = frame_k_1->getPose() * centroid_k_1;
-    centroid_k = frame_k->getPose() * centroid_k;
+//     centroid_k_1 = frame_k_1->getPose() * centroid_k_1;
+//     centroid_k = frame_k->getPose() * centroid_k;
 
-    object_centroids_k_1.push_back(centroid_k_1);
-    object_centroids_k.push_back(centroid_k);
-  }
+//     object_centroids_k_1.push_back(centroid_k_1);
+//     object_centroids_k.push_back(centroid_k);
+//   }
 
-  if (FLAGS_init_object_pose_from_gt) {
-    dyno::propogateObjectPoses(object_poses_, motion_estimates,
-                               object_centroids_k_1, object_centroids_k,
-                               frame_id, getGroundTruthPackets());
-  } else {
-    dyno::propogateObjectPoses(object_poses_, motion_estimates,
-                               object_centroids_k_1, object_centroids_k,
-                               frame_id);
-  }
-}
+//   if (FLAGS_init_object_pose_from_gt) {
+//     dyno::propogateObjectPoses(object_poses_, motion_estimates,
+//                                object_centroids_k_1, object_centroids_k,
+//                                frame_id, getGroundTruthPackets());
+//   } else {
+//     dyno::propogateObjectPoses(object_poses_, motion_estimates,
+//                                object_centroids_k_1, object_centroids_k,
+//                                frame_id);
+//   }
+// }
 
 }  // namespace dyno

@@ -105,6 +105,8 @@ struct NoiseModels {
   gtsam::SharedNoiseModel dynamic_point_noise;
   //! Isometric [3x3] noise model on static points;
   gtsam::SharedNoiseModel static_point_noise;
+
+  static NoiseModels fromBackendParams(const BackendParams&);
 };
 
 struct FormulationHooks {

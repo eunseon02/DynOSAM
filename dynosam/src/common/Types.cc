@@ -71,6 +71,18 @@ std::string to_string(const ReferenceFrame& reference_frame) {
   }
 };
 
+template <>
+std::string to_string(const MotionRepresentationStyle& style) {
+  switch (style) {
+    case MotionRepresentationStyle::F2F:
+      return "F2F";
+    case MotionRepresentationStyle::KF:
+      return "KF";
+    default:
+      return "Unknown MotionRepresentationStyle";
+  }
+};
+
 std::string demangle(const char* name) {
   // by default set to the original mangled name
   std::string demangled_name = std::string(name);

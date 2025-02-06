@@ -35,6 +35,7 @@
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>  //for now? //TODO: clean
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
+#include <tbb/tbb.h>
 
 #include <eigen3/Eigen/Dense>
 #include <opencv4/opencv2/core.hpp>
@@ -94,9 +95,9 @@ void declare_config(EgoMotionSolver::Params& config) {
   field(config.ransac_iterations, "ransac_iterations");
   field(config.ransac_probability, "ransac_probability");
 }
-void declare_config(ObjectMotionSovler::Params& config) {
+void declare_config(ObjectMotionSovlerF2F::Params& config) {
   using namespace config;
-  name("ObjectMotionSovler::Params");
+  name("ObjectMotionSovlerF2F::Params");
 
   base<EgoMotionSolver::Params>(config);
   field(config.refine_motion_with_joint_of, "refine_motion_with_joint_of");
@@ -429,13 +430,151 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d3d(
   return result;
 }
 
-ObjectMotionSovler::ObjectMotionSovler(const ObjectMotionSovler::Params& params,
-                                       const CameraParams& camera_params)
+ObjectMotionSovlerF2F::ObjectMotionSovlerF2F(
+    const ObjectMotionSovlerF2F::Params& params,
+    const CameraParams& camera_params)
     : EgoMotionSolver(static_cast<const EgoMotionSolver::Params&>(params),
                       camera_params),
       object_motion_params(params) {}
 
-Motion3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
+ObjectMotionSovlerF2F::Result ObjectMotionSovlerF2F::solve(
+    Frame::Ptr frame_k, Frame::Ptr frame_k_1) {
+  ObjectIds failed_object_tracks;
+  MotionEstimateMap motion_estimates;
+
+  // if only 1 object, no point parallelising
+  if (motion_estimates.size() <= 1) {
+    for (const auto& [object_id, observations] :
+         frame_k->object_observations_) {
+      if (!solveImpl(frame_k, frame_k_1, object_id, motion_estimates)) {
+        VLOG(5) << "Could not solve motion for object " << object_id
+                << " from frame " << frame_k_1->getFrameId() << " -> "
+                << frame_k->getFrameId();
+        failed_object_tracks.push_back(object_id);
+      }
+    }
+  } else {
+    std::mutex mutex;
+    // paralleilise the process of each function call.
+    tbb::parallel_for_each(
+        frame_k->object_observations_.begin(),
+        frame_k->object_observations_.end(),
+        [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) {
+          const auto object_id = pair.first;
+          if (!solveImpl(frame_k, frame_k_1, object_id, motion_estimates)) {
+            VLOG(5) << "Could not solve motion for object " << object_id
+                    << " from frame " << frame_k_1->getFrameId() << " -> "
+                    << frame_k->getFrameId();
+
+            std::lock_guard<std::mutex> lk(mutex);
+            failed_object_tracks.push_back(object_id);
+          }
+        });
+  }
+
+  // remove objects from the object observations list
+  // does not remove the features etc but stops the object being propogated to
+  // the backend as we loop over the object observations in the constructOutput
+  // function
+  for (auto object_id : failed_object_tracks) {
+    frame_k->object_observations_.erase(object_id);
+  }
+
+  return std::make_pair(motion_estimates,
+                        updatePoses(motion_estimates, frame_k, frame_k_1));
+}
+
+const ObjectPoseMap& ObjectMotionSovlerF2F::updatePoses(
+    MotionEstimateMap& motion_estimates, Frame::Ptr frame_k,
+    Frame::Ptr frame_k_1) {
+  gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+
+  for (const auto& [object_id, motion_estimate] : motion_estimates) {
+    auto object_points = FeatureFilterIterator(
+        const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
+        [object_id, &frame_k](const Feature::Ptr& f) -> bool {
+          return Feature::IsUsable(f) && f->objectId() == object_id &&
+                 frame_k->exists(f->trackletId()) &&
+                 frame_k->isFeatureUsable(f->trackletId());
+        });
+
+    gtsam::Point3 centroid_k_1(0, 0, 0);
+    gtsam::Point3 centroid_k(0, 0, 0);
+    size_t count = 0;
+    for (const auto& feature : object_points) {
+      gtsam::Point3 lmk_k_1 =
+          frame_k_1->backProjectToCamera(feature->trackletId());
+      centroid_k_1 += lmk_k_1;
+
+      gtsam::Point3 lmk_k = frame_k->backProjectToCamera(feature->trackletId());
+      centroid_k += lmk_k;
+
+      count++;
+    }
+
+    centroid_k_1 /= count;
+    centroid_k /= count;
+
+    centroid_k_1 = frame_k_1->getPose() * centroid_k_1;
+    centroid_k = frame_k->getPose() * centroid_k;
+
+    object_centroids_k_1.push_back(centroid_k_1);
+    object_centroids_k.push_back(centroid_k);
+  }
+
+  if (FLAGS_init_object_pose_from_gt) {
+    CHECK(object_motion_params.ground_truth_packets_request)
+        << "FLAGS_init_object_pose_from_gt is true but no ground truth packets "
+           "hook is set!";
+
+    const auto ground_truth_packets =
+        object_motion_params.ground_truth_packets_request();
+    LOG_IF(WARNING, !ground_truth_packets.has_value())
+        << "FLAGS_init_object_pose_from_gt but no ground truth provided! "
+           "Object poses will be initalised using centroid!";
+
+    dyno::propogateObjectPoses(object_poses_, motion_estimates,
+                               object_centroids_k_1, object_centroids_k,
+                               frame_k->getFrameId(), ground_truth_packets);
+  } else {
+    dyno::propogateObjectPoses(object_poses_, motion_estimates,
+                               object_centroids_k_1, object_centroids_k,
+                               frame_k->getFrameId());
+  }
+
+  return object_poses_;
+}
+
+bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
+                                      ObjectId object_id,
+                                      MotionEstimateMap& motion_estimates) {
+  Motion3SolverResult result = geometricOutlierRejection3d2d(
+      frame_k_1, frame_k, frame_k->getPose(), object_id);
+
+  VLOG(15) << " object motion estimate " << object_id << " at frame "
+           << frame_k->frame_id_
+           << (result.status == TrackingStatus::VALID ? " success "
+                                                      : " failure ")
+           << ":\n"
+           << "- Tracking Status: " << to_string(result.status) << '\n'
+           << "- Total Correspondences: "
+           << result.inliers.size() + result.outliers.size() << '\n'
+           << "\t- # inliers: " << result.inliers.size() << '\n'
+           << "\t- # outliers: " << result.outliers.size() << '\n';
+
+  // if valid, remove outliers and add to motion estimation
+  if (result.status == TrackingStatus::VALID) {
+    frame_k->dynamic_features_.markOutliers(result.outliers);
+
+    // TODO: need to assert we have F2F motion?
+    motion_estimates.insert({object_id, result.best_result});
+    return true;
+  } else {
+    return false;
+  }
+}
+
+Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
     Frame::Ptr frame_k_1, Frame::Ptr frame_k, const gtsam::Pose3& T_world_k,
     ObjectId object_id) {
   utils::TimingStatsCollector timer("motion_solver.object_solve3d2d");
@@ -498,9 +637,6 @@ Motion3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
     // still need to take the inverse as we get the inverse of G out
     gtsam::Pose3 H_w = T_world_k * G_w;
 
-    // if(params_.refine_object_motion_esimate) {
-    LOG(INFO) << "object_motion_params.refine_motion_with_3d "
-              << object_motion_params.refine_motion_with_3d;
     if (object_motion_params.refine_motion_with_3d) {
       VLOG(10) << "Refining object motion pose with 3D refinement";
       MotionOnlyRefinementOptimizer motion_refinement_graph(
@@ -513,8 +649,6 @@ Motion3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
       refined_inlier_tracklets = motion_refinement_result.inliers;
       H_w = motion_refinement_result.best_result;
     }
-
-    LOG(INFO) << "Inlier size " << refined_inlier_tracklets.size();
 
     motion_result.status = pose_result.status;
     motion_result.best_result = Motion3ReferenceFrame(
@@ -632,25 +766,35 @@ Motion3SolverResult ObjectMotionSovler::geometricOutlierRejection3d2d(
 // }
 
 ObjectMotionSolverSAM::ObjectMotionSolverSAM(
-    const ObjectMotionSovler::Params& geometric_motion_sovler_params,
+    const ObjectMotionSovlerF2F::Params& geometric_motion_sovler_params,
     const CameraParams& camera_params, const gtsam::ISAM2Params& isam2_params)
-    : isam2_params_(isam2_params) {
-  ObjectMotionSovler::Params motion_params = geometric_motion_sovler_params;
+    : isam2_params_(isam2_params),
+      output_style_(MotionRepresentationStyle::F2F) {
+  ObjectMotionSovlerF2F::Params motion_params = geometric_motion_sovler_params;
   // ensure we dont use the 3D motion solver,
   motion_params.refine_motion_with_3d = false;
+
   geometric_solver_ =
-      std::make_shared<ObjectMotionSovler>(motion_params, camera_params);
+      std::make_shared<ObjectMotionSovlerF2F>(motion_params, camera_params);
 }
 
-MotionEstimateMap ObjectMotionSolverSAM::solve(Frame::Ptr frame_k,
-                                               Frame::Ptr frame_k_1) {
+ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
+    Frame::Ptr frame_k, Frame::Ptr frame_k_1) {
   MotionEstimateMap motion_map;
-  for (const auto& [object_id, observations] : frame_k->object_observations_) {
+  auto solve_impl =
+      [&, &motion_map](
+          const std::pair<ObjectId, DynamicObjectObservation>& pair) -> bool {
+    const auto object_id = pair.first;
     VLOG(5) << "Solving Object Motion SAM for j=" << object_id;
     // do geometric solve
-    const Motion3SolverResult geometric_sovler_result =
-        geometric_solver_->geometricOutlierRejection3d2d(
-            frame_k_1, frame_k, frame_k->getPose(), object_id);
+    Motion3SolverResult geometric_sovler_result;
+    {
+      // std::lock_guard<std::mutex> lock(mutex_);
+      geometric_sovler_result =
+          geometric_solver_->geometricOutlierRejection3d2d(
+              frame_k_1, frame_k, frame_k->getPose(), object_id);
+    }
+
     if (geometric_sovler_result.status == TrackingStatus::VALID) {
       frame_k->dynamic_features_.markOutliers(geometric_sovler_result.outliers);
       frame_k_1->dynamic_features_.markOutliers(
@@ -668,46 +812,65 @@ MotionEstimateMap ObjectMotionSolverSAM::solve(Frame::Ptr frame_k,
       // make new estimator if needed
       if (!sam_estimators_.exists(object_id)) {
         LOG(INFO) << "Making new DecoupledObjectSAM for object " << object_id;
-        sam_estimators_.insert2(object_id, std::make_shared<DecoupledObjectSAM>(
-                                               object_id, isam2_params_));
+
+        FormulationHooks hooks;
+        hooks.ground_truth_packets_request =
+            geometric_solver_->objectMotionParams()
+                .ground_truth_packets_request;
+
+        // std::lock_guard<std::mutex> lock(mutex_);
+        BackendParams backend_params;  // TODO: for now
+        sam_estimators_.insert2(
+            object_id,
+            std::make_shared<DecoupledObjectSAM>(
+                object_id, NoiseModels::fromBackendParams(backend_params),
+                hooks, isam2_params_));
       }
 
       DecoupledObjectSAM::Ptr estimator = sam_estimators_.at(object_id);
       CHECK_NOTNULL(estimator);
+      auto map = estimator->map();
+      // lambda function -> we want to avoid adding measurements twice
+      // and ideally this function will run incrementally (without dropping
+      // frames) so ideally we should add the k-1 measurements once (the first
+      // time this function is called) and only at measurements at k after that
+      // however, in reality, we DO drop measurements, so we should also add k-1
+      // when we've never added them before
+      auto should_add_previous_measurements =
+          [&frame_k_1, &map](ObjectId object_id) -> bool {
+        // object does not exist yet, therefore this is the first time we've
+        // seen the object
+        const auto& object_node = map->getObject(object_id);
+        if (!object_node) return true;
 
-      // first time we've seen this object
-      // update the measurement to include measurements from the last frame to
-      // avoid duplication
-      if (!last_updated_.exists(object_id)) {
+        // likwise if the frame node does not exist yet, add measurements to add
+        // it!!
+        const auto& frame_k_1_node = map->getFrame(frame_k_1->getFrameId());
+        if (!frame_k_1_node) return true;
+
+        // if object has been observed, then measurements should already be
+        // added if not, add new measurements at this frame!
+        return !frame_k_1_node->objectObserved(object_id);
+      };
+
+      if (should_add_previous_measurements(object_id)) {
         GenericTrackedStatusVector<LandmarkKeypointStatus> measurements_k_1 =
             createMeasurementVector(frame_k_1, object_id);
 
-        auto map = estimator->map();
         map->updateObservations(measurements_k_1);
         map->updateSensorPoseMeasurement(frame_k_1->getFrameId(),
                                          frame_k_1->getPose());
-        // we can actually just update the map directly ;)
 
-        // update
-
-        // //minor hack -> we want to give an initial motion for this frame so
-        // that we dont drop any measurements
-        // //however, since motion is usually between k-1 and k, this motion is
-        // just identity
-        // //practically this SHOULD line up with the keyframed pose (ie. k-1 =
-        // s0) in the formulation, as this is the first time we've seen the
-        // object
-        // //which will construct a KF motion which is identity anyway...
-        // Motion3ReferenceFrame motion(gtsam::Pose3::Identity(),
-        // MotionRepresentationStyle::F2F, ReferenceFrame::GLOBAL,
-        // frame_k_1->getFrameId(), frame_k_1->getFrameId());
-        // estimator->update(frame_k_1->getFrameId(), measurements_k_1,
-        // frame_k_1->getPose(), motion);
       } else {
-        FrameId last_updated = last_updated_.at(object_id);
-        // check we're updating consequative frames
-        // TODO: what about the case we drop frames?
-        CHECK_EQ(last_updated, frame_k->getFrameId());
+        const auto& object_node = map->getObject(object_id);
+        CHECK_NOTNULL(object_node);
+        FrameId last_updated = object_node->getLastSeenFrame();
+
+        // TODO: should also check that first seen frame is L?
+        //  check we're updating consequative frames
+        //  TODO: what about the case we drop frames?
+        CHECK_GT(frame_k->getFrameId(), last_updated)
+            << "Consistent frame failure for j=" << object_id;
       }
 
       GenericTrackedStatusVector<LandmarkKeypointStatus> measurements =
@@ -716,23 +879,46 @@ MotionEstimateMap ObjectMotionSolverSAM::solve(Frame::Ptr frame_k,
                         geometric_sovler_result.best_result);
 
       Motion3ReferenceFrame motion_result;
+      LOG(INFO) << "Getting result";
       // get result (depending on estimation)
       if (output_style_ == MotionRepresentationStyle::F2F) {
         motion_result = estimator->getFrame2FrameMotion(frame_k->getFrameId());
       } else {
         motion_result = estimator->getKeyFramedMotion(frame_k->getFrameId());
       }
+      LOG(INFO) << " Gotten motion result " << motion_result;
 
       motion_map.insert2(object_id, motion_result);
-
-      last_updated_.at(object_id) = frame_k->getFrameId();
+      return true;
 
     } else {
       // Should be formulations job to handle and object tracking that is not
       // perfectly frame-to-frame just need to make sure this points still go to
       // the backend ;)
+      return false;
     }
+  };
+
+  std::for_each(frame_k->object_observations_.begin(),
+                frame_k->object_observations_.end(), solve_impl);
+  // for (const auto& [object_id, observations] : frame_k->object_observations_)
+  // {
+  //     solve_impl(object_id, observations);
+  // }
+  return std::make_pair(motion_map, mergeObjectMaps());
+}
+
+ObjectPoseMap ObjectMotionSolverSAM::mergeObjectMaps() const {
+  ObjectPoseMap all_object_poses;
+  for (const auto& [object_id, estimator] : sam_estimators_) {
+    ObjectPoseMap per_object_poses = estimator->getObjectPoses();
+    // should only have one object in it
+    CHECK_EQ(per_object_poses.size(), 1u);
+    CHECK(per_object_poses.exists(object_id));
+
+    all_object_poses += per_object_poses;
   }
+  return all_object_poses;
 }
 
 // TODO: really horrible I have to remake this data-structure again and
