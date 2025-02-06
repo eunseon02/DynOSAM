@@ -30,7 +30,6 @@
 
 #pragma once
 
-#include <glog/log_severity.h>
 #include <gtsam/geometry/Pose3.h>  //for Pose3
 
 #include <nlohmann/json.hpp>
