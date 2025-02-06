@@ -9,9 +9,8 @@ import numpy as np
 
 from pathlib import Path
 
-import evaluation.filesystem_utils as eval_files
-
-import evaluation.formatting_utils as formatting
+import dynosam_utils.evaluation.filesystem_utils as eval_files
+import dynosam_utils.evaluation.formatting_utils as formatting
 
 from ruamel import yaml
 import pandas as pd

@@ -1,10 +1,10 @@
-# DynoSAM Installation 
+# DynoSAM Installation
 
 Tested on Ubuntu 20.04
 
 > NOTE: this instructions are taken essentially verbatum from the included [Dockerfile](./../../docker/Dockerfile)
 
-## Dependancies 
+## Dependancies
 
 ```bash
 sudo apt-get install -y --no-install-recommends apt-utils
@@ -27,6 +27,12 @@ sudo apt-get install texlive-pictures texlive-science texlive-latex-extra latexm
 Python (pip) dependancies:
 ```bash
 python3 -m pip install pylatex evo setuptools pre-commit scipy matplotlib argcomplete black pre-commit
+```
+
+NOTE: There seems to be a conflict between the version of matplotlib and numpy. In this case following worked for me:
+```
+sudo apt remove python3-matplotlib
+python3 -m pip install numpy==1.26.3
 ```
 
 ## Install OpenCV
@@ -72,7 +78,7 @@ cd gtsam && \
     cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
     -DGTSAM_USE_SYSTEM_EIGEN=ON \
     -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF .. && \
-    
+
 sudo make -j$(nproc) install
 ```
 
@@ -109,4 +115,3 @@ sudo make install
 Due to DynoSAM being build within ROS:
 - Need to build GTSAM with `-DGTSAM_USE_SYSTEM_EIGEN=ON` to avoid issues with ROS and OpenCV-Eigen compatability. Confirmed from https://discourse.ros.org/t/announcing-gtsam-as-a-ros-1-2-package/32739 which explains that the GTSAM ROS package is build with this flag set to ON (and describes it as "problematic"). We still want to build GTSAM from source so we can control the version and other compiler flags.
 Kimera-VIO's install instructions indicate that OpenGV must use the same version of Eigen as GTSAM, which can be set using compiler flags. Since we are using the ROS install Eigen, I have removed these flags and hope that the package manager with CMake can find the right (and only) version. This has not proved problematic... yet...
-

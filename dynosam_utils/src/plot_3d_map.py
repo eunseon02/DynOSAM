@@ -1,4 +1,4 @@
-import evaluation.evaluation_lib as eval
+import dynosam_utils.evaluation.evaluation_lib as eval
 
 from evo.core import lie_algebra, trajectory, metrics, transformations
 import evo.tools.plot as evo_plot

@@ -48,7 +48,9 @@
 /** \mainpage C++ API documentation
  *  DynoSAM is a C++ library for Dynamic Visual SLAM.
  *
- * TODO: add link back to project page when it is live....
+ * See:
+ *  - <a href="https://acfr-rpg.github.io/DynOSAM/">DynoSAM Project Page</a>
+ *  - <a href="https://github.com/ACFR-RPG/DynOSAM">Github</a>
  *
  */
 
@@ -100,29 +102,6 @@ using Motion3 = gtsam::Pose3;
 using MotionMap =
     gtsam::FastMap<TrackletId,
                    Motion3>;  //! Map of tracklet ids to Motion3 (gtsam::Pose3)
-
-struct LandmarkKeypoint {
-  LandmarkKeypoint() = default;
-  LandmarkKeypoint(const Landmark& l, const Keypoint& kp)
-      : landmark(l), keypoint(kp) {}
-
-  Landmark landmark;
-  Keypoint keypoint;
-};
-
-/**
- * @brief Keypoint with depth
- *
- */
-struct KeypointDepth {
- public:
-  KeypointDepth() = default;
-  KeypointDepth(const Keypoint& p, const Depth& d) : keypoint(p), depth(d) {}
-
- public:
-  Keypoint keypoint;
-  Depth depth;
-};
 
 /**
  * @brief Get demangled class name
@@ -270,17 +249,97 @@ class TrackedValueStatus {
 
   virtual ~TrackedValueStatus() = default;
 
+  /**
+   * @brief Allows the casting of the internal value type to another using
+   * static casting.
+   *
+   * This allows sub measurements to be extracted if T has explict cast
+   * operators. e.g. struct Foo { operator Bar&(); }
+   *
+   * we can use as type to construct a TrackedValueStatus<Bar> from
+   * TrackedValueStatus<Foo>: TrackedValueStatus<Foo> foo(...);
+   * TrackedValueStatus<Bar> bar = foo.asType<Bar>();
+   *
+   * This will copy over all the meta-data (e.g. frame id, label etc) but
+   * replace the value with the cast Boo type. This is only possible since Foo
+   * contains an operator for Bar, allowing static casting to work.
+   *
+   * This function exists to allow nested data-types for VALUE to be used, where
+   * each sub-value can be extracted using asType(), as long as the casting
+   * operating works.
+   *
+   * @tparam U
+   * @return TrackedValueStatus<U>
+   */
+  template <typename U>
+  TrackedValueStatus<U> asType() const {
+    const U& new_measurement = static_cast<const U&>(this->value());
+    return TrackedValueStatus<U>(new_measurement, this->frameId(),
+                                 this->trackletId(), this->objectId(),
+                                 this->referenceFrame());
+  }
+
+  /**
+   * @brief Get value. Const version.
+   *
+   * @return const Value&
+   */
   const Value& value() const { return value_; }
+
+  /**
+   * @brief Get value. Reference version.
+   *
+   * @return Value&
+   */
   Value& value() { return value_; }
 
+  /**
+   * @brief Get tracklet id (i) for this status.
+   *
+   * @return TrackletId
+   */
   TrackletId trackletId() const { return tracklet_id_; }
+
+  /**
+   * @brief Get object id (j) for this status.
+   *
+   * @return ObjectId
+   */
   ObjectId objectId() const { return label_; }
+
+  /**
+   * @brief Get frame id (k) for this status.
+   *
+   * @return FrameId
+   */
   FrameId frameId() const { return frame_id_; }
 
+  /**
+   * @brief Get the reference frame the value is in. Const version.
+   *
+   * @return const ReferenceFrame&
+   */
   const ReferenceFrame& referenceFrame() const { return value_; }
+
+  /**
+   * @brief Get the reference frame the value is in.
+   *
+   * @return ReferenceFrame&
+   */
   ReferenceFrame& referenceFrame() { return value_; }
 
+  /**
+   * @brief Get the full reference frame and value.
+   *
+   * @return ReferenceFrameValue<Value>&
+   */
   ReferenceFrameValue<Value>& referenceFrameValue() { return value_; }
+
+  /**
+   * @brief Get the full reference frame and value. Const version.
+   *
+   * @return const ReferenceFrameValue<Value>&
+   */
   const ReferenceFrameValue<Value>& referenceFrameValue() const {
     return value_;
   }
@@ -300,6 +359,12 @@ class TrackedValueStatus {
     return os;
   }
 
+  /**
+   * @brief Returns true if the object lavel is equal to dyno::background_label.
+   *
+   * @return true
+   * @return false
+   */
   inline bool isStatic() const { return label_ == background_label; }
 
   /**
@@ -327,147 +392,6 @@ template <typename DERIVEDSTATUS, typename VALUE>
 inline constexpr bool IsDerivedTrackedValueStatus =
     std::is_base_of_v<TrackedValueStatus<VALUE>, DERIVEDSTATUS>;
 
-/**
- * @brief Metadata of a landmark. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be
- * background_label Also includes information on how the landamrk was estimated,
- * age etc...
- *
- */
-struct LandmarkStatus : public TrackedValueStatus<Landmark> {
-  using Base = TrackedValueStatus<Landmark>;
-  using Base::Value;
-  enum Method { MEASURED, TRIANGULATED, OPTIMIZED };
-  Method method_;
-
-  LandmarkStatus() {}
-
-  /**
-   * @brief Construct a new Landmark Status object
-   *
-   * @param lmk
-   * @param frame_id
-   * @param tracklet_id
-   * @param label
-   * @param method
-   */
-  LandmarkStatus(const Landmark& lmk, FrameId frame_id, TrackletId tracklet_id,
-                 ObjectId label, ReferenceFrame reference_frame, Method method)
-      : Base(lmk, frame_id, tracklet_id, label, reference_frame),
-        method_(method) {}
-
-  inline static LandmarkStatus Static(const Landmark& lmk, FrameId frame_id,
-                                      TrackletId tracklet_id,
-                                      ReferenceFrame reference_frame,
-                                      Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          reference_frame, method);
-  }
-
-  inline static LandmarkStatus Dynamic(const Landmark& lmk, FrameId frame_id,
-                                       TrackletId tracklet_id, ObjectId label,
-                                       ReferenceFrame reference_frame,
-                                       Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label, reference_frame,
-                          method);
-  }
-
-  inline static LandmarkStatus StaticInLocal(const Landmark& lmk,
-                                             FrameId frame_id,
-                                             TrackletId tracklet_id,
-                                             Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          ReferenceFrame::LOCAL, method);
-  }
-
-  inline static LandmarkStatus DynamicInLocal(const Landmark& lmk,
-                                              FrameId frame_id,
-                                              TrackletId tracklet_id,
-                                              ObjectId label, Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label,
-                          ReferenceFrame::LOCAL, method);
-  }
-
-  inline static LandmarkStatus StaticInGlobal(const Landmark& lmk,
-                                              FrameId frame_id,
-                                              TrackletId tracklet_id,
-                                              Method method) {
-    return LandmarkStatus(lmk, frame_id, tracklet_id, background_label,
-                          ReferenceFrame::GLOBAL, method);
-  }
-
-  inline static LandmarkStatus DynamicInGLobal(const Landmark& lmk,
-                                               FrameId frame_id,
-                                               TrackletId tracklet_id,
-                                               ObjectId label, Method method) {
-    CHECK(label != background_label);
-    return LandmarkStatus(lmk, frame_id, tracklet_id, label,
-                          ReferenceFrame::GLOBAL, method);
-  }
-
-  bool operator==(const LandmarkStatus& other) const {
-    return static_cast<const Base&>(*this) == static_cast<const Base&>(other) &&
-           method_ == other.method_;
-  }
-};
-
-// TODO: change so that all info is contained in the templated type (so we dont
-// need to have each derived) Status type have its own constructors etc... this
-// is soooooooo messy ;)
-/**
- * @brief Metadata of a keypoint. Includes type (static/dynamic) and label.
- *
- * Label may be background at which point the KeyPointType should be
- * background_label
- *
- */
-struct KeypointStatus : public TrackedValueStatus<Keypoint> {
-  using Base = TrackedValueStatus<Keypoint>;
-  using Base::Value;
-  KeyPointType kp_type_;
-
-  // for I/O
-  KeypointStatus() {}
-
-  /**
-   * @brief Construct a new Keypoint Status object
-   *
-   * Since the object is Keypoint, the reference frame is set to be in camera in
-   * the base class
-   *
-   * @param kp
-   * @param frame_id
-   * @param tracklet_id
-   * @param label
-   * @param kp_type
-   */
-  KeypointStatus(const Keypoint& kp, FrameId frame_id, TrackletId tracklet_id,
-                 ObjectId label, KeyPointType kp_type)
-      : Base(kp, frame_id, tracklet_id, label, ReferenceFrame::LOCAL),
-        kp_type_(kp_type) {}
-
-  inline static KeypointStatus Static(const Keypoint& kp, FrameId frame_id,
-                                      TrackletId tracklet_id) {
-    return KeypointStatus(kp, frame_id, tracklet_id, background_label,
-                          KeyPointType::STATIC);
-  }
-
-  inline static KeypointStatus Dynamic(const Keypoint& kp, FrameId frame_id,
-                                       TrackletId tracklet_id, ObjectId label) {
-    CHECK(label != background_label);
-    return KeypointStatus(kp, frame_id, tracklet_id, label,
-                          KeyPointType::DYNAMIC);
-  }
-
-  bool operator==(const KeypointStatus& other) const {
-    return static_cast<const Base&>(*this) == static_cast<const Base&>(other) &&
-           kp_type_ == other.kp_type_;
-  }
-};
-
 template <class DERIVEDSTATUS, typename VALUE = typename DERIVEDSTATUS::Value>
 struct IsStatus {
   static_assert(IsDerivedTrackedValueStatus<DERIVEDSTATUS, VALUE>,
@@ -488,6 +412,9 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
   using Base = std::vector<DERIVEDSTATUS>;
   using Base::Base;
 
+  // for IO
+  GenericTrackedStatusVector() {}
+
   /** Conversion to a standard STL container */
   operator std::vector<DERIVEDSTATUS>() const {
     return std::vector<DERIVEDSTATUS>(this->begin(), this->end());
@@ -499,24 +426,12 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
   }
 };
 
-using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
-
-// TODO: really should be values or something, not estimate as these can be
-// measurements OR values
-using StatusLandmarkEstimate = IsStatus<LandmarkStatus>::type;
-/// @brief A vector of StatusLandmarkEstimate
-using StatusLandmarkEstimates = GenericTrackedStatusVector<LandmarkStatus>;
-
-using StatusKeypointMeasurement = IsStatus<KeypointStatus>::type;
-/// @brief A vector of StatusKeypointMeasurements
-using StatusKeypointMeasurements = GenericTrackedStatusVector<KeypointStatus>;
-
-// TODO: refactor to all be simpler like this one ;)
-using KeypointDepthStatus = TrackedValueStatus<KeypointDepth>;
-
-/// @brief Map of key to an estimate containting a reference frame
-/// @tparam Key
-/// @tparam Estimate
+/**
+ * @brief Map of key to an estimate containting a reference frame
+ *
+ * @tparam Key
+ * @tparam Estimate
+ */
 template <typename Key, typename Estimate>
 using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 
@@ -534,8 +449,8 @@ using MotionEstimateMap = MotionReferenceEstimateMap<ObjectId, Motion3>;
 using Motion3ReferenceFrame = MotionReferenceFrame<Motion3>;
 
 /**
- * @brief Generic mapping of Object Id -> FrameId -> Value within a nested
- * gtsam::FastMap structure. This is a common datastrcture used for object's to
+ * @brief Generic mapping of Object Id to FrameId to VALUE within a nested
+ * gtsam::FastMap structure. This is a common datastrcture used to
  * store temporal information about each object.
  *
  * We call it ObjectCentric map as we order by ObjectId first.
@@ -589,11 +504,11 @@ class GenericObjectCentricMap
   }
 
   const Value& at(ObjectId object_id, FrameId frame_id) const {
-    return atImpl(this, object_id, frame_id);
+    return atImpl<const This, const Value&>(this, object_id, frame_id);
   }
 
   Value& at(ObjectId object_id, FrameId frame_id) {
-    return atImpl(const_cast<const This*>(this), object_id, frame_id);
+    return atImpl<This, Value&>(const_cast<This*>(this), object_id, frame_id);
   }
 
   This& operator+=(const This& rhs) {
@@ -621,14 +536,15 @@ class GenericObjectCentricMap
   }
 
  private:
-  template <typename Container>
-  static auto& atImpl(Container* container, ObjectId object_id,
-                      FrameId frame_id) {
+  template <typename Container, typename Return>
+  static Return atImpl(Container* container, ObjectId object_id,
+                       FrameId frame_id) {
     size_t out_of_range_flag;
-    const bool result = existsImpl(object_id, frame_id, out_of_range_flag);
+    const bool result =
+        container->existsImpl(object_id, frame_id, out_of_range_flag);
     if (result) {
       CHECK_EQ(out_of_range_flag, 2u);
-      return container->at(object_id)[frame_id];
+      return container->at(object_id).at(frame_id);
     } else {
       std::stringstream ss;
       ss << "Index out of range: "
@@ -725,3 +641,5 @@ inline std::string container_to_string(const Container& container,
 // struct traits : public io_traits<T> {};
 
 }  // namespace dyno
+
+#include "dynosam/common/SensorModels.hpp"

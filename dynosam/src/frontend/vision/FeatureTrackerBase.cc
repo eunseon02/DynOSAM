@@ -48,18 +48,22 @@ FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params,
 
 // doesnt make any sense for this function to be here?
 // Debug could be part of a global config singleton?
-cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
-                                               const Frame& current_frame,
-                                               bool debug) const {
+cv::Mat FeatureTrackerBase::computeImageTracks(
+    const Frame& previous_frame, const Frame& current_frame,
+    const ImageTracksParams& config) const {
   cv::Mat img_rgb;
 
   const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
   rgb.copyTo(img_rgb);
 
-  static const cv::Scalar gray(0, 255, 255);
-  static const cv::Scalar red(0, 0, 255);
-  static const cv::Scalar green(0, 255, 0);
-  static const cv::Scalar blue(255, 0, 0);
+  const bool debug = config.is_debug;
+  const bool show_frame_info = debug && config.show_frame_info;
+  const bool show_intermediate_tracking =
+      debug && config.show_intermediate_tracking;
+
+  static const cv::Scalar red(Color::red().bgra());
+  static const cv::Scalar green(Color::green().bgra());
+  static const cv::Scalar blue(Color::blue().bgra());
 
   constexpr static int kFeatureThicknessDebug = 5;
   constexpr static int kFeatureThickness = 4;
@@ -72,7 +76,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
   for (const Feature::Ptr& feature : current_frame.static_features_) {
     const Keypoint& px_cur = feature->keypoint();
     const auto pc_cur = utils::gtsamPointToCv(px_cur);
-    if (!feature->usable() && debug) {  // Untracked landmarks are red.
+    if (!feature->usable() &&
+        show_intermediate_tracking) {  // Untracked landmarks are red.
       cv::circle(img_rgb, pc_cur, static_point_thickness, red, 2);
     } else {
       const Feature::Ptr& prev_feature =
@@ -89,7 +94,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
 
         num_static_tracks++;
 
-      } else if (debug) {  // New feature tracks are blue.
+      } else if (debug &&
+                 show_intermediate_tracking) {  // New feature tracks are blue.
         cv::circle(img_rgb, pc_cur, 6, blue, 1);
       }
     }
@@ -124,7 +130,6 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
     const cv::Rect& bb = object_observation_pair.second.bounding_box_;
 
     // TODO: if its marked as moving!!
-
     if (bb.empty()) {
       continue;
     }
@@ -159,7 +164,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 1;
 
-  if (debug) {
+  if (debug && show_frame_info) {
     // taken from ORB-SLAM2 ;)
     int base_line;
     cv::Size text_size = cv::getTextSize(ss.str(), kFontFace, kFontScale,

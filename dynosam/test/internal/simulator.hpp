@@ -491,9 +491,9 @@ class RGBDScenario : public Scenario {
       std::pair<RGBDInstanceOutputPacket::Ptr, RGBDInstanceOutputPacket::Ptr>;
 
   Output getOutput(FrameId frame_id) const {
-    StatusLandmarkEstimates static_landmarks, dynamic_landmarks,
+    StatusLandmarkVector static_landmarks, dynamic_landmarks,
         noisy_static_landmarks, noisy_dynamic_landmarks;
-    StatusKeypointMeasurements static_keypoint_measurements,
+    StatusKeypointVector static_keypoint_measurements,
         dynamic_keypoint_measurements;
 
     GroundTruthInputPacket gt_packet;
@@ -571,18 +571,16 @@ class RGBDScenario : public Scenario {
           // LOG(INFO) << noisy_p_camera;
 
           auto landmark_status = dyno::LandmarkStatus::DynamicInLocal(
-              p_camera, frame_id, tracklet_id, object_id,
-              dyno::LandmarkStatus::Method::MEASURED);
+              p_camera, frame_id, tracklet_id, object_id);
           dynamic_landmarks.push_back(landmark_status);
 
           auto noisy_landmark_status = dyno::LandmarkStatus::DynamicInLocal(
-              noisy_p_camera, frame_id, tracklet_id, object_id,
-              dyno::LandmarkStatus::Method::MEASURED);
+              noisy_p_camera, frame_id, tracklet_id, object_id);
           noisy_dynamic_landmarks.push_back(noisy_landmark_status);
 
           // the keypoint sttatus should be unused in the RGBD case but
           // we need it to fill out the data structures
-          auto keypoint_status = dyno::KeypointStatus::Dynamic(
+          auto keypoint_status = dyno::KeypointStatus::DynamicInLocal(
               dyno::Keypoint(), frame_id, tracklet_id, object_id);
           dynamic_keypoint_measurements.push_back(keypoint_status);
         }
@@ -601,20 +599,18 @@ class RGBDScenario : public Scenario {
       const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
           p_camera, noise_params_.static_point_sigma);
 
-      auto landmark_status = dyno::LandmarkStatus::StaticInLocal(
-          p_camera, frame_id, tracklet_id,
-          dyno::LandmarkStatus::Method::MEASURED);
+      auto landmark_status =
+          dyno::LandmarkStatus::StaticInLocal(p_camera, frame_id, tracklet_id);
       static_landmarks.push_back(landmark_status);
 
       auto noisy_landmark_status = dyno::LandmarkStatus::StaticInLocal(
-          noisy_p_camera, frame_id, tracklet_id,
-          dyno::LandmarkStatus::Method::MEASURED);
+          noisy_p_camera, frame_id, tracklet_id);
       noisy_static_landmarks.push_back(noisy_landmark_status);
 
       // the keypoint sttatus should be unused in the RGBD case but
       // we need it to fill out the data structures
-      auto keypoint_status =
-          dyno::KeypointStatus::Static(dyno::Keypoint(), frame_id, tracklet_id);
+      auto keypoint_status = dyno::KeypointStatus::StaticInLocal(
+          dyno::Keypoint(), frame_id, tracklet_id);
       static_keypoint_measurements.push_back(keypoint_status);
     }
 

@@ -72,9 +72,52 @@ namespace opengv {
 typedef Eigen::Matrix<double, 3, 4> transformation_t;
 }
 
+#if GTSAM_VERSION_MAJOR <= 4 && GTSAM_VERSION_MINOR < 3
+template <typename T>
+using GtsamSharedPtr = boost::shared_ptr<T>;
+#else
+using GtsamSharedPtr = std::shared_ptr<T>;
+#endif
+
+namespace {
+
+/**
+ * @brief Check if two objects wrapped in 'pointer like objects' are equal.
+ * If both are 'null' function will return true.
+ *
+ * Pointer like objects are objects that function like a pointer; the wrapped
+ * value can be obtained via *operator and they function like booleans when
+ * compared. This includes types like std/boost::optional, shared pointers and
+ * raw pointers.
+ *
+ * Deferencing T MUST return gtsam::Value type (ie. have
+ * gtsam::traits<T>::Equals) defined
+ *
+ * @tparam A pointer like object wrapping a gtsam value concept type.
+ * @param a const T&
+ * @param b const T&&
+ * @return true
+ * @return false
+ */
+template <typename POINTER, typename GTSAM_VALUE>
+bool equateGtsamPointerLikeValues(const POINTER& a, const POINTER& b,
+                                  double tol = 1e-8) {
+  if (a && b) {
+    return gtsam::traits<GTSAM_VALUE>::Equals(*a, *b, tol);
+  }
+
+  if (!a && !b) {
+    return true;
+  }
+
+  return false;
+}
+
+}  // namespace
+
 namespace dyno {
 namespace utils {
-// TODO: (jesse) coudl replace with binary predicate... I guess...?
+
 /**
  * @brief Check if two objects wrapped in std::optional are equal.
  * If both are std::nullopt, function will return true
@@ -89,16 +132,14 @@ namespace utils {
  */
 template <typename T>
 bool equateGtsamOptionalValues(const std::optional<T>& a,
-                               const std::optional<T>& b) {
-  if (a && b) {
-    return gtsam::traits<T>::Equals(*a, *b);
-  }
+                               const std::optional<T>& b, double tol = 1e-8) {
+  return ::equateGtsamPointerLikeValues<std::optional<T>, T>(a, b, tol);
+}
 
-  if (!a && !b) {
-    return true;
-  }
-
-  return false;
+template <typename T>
+bool equateGtsamSharedValues(const GtsamSharedPtr<T>& a,
+                             const GtsamSharedPtr<T>& b, double tol = 1e-8) {
+  return ::equateGtsamPointerLikeValues<GtsamSharedPtr<T>, T>(a, b, tol);
 }
 
 gtsam::Pose3 cvMatToGtsamPose3(const cv::Mat& H);
@@ -236,5 +277,3 @@ inline bool saveNoiseModelAsUpperTriangular(
 
 }  // namespace utils
 }  // namespace dyno
-
-#include "dynosam/utils/GtsamUtils-inl.hpp"

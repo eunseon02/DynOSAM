@@ -11,7 +11,7 @@ use_object_motion_pnp: True
 refine_camera_pose_with_joint_of: True
 
 object_motion_solver:
-  ransac_threshold_pnp: 2.0
+  ransac_threshold_pnp: 0.2
   refine_motion_with_joint_of: True
   refine_motion_with_3d: False
 
@@ -28,7 +28,7 @@ object_motion_solver:
 
 
 camera_motion_solver:
-  ransac_threshold_pnp: 2.0
+  ransac_threshold_pnp: 0.2
   ransac_iterations: 500
   ransac_probability:  0.995
 

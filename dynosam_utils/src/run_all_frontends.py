@@ -1,4 +1,4 @@
-from eval_launch import run
+from dynosam_utils.evaluation.runner import run
 
 def run_frontend_sequnce(path, name, data_loader_num, backend_type):
     parsed_args = {

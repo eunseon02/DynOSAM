@@ -12,7 +12,8 @@ endif()
 set(CMAKE_CXX_STANDARD 17)
 
 
-# # Find Julia
+option(ENABLE_DYNAMIC_SLAM_INTERFACES "Use dynamic_slam_interfaces" ON)
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake/")
 
 find_package(ament_cmake REQUIRED)
@@ -41,17 +42,15 @@ include_directories(
 )
 
 
-# build library
-add_library(${PROJECT_NAME} SHARED
+
+set(SRC_FILES
   src/PipelineRos.cc
-  src/FrontendDisplayRos.cc
-  src/BackendDisplayRos.cc
   src/RosUtils.cc
-  src/DisplayRos.cc
   src/Utils.cc
+  src/displays/DisplaysCommon.cc
 )
 
-ament_target_dependencies(${PROJECT_NAME}
+set(TARGET_DEPS
   rclcpp
   std_msgs
   sensor_msgs
@@ -65,6 +64,44 @@ ament_target_dependencies(${PROJECT_NAME}
   tf2_ros
 )
 
+set(TARGET_EXPORT_DEPS
+  rclcpp
+  std_msgs
+  sensor_msgs
+  dynosam
+)
+
+
+if(ENABLE_DYNAMIC_SLAM_INTERFACES)
+  message(WARNING "dynamic_slam_interfaces will be used")
+  add_definitions(-DUSE_DYNAMIC_SLAM_INTERFACES)
+
+  find_package(dynamic_slam_interfaces REQUIRED)
+  list(APPEND TARGET_DEPS dynamic_slam_interfaces)
+  list(APPEND TARGET_EXPORT_DEPS dynamic_slam_interfaces)
+
+  list(APPEND SRC_FILES
+    src/displays/dynamic_slam_displays/DSDCommonRos.cc
+    src/displays/dynamic_slam_displays/FrontendDSDRos.cc
+    src/displays/dynamic_slam_displays/BackendDSDRos.cc)
+
+else()
+  message(WARNING "dynamic_slam_interfaces will be not used")
+  list(APPEND SRC_FILES
+    src/displays/inbuilt_displays/BackendInbuiltDisplayRos.cc
+    src/displays/inbuilt_displays/InbuiltDisplayCommon.cc
+    src/displays/inbuilt_displays/FrontendInbuiltDisplayRos.cc)
+
+
+endif()
+
+# build library
+add_library(${PROJECT_NAME} SHARED ${SRC_FILES})
+
+ament_target_dependencies(${PROJECT_NAME}
+  ${TARGET_DEPS}
+)
+
 target_link_libraries(${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   glog
@@ -75,9 +112,7 @@ ament_export_libraries(${PROJECT_NAME}
   gflags
 )
 
-ament_export_dependencies(rclcpp std_msgs sensor_msgs
-dynosam
-)
+ament_export_dependencies(${TARGET_EXPORT_DEPS})
 
 
 target_include_directories(${PROJECT_NAME}
@@ -105,17 +140,12 @@ install(DIRECTORY
   DESTINATION share/${PROJECT_NAME}
 )
 
-# install(DIRECTORY
-#   config
-#   DESTINATION share/${PROJECT_NAME}
-# )
-
 
 #install python scripts/modules
 ament_python_install_package(${PROJECT_NAME})
 
 #####exec test#########
-add_executable(dynosam_node src/dynosam_node.cc)
+add_executable(dynosam_node nodes/dynosam_node.cc)
 target_link_libraries(dynosam_node
   ${PROJECT_NAME}
   ${PCL_LIBRARIES}
@@ -129,7 +159,7 @@ install(TARGETS
 
 
 
-add_executable(dynosam_experiments_node src/backend_experiments_node.cc)
+add_executable(dynosam_experiments_node nodes/backend_experiments_node.cc)
 target_link_libraries(dynosam_experiments_node
   ${PROJECT_NAME}
   ${PCL_LIBRARIES}
@@ -142,6 +172,24 @@ dynosam_experiments_node
   DESTINATION lib/${PROJECT_NAME})
 
 
+add_executable(dynosam_dataset_node nodes/dataset_node.cc)
+target_link_libraries(dynosam_dataset_node
+  ${PROJECT_NAME}
+  ${PCL_LIBRARIES}
+)
+
+ament_target_dependencies(dynosam_dataset_node "rclcpp" "std_msgs" "dynosam")
+
+install(TARGETS
+dynosam_dataset_node
+  DESTINATION lib/${PROJECT_NAME})
+
+
+    # Install Python executables
+install(PROGRAMS
+scripts/run_dynosam_gtest.py
+DESTINATION lib/${PROJECT_NAME}
+)
 
 
 if(BUILD_TESTING)

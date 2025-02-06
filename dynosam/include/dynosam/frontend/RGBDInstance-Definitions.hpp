@@ -50,9 +50,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
  public:
   DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
 
-  const StatusLandmarkEstimates static_landmarks_;   //! in the camera frame
-  const StatusLandmarkEstimates dynamic_landmarks_;  //! in the camera frame
-  // TODO: handle with variant!!!!
+  const StatusLandmarkVector static_landmarks_;   //! in the camera frame
+  const StatusLandmarkVector dynamic_landmarks_;  //! in the camera frame
   const MotionEstimateMap
       estimated_motions_;  //! Estimated motions in the world frame
   const ObjectPoseMap propogated_object_poses_;  //! Propogated poses using the
@@ -61,10 +60,10 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
       camera_poses_;  //! Vector of ego-motion poses (drawn everytime)
 
   RGBDInstanceOutputPacket(
-      const StatusKeypointMeasurements& static_keypoint_measurements,
-      const StatusKeypointMeasurements& dynamic_keypoint_measurements,
-      const StatusLandmarkEstimates& static_landmarks,
-      const StatusLandmarkEstimates& dynamic_landmarks,
+      const StatusKeypointVector& static_keypoint_measurements,
+      const StatusKeypointVector& dynamic_keypoint_measurements,
+      const StatusLandmarkVector& static_landmarks,
+      const StatusLandmarkVector& dynamic_landmarks,
       const gtsam::Pose3 T_world_camera, const Timestamp timestamp,
       const FrameId frame_id, const MotionEstimateMap& estimated_motions,
       const ObjectPoseMap propogated_object_poses = {},
@@ -104,11 +103,6 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   collectStaticLandmarkKeypointMeasurements() const;
   GenericTrackedStatusVector<LandmarkKeypointStatus>
   collectDynamicLandmarkKeypointMeasurements() const;
-
-  // GenericTrackedStatusVector<KeypointDepthStatus>
-  // collectStaticKeypointDepthMeasurements() const;
-  // GenericTrackedStatusVector<KeypointDepthStatus>
-  // collectDynamicKeypointDepthMeasurements() const;
 
   /**
    * @brief Checks if an object id exists within the frontend output

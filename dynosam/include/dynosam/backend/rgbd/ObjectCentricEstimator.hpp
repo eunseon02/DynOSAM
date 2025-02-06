@@ -741,7 +741,7 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
   StateQuery<gtsam::Point3> getDynamicLandmark(
       FrameId frame_id, TrackletId tracklet_id) const override;
   // in thie case we can actually propogate all object points ;)
-  StatusLandmarkEstimates getDynamicLandmarkEstimates(
+  StatusLandmarkVector getDynamicLandmarkEstimates(
       FrameId frame_id, ObjectId object_id) const override;
 
  private:

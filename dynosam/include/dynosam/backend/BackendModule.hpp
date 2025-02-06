@@ -38,6 +38,7 @@
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/RGBDInstance-Definitions.hpp"  //for RGBDInstanceOutputPacket
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional
 
@@ -49,18 +50,13 @@ struct BackendModuleTraits {
   using DerivedPacketType = DERIVED_INPUT_PACKET;
   using DerivedPacketTypeConstPtr = std::shared_ptr<const DerivedPacketType>;
 
-  using BasePacketType = BackendInputPacket;
+  using BasePacketType = BASE_INPUT_PACKET;
   // BasePacketType is the type that gets passed to the module via the pipeline
   // and must be a base class since we pass data along the pipelines via
   // poniters
   static_assert(std::is_base_of_v<BasePacketType, DerivedPacketType>);
 
-  // Must be a gtsam value type and meet all the concept criteria for that
   using MeasurementType = MEASUREMENT_TYPE;
-
-  static constexpr size_t Dim() {
-    return gtsam::traits<MeasurementType>::dimension;
-  }
 };
 
 /**

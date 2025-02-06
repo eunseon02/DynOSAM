@@ -86,6 +86,9 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
       RGBDInstanceOutputPacket::ConstPtr input) override;
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
+  void updateMap(gtsam::Pose3& T_world_cam,
+                 RGBDInstanceOutputPacket::ConstPtr input);
+
   // FOR NOW!!
   std::function<void(const Formulation<RGBDMap>::UniquePtr&, FrameId,
                      const gtsam::Values&, const gtsam::NonlinearFactorGraph&)>
@@ -167,6 +170,11 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
 
   BackendMetaData createBackendMetadata() const;
   FormulationHooks createFormulationHooks() const;
+  BackendOutputPacket::Ptr constructOutputPacket(FrameId frame_k,
+                                                 Timestamp timestamp) const;
+  static BackendOutputPacket::Ptr constructOutputPacket(
+      const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k,
+      Timestamp timestamp);
 
  public:
   Camera::Ptr camera_;

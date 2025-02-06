@@ -66,12 +66,35 @@ class TrackletIdManager {
 
 class FeatureTrackerBase {
  public:
+  /**
+   * @brief Parameter struct to control the visualisation for
+   * FeatureTrackerBase::computeImageTracks
+   *
+   */
+  struct ImageTracksParams {
+    //! High-level control over viz. If is_debug is set to false, no debug level
+    //! viz will be used, otherwise, the fine-grained control
+    // flags will be used to determine what to show.
+    //! No debug (ie. is_debug == false) means only feature inlier feature
+    //! tracks and object bounding boxes will be shown
+    bool is_debug;
+
+    //! Fine-grained control
+
+    //! To show current frame info as text
+    bool show_frame_info = true;
+    //! To show outliers and new feature tracks (red and blue)
+    bool show_intermediate_tracking = false;
+
+    ImageTracksParams(bool debug) : is_debug(debug) {}
+  };
+
   FeatureTrackerBase(const TrackerParams& params, Camera::Ptr camera,
                      ImageDisplayQueue* display_queue);
 
   cv::Mat computeImageTracks(const Frame& previous_frame,
                              const Frame& current_frame,
-                             bool debug = false) const;
+                             const ImageTracksParams& config = false) const;
 
  protected:
   /**

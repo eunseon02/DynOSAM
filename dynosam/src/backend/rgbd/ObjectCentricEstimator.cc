@@ -259,7 +259,7 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   }
 }
 
-StatusLandmarkEstimates ObjectCentricAccessor::getDynamicLandmarkEstimates(
+StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node = map()->getFrame(frame_id);
   const auto object_node = map()->getObject(object_id);
@@ -267,10 +267,10 @@ StatusLandmarkEstimates ObjectCentricAccessor::getDynamicLandmarkEstimates(
   CHECK_NOTNULL(object_node);
 
   if (!frame_node->objectObserved(object_id)) {
-    return StatusLandmarkEstimates{};
+    return StatusLandmarkVector{};
   }
 
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
   // unlike in the base version, iterate over all points on the object (i.e all
   // tracklets) as we can propogate all of them!!!!
   const auto& dynamic_landmarks = object_node->dynamic_landmarks;
@@ -283,12 +283,9 @@ StatusLandmarkEstimates ObjectCentricAccessor::getDynamicLandmarkEstimates(
     StateQuery<gtsam::Point3> lmk_query =
         this->getDynamicLandmark(frame_id, tracklet_id);
     if (lmk_query) {
-      estimates.push_back(LandmarkStatus::DynamicInGLobal(
-          lmk_query.get(),  // estimate
-          frame_id, tracklet_id, object_id,
-          LandmarkStatus::Method::OPTIMIZED  // this may not be correct!!
-          )                                  // status
-      );
+      estimates.push_back(
+          LandmarkStatus::DynamicInGLobal(lmk_query.get(),  // estimate
+                                          frame_id, tracklet_id, object_id));
     }
   }
   return estimates;
@@ -530,7 +527,7 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
   CHECK(frame_node);
   CHECK(frame_node->objectObserved(object_id));
 
-  StatusLandmarkEstimates dynamic_landmarks;
+  StatusLandmarkVector dynamic_landmarks;
 
   // measured/linearized camera pose at the first frame this object has been
   // seen
@@ -545,9 +542,9 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
     // const gtsam::Point3 landmark_measurement_world = X_world *
     // landmark_measurement_local;
 
-    dynamic_landmarks.push_back(LandmarkStatus::DynamicInGLobal(
-        landmark_measurement_local, frame_id, lmk_node->tracklet_id, object_id,
-        LandmarkStatus::Method::MEASURED));
+    dynamic_landmarks.push_back(
+        LandmarkStatus::DynamicInGLobal(landmark_measurement_local, frame_id,
+                                        lmk_node->tracklet_id, object_id));
   }
 
   CloudPerObject object_clouds = groupObjectCloud(dynamic_landmarks, X_world);

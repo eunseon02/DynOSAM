@@ -63,21 +63,17 @@ class MapNodeBase {
   virtual int getId() const = 0;
   virtual std::string toString() const = 0;
 
-  // TODO: not used
-  template <typename ValueType>
-  std::optional<ValueType> queryMap(gtsam::Key key) const;
-
  protected:
   std::shared_ptr<Map<MEASUREMENT>> map_ptr_;
 };
 
-// TODO: unused due to circular dependancies
-template <typename NODE>
-struct IsMapNode {
-  using UnderlyingType =
-      typename NODE::element_type;  // how to check NODE is a shared_ptr?
-  static_assert(std::is_base_of_v<MapNodeBase, UnderlyingType>);
-};
+// // TODO: unused due to circular dependancies
+// template <typename NODE>
+// struct IsMapNode {
+//   using UnderlyingType =
+//       typename NODE::element_type;  // how to check NODE is a shared_ptr?
+//   static_assert(std::is_base_of_v<MapNodeBase, UnderlyingType>);
+// };
 
 template <typename NODE>
 struct MapNodePtrComparison {
@@ -86,7 +82,13 @@ struct MapNodePtrComparison {
   }
 };
 
-// TODO:assume Node is a shared_ptr to a MapNodeType -> enforce later!!!
+/**
+ * @brief Data structuring for fast access of map nodes, sorted by their id.
+ * We use a set to prevent objects being added multiple times.
+ *
+ * @tparam NODE Must be a pointer to a MapNodeBase (or equivalent concept with a
+ * getId()) function.
+ */
 template <typename NODE>
 class FastMapNodeSet
     : public std::set<
@@ -101,17 +103,40 @@ class FastMapNodeSet
 
   FastMapNodeSet() = default;  ///< Default constructor
 
-  /** Constructor from a iterable container, passes through to base class */
+  /**
+   * @brief Constructor from a iterable container, passes through to base class.
+   *
+   * @tparam INPUTCONTAINER
+   * @param container const INPUTCONTAINER&
+   */
   template <typename INPUTCONTAINER>
   explicit FastMapNodeSet(const INPUTCONTAINER& container)
       : Base(container.begin(), container.end()) {}
 
-  /** Copy constructor from another FastMapNodeSet */
+  /**
+   * @brief Copy constructor from another FastMapNodeSet, passes through to base
+   * class.
+   *
+   * @param x const FastMapNodeSet<NODE>&
+   */
   FastMapNodeSet(const FastMapNodeSet<NODE>& x) : Base(x) {}
 
-  /** Copy constructor from the base set class */
+  /**
+   * @brief Copy constructor from the base set class, passes through to base
+   * class.
+   *
+   * @param x Base
+   */
   FastMapNodeSet(const Base& x) : Base(x) {}
 
+  /**
+   * @brief Returns all id's from the contained nodes.
+   *
+   * Recalculates each time O(N)
+   *
+   * @tparam Index
+   * @return std::vector<Index>
+   */
   template <typename Index = int>
   std::vector<Index> collectIds() const {
     std::vector<Index> ids;
@@ -123,18 +148,38 @@ class FastMapNodeSet
     return ids;
   }
 
+  /**
+   * @brief Get the first (smallest) index stored.
+   *
+   * @tparam Index
+   * @return Index
+   */
   template <typename Index = int>
   Index getFirstIndex() const {
     const NODE& node = *Base::cbegin();
     return getIndexSafe<Index>(node);
   }
 
+  /**
+   * @brief Get the last (largest) index stored
+   *
+   * @tparam Index
+   * @return Index
+   */
   template <typename Index = int>
   Index getLastIndex() const {
     const NODE& node = *Base::crbegin();
     return getIndexSafe<Index>(node);
   }
 
+  /**
+   * @brief Find a NODE based on their index. Returns this->end() if not found.
+   * Non const version.
+   *
+   * @tparam Index
+   * @param index
+   * @return Base::iterator
+   */
   template <typename Index = int>
   typename Base::iterator find(Index index) {
     return std::find_if(Base::begin(), Base::cend(), [index](const NODE& node) {
@@ -142,6 +187,14 @@ class FastMapNodeSet
     });
   }
 
+  /**
+   * @brief Find a NODE based on their index. Returns this->end() if not found.
+   * Const version.
+   *
+   * @tparam Index
+   * @param index
+   * @return Base::const_iterator
+   */
   template <typename Index = int>
   typename Base::const_iterator find(Index index) const {
     return std::find_if(Base::cbegin(), Base::cend(),
@@ -150,15 +203,35 @@ class FastMapNodeSet
                         });
   }
 
+  /**
+   * @brief Check if a node with the given ID exists in the container.
+   *
+   * @tparam Index
+   * @param index
+   * @return true
+   * @return false
+   */
   template <typename Index = int>
   bool exists(Index index) const {
     return this->find(index) != this->end();
   }
 
+  /**
+   * @brief Merges this container with another. Will automatically be sorted.
+   *
+   * @param other FastMapNodeSet<NODE>&
+   */
   void merge(const FastMapNodeSet<NODE>& other) {
     Base::insert(other.begin(), other.end());
   }
 
+  /**
+   * @brief Checks if the ID's of all the nodes are containuously ascending (ie.
+   * there is no missing ID)
+   *
+   * @return true
+   * @return false
+   */
   bool continuousAscendingIndex() const {
     auto ids = collectIds();
     if (ids.size() < 2) return true;
@@ -180,7 +253,6 @@ class FastMapNodeSet
 };
 
 // forward delcare structs
-
 template <typename MEASUREMENT>
 struct FrameNode;
 template <typename MEASUREMENT>
@@ -195,9 +267,6 @@ using ObjectNodePtr = std::shared_ptr<ObjectNode<MEASUREMENT>>;
 template <typename MEASUREMENT>
 using LandmarkNodePtr = std::shared_ptr<LandmarkNode<MEASUREMENT>>;
 
-// TODO: using std::set, prevents the same object being added multiple times
-// while this is what we want, it may hide a bug, as we never want this
-// situation to actually occur
 template <typename MEASUREMENT>
 using FrameNodePtrSet = FastMapNodeSet<FrameNodePtr<MEASUREMENT>>;
 template <typename MEASUREMENT>
@@ -205,6 +274,12 @@ using LandmarkNodePtrSet = FastMapNodeSet<LandmarkNodePtr<MEASUREMENT>>;
 template <typename MEASUREMENT>
 using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 
+/**
+ * @brief Represents an optional value with meta-data that is retrieved from the
+ * map.
+ *
+ * @tparam ValueType A value type stored in gtsam::Values
+ */
 template <typename ValueType>
 class StateQuery : public std::optional<ValueType> {
  public:
@@ -213,7 +288,6 @@ class StateQuery : public std::optional<ValueType> {
   gtsam::Key key_;
   Status status_;
 
-  // TODO: not needed!
   StateQuery() {}
   StateQuery(gtsam::Key key, const ValueType& v) : key_(key), status_(VALID) {
     Base::emplace(v);
@@ -283,6 +357,12 @@ struct MissingLandmarkException : InvalidLandmarkException {
                              std::to_string(frame_id)) {}
 };
 
+/**
+ * @brief Frame node representing all temporal data at a frame id (k) in the
+ * map-graph.
+ *
+ * @tparam MEASUREMENT
+ */
 template <typename MEASUREMENT>
 class FrameNode : public MapNodeBase<MEASUREMENT> {
  public:
@@ -293,15 +373,15 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   FrameNode(const std::shared_ptr<Map<MEASUREMENT>>& map)
       : MapNodeBase<MEASUREMENT>(map) {}
 
+  /// @brief FrameId (k)
   FrameId frame_id;
-  // TODO: check consistency between dynamic lmks existing in the values, and a
-  // motion existing all dynamic lmks landmarks that have observations at this
-  // frame
+  /// @brief All dynamic landmarks observed at this frame
   LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;
-  // all static landmarks that have observations at this frame
+  /// @brief All static landmarks observed at this frame
   LandmarkNodePtrSet<MEASUREMENT> static_landmarks;
-  // this means that we have a point measurement on this object at this frame,
-  // not necessarily that we have a motion at this frame
+  /// @brief All objects seen at this frame. NOTE that this means that we have
+  /// point observations at this frame, but not necessarily a motion (e.g. if we
+  /// only observe this object once)
   ObjectNodePtrSet<MEASUREMENT> objects_seen;
 
   /// @brief Optional initial camera pose in world, provided by the front-end
@@ -322,48 +402,123 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
     ss << "Objects seen: "
        << container_to_string(objects_seen.template collectIds<ObjectId>())
        << "\n";
-    ss << "Num dynamic points: " << numDynamicPoints() << "\n";
-    ss << "Num static points: " << numStaticPoints();
+    ss << "Num dynamic measurements: " << numDynamicMeasurements() << "\n";
+    ss << "Num static measurements: " << numStaticMeasurements();
     return ss.str();
   }
 
+  /**
+   * @brief True if the requested object was observed in this frame.
+   *
+   * @param object_id ObjectId
+   * @return true
+   * @return false
+   */
   bool objectObserved(ObjectId object_id) const;
-  // TODO: test
+
+  /**
+   * @brief True if the requested object was observed at the previous frame.
+   *
+   * @param object_id ObjectId
+   * @return true
+   * @return false
+   */
   bool objectObservedInPrevious(ObjectId object_id) const;
 
-  // object appears in both this and previous frame so we expect a motion from
-  // k-1 to k
-  // TODO: test
+  /**
+   * @brief True if the object appears at this (k) and the previous frame (k-1)
+   * and therefore we expect a motion to exist taking us from k-1 to k.
+   *
+   * @param object_id ObjectId
+   * @return true
+   * @return false
+   */
   bool objectMotionExpected(ObjectId object_id) const;
 
+  /**
+   * @brief Constructs a robot/sensor pose key.
+   *
+   * @return gtsam::Key
+   */
   gtsam::Key makePoseKey() const;
 
+  /**
+   * @brief Consturcts an object motion key. The associated motion will be from
+   * k-1 to k.
+   *
+   * @param object_id ObjectId
+   * @return gtsam::Key
+   */
   gtsam::Key makeObjectMotionKey(ObjectId object_id) const;
+
+  /**
+   * @brief Construct an object pose key. The associated pose will be for frame
+   * k.
+   *
+   * @param object_id ObjectId
+   * @return gtsam::Key
+   */
   gtsam::Key makeObjectPoseKey(ObjectId object_id) const;
 
   /// @brief Const LandmarkNodePtr with corresponding Measurement value
   using LandmarkMeasurementPair =
       std::pair<const LandmarkNodePtr<MEASUREMENT>, MEASUREMENT>;
 
-  // vector of measurements taken at this frame
+  /**
+   * @brief Get all static measurements for this frame.
+   *
+   * @return std::vector<LandmarkMeasurementPair>
+   */
   std::vector<LandmarkMeasurementPair> getStaticMeasurements() const;
+
+  /**
+   * @brief Get all (over all objects) dynamic measurements for this frame.
+   *
+   * @return std::vector<LandmarkMeasurementPair>
+   */
   std::vector<LandmarkMeasurementPair> getDynamicMeasurements() const;
+
+  /**
+   * @brief Get the Dynamic Measurements object
+   *
+   * @param object_id
+   * @return std::vector<LandmarkMeasurementPair>
+   */
   std::vector<LandmarkMeasurementPair> getDynamicMeasurements(
       ObjectId object_id) const;
 
-  // static and dynamic
-  StatusLandmarkEstimates getAllLandmarkEstimates() const;
-
+  /**
+   * @brief Number of observed objects at this frame.
+   *
+   * @return size_t
+   */
   inline size_t numObjects() const { return objects_seen.size(); }
-  inline size_t numDynamicPoints() const { return dynamic_landmarks.size(); }
-  inline size_t numStaticPoints() const { return static_landmarks.size(); }
 
- private:
-  /// @brief
-  using GenericGetLandmarkEstimateFunc =
-      std::function<StateQuery<Landmark>(LandmarkNodePtr<MEASUREMENT>)>;
+  /**
+   * @brief Number of dynamic measurements for this frame.
+   *
+   * @return size_t
+   */
+  inline size_t numDynamicMeasurements() const {
+    return dynamic_landmarks.size();
+  }
+
+  /**
+   * @brief Number of static measurements for this frame.
+   *
+   * @return size_t
+   */
+  inline size_t numStaticMeasurements() const {
+    return static_landmarks.size();
+  }
 };
 
+/**
+ * @brief Object node representing all object related data (j) over all time(k
+ * to K) in the map-graph.
+ *
+ * @tparam MEASUREMENT
+ */
 template <typename MEASUREMENT>
 class ObjectNode : public MapNodeBase<MEASUREMENT> {
  public:
@@ -374,8 +529,9 @@ class ObjectNode : public MapNodeBase<MEASUREMENT> {
   ObjectNode(const std::shared_ptr<Map<MEASUREMENT>>& map)
       : MapNodeBase<MEASUREMENT>(map) {}
 
+  /// @brief Object label (j)
   ObjectId object_id;
-  // all tracklets
+  /// @brief All landmarks associated with the object over time
   LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;
 
   /**
@@ -395,25 +551,47 @@ class ObjectNode : public MapNodeBase<MEASUREMENT> {
     return ss.str();
   }
 
+  /**
+   * @brief Get the first frame this object was observed in.
+   *
+   * @return FrameId
+   */
   inline FrameId getFirstSeenFrame() const {
     return getSeenFrames().template getFirstIndex<FrameId>();
   }
+
+  /**
+   * @brief Get the last frame this object was observed in.
+   *
+   * @return FrameId
+   */
   inline FrameId getLastSeenFrame() const {
     return getSeenFrames().template getLastIndex<FrameId>();
   }
 
-  // this could take a while?
-  // for all the lmks we have for this object, find the frames of those lmks
+  /**
+   * @brief Get all the frame nodes that have observed this object.
+   *
+   * @return FrameNodePtrSet<MEASUREMENT>
+   */
   FrameNodePtrSet<MEASUREMENT> getSeenFrames() const;
+
+  /**
+   * @brief Get all the frame ids that have observed this object.
+   *
+   * @return FrameIds
+   */
   FrameIds getSeenFrameIds() const;
-  // The landmarks might have been seen at multiple frames but we know this is
-  // the subset of lmks at this requested frame
+
+  /**
+   * @brief Get all the landmarks that observed this object at a particular
+   * frame id. This should be a subset of the dynamic_landmarks stored.
+   *
+   * @param frame_id FrameId
+   * @return LandmarkNodePtrSet<MEASUREMENT>
+   */
   LandmarkNodePtrSet<MEASUREMENT> getLandmarksSeenAtFrame(
       FrameId frame_id) const;
-
-  /// @brief A pair of Const LandmarkNodePtr's
-  using LandmarkNodePair = std::pair<const LandmarkNodePtr<MEASUREMENT>,
-                                     const LandmarkNodePtr<MEASUREMENT>>;
 };
 
 struct InvalidLandmarkQuery : public DynosamException {
@@ -422,6 +600,15 @@ struct InvalidLandmarkQuery : public DynosamException {
                          DynoLikeKeyFormatter(key) + ", reason: " + string) {}
 };
 
+/**
+ * @brief Landmark node representing all the measurements of a particular
+ * landmark (i) over all time (k to K) in the map-graph.
+ *
+ * The node can represent either a static or dynamic landmark and has multiple
+ * measurements associated with it.
+ *
+ * @tparam MEASUREMENT
+ */
 template <typename MEASUREMENT>
 class LandmarkNode : public MapNodeBase<MEASUREMENT> {
  public:
@@ -436,8 +623,10 @@ class LandmarkNode : public MapNodeBase<MEASUREMENT> {
       : MapNodeBase<MEASUREMENT>(map) {}
   virtual ~LandmarkNode() = default;
 
+  /// @brief Unique tracklet (i) of the landmark/
   TrackletId tracklet_id;
-  ObjectId object_id;  // will this change ever?
+  /// @brief Object label (j) of the landmark.
+  ObjectId object_id;
 
   /**
    * @brief Returns the tracklet_id
@@ -461,44 +650,125 @@ class LandmarkNode : public MapNodeBase<MEASUREMENT> {
 
   ObjectId getObjectId() const;
 
-  // simply checks the background label
-  // dangernous if the label changes as now it will attempt to retrieve a static
-  // point
+  /**
+   * @brief Returns true if the landmark is static.
+   *
+   * Simply checks the background label, so could be dangerous if the label
+   * changes (but this should never happen!!)
+   *
+   * @return true
+   * @return false
+   */
   bool isStatic() const;
+
+  /**
+   * @brief Number of observations of this landmark.
+   *
+   * @return size_t
+   */
   size_t numObservations() const;
 
+  /**
+   * @brief Get all the frame nodes this landmark was observed in.
+   *
+   * @return const FrameNodePtrSet<MEASUREMENT>&
+   */
   inline const FrameNodePtrSet<MEASUREMENT>& getSeenFrames() const {
     return frames_seen_;
   }
 
+  /**
+   * @brief Get all the frame id's this landmark was observed in.
+   *
+   * @return FrameIds
+   */
   FrameIds getSeenFrameIds() const;
 
+  /**
+   * @brief Get all the measurements for this landmark.
+   *
+   * @return const Measurements&
+   */
   inline const Measurements& getMeasurements() const { return measurements_; }
 
+  /**
+   * @brief True if the landmark was observed at the requested frame.
+   *
+   * @param frame_id FrameId
+   * @return true
+   * @return false
+   */
   bool seenAtFrame(FrameId frame_id) const;
-  // should exist if also at frame
+
+  /**
+   * @brief True if the landmark was a measurement at the requested frame.
+   * Should be true if seenAtFrame() is also true.
+   *
+   * @param frame_id FrameId
+   * @return true
+   * @return false
+   */
   bool hasMeasurement(FrameId frame_id) const;
+
+  /**
+   * @brief Get the measurement at the requested frame node.
+   * Throws DynosamException if no measurement existd at this frame; use with
+   * seenAtFrame or hasMeasurement.
+   *
+   * @param frame_node FrameNodePtr<MEASUREMENT>
+   * @return const MEASUREMENT&
+   */
   const MEASUREMENT& getMeasurement(FrameNodePtr<MEASUREMENT> frame_node) const;
+
+  /**
+   * @brief Get the measurement at the requested frame id.
+   * Throws DynosamException if no measurement existd at this frame; use with
+   * seenAtFrame or hasMeasurement.
+   *
+   * @param frame_id FrameId
+   * @return const MEASUREMENT&
+   */
   const MEASUREMENT& getMeasurement(FrameId frame_id) const;
 
-  // TODO: test
+  /**
+   * @brief Adds a measurement with the associated frame id.
+   *
+   * @param frame_node FrameNodePtr<MEASUREMENT>
+   * @param measurement const MEASUREMENT&
+   */
   void add(FrameNodePtr<MEASUREMENT> frame_node,
            const MEASUREMENT& measurement);
 
-  // THROWS exception when wrong type... is there a cleaner way to handle this?
-  // TODO: there are some tests
-  //  StateQuery<Landmark> getStaticLandmarkEstimate() const;
-  //  StateQuery<Landmark> getDynamicLandmarkEstimate(FrameId frame_id) const;
-
+  /**
+   * @brief Construcs a static landmark key for this landmark. The tracklet id
+   * will be used to construct a unique key.
+   *
+   * @exception DynosamException if the landmark is not static.
+   *
+   *
+   * @return gtsam::Key
+   */
   gtsam::Key makeStaticKey() const;
+
+  /**
+   * @brief Construcs a dynamic landmark key for this landmark.
+   * @see LandmarkNode<MEASUREMENT>#makeDynamicSymbol
+   *
+   * @param frame_id
+   * @return gtsam::Key
+   */
   gtsam::Key makeDynamicKey(FrameId frame_id) const;
+
+  /**
+   * @brief Construcs a dynamic landmark symbol for this landmark. The frame id
+   * and tracklet id will be used to construct a unique key.
+   * @exception DynosamException if the landmark is not dynamic.
+   *
+   * @param frame_id FrameId
+   * @return gtsam::Key DynamicPointSymbol
+   */
   DynamicPointSymbol makeDynamicSymbol(FrameId frame_id) const;
 
-  // bool appendStaticLandmarkEstimate(StatusLandmarkEstimates& estimates)
-  // const; bool appendDynamicLandmarkEstimate(StatusLandmarkEstimates&
-  // estimates, FrameId frame_id) const;
-
- private:
  protected:
   FrameNodePtrSet<MEASUREMENT> frames_seen_;
   Measurements measurements_;

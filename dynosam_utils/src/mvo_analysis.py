@@ -7,8 +7,8 @@ import evo.core.trajectory as evo_traj
 import evo.tools.plot as evo_plot
 import evo.core.sync as evo_sync
 
-import evaluation.evaluation_lib as eval
-import evaluation.formatting_utils as formatting_utils
+import dynosam_utils.evaluation.evaluation_lib as eval
+import dynosam_utils.evaluation.formatting_utils as formatting_utils
 
 import sys
 import copy

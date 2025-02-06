@@ -562,7 +562,7 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
   }
 
   // this doesnt really work any more as debug info is meant to be per frame?
-  if (result.debug_info) {
+  if (result.debug_info && VLOG_IS_ON(20)) {
     for (const auto& [object_id, object_info] :
          result.debug_info->getObjectInfos()) {
       std::stringstream ss;
@@ -636,10 +636,8 @@ void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
     logger->logObjectPose(frame_k, object_pose_map, ground_truth_packets);
 
     if (map->frameExists(frame_k)) {
-      StatusLandmarkEstimates static_map =
-          accessor->getStaticLandmarkEstimates(frame_k);
-      StatusLandmarkEstimates dynamic_map =
-          accessor->getDynamicLandmarkEstimates(frame_k);
+      auto static_map = accessor->getStaticLandmarkEstimates(frame_k);
+      auto dynamic_map = accessor->getDynamicLandmarkEstimates(frame_k);
 
       CHECK(X_k_query);  // actually not needed for points in world!!
       logger->logPoints(frame_k, *X_k_query, static_map);

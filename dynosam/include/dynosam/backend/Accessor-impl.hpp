@@ -120,12 +120,12 @@ ObjectPoseMap Accessor<MAP>::getObjectPoses() const {
 }
 
 template <class MAP>
-StatusLandmarkEstimates Accessor<MAP>::getDynamicLandmarkEstimates(
+StatusLandmarkVector Accessor<MAP>::getDynamicLandmarkEstimates(
     FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
   CHECK_NOTNULL(frame_node);
 
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
   const auto object_seen =
       frame_node->objects_seen.template collectIds<ObjectId>();
   for (ObjectId object_id : object_seen) {
@@ -135,16 +135,16 @@ StatusLandmarkEstimates Accessor<MAP>::getDynamicLandmarkEstimates(
 }
 
 template <class MAP>
-StatusLandmarkEstimates Accessor<MAP>::getDynamicLandmarkEstimates(
+StatusLandmarkVector Accessor<MAP>::getDynamicLandmarkEstimates(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node = map()->getFrame(frame_id);
   CHECK_NOTNULL(frame_node);
 
   if (!frame_node->objectObserved(object_id)) {
-    return StatusLandmarkEstimates{};
+    return StatusLandmarkVector{};
   }
 
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
   const auto& dynamic_landmarks = frame_node->dynamic_landmarks;
   for (auto lmk_node : dynamic_landmarks) {
     const auto tracklet_id = lmk_node->tracklet_id;
@@ -157,11 +157,10 @@ StatusLandmarkEstimates Accessor<MAP>::getDynamicLandmarkEstimates(
     StateQuery<gtsam::Point3> lmk_query =
         this->getDynamicLandmark(frame_id, tracklet_id);
     if (lmk_query) {
-      estimates.push_back(LandmarkStatus::DynamicInGLobal(
-          lmk_query.get(),  // estimate
-          frame_id, tracklet_id, object_id,
-          LandmarkStatus::Method::OPTIMIZED  // this may not be correct!!
-          )                                  // status
+      estimates.push_back(
+          LandmarkStatus::DynamicInGLobal(lmk_query.get(),  // estimate
+                                          frame_id, tracklet_id,
+                                          object_id)  // status
       );
     }
   }
@@ -169,12 +168,12 @@ StatusLandmarkEstimates Accessor<MAP>::getDynamicLandmarkEstimates(
 }
 
 template <class MAP>
-StatusLandmarkEstimates Accessor<MAP>::getStaticLandmarkEstimates(
+StatusLandmarkVector Accessor<MAP>::getStaticLandmarkEstimates(
     FrameId frame_id) const {
   // dont go over the frames as this contains references to the landmarks
   // multiple times
   // e.g. the ones seen in that frame
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
 
   const auto frame_node = map()->getFrame(frame_id);
   CHECK_NOTNULL(frame_node);
@@ -187,8 +186,8 @@ StatusLandmarkEstimates Accessor<MAP>::getStaticLandmarkEstimates(
         estimates.push_back(LandmarkStatus::StaticInGlobal(
             lmk_query.get(),  // estimate
             LandmarkStatus::MeaninglessFrame,
-            landmark_node->getId(),             // tracklet id
-            LandmarkStatus::Method::OPTIMIZED)  // status
+            landmark_node->getId()  // tracklet id
+            )                       // status
         );
       }
     }
@@ -197,10 +196,10 @@ StatusLandmarkEstimates Accessor<MAP>::getStaticLandmarkEstimates(
 }
 
 template <class MAP>
-StatusLandmarkEstimates Accessor<MAP>::getFullStaticMap() const {
+StatusLandmarkVector Accessor<MAP>::getFullStaticMap() const {
   // dont go over the frames as this contains references to the landmarks
   // multiple times e.g. the ones seen in that frame
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
   const auto landmarks = map()->getLandmarks();
 
   for (const auto& [_, landmark_node] : landmarks) {
@@ -211,8 +210,8 @@ StatusLandmarkEstimates Accessor<MAP>::getFullStaticMap() const {
         estimates.push_back(LandmarkStatus::StaticInGlobal(
             lmk_query.get(),  // estimate
             LandmarkStatus::MeaninglessFrame,
-            landmark_node->getId(),             // tracklet id
-            LandmarkStatus::Method::OPTIMIZED)  // status
+            landmark_node->getId()  // tracklet id
+            )                       // status
         );
       }
     }
@@ -221,9 +220,9 @@ StatusLandmarkEstimates Accessor<MAP>::getFullStaticMap() const {
 }
 
 template <class MAP>
-StatusLandmarkEstimates Accessor<MAP>::getLandmarkEstimates(
+StatusLandmarkVector Accessor<MAP>::getLandmarkEstimates(
     FrameId frame_id) const {
-  StatusLandmarkEstimates estimates;
+  StatusLandmarkVector estimates;
   estimates += getStaticLandmarkEstimates(frame_id);
   estimates += getDynamicLandmarkEstimates(frame_id);
   return estimates;
@@ -299,7 +298,7 @@ gtsam::FastMap<ObjectId, gtsam::Point3> Accessor<MAP>::computeObjectCentroids(
 template <class MAP>
 std::tuple<gtsam::Point3, bool> Accessor<MAP>::computeObjectCentroid(
     FrameId frame_id, ObjectId object_id) const {
-  const StatusLandmarkEstimates& dynamic_lmks =
+  const StatusLandmarkVector& dynamic_lmks =
       this->getDynamicLandmarkEstimates(frame_id, object_id);
 
   // convert to point cloud - should be a map with only one map in it

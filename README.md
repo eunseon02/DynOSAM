@@ -11,8 +11,26 @@ DynoSAM is a Stereo/RGB-D Visual Odometry pipeline for Dynamic SLAM and estiamte
 
 DynoSAM current provides full-batch and sliding-window optimisation procedures and is integrated with ROS2.
 
+## Publication
+The offical code used for our paper:
+- [Jesse Morris](https://jessemorris.github.io/), Yiduo Wang, Mikolaj Kliniewski, Viorela Ila, [*DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM*](https://arxiv.org/pdf/2501.11893), Arxiv.  Submitted Transactions on Robotics (T-RO) Visual SLAM Special Issue (2025).
 
-## Related Publication
+We kindly ask to cite our paper if you find this work useful:
+
+```bibtex
+
+@misc{morris2025dynosam,
+      title={DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM},
+      author={Jesse Morris and Yiduo Wang and Mikolaj Kliniewski and Viorela Ila},
+      year={2025},
+      eprint={2501.11893},
+      archivePrefix={arXiv},
+      primaryClass={cs.RO},
+      url={https://arxiv.org/abs/2501.11893},
+}
+
+```
+## Related Publications
 
 DynoSAM was build as a culmination of several works:
 
@@ -22,10 +40,13 @@ DynoSAM was build as a culmination of several works:
 
 ## Demo
 
+Example output running on the Oxford Multimotion Dataset (OMD, _swinging_4_unconstrained_).
+
 <div align="center">
   <img src="./docs/media/omd-demo.gif"/>
 </div>
 
+> NOTE: this visualisation was generated using playback and is does not reflect the realtime output of our system.
 
 # 1. Installtion
 
@@ -41,6 +62,10 @@ Tested on Ubuntu 20.04
 - [Glog](http://rpg.ifi.uzh.ch/docs/glog.html), [Gflags](https://gflags.github.io/gflags/)
 - [Gtest](https://github.com/google/googletest/blob/master/googletest/docs/primer.md) (installed automagically)
 - [config_utilities](https://github.com/MIT-SPARK/config_utilities)
+- [dynamic_slam_interfaces](https://github.com/ACFR-RPG/dynamic_slam_interfaces) (Required by default. Can be optionally made not a requirement. See Insallation instructions below)
+
+External dependancies (for visualization) not required for compilation.
+- [rviz_dynamic_slam_plugins](https://github.com/ACFR-RPG/rviz_dynamic_slam_plugins) (Plugin to display custom `dynamic_slam_interfaces` messages which are advertised by default.)
 
 
 ## Installation Instructions
@@ -48,23 +73,45 @@ DynoSAM is currently built within the ROS2 infrastructure (if there is enough in
 
 We provide a development [Dockerfile](./docker/Dockerfile) that will install all dependancies but expects DynoSAM to be cloned locally. The associated [container creation](./docker/create_container.sh) will then mount the local DynoSAM folder into the container along with local results/dataset folders.
 
-> NOTE: there are some minor issues with the current dockerfile which will be fixed in-time.
+> NOTE: there are some minor issues with the current dockerfile which will be fixed intime.
 
 The general ROS2 build procedure holds as all relevant subfolders in DynoSAM are built as packages.
 
-More detailed instructions are fonud here: [Insallation instructions](./docs/media/INSTALL.md)
+More detailed instructions are found here: [Insallation instructions](./docs/media/INSTALL.md)
+
+```
+# Finally compile
+cd ros_ws && colcon build
+
+# Refresh workspace
+source ~/ros_ws/install/setup.bash
+```
+
+`dynamic_slam_interfaces` is a require dependacy by default. This package is used to include custom messages that represet the state of each dynamic object per frame and is used by the ROS publishers.
+
+To disable this dependancy compile the code as
+```
+colcon build --cmake-args -DENABLE_DYNAMIC_SLAM_INTERFACES=OFF
+```
+By default `ENABLE_DYNAMIC_SLAM_INTERFACES=ON` in the [CMakeLists.txt](./dynosam_ros/CMakeLists.txt). This CMake option will additionally change the _visualisation_ (and the output topics) used by DynoSAM. See the [ROS Visualisation](#ros-visualisation) section below.
+
+
 
 # 2. Usage
 
+## Documentation
+We auto generate [Doxygen code docs](https://acfr-rpg.github.io/DynOSAM/doxygen/) for all classes in DynoSAM. The code docs are up-to-date with the _main_ branch.
+
 ## Running and Configuration
 
-DynoSAM uses a combination of yaml files and GFLAGS (these are being simplified but GFLAGS allow an easier way to programatically set variables over cmd-line) to configure the system. ROS params are used sparingly and are only used to set input file paths.
+DynoSAM uses a combination of yaml files and GFLAGS (these are being simplified but GFLAGS allows an easier way to programatically set variables over cmd-line) to configure the system. ROS params are used sparingly and are only used to set input file paths.
 
 ### Running with Launch files
 All .yaml and .flag files should be placed in the same params folder, which is specified by the command line.
 To specify the dataset loader, the GFLAG `--data_provider_type` should be set (see [pipeline.flags](./dynosam/params/pipeline.flags)). Eventually, this will also include the option to take data live from a sensor. For data providers that are specific to each dataset used for evaluation, a dataset path must also be set.
 
-DynoSAM will also log all output configuration to an output-folder specified by `--output_path` (see [pipeline.flags](./dynosam/params/pipeline.flags)). Data will only be logged if this folder exists.
+DynoSAM will also log all output configuration to an output-folder specified by `--output_path` (see [pipeline.flags](./dynosam/params/pipeline.flags)).
+__Data will only be logged if this folder exists.__
 
 The DynoSAM pipeline can be launched via launch file:
 ```
@@ -73,13 +120,9 @@ ros2 launch dynosam_ros dyno_sam_launch.py params_path:=<value> dataset_path:=<>
 The launch file will load all the GFLAG's from all .flag files found in the params folder.
 
 ### Running with complex input
-For evaluation and more refined control over the input to the system we also provide a evaluation launch script
+For evaluation and more refined control over the input to the system we also provide an evaluation launch script and can be run as:
 ```
-cd dynosam_utils/src
-```
-and can be run as
-```
-python3 eval_launch.py
+ros2 run dynosam_utils eval_launch.py
   --dataset_path <Path to dataset>
   --params_path <Absolute path to the params folder to run dynosam with>
   --launch_file <Wich dynosam launch file to run with!>
@@ -90,16 +133,34 @@ python3 eval_launch.py
   *args...
 
 ```
-In addition to these arguments, this script takes all additional cmd-line arguments and parses them to the DynoSAM node, allowing any GFLAGS to be overwritten directly by specifying them in the commandline. e.g the dataset provider type can be specifued as:
+This script automated the process of running the evaluation suite (ie. `--run_analysis_`) and set all rosparams/re-direct input and output paths (e.g. `--output_path`, `name`, etc...).
+
+In addition to these arguments, this script takes all additional cmd-line arguments and parses them to the DynoSAM node, allowing any GFLAGS to be overwritten directly by specifying them in the commandline. e.g the dataset provider type can be specified as:
 ```
-python3 eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
+ros2 run dynosam_utils eval_launch.py --output_path=/path/to/results --name test --run_pipeline --data_provider_type=2
 ```
-This script will also construct the corresponding output folder (e.g. ouput_path/name) and make it, if it does not exist. In the aboce example, the program will make the folder '/path/to/results/test/' and deposit all output logs in that folder.
+This script will also construct the corresponding output folder (e.g. ouput_path/name) and make it, if it does not exist. In the aboce example, the program will make the folder _'/path/to/results/test/'_ and deposit all output logs in that folder.
+
+> NOTE: for all evaluations and metrics, this script was used to run the program.
 
 ### Running programtically
 All the cmdline functionality can be replicated programtically using python in order to run experiments and evaluations.
 See [run_experiments_tro.py](./dynosam_utils/src/run_experiments_tro.py) for examples.
 
+
+## Tests
+We use [gtest](https://github.com/google/googletest) for unit testing. This is installed automagically. When building with ROS, all tests will go into the install folder.
+
+To run the unit tests: build the code, navigate inside the `install` folder and run the tests. Both `dynosam` and `dynosam_ros` packages come with unit tests.
+
+We provide a useful script to make running tests easier. Run
+```
+ros2 run dynosam_ros run_dynosam_gtest.py
+```
+from anywhere on the system to run tests. The unit tests for a particular package (ie. `dynosam` and `dynosam_ros`) can be specified using the `--package` argumement. This script forwards all arguments to the test executable so that GFLAGS can still be used e.g.
+```
+run dynosam_ros run_dynosam_gtest.py --package=dynosam_ros --gtest_filter=TestConcepts*
+```
 
 ## Datasets
 
@@ -107,15 +168,16 @@ We provide a number of data providers which process datasets into the input form
 
 We are currently working on providing datasets to process live data, along-side pre-processing modules which will be available soon.
 
+[Download](https://unisyd-my.sharepoint.com/:f:/g/personal/jesse_morris_sydney_edu_au/EhK53_rmAqRDtHslS9HEuwwByFpR2oX59A_CKQTKrc9dAA?e=nbmM8h) processed version of the KITTI tracking and OMD sequences. The other sequences were used in their raw form.
+
 ### i. KITTI Tracking Dataset
 We use a modified version of the KITTI tracking dataset which includes ground truth motion data, as well dense optical-flow, depth and segmentation masks.
-TODO:
 
 The required dataset loader can be specified by setting `--data_provider_type=0`
 
 ### ii. Oxford Multimotion Dataset (OMD)
 Raw data can be downloaded from the [project page](https://robotic-esp.com/datasets/omd/).
-For our 2024 T-RO paper we used a modified version of the dataset which can be downloaded here. (TODO) which is associated with the current dataloader.
+For our 2024 T-RO paper we used a modified version of the dataset which can be downloaded from the above link.
 
 C++ code to parse the raw dataset (although not used) is also provided and the code used to pre-process the dataset (as optical flow and segmentation masks are not provided in the raw dataset) will also be provided soon.
 
@@ -132,6 +194,16 @@ The required dataset loader can be specified by setting `--data_provider_type=2`
 Access [raw dataset](https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/) and extract in a folder. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
 
 The required dataset loader can be specified by setting `--data_provider_type=1`
+
+
+## ROS Visualisation
+All 3D visualisation in DynoSAM is done using RVIZ. Camera pose and point clouds are vizualised using standard ROS messages. Visualising the objects is more complex and we provide two different ways to do this which can be controlled at compile time using the cmake flag `-DENABLE_DYNAMIC_SLAM_INTERFACES=ON/OFF`
+
+1. (`ON`, now default) Usage of the custom `dynamic_slam_interfaces::msg::ObjectOdometry` (in [dynamic_slam_interfaces](https://github.com/ACFR-RPG/dynamic_slam_interfaces)) to publish to current state of the each object per frame. Our custom RVIZ plugin [rviz_dynamic_slam_plugins](https://github.com/ACFR-RPG/rviz_dynamic_slam_plugins) can be used to visualize this message type. The object id, current pose, velocity, path etc... will be shown for each object. See this [README.md](./dynosam_ros/include/dynosam_ros/displays/dynamic_slam_displays/README.md) for more detail.
+2. (`OFF`) Instead of using the custom messages, standard ROS visualisation messages are used instead to display the state of each object (object id, current pose...). This setup is therefore more complex, and results in many more advertised topics to achieve a similar (and less flexible) display than using the custom plugin/interface combination. As a result, this method of display is not preferred. See this [README.md](./dynosam_ros/include/dynosam_ros/displays/inbuilt_displays/README.md) for more detail.
+
+> NOTE: the publishing of object states is meant primilarily for __visualisation__ purposes and not for recording data used for evaluation. This is done using csv files in a different submodule: see [Evaluation](#4-evaluation).
+
 
 # 2. Image Pre-processing
 DynoSAM requires input image data in the form:
@@ -223,7 +295,7 @@ In the case of motion logs, the frame id is the __to__ motion, such that the mot
 
 ## Results and Metrics
 
-The DynoSAM framework comes with automated [evaluation tools](./dynosam_utils/src/evaluation/) that run as part of the pipeline. This can be run with the`--run_analysis` argument when using `eval_launch.py`. The evaluation module will look for a valid dynosam results folder in the provided output directory and will run evaluations _per prefix found_ in the folder. This enables one folder to contain multiple sets of log files, each defined with a different prefix, i.e for one dataset, multiple configurations of the back-end can be run and logged to the same folder, as long as the prefix is different.
+The DynoSAM framework comes with automated [evaluation tools](./dynosam_utils/dynosam_utils//evaluation/) that run as part of the pipeline. This can be run with the`--run_analysis` argument when using `eval_launch.py`. The evaluation module will look for a valid dynosam results folder in the provided output directory and will run evaluations _per prefix found_ in the folder. This enables one folder to contain multiple sets of log files, each defined with a different prefix, i.e for one dataset, multiple configurations of the back-end can be run and logged to the same folder, as long as the prefix is different.
 
 From the logged files the evaluation suite will produce ATE and RPE results for visual odometry and AME, RME and RPE results for objects. See our TRO paper for more details on these metrics. Per-frame numerical errors are logged in __*results.pdf__ with error plots for each metric as well as plots of the object and camera trajectory additionally included.
 
@@ -237,7 +309,7 @@ From the logged files the evaluation suite will produce ATE and RPE results for 
 
 A full summary of numerical results are also generated in __result_tables.pdf__. This file includes all metrics for all sets of dynosam results found. The per-object error (for each metric) is recorded, as is the mean error over all objects for a particular metric.
 
-The `DatasetEvaluator` does most of the heavy lifting and can be found in the [evaluation_lib.py](./dynosam_utils/src/evaluation/evaluation_lib.py) module. As shown in some of the other evaluation scripts (e.g [sliding_window_vs_batch_error_plot.py](./dynosam_utils/src/sliding_window_vs_batch_error_plot.py)) we can use the tools and classes defined to do more complex evaluation and visualisation.
+The `DatasetEvaluator` does most of the heavy lifting and can be found in the [evaluation_lib.py](./dynosam_utils/dynosam_utils/evaluation/evaluation_lib.py) module. As shown in some of the other evaluation scripts (e.g [sliding_window_vs_batch_error_plot.py](./dynosam_utils/src/sliding_window_vs_batch_error_plot.py)) we can use the tools and classes defined to do more complex evaluation and visualisation.
 
 # 5. Program Structure and Modules
 
@@ -274,7 +346,7 @@ All transform types (e.g. poses $X$ and motions $H$) are implemented using `gtsa
 > NOTE: I was very inconsistent with my variable naming through this code, mainly becuase I did not find a good way to deal with the funky three-indexed notation very well. I am fixing this as I go ;)
 
 ### Modules
-The front-end and back-end's are implemented in associated subfolders.
+The front-end and back-ends are implemented in associated subfolders.
 
 
 __Front-end__
@@ -293,7 +365,7 @@ As per our key contributions, our back-end is structured to facilitate new imple
   - Integrates new observations into the graph and updates it accordingly.
   - It creates an `Acccessor` object which is used externally to extract and interact with the internal representation.
 
-- [`Accessor`](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathbf{O}_k$.
+- [`Accessor`](./dynosam/include/dynosam/backend/Accessor.hpp) defines the interface between the derived `Formulation` and the backend modules and facilitates the extraction and conversion of variables into a format that aligns with backend expectations. This format is specified in our paper as $\mathcal{O}_k$.
 
 Each formulation will need to derive from `Formulation` and define their own `Accessor`. The two formulations discussed in our paper are implemented as
   - [`WorldMotionFormulation`](./dynosam/include/dynosam/backend/rgbd/WorldMotionEstimator.hpp)
@@ -305,7 +377,7 @@ Each formulation will need to derive from `Formulation` and define their own `Ac
 We strongly encourage you to submit issues, feedback and potential improvements.
 We follow the branch, open PR, review, and merge workflow.
 
-As of Nov 2024 I still actively developing this project as part of my PhD at the [ACFR](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-robotics.html). Things may change but I will do my best to ensure versions are tagged etc... as a result I will also be happy to address all bugs and feature requests! Send 'em through!!
+As of Nov 2024 I am still actively developing this project as part of my PhD at the [ACFR](https://www.sydney.edu.au/engineering/our-research/robotics-and-intelligent-systems/australian-centre-for-robotics.html). Things may change but I will do my best to ensure versions are tagged etc... as a result I will also be happy to address all bugs and feature requests! Send 'em through!!
 
 To contribute to this repo, make sure you have [pre-commit](https://pre-commit.com/) installed to enable checks.
 ```bash

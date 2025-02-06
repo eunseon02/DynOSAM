@@ -178,42 +178,42 @@ class Accessor {
    * time-step k.
    *
    * @param frame_id FrameId
-   * @return StatusLandmarkEstimates
+   * @return StatusLandmarkVector
    */
-  StatusLandmarkEstimates getDynamicLandmarkEstimates(FrameId frame_id) const;
+  StatusLandmarkVector getDynamicLandmarkEstimates(FrameId frame_id) const;
 
   /**
    * @brief Get all dynamic landmarks for object j at time-step k.
    *
    * @param frame_id FrameId
    * @param object_id ObjectId
-   * @return StatusLandmarkEstimates
+   * @return StatusLandmarkVector
    */
-  virtual StatusLandmarkEstimates getDynamicLandmarkEstimates(
+  virtual StatusLandmarkVector getDynamicLandmarkEstimates(
       FrameId frame_id, ObjectId object_id) const;
 
   /**
    * @brief Get all static landmarks at time-step k.
    *
    * @param frame_id FrameId
-   * @return StatusLandmarkEstimates
+   * @return StatusLandmarkVector
    */
-  StatusLandmarkEstimates getStaticLandmarkEstimates(FrameId frame_id) const;
+  StatusLandmarkVector getStaticLandmarkEstimates(FrameId frame_id) const;
 
   /**
    * @brief Get all static landmarks from time-step 0 to k.
    *
-   * @return StatusLandmarkEstimates
+   * @return StatusLandmarkVector
    */
-  StatusLandmarkEstimates getFullStaticMap() const;
+  StatusLandmarkVector getFullStaticMap() const;
 
   /**
    * @brief Get all landmarks (static and dynamic) at time-step k.
    *
    * @param frame_id FrameId
-   * @return StatusLandmarkEstimates
+   * @return StatusLandmarkVector
    */
-  StatusLandmarkEstimates getLandmarkEstimates(FrameId frame_id) const;
+  StatusLandmarkVector getLandmarkEstimates(FrameId frame_id) const;
 
   /**
    * @brief Check if there exists an estimate for object motion at time-step (k)

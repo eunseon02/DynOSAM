@@ -158,17 +158,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
                   // gross!
 
   // Pose estimate from the front-end
-  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
-  {
-    utils::TimingStatsCollector timer("map.update_observations");
-    map_->updateObservations(
-        input->collectStaticLandmarkKeypointMeasurements());
-    map_->updateObservations(
-        input->collectDynamicLandmarkKeypointMeasurements());
-    // update other measurements
-    map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
-    map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
-  }
+  gtsam::Pose3 T_world_cam_k_frontend;
+  updateMap(T_world_cam_k_frontend, input);
 
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
@@ -190,21 +181,13 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
 RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
+  const Timestamp timestamp = input->getTimestamp();
+  LOG(INFO) << "Running backend " << frame_k;
   CHECK_EQ(spin_state_.frame_id, frame_k);
 
   // Pose estimate from the front-end
-  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
-  LOG(INFO) << "Running backend " << frame_k;
-  {
-    utils::TimingStatsCollector timer("map.update_observations");
-    map_->updateObservations(
-        input->collectStaticLandmarkKeypointMeasurements());
-    map_->updateObservations(
-        input->collectDynamicLandmarkKeypointMeasurements());
-    // update other measurements
-    map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
-    map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
-  }
+  gtsam::Pose3 T_world_cam_k_frontend;
+  updateMap(T_world_cam_k_frontend, input);
 
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
@@ -294,7 +277,6 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
       // graph.error(values);
       gtsam::LevenbergMarquardtParams opt_params;
-      // if(VLOG_IS_ON(20))
       opt_params.verbosity = gtsam::NonlinearOptimizerParams::Verbosity::ERROR;
 
       const auto theta = new_updater_->getTheta();
@@ -344,24 +326,28 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   new_updater_->accessorFromTheta()->postUpdateCallback(
       backend_info);  // force update every time (slow! and just for testing)
 
-  auto backend_output = std::make_shared<BackendOutputPacket>();
-  backend_output->timestamp_ = input->getTimestamp();
-  backend_output->frame_id_ = input->getFrameId();
-  backend_output->T_world_camera_ = accessor->getSensorPose(frame_k).get();
-  backend_output->static_landmarks_ = accessor->getFullStaticMap();
-  backend_output->dynamic_landmarks_ =
-      accessor->getDynamicLandmarkEstimates(frame_k);
-
-  for (FrameId frame_id : map_->getFrameIds()) {
-    backend_output->optimized_poses_.push_back(
-        accessor->getSensorPose(frame_id).get());
-  }
-
-  backend_output->composed_object_poses = accessor->getObjectPoses();
+  BackendOutputPacket::Ptr backend_output =
+      constructOutputPacket(frame_k, timestamp);
 
   debug_info_ = DebugInfo();
 
   return {State::Nominal, backend_output};
+}
+
+void RGBDBackendModule::updateMap(gtsam::Pose3& T_world_cam,
+                                  RGBDInstanceOutputPacket::ConstPtr input) {
+  utils::TimingStatsCollector timer("map.update_observations");
+
+  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
+  const FrameId frame_k = input->getFrameId();
+
+  map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
+  map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
+  // update other measurements
+  map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
+  map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
+
+  T_world_cam = T_world_cam_k_frontend;
 }
 
 std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
@@ -535,23 +521,35 @@ FormulationHooks RGBDBackendModule::createFormulationHooks() const {
   return hooks;
 }
 
-// TODO: these functions can go in base
-void RGBDBackendModule::saveGraph(const std::string& file) {
-  // TODO: must be careful as there could be inconsistencies between the graph
-  // in the optimzier, and the graph in the map
-  // TODO:
-  //  gtsam::NonlinearFactorGraph graph = map_->getGraph();
-  //  // gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
-  //  graph.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
+BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(
+    FrameId frame_k, Timestamp timestamp) const {
+  CHECK_NOTNULL(new_updater_);
+  return RGBDBackendModule::constructOutputPacket(new_updater_, frame_k,
+                                                  timestamp);
 }
-void RGBDBackendModule::saveTree(const std::string& file) {
-  // auto incremental_optimizer = safeCast<Optimizer<Landmark>,
-  // IncrementalOptimizer<Landmark>>(optimizer_); if(incremental_optimizer) {
-  //     auto smoother = incremental_optimizer->getSmoother();
-  //     smoother.saveGraph(getOutputFilePath(file), DynoLikeKeyFormatter);
-  //     // smoother.getISAM2().saveGraph(getOutputFilePath(file),
-  //     DynoLikeKeyFormatter);
-  // }
+
+BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(
+    const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k,
+    Timestamp timestamp) {
+  auto accessor = formulation->accessorFromTheta();
+
+  auto backend_output = std::make_shared<BackendOutputPacket>();
+  backend_output->timestamp = timestamp;
+  backend_output->frame_id = frame_k;
+  backend_output->T_world_camera = accessor->getSensorPose(frame_k).get();
+  backend_output->static_landmarks = accessor->getFullStaticMap();
+  backend_output->optimized_object_motions =
+      accessor->getObjectMotions(frame_k);
+  backend_output->dynamic_landmarks =
+      accessor->getDynamicLandmarkEstimates(frame_k);
+  auto map = formulation->map();
+  for (FrameId frame_id : map->getFrameIds()) {
+    backend_output->optimized_camera_poses.push_back(
+        accessor->getSensorPose(frame_id).get());
+  }
+
+  backend_output->optimized_object_poses = accessor->getObjectPoses();
+  return backend_output;
 }
 
 }  // namespace dyno

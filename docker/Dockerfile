@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:latest
-FROM osrf/ros:humble-desktop
+FROM osrf/ros:humble-desktop-full
 
 MAINTAINER Jesse Morris "jesse.morris@sydney.edu.au"
 
@@ -8,7 +8,7 @@ MAINTAINER Jesse Morris "jesse.morris@sydney.edu.au"
 ENV DEBIAN_FRONTEND=noninteractive
 
 #Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends apt-utils
+RUN apt-get update && apt-get upgrade -y --no-install-recommends apt-utils
 RUN apt-get update && apt-get install -y git cmake build-essential pkg-config
 
 # Install xvfb to provide a display to container for GUI realted testing.
@@ -26,13 +26,14 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # ROS installs
-RUN apt install ros-humble-diagnostic-updater \
-      ros-humble-ros2cli-common-extensions \
-      ros-humble-vision-opencv \
-      ros-humble-diagnostics
+RUN apt-get install \
+      ros-humble-ros2cli-common-extensions
+RUN apt-get install ros-humble-vision-opencv
 
 # other deps
-RUN apt install libpng++-dev
+RUN apt-get install libpng++-dev/focal nlohmann-json3-dev/focal
+
+RUN python3 -m pip install pylatex evo setuptools pre-commit scipy argcomplete black pre-commit
 
 
 WORKDIR /root/
@@ -64,6 +65,13 @@ RUN cd opencv/build && \
       make -j$(nproc) install
 
 
+RUN clone git@github.com:MIT-SPARK/config_utilities.git
+RUN cd config_utilities/config_utilities && mkdir build && \
+      cd build && \
+      cmake .. && make -j$(nproc) install
+
+
+
 # Install GTSAM
 RUN apt-get update && apt-get install -y libboost-all-dev libtbb-dev
 RUN git clone https://github.com/borglab/gtsam.git
@@ -79,14 +87,12 @@ RUN cd gtsam && \
 
 
 # Install Open_GV
-RUN git clone https://github.com/laurentkneip/opengv
+RUN git clone https://github.com/MIT-SPARK/opengv
 RUN cd opengv && \
       mkdir build
 RUN cd opengv/build && \
       cmake -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr/local \
-      # -DEIGEN_INCLUDE_DIRS=/root/gtsam/gtsam/3rdparty/Eigen \
-      # -DEIGEN_INCLUDE_DIR=/root/gtsam/gtsam/3rdparty/Eigen .. && \
       .. && make -j$(nproc) install
 
 # Install glog, gflags
@@ -101,7 +107,8 @@ RUN pip3 install setuptools pre-commit scipy matplotlib argcomplete
 RUN DEBIAN_FRONTEND=noninteractive apt install -y libsuitesparse-dev
 
 
-RUN mkdir -p /home/user/dev_ws/src/DynOSAM
+RUN mkdir -p /home/user/dev_ws/src/core
+RUN mkdir -p /home/user/dev_ws/src/third_parties
 RUN mkdir -p /home/user/upstream_ws/src
 
 SHELL ["/bin/bash", "-c"]

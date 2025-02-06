@@ -1,6 +1,6 @@
-import evaluation.evaluation_lib as eval
-import evaluation.core.metrics as eval_metrics
-from evaluation.formatting_utils import * #for nice colours
+import dynosam_utils.evaluation.evaluation_lib as eval
+import dynosam_utils.evaluation.core.metrics as eval_metrics
+from dynosam_utils.evaluation.formatting_utils import * #for nice colours
 
 
 from evo.core import lie_algebra, trajectory, metrics, transformations
@@ -11,10 +11,13 @@ import sys
 import gtsam
 
 import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+
 
 # Reset all rcParams to their default values
-# plt.rcdefaults()
-startup_plotting(65)
+plt.rcdefaults()
+startup_plotting(50)
 
 
 plt.rcParams["lines.linewidth"] = 4.0
@@ -50,7 +53,12 @@ plt.rcParams["lines.linewidth"] = 4.0
 # plt.rcParams['legend.fontsize']=14
 
 
-def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objects:List[int], suptitle:bool = True, **kwargs):
+def make_plot_all_objects(
+        prefix,
+        dataset_evaluator:eval.DatasetEvaluator,
+        objects:List[int],
+        suptitle:bool = True,
+        **kwargs):
     data_files = dataset_evaluator.make_data_files(prefix)
 
 
@@ -60,8 +68,8 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
 
     motion_eval = dataset_evaluator.create_motion_error_evaluator(data_files)
 
-    for object_id, object_motion_traj_est, object_motion_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
-    # for object_id, object_motion_traj_est, object_pose_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_poses_traj_ref):
+    # for object_id, object_motion_traj_est, object_motion_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_motion_traj_ref):
+    for object_id, object_motion_traj_est, object_pose_traj_ref in eval.common_entries(motion_eval.object_motion_traj, motion_eval.object_poses_traj_ref):
         if object_motion_traj_est.num_poses < 5:
             continue
 
@@ -70,10 +78,9 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
             continue
 
 
-        fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True)
-
+        fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True, layout="constrained")
         # fig.set_size_inches(15, 15) # for KITTI
-        fig.set_size_inches(15, 11)  # for OMD
+        # fig.set_size_inches(15, 11)  # for OMD
 
         if suptitle:
             fig.suptitle(f"Object {object_id}", fontweight="bold")
@@ -93,16 +100,16 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         # print(object_pose_traj_ref.timestamps)
         # # copied from tools.plot_trajectory_error
         # import evo.core.metrics as metrics
-        ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
-        # data = (object_pose_traj_ref,object_motion_traj_est)
+        # ape_E = metrics.APE(metrics.PoseRelation.full_transformation)
+        data = (object_pose_traj_ref,object_motion_traj_est)
 
-        data = (object_motion_traj_ref,object_motion_traj_est)
+        # data = (object_motion_traj_ref,object_motion_traj_est)
         # eval_metrics.RME.sync_object_motion_and_pose(data)
-        ape_E.process_data(data)
+        rme_E.process_data(data)
 
         rot_error = []
         trans_error = []
-        for E in ape_E.E[:-5]:
+        for E in rme_E.E[:-10]:
             E_se3 = gtsam.Pose3(E)
             E_trans = E_se3.translation()
             E_rot = E_se3.rotation()
@@ -122,7 +129,6 @@ def make_plot_all_objects(prefix, dataset_evaluator:eval.DatasetEvaluator, objec
         trans_error_axes.plot(trans_error[:,0], label="x", color=get_nice_red(), **kwargs)
         trans_error_axes.plot(trans_error[:,1], label="y", color=get_nice_green(), **kwargs)
         trans_error_axes.plot(trans_error[:,2], label="z", color=get_nice_blue(), **kwargs)
-
 
         # smart_legend(rot_error_axes)
         # smart_legend(trans_error_axes)
@@ -169,10 +175,12 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
         set_axes_equal(frontend_rot_axes, backend_rot_axes)
         set_axes_equal(frontend_trans_axes, backend_trans_axes)
 
-        fig_frontend.tight_layout(pad=0.9)
-        fig_backend.tight_layout(pad=0.9)
-        # fig_frontend.tight_layout()
-        # fig_backend.tight_layout()
+        # fig_frontend.tight_layout(pad=0.9)
+        # fig_backend.tight_layout(pad=0.9)
+        fig_frontend.tight_layout()
+        fig_backend.tight_layout()
+
+        return (fig_frontend, frontend_rot_axes, frontend_trans_axes), (fig_backend, backend_rot_axes, backend_trans_axes)
 
 
 
@@ -184,8 +192,9 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
 
 
 # these are the ones we actually used
-make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
-# make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+# omd_frontend, omd_backend = make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
+kitti_frontend, kitti_backend = make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+
 
 
 

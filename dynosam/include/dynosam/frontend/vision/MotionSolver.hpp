@@ -106,6 +106,9 @@ struct SolverResult {
   TrackletIds inliers;
   TrackletIds outliers;
   TrackingStatus status;
+
+  std::optional<double> error_before{};
+  std::optional<double> error_after{};
 };
 
 using Pose3SolverResult = SolverResult<gtsam::Pose3>;

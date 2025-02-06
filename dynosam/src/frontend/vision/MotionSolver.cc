@@ -48,7 +48,6 @@
 #include "dynosam/common/Types.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/factors/Pose3FlowProjectionFactor.h"
-#include "dynosam/frontend/MonoInstance-Definitions.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/utils/Accumulator.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"

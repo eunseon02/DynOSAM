@@ -40,8 +40,8 @@ namespace dyno {
 
 GenericTrackedStatusVector<LandmarkKeypointStatus>
 collectLandmarkKeypointMeasurementsHelper(
-    const StatusLandmarkEstimates& landmarks,
-    const StatusKeypointMeasurements& keypoints) {
+    const StatusLandmarkVector& landmarks,
+    const StatusKeypointVector& keypoints) {
   CHECK_EQ(landmarks.size(), keypoints.size());
 
   GenericTrackedStatusVector<LandmarkKeypointStatus> collection;
@@ -53,15 +53,13 @@ collectLandmarkKeypointMeasurementsHelper(
     CHECK_EQ(lmk_status.trackletId(), kp_status.trackletId());
     CHECK_EQ(lmk_status.objectId(), kp_status.objectId());
     CHECK_EQ(lmk_status.frameId(), kp_status.frameId());
+    // expect visual measurements being sent to the back-end to be local
+    CHECK_EQ(lmk_status.referenceFrame(), ReferenceFrame::LOCAL);
 
-    LandmarkKeypoint(lmk_status.value(), kp_status.value());
     collection.push_back(LandmarkKeypointStatus(
         LandmarkKeypoint(lmk_status.value(), kp_status.value()),
         lmk_status.frameId(), lmk_status.trackletId(), lmk_status.objectId(),
-        lmk_status
-            .referenceFrame()  // use reference frame of lmk as the reference
-                               // frame of keypoint has to be 'local'
-        ));
+        lmk_status.referenceFrame()));
   }
 
   return collection;

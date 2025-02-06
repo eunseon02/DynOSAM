@@ -8,11 +8,13 @@ CONTAINER_IMAGE_NAME=acfr-rpg/dyno_sam
 LOCAL_DATA_FOLDER=/media/jmor6670/T7/datasets
 LOCAL_RESULTS_FOLDER=~/results/
 LOCAL_DYNO_SAM_FOLDER=~/Code/src/DynOSAM/
+LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER=~/Code/src/third_party_dynosam/
 
 
 CONTAINER_DATA_FOLDER=/root/data
 CONTAINER_RESULTS_FOLDER=/root/results
-CONTAINER_WORKSPACE_FOLDER=/home/user/dev_ws/src/DynOSAM
+CONTAINER_WORKSPACE_FOLDER=/home/user/dev_ws/src/core/
+CONTAINER_WORKSPACE_FOLDER_THIRD_PARTY=/home/user/dev_ws/src/third_parties/
 
 
 
@@ -65,6 +67,8 @@ if [ -z "$NVIDIA_SOS" ]; then
 fi
 for so in $NVIDIA_SOS; do DOCKER_NVIDIA_SO_VOLUMES+="--volume $so:$so "; done
 
+USE_NVIDIA=true
+
 if "$USE_NVIDIA"; then
     # If executing this script from an unmanned shell (like from seawolf ShellCmd)
     # We can't use "-i"
@@ -78,11 +82,12 @@ if "$USE_NVIDIA"; then
     echo "Container name will be: $CONTAINER_NAME"
     docker run $DOCKER_NVIDIA_SO_VOLUMES \
         --privileged \
-        -i -d --gpus all \
+        -i -d \
         --volume $XSOCK:$XSOCK:rw \
         -v $LOCAL_DATA_FOLDER:$CONTAINER_DATA_FOLDER \
         -v $LOCAL_RESULTS_FOLDER:$CONTAINER_RESULTS_FOLDER \
         -v $LOCAL_DYNO_SAM_FOLDER:$CONTAINER_WORKSPACE_FOLDER \
+        -v $LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER:$CONTAINER_WORKSPACE_FOLDER_THIRD_PARTY \
         -v /var/run/docker.sock:/var/run/docker.sock \
         --env DISPLAY=$DISPLAY \
         --env XAUTHORITY=$XAUTH \

@@ -60,14 +60,6 @@ NLOHMANN_JSON_SERIALIZE_ENUM(ReferenceFrame, {
                                                  {OBJECT, "object"},
                                              })
 
-NLOHMANN_JSON_SERIALIZE_ENUM(
-    LandmarkStatus::Method,
-    {
-        {LandmarkStatus::Method::MEASURED, "measured"},
-        {LandmarkStatus::Method::TRIANGULATED, "triangulated"},
-        {LandmarkStatus::Method::OPTIMIZED, "optimized"},
-    })
-
 NLOHMANN_JSON_SERIALIZE_ENUM(FrontendType, {
                                                {kRGBD, "RGB"},
                                                {kMono, "Mono"},
@@ -305,8 +297,6 @@ struct adl_serializer<dyno::ReferenceFrameValue<T>> {
   }
 };
 
-// TODO: figure out how to use the existing to/from_json functions for the base
-// class (ReferenceFrameValue) for some reason could not get these to work...
 template <typename T>
 struct adl_serializer<dyno::MotionReferenceFrame<T>> {
   static void to_json(json& j, const dyno::MotionReferenceFrame<T>& value) {
@@ -329,52 +319,142 @@ struct adl_serializer<dyno::MotionReferenceFrame<T>> {
   }
 };
 
+template <typename T>
+struct adl_serializer<dyno::MeasurementWithCovariance<T>> {
+  static void to_json(json& j,
+                      const dyno::MeasurementWithCovariance<T>& value) {
+    j["measurement"] = value.measurement();
+    if (value.hasModel()) {
+      j["covariance"] = value.covariance();
+    }
+  }
+  static void from_json(const json& j,
+                        dyno::MeasurementWithCovariance<T>& value) {
+    T measurement = j["measurement"].template get<T>();
+
+    // check if the json has a covariance value, if it does not it means the
+    // original object did not have a sensor model. We should then use the
+    // measurement only constructor to ennsure the new model does not have a
+    // model eitehr and hasModel() returns false!
+    if (j.contains("covariance")) {
+      typename dyno::MeasurementWithCovariance<T>::Covariance cov =
+          j["covariance"]
+              .template get<
+                  typename dyno::MeasurementWithCovariance<T>::Covariance>();
+      value = dyno::MeasurementWithCovariance<T>(measurement, cov);
+      return;
+    } else {
+      // measurement only constructor
+      value = dyno::MeasurementWithCovariance<T>(measurement);
+    }
+  }
+};
+
+template <typename T>
+struct adl_serializer<dyno::TrackedValueStatus<T>> {
+  static void to_json(json& j, const dyno::TrackedValueStatus<T>& status) {
+    using nlohmann::to_json;
+    // expect value to be seralizable
+    j["value"] = (json)status.value();
+    j["frame_id"] = status.frameId();
+    j["tracklet_id"] = status.trackletId();
+    j["object_id"] = status.objectId();
+    j["reference_frame"] = status.referenceFrame();
+  }
+  static void from_json(const json& j, dyno::TrackedValueStatus<T>& status) {
+    typename dyno::TrackedValueStatus<T>::Value value =
+        j["value"].template get<typename dyno::TrackedValueStatus<T>::Value>();
+
+    using namespace dyno;
+    FrameId frame_id = j["frame_id"].template get<FrameId>();
+    TrackletId tracklet_id = j["tracklet_id"].template get<TrackletId>();
+    ObjectId object_id = j["object_id"].template get<ObjectId>();
+    ReferenceFrame rf = j["reference_frame"].template get<ReferenceFrame>();
+    status = dyno::TrackedValueStatus<T>(value, frame_id, tracklet_id,
+                                         object_id, rf);
+  }
+};
+
+// sinnce VisualMeasurementWithCovStatus is aliased it becomes its own type
+// so we need to specify the adl for this
+// we just specify the exact type and then cast to the known type
+// (TrackedValueStatus) which should allow the adl to find the right type I dont
+// know a better way of doing this expect for writing an adl_serializer for
+// every class which I dont want to do since the MeasurementStatis classes all
+// designed to be defined by typdef
+template <typename T>
+struct adl_serializer<dyno::VisualMeasurementWithCovStatus<T>> {
+  static void to_json(json& j,
+                      const dyno::VisualMeasurementWithCovStatus<T>& status) {
+    using Type = typename dyno::VisualMeasurementWithCovStatus<T>::Value;
+    using TrackedStatusValue = dyno::TrackedValueStatus<Type>;
+
+    const auto& cast_status = static_cast<const TrackedStatusValue&>(status);
+    j = cast_status;
+  }
+  static void from_json(const json& j,
+                        dyno::VisualMeasurementWithCovStatus<T>& status) {
+    using Type = typename dyno::VisualMeasurementWithCovStatus<T>::Value;
+    using TrackedStatusValue = dyno::TrackedValueStatus<Type>;
+
+    status = j.template get<TrackedStatusValue>();
+  }
+};
+
+// begin dyno::GenericTrackedStatusVector
+// The default json seraliser only works with primitive types and the stl
+// containers could write own seraliser but also just iterate over things
+template <typename DERIVEDSTATUS>
+struct adl_serializer<dyno::GenericTrackedStatusVector<DERIVEDSTATUS>> {
+  using Vector = dyno::GenericTrackedStatusVector<DERIVEDSTATUS>;
+
+  static void to_json(
+      json& j, const dyno::GenericTrackedStatusVector<DERIVEDSTATUS>& map) {
+    for (const auto& value : map) {
+      json j_value = value;
+      j.push_back(j_value);
+    }
+  }
+
+  static void from_json(const json& j,
+                        dyno::GenericTrackedStatusVector<DERIVEDSTATUS>& map) {
+    for (const json& j_value : j) {
+      DERIVEDSTATUS status = j_value.template get<DERIVEDSTATUS>();
+      map.push_back(status);
+    }
+  }
+};
+// end dyno::GenericTrackedStatusVector
+
+// template <typename T>
+// struct adl_serializer<dyno::VisualMeasurementStatus<T>> {
+//     static void to_json(json& j, const dyno::VisualMeasurementStatus<T>&
+//     status) {
+//         //expect value to be seralizable
+//         j["value"] = (json)status.value();
+//         j["frame_id"] = status.frameId();
+//         j["tracklet_id"] = status.trackletId();
+//         j["object_id"] = status.objectId();
+//         j["reference_frame"] = status.referenceFrame();
+//     }
+//     static void from_json(const json& j, dyno::VisualMeasurementStatus<T>&
+//     status) {
+//         using namespace dyno;
+//         typename dyno::VisualMeasurementStatus<T>::Value value =
+//         j["value"].template get<typename
+//         dyno::VisualMeasurementStatus<T>::Value>(); FrameId frame_id =
+//         j["frame_id"].template get<FrameId>(); TrackletId tracklet_id =
+//         j["tracklet_id"].template get<TrackletId>(); ObjectId object_id =
+//         j["object_id"].template get<ObjectId>(); ReferenceFrame rf =
+//         j["reference_frame"].template get<ReferenceFrame>(); status =
+//         dyno::VisualMeasurementStatus<T>(
+//             value,
+//             frame_id,
+//             tracklet_id,
+//             object_id,
+//             rf
+//         );
+//     }
+// };
+
 }  // namespace nlohmann
-
-// restart dyno nanmespace after we have defined all the 3rd party librariers
-// to avoid the "Specialization of member function template after instantiation
-// error, and order of member functions" error
-namespace dyno {
-
-inline void to_json(json& j, const KeypointStatus& status) {
-  // expect value to be seralizable
-  j["value"] = (json)status.value();
-  j["frame_id"] = status.frameId();
-  j["tracklet_id"] = status.trackletId();
-  j["object_id"] = status.objectId();
-  j["kp_type"] = (json)status.kp_type_;
-}
-
-inline void from_json(const json& j, KeypointStatus& status) {
-  Keypoint value = j["value"].template get<Keypoint>();
-  FrameId frame_id = j["frame_id"].template get<FrameId>();
-  TrackletId tracklet_id = j["tracklet_id"].template get<TrackletId>();
-  ObjectId object_id = j["object_id"].template get<ObjectId>();
-  KeyPointType kp_type = j["kp_type"].template get<KeyPointType>();
-
-  status = KeypointStatus(value, frame_id, tracklet_id, object_id, kp_type);
-}
-
-inline void to_json(json& j, const LandmarkStatus& status) {
-  // expect value to be seralizable
-  j["value"] = (json)status.value();
-  j["frame_id"] = status.frameId();
-  j["tracklet_id"] = status.trackletId();
-  j["object_id"] = status.objectId();
-  j["reference_frame"] = status.referenceFrame();
-  j["method"] = (json)status.method_;
-}
-
-inline void from_json(const json& j, LandmarkStatus& status) {
-  Landmark value = j["value"].template get<Landmark>();
-  FrameId frame_id = j["frame_id"].template get<FrameId>();
-  TrackletId tracklet_id = j["tracklet_id"].template get<TrackletId>();
-  ObjectId object_id = j["object_id"].template get<ObjectId>();
-  ReferenceFrame rf = j["reference_frame"].template get<ReferenceFrame>();
-  LandmarkStatus::Method method =
-      j["method"].template get<LandmarkStatus::Method>();
-
-  status = LandmarkStatus(value, frame_id, tracklet_id, object_id, rf, method);
-}
-
-}  // namespace dyno

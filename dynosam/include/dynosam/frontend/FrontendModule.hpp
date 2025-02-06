@@ -32,7 +32,6 @@
 
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/ModuleBase.hpp"
-#include "dynosam/common/ModulePacketVariants.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"

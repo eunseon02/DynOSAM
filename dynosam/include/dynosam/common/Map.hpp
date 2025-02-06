@@ -106,15 +106,19 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
    * @brief Update the map structure given new measurements.
    *
    * @tparam DERIVEDSTATUS
-   * @param measurements const MeasurementStatusVector<DERIVEDSTATUS>&
+   * @param measurements const GenericTrackedStatusVector<DERIVEDSTATUS>&
    */
   template <typename DERIVEDSTATUS>
   void updateObservations(
-      const MeasurementStatusVector<DERIVEDSTATUS>& measurements) {
+      const GenericTrackedStatusVector<DERIVEDSTATUS>& measurements) {
+    using DerivedMeasurement =
+        typename GenericTrackedStatusVector<DERIVEDSTATUS>::Value;
     for (const DERIVEDSTATUS& status_measurement : measurements) {
-      const TrackedValueStatus<MEASUREMENT>& status =
-          static_cast<const TrackedValueStatus<MEASUREMENT>&>(
+      const TrackedValueStatus<DerivedMeasurement>& derived_status =
+          static_cast<const TrackedValueStatus<DerivedMeasurement>&>(
               status_measurement);
+      const TrackedValueStatus<MEASUREMENT>& status =
+          derived_status.template asType<MEASUREMENT>();
       const MEASUREMENT& measurement = status_measurement.value();
       const TrackletId tracklet_id = status.trackletId();
       const FrameId frame_id = status.frameId();

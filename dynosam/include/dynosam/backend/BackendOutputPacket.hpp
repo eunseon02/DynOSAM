@@ -1,53 +1,59 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
 #include "dynosam/common/Types.hpp"
-#include "dynosam/backend/BackendDefinitions.hpp"
-
 
 namespace dyno {
 
 struct BackendOutputPacket {
+  DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
-DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
+  StatusLandmarkVector static_landmarks;   // all frames?
+  StatusLandmarkVector dynamic_landmarks;  // only this frame?
+  // LandmarkMap static_lmks_;
+  // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
+  // StatusLandmarkEstimates initial_dynamic_lmks_;
+  // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
+  gtsam::Pose3 T_world_camera;
+  FrameId frame_id;
+  Timestamp timestamp;
+  MotionEstimateMap optimized_object_motions;
+  ObjectPoseMap optimized_object_poses;
+  gtsam::Pose3Vector optimized_camera_poses;
 
-    StatusLandmarkEstimates static_landmarks_; //all frames?
-    StatusLandmarkEstimates dynamic_landmarks_; //only this frame?
-    // LandmarkMap static_lmks_;
-    // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-    // StatusLandmarkEstimates initial_dynamic_lmks_;
-    // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-    gtsam::Pose3 T_world_camera_;
-    DebugInfo debug_info_;
-    FrameId frame_id_;
-    Timestamp timestamp_;
-    ObjectPoseMap composed_object_poses;
-    gtsam::Pose3Vector optimized_poses_;
-
-    // gtsam::FastMap<ObjectId, gtsam::Pose3Vector> object_poses_composed_;
+  inline FrameId getFrameId() const { return frame_id; }
+  inline Timestamp getTimestamp() const { return timestamp;  }
+  const gtsam::Pose3& pose() const { return T_world_camera; }
 
 };
 
-} //dyno
+}  // namespace dyno
