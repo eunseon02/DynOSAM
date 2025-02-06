@@ -90,20 +90,13 @@ class RGBDInstanceFrontendModule : public FrontendModule {
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
       const Frame& frame, const MotionEstimateMap& estimated_motions,
-      const gtsam::Pose3& T_world_camera,
+      const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
       const DebugImagery::Optional& debug_imagery = std::nullopt);
 
-  //   // updates the object_poses_ map which is then sent to the viz via the
-  //   output
-  //   // this updates the estimated trajectory of the object from a starting
-  //   pont
-  //   // using the object motion to propofate the object pose
-  //   void propogateObjectPoses(const MotionEstimateMap& motion_estimates,
-  //                             FrameId frame_id);
-  //   // updates object poses
-  //   void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr,
-  //                            ObjectId object_id, FrameId frame_id);
+  cv::Mat createTrackingImage(const Frame::Ptr& frame_k,
+                              const Frame::Ptr& frame_k_1,
+                              const ObjectPoseMap& object_poses) const;
 
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag

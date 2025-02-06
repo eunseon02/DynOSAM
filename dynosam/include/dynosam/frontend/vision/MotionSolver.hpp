@@ -435,6 +435,11 @@ class ObjectMotionSolverSAM : public ObjectMotionSolver {
   GenericTrackedStatusVector<LandmarkKeypointStatus> createMeasurementVector(
       Frame::Ptr frame, ObjectId object_id) const;
 
+  // internal functions used in solve which are thread safe
+  Motion3SolverResult initialPnPSolve(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
+                                      ObjectId object_id);
+  DecoupledObjectSAM::Ptr getEstimator(ObjectId object_id);
+
  private:
   const gtsam::ISAM2Params isam2_params_;
   mutable std::mutex mutex_;

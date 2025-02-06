@@ -134,10 +134,6 @@ namespace dyno {
 //   }
 // };
 
-// TODO: hack for now!
-gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>
-    ObjectCentricFormulation::L0_;
-
 StateQuery<gtsam::Pose3> ObjectCentricAccessor::getSensorPose(
     FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
@@ -419,28 +415,6 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
       dynamic_point_noise);
 
   result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
-
-  // assume we've added both!!
-  //  TODO: NEW STUFF AND TESTG!!!
-  //  new_factors.emplace_shared<AuxillaryTransformFactor>(
-  //    frame_node_k_1->makePoseKey(),
-  //    object_motion_key_k_1,
-  //    frame_node_k->makePoseKey(),
-  //    object_motion_key_k,
-  //    lmk_node->getMeasurement(frame_node_k_1).landmark,
-  //    lmk_node->getMeasurement(frame_node_k).landmark,
-  //    landmark_motion_noise
-  //  );
-
-  // new_factors.emplace_shared<SmartHFactor>(
-  //   frame_node_k_1->makePoseKey(),
-  //   object_motion_key_k_1,
-  //   frame_node_k->makePoseKey(),
-  //   object_motion_key_k,
-  //   lmk_node->getMeasurement(frame_node_k_1).landmark,
-  //   lmk_node->getMeasurement(frame_node_k).landmark,
-  //   landmark_motion_noise
-  // );
 }
 
 void ObjectCentricFormulation::objectUpdateContext(
@@ -520,19 +494,11 @@ void ObjectCentricFormulation::objectUpdateContext(
       new_factors.emplace_shared<ObjectCentricSmoothing>(
           object_motion_key_k_2, object_motion_key_k_1, object_motion_key_k,
           getOrConstructL0(object_id, frame_id).second, object_smoothing_noise);
-      // new_factors.emplace_shared<gtsam::BetweenFactor<gtsam::Pose3>>(
-      //     object_motion_key_k_1, object_motion_key_k,
-      //     gtsam::Pose3::Identity(), object_smoothing_noise);
       if (result.debug_info)
         result.debug_info->getObjectInfo(context.getObjectId())
             .smoothing_factor_added = true;
     }
   }
-
-  LOG(INFO) << "Done objectUpdateContext";
-
-  // clear point context for this object id
-  point_contexts_.erase(object_id);
 }
 
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(

@@ -1,52 +1,60 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
+
+#include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
-#include "dynosam/utils/GtsamUtils.hpp"
-
 
 namespace dyno {
 
 decltype(TrackletIdManager::instance_) TrackletIdManager::instance_;
 
-FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params, Camera::Ptr camera, ImageDisplayQueue* display_queue)
-  : params_(params),
-    img_size_(camera->getParams().imageSize()),
-    camera_(camera),
-    display_queue_(display_queue) {}
+FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params,
+                                       Camera::Ptr camera,
+                                       ImageDisplayQueue* display_queue)
+    : params_(params),
+      img_size_(camera->getParams().imageSize()),
+      camera_(camera),
+      display_queue_(display_queue) {}
 
-
-
-//doesnt make any sense for this function to be here?
-//Debug could be part of a global config singleton?
-cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, const Frame& current_frame, bool debug) const {
+// doesnt make any sense for this function to be here?
+// Debug could be part of a global config singleton?
+cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame,
+                                               const Frame& current_frame,
+                                               bool debug) const {
   cv::Mat img_rgb;
 
   const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
   rgb.copyTo(img_rgb);
-
 
   static const cv::Scalar gray(0, 255, 255);
   static const cv::Scalar red(0, 0, 255);
@@ -56,7 +64,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, cons
   constexpr static int kFeatureThicknessDebug = 5;
   constexpr static int kFeatureThickness = 4;
   // constexpr static int kFeatureThickness = 7;
-  int static_point_thickness = debug ? kFeatureThicknessDebug : kFeatureThickness;
+  int static_point_thickness =
+      debug ? kFeatureThicknessDebug : kFeatureThickness;
 
   int num_static_tracks = 0;
   // Add all keypoints in cur_frame with the tracks.
@@ -64,14 +73,15 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, cons
     const Keypoint& px_cur = feature->keypoint();
     const auto pc_cur = utils::gtsamPointToCv(px_cur);
     if (!feature->usable() && debug) {  // Untracked landmarks are red.
-      cv::circle(img_rgb,  pc_cur, static_point_thickness, red, 2);
+      cv::circle(img_rgb, pc_cur, static_point_thickness, red, 2);
     } else {
-
-      const Feature::Ptr& prev_feature = previous_frame.static_features_.getByTrackletId(feature->trackletId());
+      const Feature::Ptr& prev_feature =
+          previous_frame.static_features_.getByTrackletId(
+              feature->trackletId());
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
-        cv::circle(img_rgb,  pc_cur, static_point_thickness, green, 1);
+        cv::circle(img_rgb, pc_cur, static_point_thickness, green, 1);
 
         // draw the optical flow arrow
         const auto pc_prev = utils::gtsamPointToCv(prev_feature->keypoint());
@@ -79,96 +89,68 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, cons
 
         num_static_tracks++;
 
-      } else if(debug) {  // New feature tracks are blue.
+      } else if (debug) {  // New feature tracks are blue.
         cv::circle(img_rgb, pc_cur, 6, blue, 1);
       }
     }
   }
 
-  // for(const auto& [instance_label, object_observation] : current_frame.object_observations_) {
-  //   // CHECK(object_observation.marked_as_moving_);
-  //   //get average center of 2 object
-  //   FeaturePtrs features = current_frame.collectFeatures(object_observation.object_features_);
-
-  //   size_t count = 0;
-  //   int center_x = 0, center_y = 0;
-  //   auto usable_iterator = internal::filter_const_iterator<FeaturePtrs>(features, [](const Feature::Ptr& f) { return Feature::IsUsable(f); });
-  //   for(const Feature::Ptr& feature : usable_iterator) {
-  //     center_x += functional_keypoint::u(feature->keypoint_);
-  //     center_y += functional_keypoint::v(feature->keypoint_);
-  //     count++;
-  //   }
-
-  //   center_x /= features.size();
-  //   center_y /= features.size();
-
-  //   cv::putText(
-  //     img_rgb,
-  //     std::to_string(object_observation.tracking_label_),
-  //     cv::Point(center_x, center_y),
-  //     cv::FONT_HERSHEY_DUPLEX,
-  //     1.0,
-  //     CV_RGB(118, 185, 0),  // font color
-  //     3);
-
-  // }
-
-  for ( const Feature::Ptr& feature : current_frame.dynamic_features_) {
+  for (const Feature::Ptr& feature : current_frame.dynamic_features_) {
     const Keypoint& px_cur = feature->keypoint();
     if (!feature->usable()) {  // Untracked landmarks are red.
       // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 1, red, 2);
     } else {
-
-
-      const Feature::Ptr& prev_feature = previous_frame.dynamic_features_.getByTrackletId(feature->trackletId());
+      const Feature::Ptr& prev_feature =
+          previous_frame.dynamic_features_.getByTrackletId(
+              feature->trackletId());
       if (prev_feature) {
         // If feature was in previous frame, display tracked feature with
         // green circle/line:
         // cv::circle(img_rgb,  utils::gtsamPointToCv(px_cur), 6, green, 1);
         const Keypoint& px_prev = prev_feature->keypoint();
         const cv::Scalar colour = Color::uniqueId(feature->objectId()).bgra();
-        cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev), utils::gtsamPointToCv(px_cur), colour, 1);
+        cv::arrowedLine(img_rgb, utils::gtsamPointToCv(px_prev),
+                        utils::gtsamPointToCv(px_cur), colour, 1);
       } else {  // New feature tracks are blue.
         // cv::circle(img_rgb, utils::gtsamPointToCv(px_cur), 1, blue, 1);
       }
     }
   }
 
-
   std::vector<ObjectId> objects_to_print;
-  for(const auto& object_observation_pair : current_frame.object_observations_) {
-      const ObjectId object_id = object_observation_pair.first;
-      const cv::Rect& bb = object_observation_pair.second.bounding_box_;
+  for (const auto& object_observation_pair :
+       current_frame.object_observations_) {
+    const ObjectId object_id = object_observation_pair.first;
+    const cv::Rect& bb = object_observation_pair.second.bounding_box_;
 
-      //TODO: if its marked as moving!!
+    // TODO: if its marked as moving!!
 
-      if(bb.empty()) { continue; }
+    if (bb.empty()) {
+      continue;
+    }
 
+    objects_to_print.push_back(object_id);
+    const cv::Scalar colour = Color::uniqueId(object_id).bgra();
 
-      objects_to_print.push_back(object_id);
-      const cv::Scalar colour = Color::uniqueId(object_id).bgra();
-
-      const std::string label = "object " + std::to_string(object_id);
-      utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
-
+    const std::string label = "object " + std::to_string(object_id);
+    utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
   }
 
-  //draw text info
+  // draw text info
   std::stringstream ss;
   ss << "Frame ID: " << current_frame.getFrameId() << " | ";
   ss << "VO tracks: " << num_static_tracks << " | ";
   ss << "Objects: ";
 
-  if(objects_to_print.empty()) {
+  if (objects_to_print.empty()) {
     ss << "None";
-  }
-  else {
+  } else {
     ss << "[";
     for (size_t i = 0; i < objects_to_print.size(); ++i) {
-        ss << objects_to_print[i];
-        if (i != objects_to_print.size() - 1) {
-            ss << ", "; // Add comma between elements
-        }
+      ss << objects_to_print[i];
+      if (i != objects_to_print.size() - 1) {
+        ss << ", ";  // Add comma between elements
+      }
     }
     ss << "]";
   }
@@ -177,35 +159,38 @@ cv::Mat FeatureTrackerBase::computeImageTracks(const Frame& previous_frame, cons
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 1;
 
-  if(debug) {
-    //taken from ORB-SLAM2 ;)
+  if (debug) {
+    // taken from ORB-SLAM2 ;)
     int base_line;
-    cv::Size text_size = cv::getTextSize(ss.str(),kFontFace, kFontScale, kThickness, &base_line);
-    cv::Mat image_text = cv::Mat(img_rgb.rows+text_size.height+10,img_rgb.cols,img_rgb.type());
-    img_rgb.copyTo(image_text.rowRange(0,img_rgb.rows).colRange(0,img_rgb.cols));
-    image_text.rowRange(img_rgb.rows,image_text.rows) = cv::Mat::zeros(text_size.height+10,img_rgb.cols,img_rgb.type());
-    cv::putText(image_text, ss.str(), cv::Point(5,image_text.rows-5), kFontFace, kFontScale, cv::Scalar(255, 255, 255), kThickness);
+    cv::Size text_size = cv::getTextSize(ss.str(), kFontFace, kFontScale,
+                                         kThickness, &base_line);
+    cv::Mat image_text = cv::Mat(img_rgb.rows + text_size.height + 10,
+                                 img_rgb.cols, img_rgb.type());
+    img_rgb.copyTo(
+        image_text.rowRange(0, img_rgb.rows).colRange(0, img_rgb.cols));
+    image_text.rowRange(img_rgb.rows, image_text.rows) =
+        cv::Mat::zeros(text_size.height + 10, img_rgb.cols, img_rgb.type());
+    cv::putText(image_text, ss.str(), cv::Point(5, image_text.rows - 5),
+                kFontFace, kFontScale, cv::Scalar(255, 255, 255), kThickness);
     return image_text;
-  }
-  else {
+  } else {
     return img_rgb;
   }
-
 }
-
 
 bool FeatureTrackerBase::isWithinShrunkenImage(const Keypoint& kp) const {
-    const auto shrunken_row = params_.shrink_row;
-    const auto shrunken_col = params_.shrink_col;
+  const auto shrunken_row = params_.shrink_row;
+  const auto shrunken_col = params_.shrink_col;
 
-    const int predicted_col = functional_keypoint::u(kp);
-    const int predicted_row = functional_keypoint::v(kp);
+  const int predicted_col = functional_keypoint::u(kp);
+  const int predicted_row = functional_keypoint::v(kp);
 
-    const auto image_rows = img_size_.height;
-    const auto image_cols = img_size_.width;
-    return (predicted_row > shrunken_row && predicted_row < (image_rows - shrunken_row) &&
-        predicted_col > shrunken_col && predicted_col < (image_cols - shrunken_col));
-
+  const auto image_rows = img_size_.height;
+  const auto image_cols = img_size_.width;
+  return (predicted_row > shrunken_row &&
+          predicted_row < (image_rows - shrunken_row) &&
+          predicted_col > shrunken_col &&
+          predicted_col < (image_cols - shrunken_col));
 }
 
-}
+}  // namespace dyno

@@ -38,6 +38,7 @@
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "dynosam/common/Types.hpp"  //for template to_string
+#include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
 
 namespace dyno {
@@ -269,6 +270,46 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
               cv::Scalar(255, 255, 255), kThickness);
   // draw bounding box with line thickness kThickness
   cv::rectangle(image, bounding_box, colour, 2);
+}
+
+void drawObjectPoses(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
+                     const std::vector<gtsam::Pose3>& poses_c, float scale) {
+  cv::Mat K_float, D_float;
+  K.copyTo(K_float);
+  D.copyTo(D_float);
+
+  K_float.convertTo(K_float, CV_32F);
+  D_float.convertTo(D_float, CV_32F);
+
+  // Define the 3D points for the axis (origin and points along X, Y, Z)
+  static const std::vector<cv::Point3f> axis_points = {
+      {0, 0, 0},      // Origin
+      {scale, 0, 0},  // X-axis (red)
+      {0, scale, 0},  // Y-axis (green)
+      {0, 0, scale}   // Z-axis (blue)
+  };
+
+  for (const gtsam::Pose3& pose : poses_c) {
+    auto [rot_matrix, tvec] = Pose2cvmats(pose);
+
+    rot_matrix.convertTo(rot_matrix, CV_32F);
+    tvec.convertTo(tvec, CV_32F);
+
+    cv::Mat rvec;
+    cv::Rodrigues(rot_matrix,
+                  rvec);  // Convert rotation matrix to Rodrigues vector
+
+    std::vector<cv::Point2f> image_points;
+    cv::projectPoints(axis_points, rvec, tvec, K_float, D_float, image_points);
+
+    // Draw axes on the image
+    cv::line(image, image_points[0], image_points[1], cv::Scalar(0, 0, 255),
+             2);  // X-axis in red
+    cv::line(image, image_points[0], image_points[2], cv::Scalar(0, 255, 0),
+             2);  // Y-axis in green
+    cv::line(image, image_points[0], image_points[3], cv::Scalar(255, 0, 0),
+             2);  // Z-axis in blue
+  }
 }
 
 bool compareCvMatsUpToTol(const cv::Mat& mat1, const cv::Mat& mat2,

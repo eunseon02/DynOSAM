@@ -786,14 +786,10 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
           const std::pair<ObjectId, DynamicObjectObservation>& pair) -> bool {
     const auto object_id = pair.first;
     VLOG(5) << "Solving Object Motion SAM for j=" << object_id;
+
     // do geometric solve
-    Motion3SolverResult geometric_sovler_result;
-    {
-      // std::lock_guard<std::mutex> lock(mutex_);
-      geometric_sovler_result =
-          geometric_solver_->geometricOutlierRejection3d2d(
-              frame_k_1, frame_k, frame_k->getPose(), object_id);
-    }
+    const Motion3SolverResult geometric_sovler_result =
+        initialPnPSolve(frame_k, frame_k_1, object_id);
 
     if (geometric_sovler_result.status == TrackingStatus::VALID) {
       frame_k->dynamic_features_.markOutliers(geometric_sovler_result.outliers);
@@ -809,25 +805,7 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
 
       CHECK_GE(geometric_sovler_result.inliers.size(), 5);
 
-      // make new estimator if needed
-      if (!sam_estimators_.exists(object_id)) {
-        LOG(INFO) << "Making new DecoupledObjectSAM for object " << object_id;
-
-        FormulationHooks hooks;
-        hooks.ground_truth_packets_request =
-            geometric_solver_->objectMotionParams()
-                .ground_truth_packets_request;
-
-        // std::lock_guard<std::mutex> lock(mutex_);
-        BackendParams backend_params;  // TODO: for now
-        sam_estimators_.insert2(
-            object_id,
-            std::make_shared<DecoupledObjectSAM>(
-                object_id, NoiseModels::fromBackendParams(backend_params),
-                hooks, isam2_params_));
-      }
-
-      DecoupledObjectSAM::Ptr estimator = sam_estimators_.at(object_id);
+      DecoupledObjectSAM::Ptr estimator = getEstimator(object_id);
       CHECK_NOTNULL(estimator);
       auto map = estimator->map();
       // lambda function -> we want to avoid adding measurements twice
@@ -879,15 +857,14 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
                         geometric_sovler_result.best_result);
 
       Motion3ReferenceFrame motion_result;
-      LOG(INFO) << "Getting result";
       // get result (depending on estimation)
       if (output_style_ == MotionRepresentationStyle::F2F) {
         motion_result = estimator->getFrame2FrameMotion(frame_k->getFrameId());
       } else {
         motion_result = estimator->getKeyFramedMotion(frame_k->getFrameId());
       }
-      LOG(INFO) << " Gotten motion result " << motion_result;
 
+      std::lock_guard<std::mutex> lock(mutex_);
       motion_map.insert2(object_id, motion_result);
       return true;
 
@@ -899,8 +876,9 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
     }
   };
 
-  std::for_each(frame_k->object_observations_.begin(),
-                frame_k->object_observations_.end(), solve_impl);
+  tbb::parallel_for_each(frame_k->object_observations_.begin(),
+                         frame_k->object_observations_.end(), solve_impl);
+
   // for (const auto& [object_id, observations] : frame_k->object_observations_)
   // {
   //     solve_impl(object_id, observations);
@@ -947,6 +925,37 @@ ObjectMotionSolverSAM::createMeasurementVector(Frame::Ptr frame,
   }
 
   return collection;
+}
+
+Motion3SolverResult ObjectMotionSolverSAM::initialPnPSolve(Frame::Ptr frame_k,
+                                                           Frame::Ptr frame_k_1,
+                                                           ObjectId object_id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return geometric_solver_->geometricOutlierRejection3d2d(
+      frame_k_1, frame_k, frame_k->getPose(), object_id);
+}
+
+DecoupledObjectSAM::Ptr ObjectMotionSolverSAM::getEstimator(
+    ObjectId object_id) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  // make new estimator if needed
+  if (!sam_estimators_.exists(object_id)) {
+    LOG(INFO) << "Making new DecoupledObjectSAM for object " << object_id;
+
+    FormulationHooks hooks;
+    hooks.ground_truth_packets_request =
+        geometric_solver_->objectMotionParams().ground_truth_packets_request;
+
+    BackendParams backend_params;  // TODO: for now
+    sam_estimators_.insert2(
+        object_id,
+        std::make_shared<DecoupledObjectSAM>(
+            object_id, NoiseModels::fromBackendParams(backend_params), hooks,
+            isam2_params_));
+  }
+
+  return sam_estimators_.at(object_id);
 }
 
 }  // namespace dyno

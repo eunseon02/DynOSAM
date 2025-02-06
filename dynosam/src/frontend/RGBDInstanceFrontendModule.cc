@@ -39,6 +39,7 @@
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam/logger/Logger.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -189,13 +190,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     vision_tools::trackDynamic(base_params_, *previous_frame, frame);
   }
 
+  ObjectPoseMap object_poses;
   MotionEstimateMap motion_estimates;
-  std::tie(motion_estimates, object_poses_) =
+  std::tie(motion_estimates, object_poses) =
       object_motion_solver_->solve(frame, previous_frame);
-  // solveObjectMotions(frame, previous_frame, motion_estimates);
-
-  // update the object_poses trajectory map which will be send to the viz
-  // propogateObjectPoses(motion_estimates, frame->getFrameId());
 
   if (logger_) {
     auto ground_truths = this->getGroundTruthPackets();
@@ -209,7 +207,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   DebugImagery debug_imagery;
   debug_imagery.tracking_image =
-      tracker_->computeImageTracks(*previous_frame, *frame);
+      createTrackingImage(frame, previous_frame, object_poses);
   if (display_queue_)
     display_queue_->push(
         ImageToDisplay("tracks", debug_imagery.tracking_image));
@@ -221,9 +219,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   //  debug_imagery.input_images = frame->tracking_images_;
   debug_imagery.input_images = tracking_images;
 
-  RGBDInstanceOutputPacket::Ptr output =
-      constructOutput(*frame, motion_estimates, frame->T_world_camera_,
-                      input->optional_gt_, debug_imagery);
+  RGBDInstanceOutputPacket::Ptr output = constructOutput(
+      *frame, motion_estimates, object_poses, frame->T_world_camera_,
+      input->optional_gt_, debug_imagery);
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});
@@ -239,7 +237,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     logger_->logPoints(output->getFrameId(), output->T_world_camera_,
                        output->dynamic_landmarks_);
     // object_poses_ are in frontend module
-    logger_->logObjectPose(output->getFrameId(), object_poses_, ground_truths);
+    logger_->logObjectPose(output->getFrameId(), object_poses, ground_truths);
     logger_->logObjectBbxes(output->getFrameId(), output->getObjectBbxes());
   }
   return {State::Nominal, output};
@@ -296,7 +294,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame, const MotionEstimateMap& estimated_motions,
-    const gtsam::Pose3& T_world_camera,
+    const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
     const GroundTruthInputPacket::Optional& gt_packet,
     const DebugImagery::Optional& debug_imagery) {
   StatusKeypointMeasurements static_keypoint_measurements;
@@ -364,60 +362,35 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
   return std::make_shared<RGBDInstanceOutputPacket>(
       static_keypoint_measurements, dynamic_keypoint_measurements,
       static_landmarks, dynamic_landmarks, T_world_camera, frame.timestamp_,
-      frame.frame_id_, estimated_motions, object_poses_, camera_poses_, camera_,
+      frame.frame_id_, estimated_motions, object_poses, camera_poses_, camera_,
       gt_packet, debug_imagery);
 }
 
-// void RGBDInstanceFrontendModule::propogateObjectPoses(
-//     const MotionEstimateMap& motion_estimates, FrameId frame_id) {
-//   gtsam::Point3Vector object_centroids_k_1, object_centroids_k;
+cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
+    const Frame::Ptr& frame_k, const Frame::Ptr& frame_k_1,
+    const ObjectPoseMap& object_poses) const {
+  cv::Mat tracking_image = tracker_->computeImageTracks(*frame_k_1, *frame_k);
 
-//   for (const auto& [object_id, motion_estimate] : motion_estimates) {
-//     const auto frame_k_1 = tracker_->getPreviousFrame();
-//     const auto frame_k = tracker_->getCurrentFrame();
+  const auto& camera_params = camera_->getParams();
+  const auto& K = camera_params.getCameraMatrix();
+  const auto& D = camera_params.getDistortionCoeffs();
 
-//     auto object_points = FeatureFilterIterator(
-//         const_cast<FeatureContainer&>(frame_k_1->dynamic_features_),
-//         [object_id, &frame_k](const Feature::Ptr& f) -> bool {
-//           return Feature::IsUsable(f) && f->objectId() == object_id &&
-//                  frame_k->exists(f->trackletId()) &&
-//                  frame_k->isFeatureUsable(f->trackletId());
-//         });
+  const gtsam::Pose3& X_k = frame_k->getPose();
 
-//     gtsam::Point3 centroid_k_1(0, 0, 0);
-//     gtsam::Point3 centroid_k(0, 0, 0);
-//     size_t count = 0;
-//     for (const auto& feature : object_points) {
-//       gtsam::Point3 lmk_k_1 =
-//           frame_k_1->backProjectToCamera(feature->trackletId());
-//       centroid_k_1 += lmk_k_1;
+  // poses are expected to be in the world frame
+  gtsam::FastMap<ObjectId, gtsam::Pose3> poses_k_map =
+      object_poses.collectByFrame(frame_k->getFrameId());
+  std::vector<gtsam::Pose3> poses_k_vec;
+  std::transform(poses_k_map.begin(), poses_k_map.end(),
+                 std::back_inserter(poses_k_vec),
+                 [&X_k](const std::pair<ObjectId, gtsam::Pose3>& pair) {
+                   // put object pose into the camera frame so it can be
+                   // projected into the image
+                   return X_k.inverse() * pair.second;
+                 });
 
-//       gtsam::Point3 lmk_k =
-//       frame_k->backProjectToCamera(feature->trackletId()); centroid_k +=
-//       lmk_k;
-
-//       count++;
-//     }
-
-//     centroid_k_1 /= count;
-//     centroid_k /= count;
-
-//     centroid_k_1 = frame_k_1->getPose() * centroid_k_1;
-//     centroid_k = frame_k->getPose() * centroid_k;
-
-//     object_centroids_k_1.push_back(centroid_k_1);
-//     object_centroids_k.push_back(centroid_k);
-//   }
-
-//   if (FLAGS_init_object_pose_from_gt) {
-//     dyno::propogateObjectPoses(object_poses_, motion_estimates,
-//                                object_centroids_k_1, object_centroids_k,
-//                                frame_id, getGroundTruthPackets());
-//   } else {
-//     dyno::propogateObjectPoses(object_poses_, motion_estimates,
-//                                object_centroids_k_1, object_centroids_k,
-//                                frame_id);
-//   }
-// }
+  utils::drawObjectPoses(tracking_image, K, D, poses_k_vec);
+  return tracking_image;
+}
 
 }  // namespace dyno

@@ -30,6 +30,8 @@
 
 #include "dynosam/backend/rgbd/impl/DecoupledObjectSAM.hpp"
 
+#include "dynosam/utils/TimingStats.hpp"
+
 namespace dyno {
 
 DecoupledObjectSAM::DecoupledObjectSAM(
