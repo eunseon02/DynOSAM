@@ -570,12 +570,11 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
 //  so only one composition is needed to get the latest motion
 gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
     ObjectId object_id, FrameId frame_id) {
-  gtsam::Pose3 L_0;
-  FrameId s0;
-  std::tie(s0, L_0) = getOrConstructL0(object_id, frame_id);
+  auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
 
-  CHECK_LE(s0, frame_id);
-  if (frame_id == s0) {
+  FrameId current_frame_id = frame_id;
+  CHECK_LE(s0, current_frame_id);
+  if (current_frame_id == s0) {
     // same frame so motion between them should be identity!
     // except for rotation?
     return gtsam::Pose3::Identity();
@@ -583,13 +582,63 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
 
   // only need an initial motion when k > s0
   Motion3ReferenceFrame initial_motion_frame;
-  CHECK(
-      map()->hasInitialObjectMotion(frame_id, object_id, &initial_motion_frame))
-      << "Missing initial motion at k= " << frame_id << " j= " << object_id;
-  CHECK_EQ(initial_motion_frame.to(), frame_id);
+  const bool has_frontend_motion = map()->hasInitialObjectMotion(
+      current_frame_id, object_id, &initial_motion_frame);
+
+  if (!has_frontend_motion) {
+    // no motion estimation that takes us to this frame
+    //  1. Check how far away the last motion we have is
+    const auto object_node = CHECK_NOTNULL(map()->getObject(object_id));
+    // assume continuous
+    const auto seen_frame_ids_vec = object_node->getSeenFrameIds();
+    std::set<FrameId> seen_frame_ids(seen_frame_ids_vec.begin(),
+                                     seen_frame_ids_vec.end());
+    // get smallest before current frame
+    auto it = seen_frame_ids.lower_bound(current_frame_id);
+    if (it != seen_frame_ids.begin() &&
+        (it == seen_frame_ids.end() || *it >= current_frame_id)) {
+      --it;
+
+    } else {
+      LOG(FATAL)
+          << "Bookkeeping failure!! Cound not find a frame id for object "
+          << object_id << " < " << current_frame_id
+          << " but this frame is not s0!";
+    }
+    FrameId previous_frame = *it;
+    // must actually be smaller than query frame
+    CHECK_LT(previous_frame, current_frame_id);
+    // should not be s0 becuase we have a condition for this!
+    CHECK_GT(previous_frame, s0);
+    // 2. If within threshold apply constant motion model to get us to current
+    // frame and use that as initalisation (?)
+    FrameId diff = current_frame_id - previous_frame;
+
+    // TODO:hack!! This really depends on framerate etc...!!! just for now!!!!
+    if (diff > 5) {
+      LOG(FATAL) << "Motion intalisation failed for j= " << object_id
+                 << ", motion missing at " << current_frame_id
+                 << " and previous seen frame " << previous_frame
+                 << " too far away!";
+    } else {
+      // TODO: just use previous motion???
+      CHECK(map()->hasInitialObjectMotion(previous_frame, object_id,
+                                          &initial_motion_frame));
+      // update current_frame_id to previous frame so that the composition loop
+      // below stops at the right place!
+      // TODO: will this mess up the frame_id - 1 check?
+      //  LOG(INFO) << "Updating current frame id to previous frame " <<
+      //  previous_frame << " to account for missing frame at " <<
+      //  current_frame_id;
+      current_frame_id = previous_frame;
+    }
+  }
+
+  // << "Missing initial motion at k= " << frame_id << " j= " << object_id;
+  CHECK_EQ(initial_motion_frame.to(), current_frame_id);
   CHECK_EQ(initial_motion_frame.frame(), ReferenceFrame::GLOBAL);
 
-  if (frame_id - 1 == s0) {
+  if (current_frame_id - 1 == s0) {
     // a motion that takes us from k-1 to k where k-1 == s0
     return initial_motion_frame;
   } else {
@@ -605,19 +654,31 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
       Motion3 initial_motion = initial_motion_frame;
 
       // query from so+1 to k since we index backwards
-      for (auto frame = s0 + 1; frame <= frame_id; frame++) {
+      bool initalised_from_frontend = true;
+      for (auto frame = s0 + 1; frame <= current_frame_id; frame++) {
+        // LOG(INFO) << "frontend motion at frame " << frame << " object id "<<
+        // object_id;
         Motion3ReferenceFrame motion_frame;  // if fail just use identity?
         if (!map()->hasInitialObjectMotion(frame, object_id, &motion_frame)) {
-          LOG(INFO) << "No frontend motion at frame " << frame << " object id "
-                    << object_id;
+          LOG(WARNING) << "No frontend motion at frame " << frame
+                       << " object id " << object_id;
           CHECK_EQ(motion_frame.style(), MotionRepresentationStyle::F2F)
               << "Motion representation is inconsistent!! ";
+          initalised_from_frontend = false;
+          break;
         }
         Motion3 motion = motion_frame;
         composed_motion = motion * composed_motion;
       }
+
+      // if(initalised_from_frontend) {
       // after loop motion should be ^w_{s0}H_k
       return composed_motion;
+      // }
+      // else {
+      //   // L0_.erase(object_id);
+
+      // }
     }
   }
 }

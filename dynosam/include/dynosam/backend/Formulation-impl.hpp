@@ -580,7 +580,7 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 template <typename MAP>
 void Formulation<MAP>::logBackendFromMap(const BackendMetaData& backend_info) {
   // TODO:
-  std::string logger_prefix = this->loggerPrefix();
+  std::string logger_prefix = this->getFullyQualifiedName();
   const std::string suffix = backend_info.logging_suffix;
 
   // add suffix to name if required

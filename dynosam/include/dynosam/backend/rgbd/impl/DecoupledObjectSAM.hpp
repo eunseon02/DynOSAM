@@ -73,6 +73,7 @@ class DecoupledObjectSAM {
   }
 
   const gtsam::Values& getEstimate() const { return estimate_; }
+  const gtsam::ISAM2Result& getISAM2Result() const { return result_; }
 
   inline Map::Ptr map() { return map_; }
 
@@ -111,7 +112,16 @@ class DecoupledObjectSAM {
     map_->updateObjectMotionMeasurements(frame_k, motion_estimate);
   }
 
-  void updateSmoother(FrameId frame_k);
+  bool updateSmoother(FrameId frame_k);
+
+  void updateFormulation(FrameId frame_k,
+                         gtsam::NonlinearFactorGraph& new_factors,
+                         gtsam::Values& new_values);
+
+  bool optimize(gtsam::ISAM2Result* result,
+                const gtsam::NonlinearFactorGraph& new_factors =
+                    gtsam::NonlinearFactorGraph(),
+                const gtsam::Values& new_values = gtsam::Values());
 
  private:
   const ObjectId object_id_;

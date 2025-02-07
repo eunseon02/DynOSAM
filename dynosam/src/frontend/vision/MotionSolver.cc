@@ -781,8 +781,7 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
     Frame::Ptr frame_k, Frame::Ptr frame_k_1) {
   MotionEstimateMap motion_map;
   auto solve_impl =
-      [&, &motion_map](
-          const std::pair<ObjectId, DynamicObjectObservation>& pair) -> bool {
+      [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) -> bool {
     const auto object_id = pair.first;
     VLOG(5) << "Solving Object Motion SAM for j=" << object_id;
 
@@ -875,13 +874,12 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
     }
   };
 
-  tbb::parallel_for_each(frame_k->object_observations_.begin(),
-                         frame_k->object_observations_.end(), solve_impl);
+  {
+    dyno::utils::TimingStatsCollector timer("decoupled_object_sam.optimize");
+    tbb::parallel_for_each(frame_k->object_observations_.begin(),
+                           frame_k->object_observations_.end(), solve_impl);
+  }
 
-  // for (const auto& [object_id, observations] : frame_k->object_observations_)
-  // {
-  //     solve_impl(object_id, observations);
-  // }
   return std::make_pair(motion_map, mergeObjectMaps());
 }
 

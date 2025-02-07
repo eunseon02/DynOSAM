@@ -798,11 +798,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
  protected:
   std::pair<FrameId, gtsam::Pose3> getOrConstructL0(ObjectId object_id,
                                                     FrameId frame_id);
+  // TODO: rename to compute initial H
   gtsam::Pose3 computeInitialHFromFrontend(ObjectId object_id,
                                            FrameId frame_id);
-
-  // gtsam::FastMap<ObjectId, std::vector<PointUpdateContextType>>
-  // point_contexts_;
 
   // TODO: in the sliding window case the formulation gets reallcoated every
   // time so that L0 map is different, but the values will share the same H

@@ -44,6 +44,7 @@ DecoupledObjectSAM::DecoupledObjectSAM(
   smoother_ = std::make_shared<gtsam::ISAM2>(isam_params);
 
   FormulationParams formulation_params;
+  formulation_params.suffix = "object_" + std::to_string(object_id);
   // HACK for now so that we get object motions at every frame!!!?
   formulation_params.min_dynamic_observations = 1u;
 
@@ -56,11 +57,11 @@ DecoupledObjectSAM::DecoupledObjectSAM(
 Motion3ReferenceFrame DecoupledObjectSAM::getFrame2FrameMotion(
     FrameId frame_id) const {
   // this is in the form of our accessor
-  StateQuery<gtsam::Pose3> H_w =
+  StateQuery<gtsam::Pose3> H_W_km1_k =
       accessor_->getObjectMotion(frame_id, object_id_);
-  CHECK(H_w);
+  CHECK(H_W_km1_k);
 
-  return Motion3ReferenceFrame(H_w.get(), MotionRepresentationStyle::F2F,
+  return Motion3ReferenceFrame(H_W_km1_k.get(), MotionRepresentationStyle::F2F,
                                ReferenceFrame::GLOBAL, frame_id - 1u, frame_id);
 }
 
@@ -73,40 +74,69 @@ Motion3ReferenceFrame DecoupledObjectSAM::getKeyFramedMotion(
 
   auto motion_key = frame_node_k->makeObjectMotionKey(object_id_);
   // raw access the theta in the accessor!!
-  StateQuery<gtsam::Pose3> motion_s0_k =
+
+  StateQuery<gtsam::Pose3> H_W_s0_k =
       accessor_->query<gtsam::Pose3>(motion_key);
-  CHECK(motion_s0_k);
+  CHECK(H_W_s0_k);
 
   CHECK(decoupled_formulation_->hasObjectKeyFrame(object_id_, frame_id));
   // s0
   auto [reference_frame, _] =
       decoupled_formulation_->getObjectKeyFrame(object_id_, frame_id);
 
-  return Motion3ReferenceFrame(motion_s0_k.get(), MotionRepresentationStyle::KF,
+  return Motion3ReferenceFrame(H_W_s0_k.get(), MotionRepresentationStyle::KF,
                                ReferenceFrame::GLOBAL, reference_frame,
                                frame_id);
 }
 
-void DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
-  gtsam::Values new_values;
-  gtsam::NonlinearFactorGraph new_factors;
+void DecoupledObjectSAM::updateFormulation(
+    FrameId frame_k, gtsam::NonlinearFactorGraph& new_factors,
+    gtsam::Values& new_values) {
   // no need to update and static or odometry things ;)
   UpdateObservationParams update_params;
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
-  LOG(INFO) << "DecoupledObjectSAM: Starting formulation update k=" << frame_k
-            << " j= " << object_id_;
+  VLOG(10) << "DecoupledObjectSAM: Starting formulation update k=" << frame_k
+           << " j= " << object_id_;
   decoupled_formulation_->updateDynamicObservations(frame_k, new_values,
                                                     new_factors, update_params);
+}
 
-  LOG(INFO) << "DecoupledObjectSAM: Starting smoother update k=" << frame_k
-            << " j= " << object_id_;
-  result_ = smoother_->update(new_factors, new_values);
+bool DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
+  gtsam::Values new_values;
+  gtsam::NonlinearFactorGraph new_factors;
+
+  updateFormulation(frame_k, new_factors, new_values);
+
+  // do first optimisation
+  dyno::utils::TimingStatsCollector timer(
+      "decoupled_object_sam.optimize." +
+      decoupled_formulation_->getFullyQualifiedName());
+  bool is_smoother_ok = optimize(&result_, new_factors, new_values);
+
+  VLOG(5) << "DecoupledObjectSAM: update complete k=" << frame_k
+          << " j= " << object_id_
+          << "  error before: " << result_.errorBefore.value_or(NaN)
+          << " error after: " << result_.errorAfter.value_or(NaN);
+  return is_smoother_ok;
+}
+
+bool DecoupledObjectSAM::optimize(
+    gtsam::ISAM2Result* result, const gtsam::NonlinearFactorGraph& new_factors,
+    const gtsam::Values& new_values) {
+  CHECK_NOTNULL(result);
+  CHECK(smoother_);
+
+  try {
+    *result = smoother_->update(new_factors, new_values);
+  } catch (gtsam::IndeterminantLinearSystemException& e) {
+    LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
+               << DynoLikeKeyFormatter(e.nearbyVariable());
+  }
   estimate_ = smoother_->calculateEstimate();
-
   decoupled_formulation_->updateTheta(estimate_);
-  LOG(INFO) << "DecoupledObjectSAM: finished updateSmoother" << frame_k
-            << " j= " << object_id_;
+
+  return true;
 }
 
 }  // namespace dyno

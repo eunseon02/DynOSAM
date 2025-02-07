@@ -72,6 +72,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   }
 
   gtsam::ISAM2Params isam2_params;
+  isam2_params.keyFormatter = DynoLikeKeyFormatter;
   isam2_params.evaluateNonlinearError = true;
 
   ObjectMotionSovlerF2F::Params object_motion_solver_params =
