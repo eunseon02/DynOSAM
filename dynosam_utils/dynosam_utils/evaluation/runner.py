@@ -125,7 +125,8 @@ def run(parsed_args, unknown_args):
 
     log.info(f"Setting output folder path: {output_folder_path}")
 
-    unknown_args.append("--output_path={}".format(output_folder_path))
+    # append to front of args so that --ros-args (if any) are always last!
+    unknown_args.insert(0, "--output_path={}".format(output_folder_path))
 
     running_success = True
     if run_pipeline:

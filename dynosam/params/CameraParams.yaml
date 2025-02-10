@@ -17,7 +17,7 @@ resolution:
 
 camera_model: pinhole
 intrinsics: [721.5377,  721.5377, 609.5593, 172.8540] #fu, fv, cu, cv
-distortion_model: radial-tangential
+distortion_model: radial_tangential
 distortion_coefficients: [0.0, 0.0, 0.0, 0.0]
 
 ##KITTI!! 0018-0020

@@ -39,6 +39,7 @@
 #include <dynosam/visualizer/OpenCVFrontendDisplay.hpp>
 
 #include "dynosam_ros/Display-Definitions.hpp"
+#include "dynosam_ros/OnlineDataProviderRos.hpp"
 #include "dynosam_ros/RosUtils.hpp"
 #include "dynosam_ros/displays/DisplaysImpl.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
@@ -57,6 +58,37 @@ DynoNode::DynoNode(const std::string& node_name,
 }
 
 dyno::DataProvider::Ptr DynoNode::createDataProvider() {
+  const bool online =
+      ParameterConstructor(this, "online", false)
+          .description("If the online DataProvider should be used")
+          .finish()
+          .get<bool>();
+
+  if (online) {
+    RCLCPP_INFO_STREAM(
+        this->get_logger(),
+        "Online DataProvider selected. Waiting for ROS topics...");
+    OnlineDataProviderRosParams online_params;
+    online_params.wait_for_camera_params =
+        ParameterConstructor(this, "wait_for_camera_params",
+                             online_params.wait_for_camera_params)
+            .description(
+                "If the online DataProvider should wait for the camera params "
+                "on a ROS topic!")
+            .finish()
+            .get<bool>();
+    online_params.camera_params_timeout =
+        ParameterConstructor(this, "camera_params_timeout",
+                             online_params.camera_params_timeout)
+            .description(
+                "When waiting for camera params, how long the online "
+                "DataProvider should wait before time out (ms)")
+            .finish()
+            .get<int>();
+    return std::make_shared<OnlineDataProviderRos>(
+        this->create_sub_node("dataprovider"), online_params);
+  }
+
   auto params_path = getParamsPath();
   auto dataset_path = getDatasetPath();
   auto dyno_params = getDynoParams();

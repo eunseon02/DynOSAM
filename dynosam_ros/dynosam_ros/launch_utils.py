@@ -93,6 +93,11 @@ def load_dynosam_node(context, *args, **kwargs):
     dynosam_dataset_path_config = LaunchConfiguration("dataset_path")
     dynosam_params_folder_config = LaunchConfiguration("params_path")
     glog_verbose_flag_config = LaunchConfiguration("v")
+    online_config = LaunchConfiguration("online")
+    wait_for_camera_params_config = LaunchConfiguration("wait_for_camera_params")
+    camera_params_timeout_config = LaunchConfiguration("camera_params_timeout")
+
+    print(context.argv)
 
     # Construct the flagfile arguments given the params folder
     # where we expect to find some files with the suffix .flags (for gflags)
@@ -153,7 +158,10 @@ def load_dynosam_node(context, *args, **kwargs):
         executable=executable,
         parameters=[
             {"params_folder_path": dynosam_params_folder_config},
-            {"dataset_path": dynosam_dataset_path_config}
+            {"dataset_path": dynosam_dataset_path_config},
+            {"online": online_config},
+            {"wait_for_camera_params": wait_for_camera_params_config},
+            {"camera_params_timeout": camera_params_timeout_config}
         ],
         arguments=arguments,
         **node_kwargs
@@ -208,8 +216,14 @@ def generate_dynosam_launch_description(**kwargs):
         'v',
         default_value=str(default_glog_v))
 
+    online_data_provider_arg = DeclareLaunchArgument("online", default_value="True")
+    wait_for_camera_params_arg = DeclareLaunchArgument("wait_for_camera_params", default_value="True")
+    camera_params_timeout_arg = DeclareLaunchArgument("camera_params_timeout", default_value="-1")
+
+
     # remove the above values from the kwargs so that they are not parsed to the load_dynosam_node function
     clean_kwargs = kwargs
+
 
     if "dataset_path" in clean_kwargs:
         del clean_kwargs["dataset_path"]
@@ -220,11 +234,13 @@ def generate_dynosam_launch_description(**kwargs):
     if "params_path" in clean_kwargs:
         del clean_kwargs["params_path"]
 
-
     return LaunchDescription([
         # Must be inside launch description to be registered
         dynosam_params_folder_arg,
         dynosam_dataset_path_arg,
         glog_verbose_flag_arg,
+        online_data_provider_arg,
+        wait_for_camera_params_arg,
+        camera_params_timeout_arg,
         OpaqueFunction(function=load_dynosam_node, kwargs=clean_kwargs)
     ])
