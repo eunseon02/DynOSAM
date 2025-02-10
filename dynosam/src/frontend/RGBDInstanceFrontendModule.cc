@@ -128,7 +128,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
 
-  LOG(INFO) << to_string(tracker_->getTrackerInfo());
+  VLOG(1) << to_string(tracker_->getTrackerInfo());
 
   {
     utils::TimingStatsCollector update_depths_timer("depth_updater");

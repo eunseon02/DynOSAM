@@ -421,9 +421,6 @@ void ObjectCentricFormulation::objectUpdateContext(
   const gtsam::Key object_motion_key_k =
       frame_node_k->makeObjectMotionKey(context.getObjectId());
 
-  LOG(INFO) << "Object update context "
-            << DynoLikeKeyFormatter(object_motion_key_k);
-
   auto theta_accessor = this->accessorFromTheta();
   const auto frame_id = context.getFrameId();
   const auto object_id = context.getObjectId();
@@ -432,8 +429,8 @@ void ObjectCentricFormulation::objectUpdateContext(
     // gtsam::Pose3 motion;
     const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
     gtsam::Pose3 motion = computeInitialHFromFrontend(object_id, frame_id);
-    LOG(INFO) << "Added motion at  "
-              << DynoLikeKeyFormatter(object_motion_key_k);
+    // LOG(INFO) << "Added motion at  "
+    //           << DynoLikeKeyFormatter(object_motion_key_k);
     // gtsam::Pose3 motion;
     new_values.insert(object_motion_key_k, motion);
     is_other_values_in_map.insert2(object_motion_key_k, true);

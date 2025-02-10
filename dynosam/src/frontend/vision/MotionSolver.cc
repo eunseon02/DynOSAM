@@ -794,9 +794,6 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
       frame_k_1->dynamic_features_.markOutliers(
           geometric_sovler_result.outliers);
 
-      LOG(INFO) << "geometric_sovler_result.inliers.size() "
-                << geometric_sovler_result.inliers.size();
-
       const Motion3ReferenceFrame& motion_reference =
           geometric_sovler_result.best_result;
       CHECK_EQ(motion_reference.style(), MotionRepresentationStyle::F2F);

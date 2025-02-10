@@ -117,9 +117,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   new_frame->setMaxBackgroundDepth(frontend_params_.max_background_depth);
   new_frame->setMaxObjectDepth(frontend_params_.max_object_depth);
 
-  LOG(INFO) << "Tracked on frame " << frame_id
-            << " t= " << std::setprecision(15) << timestamp << ", object ids "
-            << container_to_string(new_frame->getObjectIds());
+  VLOG(1) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15)
+          << timestamp << ", object ids "
+          << container_to_string(new_frame->getObjectIds());
   previous_frame_ = new_frame;
 
   return new_frame;

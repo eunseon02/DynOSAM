@@ -109,14 +109,22 @@ struct NoiseModels {
   static NoiseModels fromBackendParams(const BackendParams&);
 };
 
+/**
+ * @brief Defines a set of input hooks to the formulation that allow
+ * communication to outside the formulation
+ *
+ */
 struct FormulationHooks {
-  // Return copy? Should return reference? Maybe?
   using GroundTruthPacketsRequest =
       std::function<std::optional<GroundTruthPacketMap>()>;
 
   GroundTruthPacketsRequest ground_truth_packets_request;
 };
 
+/**
+ * @brief Data shared between a Formulation and its accessor
+ *
+ */
 struct SharedFormulationData {
   const gtsam::Values* values;
   const FormulationHooks* hooks;

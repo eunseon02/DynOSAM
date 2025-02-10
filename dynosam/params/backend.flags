@@ -5,13 +5,13 @@
 # --constant_object_motion_translation_sigma=0.2
 
 # good for carla
---constant_object_motion_rotation_sigma=0.02
---constant_object_motion_translation_sigma=0.01
+--constant_object_motion_rotation_sigma=0.05
+--constant_object_motion_translation_sigma=0.1
 
 
 
 # --motion_ternary_factor_noise_sigma=0.00000000001
---motion_ternary_factor_noise_sigma=0.0001
+--motion_ternary_factor_noise_sigma=0.00001
 
 # --odometry_rotation_sigma=0.2
 # --odometry_translation_sigma=0.3

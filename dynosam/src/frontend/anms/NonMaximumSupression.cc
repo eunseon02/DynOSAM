@@ -13,16 +13,14 @@
  * @author Luca Carlone
  */
 
-#include "dynosam/frontend/anms/NonMaximumSuppression.h"
-
 #include <glog/logging.h>
 
+#include <Eigen/Dense>
 #include <numeric>
 #include <opencv2/opencv.hpp>
 #include <vector>
 
-#include <Eigen/Dense>
-
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/anms/anms/anms.h"
 #include "dynosam/utils/TimingStats.hpp"
 
@@ -33,24 +31,19 @@ AdaptiveNonMaximumSuppression::AdaptiveNonMaximumSuppression(
     : NonMaximumSuppression(), anms_algorithm_type_(anms_algorithm_type){};
 
 std::vector<cv::KeyPoint> AdaptiveNonMaximumSuppression::suppressNonMax(
-    const std::vector<cv::KeyPoint>& keyPoints,
-    const int& numRetPoints,
-    const float& tolerance,
-    const int& cols,
-    const int& rows,
-    const int& nr_horizontal_bins,
-    const int& nr_vertical_bins,
+    const std::vector<cv::KeyPoint>& keyPoints, const int& numRetPoints,
+    const float& tolerance, const int& cols, const int& rows,
+    const int& nr_horizontal_bins, const int& nr_vertical_bins,
     const Eigen::MatrixXd& binning_mask) {
-
   utils::TimingStatsCollector timer("anms_timer");
 
   if (keyPoints.size() == 0) {
-    std::cout << "No keypoints for non-max suppression..." <<std::endl;
+    std::cout << "No keypoints for non-max suppression..." << std::endl;
     return std::vector<cv::KeyPoint>();
   }
 
   // Sorting keypoints by deacreasing order of strength
-//   VLOG(5) << "Sorting keypoints in decreasing order of strength.";
+  //   VLOG(5) << "Sorting keypoints in decreasing order of strength.";
   std::vector<int> responseVector;
   for (unsigned int i = 0; i < keyPoints.size(); i++) {
     responseVector.push_back(keyPoints[i].response);
@@ -64,78 +57,69 @@ std::vector<cv::KeyPoint> AdaptiveNonMaximumSuppression::suppressNonMax(
   }
 
   std::vector<cv::KeyPoint> keypoints;
-//   VLOG(5) << "Starting Adaptive Non-Maximum Suppression.";
+  //   VLOG(5) << "Starting Adaptive Non-Maximum Suppression.";
   switch (anms_algorithm_type_) {
     case AnmsAlgorithmType::TopN: {
-    //   VLOG(1) << "Running TopN: " << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Running TopN: " <<
+      //   VIO::to_underlying(anms_algorithm_type_);
       keypoints = anms::TopN(keyPoints, numRetPoints);
       break;
     };
     case AnmsAlgorithmType::BrownANMS: {
-    //   VLOG(1) << "Running BrownANMS: "
-            //   << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Running BrownANMS: "
+      //   << VIO::to_underlying(anms_algorithm_type_);
       keypoints = anms::BrownANMS(keyPoints, numRetPoints);
       break;
     };
     case AnmsAlgorithmType::SDC: {
-    //   VLOG(1) << "Running SDC: " << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Running SDC: " <<
+      //   VIO::to_underlying(anms_algorithm_type_);
       keypoints =
           anms::Sdc(keyPointsSorted, numRetPoints, tolerance, cols, rows);
       break;
     };
     case AnmsAlgorithmType::KdTree: {
-    //   VLOG(1) << "Running KdTree: " << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Running KdTree: " <<
+      //   VIO::to_underlying(anms_algorithm_type_);
       keypoints =
           anms::KdTree(keyPointsSorted, numRetPoints, tolerance, cols, rows);
       break;
     };
     case AnmsAlgorithmType::RangeTree: {
-        std::cout << "Running RangeTree " << keyPointsSorted.size() << std::endl;
-        std::cout << numRetPoints << std::endl;
-    //   VLOG(1) << "Running RangeTree: "
-            //   << VIO::to_underlying(anms_algorithm_type_);
       keypoints =
           anms::RangeTree(keyPointsSorted, numRetPoints, tolerance, cols, rows);
       break;
     };
     case AnmsAlgorithmType::Ssc: {
-    //   VLOG(1) << "Running SSC: " << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Running SSC: " <<
+      //   VIO::to_underlying(anms_algorithm_type_);
       keypoints =
           anms::Ssc(keyPointsSorted, numRetPoints, tolerance, cols, rows);
       break;
     };
     case AnmsAlgorithmType::Binning: {
-    //   VLOG(1) << "Running Binning: "
-            //   << VIO::to_underlying(anms_algorithm_type_);
-      keypoints = binning(keyPointsSorted,
-                          numRetPoints,
-                          cols,
-                          rows,
-                          nr_horizontal_bins,
-                          nr_vertical_bins,
-                          binning_mask);
+      //   VLOG(1) << "Running Binning: "
+      //   << VIO::to_underlying(anms_algorithm_type_);
+      keypoints = binning(keyPointsSorted, numRetPoints, cols, rows,
+                          nr_horizontal_bins, nr_vertical_bins, binning_mask);
       break;
     };
     default: {
-    //   VLOG(1) << "Unknown ANMS algorithm requested: "
-            //   << VIO::to_underlying(anms_algorithm_type_);
+      //   VLOG(1) << "Unknown ANMS algorithm requested: "
+      //   << VIO::to_underlying(anms_algorithm_type_);
       break;
     };
   }
-//   VLOG(1) << "Non Maximum Suppression Timing [ms]: "
-//           << utils::Timer::toc(tic).count();
+  //   VLOG(1) << "Non Maximum Suppression Timing [ms]: "
+  //           << utils::Timer::toc(tic).count();
   return keypoints;
 }
 
 // ---------------------------------------------------------------------------------
 std::vector<cv::KeyPoint> AdaptiveNonMaximumSuppression::binning(
-    const std::vector<cv::KeyPoint>& keyPoints,
-    const int& numKptsToRetain,
-    const int& imgCols,
-    const int& imgRows,
-    const int& nr_horizontal_bins,
-    const int& nr_vertical_bins,
-    const Eigen::MatrixXd& binning_mask) {
+    const std::vector<cv::KeyPoint>& keyPoints, const int& numKptsToRetain,
+    const int& imgCols, const int& imgRows, const int& nr_horizontal_bins,
+    const int& nr_vertical_bins, const Eigen::MatrixXd& binning_mask) {
   if (static_cast<size_t>(numKptsToRetain) > keyPoints.size()) {
     return keyPoints;
   }

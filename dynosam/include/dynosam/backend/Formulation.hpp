@@ -306,9 +306,6 @@ class Formulation {
       const SharedFormulationData& shared_data) const = 0;
 
  public:
-  // TODO: get formatter!?
-  // TODO: isIncrementable?
-
   /**
    * @brief Get the map used by the formulation
    *
@@ -353,7 +350,14 @@ class Formulation {
   const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
 
   const FormulationHooks& hooks() const { return hooks_; }
-  // FormulationHooks& hooks() { return hooks_; }
+
+  /**
+   * @brief Custom gtsam::Key formatter for this formulation.
+   * Defaults to DynoLikeKeyFormatter.
+   *
+   * @return gtsam::KeyFormatter
+   */
+  virtual gtsam::KeyFormatter formatter() const { return DynoLikeKeyFormatter; }
 
   /**
    * @brief Get the fully qualified name of this formulation which is derived
