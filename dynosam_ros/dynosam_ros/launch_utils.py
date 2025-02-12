@@ -97,8 +97,6 @@ def load_dynosam_node(context, *args, **kwargs):
     wait_for_camera_params_config = LaunchConfiguration("wait_for_camera_params")
     camera_params_timeout_config = LaunchConfiguration("camera_params_timeout")
 
-    print(context.argv)
-
     # Construct the flagfile arguments given the params folder
     # where we expect to find some files with the suffix .flags (for gflags)
     # these will be added to the arguments list as --flagfile="/path/to/flags/file.flags"
@@ -216,7 +214,7 @@ def generate_dynosam_launch_description(**kwargs):
         'v',
         default_value=str(default_glog_v))
 
-    online_data_provider_arg = DeclareLaunchArgument("online", default_value="True")
+    online_data_provider_arg = DeclareLaunchArgument("online", default_value="False")
     wait_for_camera_params_arg = DeclareLaunchArgument("wait_for_camera_params", default_value="True")
     camera_params_timeout_arg = DeclareLaunchArgument("camera_params_timeout", default_value="-1")
 

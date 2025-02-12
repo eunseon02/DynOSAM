@@ -104,9 +104,9 @@ void OnlineDataProviderRos::imageSyncCallback(
   }
 
   const cv::Mat rgb = readRgbRosImage(rgb_msg);
-  const cv::Mat depth = readRgbRosImage(depth_msg);
-  const cv::Mat flow = readRgbRosImage(flow_msg);
-  const cv::Mat mask = readRgbRosImage(mask_msg);
+  const cv::Mat depth = readDepthRosImage(depth_msg);
+  const cv::Mat flow = readFlowRosImage(flow_msg);
+  const cv::Mat mask = readMaskRosImage(mask_msg);
 
   const Timestamp timestamp = utils::fromRosTime(rgb_msg->header.stamp);
   const FrameId frame_id = frame_id_;
@@ -118,6 +118,16 @@ void OnlineDataProviderRos::imageSyncCallback(
       ImageWrapper<ImageType::OpticalFlow>(flow),
       ImageWrapper<ImageType::MotionMask>(mask));
   CHECK(image_container);
+
+  cv::Mat of_viz, motion_viz, depth_viz;
+  of_viz = ImageType::OpticalFlow::toRGB(flow);
+  motion_viz = ImageType::MotionMask::toRGB(mask);
+  depth_viz = ImageType::Depth::toRGB(depth);
+
+  // cv::imshow("Optical Flow", of_viz);
+  // cv::imshow("Motion mask", motion_viz);
+  // cv::imshow("Depth", depth_viz);
+  // cv::waitKey(1);
   // trigger callback to send data to the DataInterface!
   image_container_callback_(image_container);
 }

@@ -1,0 +1,36 @@
+<launch>
+
+    <arg name="output_path" default="" />
+    <arg name="log_output" default="false"/>
+
+    <arg name="params_folder" default="$(find-pkg-share dynosam)/params/"/>
+
+    <arg name="camera_info" default="/dyno/camera/camera_info"/>
+    <arg name="rgb_cam_topic" default="/dyno/camera/rgb"/>
+    <arg name="depth_cam_topic" default="/dyno/camera/depth"/>
+    <arg name="motion_mask_cam_topic" default="/dyno/camera/motion_mask"/>
+    <arg name="optical_flow_cam_topic" default="/dyno/camera/optical_flow"/>
+
+    <!-- Launch a Python node -->
+    <node pkg="dynosam_ros"
+          exec="dynosam_node"
+          name="dynosam_vo_ros"
+          output="screen"
+          args="--output_path=$(var output_path)
+                --v=100
+                --flagfile=$(var params_folder)/backend.flags
+                --flagfile=$(var params_folder)/frontend.flags
+                --flagfile=$(var params_folder)/pipeline.flags">
+
+        <param name="online" value="true" />
+        <param name="params_folder_path" value="$(var params_folder)" />
+
+
+        <!-- Remap topics -->
+        <remap from="dataprovider/image/camera_info" to="$(var camera_info)"/>
+        <remap from="dataprovider/image/rgb" to="$(var rgb_cam_topic)"/>
+        <remap from="dataprovider/image/depth" to="$(var depth_cam_topic)"/>
+        <remap from="dataprovider/image/flow" to="$(var optical_flow_cam_topic)"/>
+        <remap from="dataprovider/image/mask" to="$(var motion_mask_cam_topic)"/>
+    </node>
+</launch>

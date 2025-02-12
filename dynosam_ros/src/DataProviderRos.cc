@@ -66,7 +66,9 @@ const cv_bridge::CvImageConstPtr DataProviderRos::readRosImage(
   CHECK(img_msg);
   cv_bridge::CvImageConstPtr cv_ptr;
   try {
-    cv_ptr = cv_bridge::toCvShare(img_msg);
+    // important to copy to ensure that memory does not go out of scope (which
+    // it seems to !!!)
+    cv_ptr = cv_bridge::toCvCopy(img_msg);
   } catch (cv_bridge::Exception& exception) {
     RCLCPP_FATAL(node_->get_logger(), "cv_bridge exception: %s",
                  exception.what());

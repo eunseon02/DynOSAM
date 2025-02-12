@@ -96,6 +96,7 @@ if "$USE_NVIDIA"; then
         --volume $XAUTH:$XAUTH:rw \
         --net host \
         --pid host \
+        --ipc host \
         -it \
         --name=$CONTAINER_NAME \
         $CONTAINER_IMAGE_NAME "$@"

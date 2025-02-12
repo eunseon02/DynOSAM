@@ -73,7 +73,4 @@ if __name__ == '__main__':
     args, unknown = parser.parse_known_args()
     args_dictionary = vars(args)
 
-    print(args)
-    print(unknown)
-
     sys.exit(run(args_dictionary, unknown))
