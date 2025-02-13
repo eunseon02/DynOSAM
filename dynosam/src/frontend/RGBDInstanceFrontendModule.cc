@@ -94,9 +94,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
   ImageContainer::Ptr image_container = input->image_container_;
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container);
-  LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
+  // LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
   CHECK(frame->updateDepths());
-  LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
+  // LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
 
   return {State::Nominal, nullptr};
 }

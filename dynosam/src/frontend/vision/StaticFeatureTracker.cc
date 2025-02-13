@@ -242,7 +242,6 @@ FeatureContainer KltFeatureTracker::trackStatic(
                    new_tracks_and_detections, detection_mask);
 
     tracker_info.static_track_detections = new_tracks_and_detections.size();
-    LOG(INFO) << "First detections " << tracker_info.static_track_detections;
 
     return new_tracks_and_detections;
   } else {
@@ -261,9 +260,6 @@ FeatureContainer KltFeatureTracker::trackStatic(
     for (const auto& inlier_feature : iter) {
       previous_inliers.add(inlier_feature);
     }
-
-    LOG(INFO) << "Num usable static "
-              << previous_frame->numStaticUsableFeatures();
 
     // Tracklet ids associated with the set of previous inliers that are now
     // outliers
@@ -390,10 +386,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
                                     TrackletIds& outlier_previous_features,
                                     FeatureTrackerInfo& tracker_info,
                                     const cv::Mat& detection_mask) {
-  LOG(INFO) << current_processed_img.empty();
-  LOG(INFO) << previous_processed_img.empty();
-  LOG(INFO) << previous_features.empty();
-
   if (current_processed_img.empty() || previous_processed_img.empty() ||
       previous_features.empty()) {
     return false;
@@ -440,8 +432,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     }
   }
 
-  VLOG(10) << good_tracklets.size() << " tracked with KLT tracking";
-
   // Geometric verification using RANSAC
   const cv::Mat geometric_verification_mask =
       geometricVerification(good_previous, good_current);
@@ -455,7 +445,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     }
   }
 
-  VLOG(10) << "Tracked " << verified_current.size() << " on frame " << frame_k;
   CHECK_EQ(verified_tracklets.size(), verified_current.size());
 
   // add to tracked features
@@ -487,8 +476,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       tracked_features.add(feature);
     }
   }
-
-  VLOG(10) << "Final " << tracked_features.size() << " after tracking";
 
   // Get the outliers associated with the previous_features container by taking
   // the set difference between the verified and total tracklets NOTE: verified
@@ -584,16 +571,6 @@ Feature::Ptr KltFeatureTracker::constructNewStaticFeature(
       .markInlier()
       .trackletId(tracklet_to_use)
       .keypoint(kp_current);
-  // feature->keypoint_ = kp_current;
-  // // feature->measured_flow_ = flow;
-  // // feature->predicted_keypoint_ = predicted_kp;
-  // feature->age_ = kAge;
-  // feature->tracklet_id_ = tracklet_to_use;
-  // feature->frame_id_ = frame_id;
-  // feature->type_ = KeyPointType::STATIC;
-  // feature->inlier_ = true;
-  // feature->instance_label_ = background_label;
-  // feature->tracking_label_ = background_label;
   return feature;
 }
 

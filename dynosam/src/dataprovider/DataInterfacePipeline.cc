@@ -56,15 +56,12 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
 
   bool queue_state;
   ImageContainer::Ptr packet = nullptr;
-  LOG(INFO) << "Getting data packet!";
 
   if (parallel_run_) {
     queue_state = packet_queue_.pop(packet);
   } else {
     queue_state = packet_queue_.popBlocking(packet);
   }
-
-  LOG(INFO) << "Gotten data packet! " << queue_state;
 
   if (!queue_state) {
     //  LOG_EVERY_N(WARNING, 10)
