@@ -45,20 +45,76 @@
 
 namespace dyno {
 
+/**
+ * @brief Base Dataprovider for ROS that implements common image processing
+ * functionalities.
+ *
+ */
 class DataProviderRos : public DataProvider {
  public:
   DataProviderRos(rclcpp::Node::SharedPtr node);
   virtual ~DataProviderRos() = default;
 
+  /**
+   * @brief Convers a sensor_msgs::msg::Image to a cv::Mat while testing that
+   * the input has the correct datatype for an RGB image (as defined by
+   * ImageType::RGBMono).
+   *
+   * @param img_msg const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv::Mat
+   */
   const cv::Mat readRgbRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
+
+  /**
+   * @brief Convers a sensor_msgs::msg::Image to a cv::Mat while testing that
+   * the input has the correct datatype for an Depth image (as defined by
+   * ImageType::Depth).
+   *
+   * @param img_msg const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv::Mat
+   */
   const cv::Mat readDepthRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
+
+  /**
+   * @brief Convers a sensor_msgs::msg::Image to a cv::Mat while testing that
+   * the input has the correct datatype for an Optical Flow image (as defined by
+   * ImageType::OpticalFlow).
+   *
+   * @param img_msg const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv::Mat
+   */
   const cv::Mat readFlowRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
+
+  /**
+   * @brief Convers a sensor_msgs::msg::Image to a cv::Mat while testing that
+   * the input has the correct datatype for an Motion Mask image (as defined by
+   * ImageType::MotionMask).
+   *
+   * @param img_msg const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv::Mat
+   */
   const cv::Mat readMaskRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
 
+  /**
+   * @brief Gets CameraParams from a sensor_msgs::msg::CameraInfo recieved on
+   * the specified topic. This function is blocking until a message is recieved
+   * (or until the time_to_wait) elapses.
+   *
+   * While this function returns a const ref to the CameraParams it also sets
+   * the internal camera_params_. The camera params are then returned by the
+   * overwritten getCameraParams, allowing the PipelineManager to access the
+   * correct camera paramters.
+   *
+   * @tparam Rep int64_t,
+   * @tparam Period std::milli
+   * @param time_to_wait const std::chrono::duration<Rep, Period>&
+   * @param topic const std::string&. Defaults to "image/camera_info"
+   * @return const CameraParams&
+   */
   template <class Rep = int64_t, class Period = std::milli>
   const CameraParams& waitAndSetCameraParams(
       const std::chrono::duration<Rep, Period>& time_to_wait =
@@ -92,9 +148,31 @@ class DataProviderRos : public DataProvider {
   }
 
  protected:
+  /**
+   * @brief Helper function to convert a ROS Image message to a CvImageConstPtr
+   * via the cv bridge.
+   *
+   * @param img_msg const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv_bridge::CvImageConstPtr
+   */
   const cv_bridge::CvImageConstPtr readRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const;
 
+  /**
+   * @brief Helper function to convert a
+   * sensor_msgs::msg::Image::ConstSharedPtr& to a cv::Mat with the right
+   * datatype.
+   *
+   * The datatype is specified from the template IMAGETYPE::OpenCVType and
+   * ensures the passed in image has the correct datatype for the desired
+   * IMAGETYPE.
+   *
+   * ROS will be shutdown if the incoming image has an incorrect type.
+   *
+   * @tparam IMAGETYPE
+   * @param img_msg  const sensor_msgs::msg::Image::ConstSharedPtr&
+   * @return const cv::Mat
+   */
   template <typename IMAGETYPE>
   const cv::Mat convertRosImage(
       const sensor_msgs::msg::Image::ConstSharedPtr& img_msg) const {

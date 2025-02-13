@@ -45,15 +45,55 @@ struct OnlineDataProviderRosParams {
   int32_t camera_params_timeout{-1};
 };
 
+/**
+ * @brief Online data-provider for DynoSAM.
+ *
+ * Subscribes to four synchronized image topics (rgb, depth, mask and optical
+ * flow) and a camera_info topic (to define the camera intrinsics of the
+ * system).
+ *
+ *
+ *
+ */
 class OnlineDataProviderRos : public DataProviderRos {
  public:
+  /**
+   * @brief Construct a new OnlineDataProviderRos.
+   *
+   * Constructor will block until camera info has been received (if
+   * OnlineDataProviderRosParams::wait_for_camera_params is true).
+   *
+   * @param node rclcpp::Node::SharedPtr
+   * @param params const OnlineDataProviderRosParams&
+   */
   OnlineDataProviderRos(rclcpp::Node::SharedPtr node,
                         const OnlineDataProviderRosParams &params);
 
+  /**
+   * @brief Indicates that there is no known end to the dataset
+   *
+   * @return int
+   */
   int datasetSize() const override { return -1; }
 
+  /**
+   * @brief Returns true while not shutdown
+   *
+   * @return true
+   * @return false
+   */
   bool spin() override;
+
+  /**
+   * @brief Disconnects all subscribers
+   *
+   */
   void shutdown() override;
+
+  /**
+   * @brief Connects all subscribers.
+   *
+   */
   void connect();
 
  private:
