@@ -18,8 +18,8 @@ def parser():
 
     # By default not required as the dynosam_launch.py file will look for default params folder
     # in the share/ folder of the installed package
-    input_opts.add_argument("-p", "--params_path", type=str,
-                                help="Absolute path to the params to dun Dynosam with.",
+    input_opts.add_argument("-P", "--params_path", type=str,
+                                help="Absolute path to the params to dun Dynosam with. Note we use -P to avoid conflicting with --ros-args -p.",
                                 required=False)
 
     input_opts.add_argument("-l", "--launch_file", type=str,
@@ -27,7 +27,7 @@ def parser():
                                 default="dyno_sam_launch.py")
 
 
-    evaluation_opts.add_argument("-r", "--run_pipeline", action="store_true",
+    evaluation_opts.add_argument("-R", "--run_pipeline", action="store_true",
                                  help="Run dyno?")
 
     evaluation_opts.add_argument("-o", "--output_path",
@@ -57,6 +57,13 @@ if __name__ == '__main__':
     from dynosam_utils.evaluation.runner import run
     import argcomplete
     import sys
+
+    # import rclpy
+    # rclpy.init()
+
+    # non_ros_args = rclpy.utilities.remove_ros_args(sys.argv)
+    # print(f"Sys argv {sys.argv}")
+
     ###
     parser = parser()
     argcomplete.autocomplete(parser)

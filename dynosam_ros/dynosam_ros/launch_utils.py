@@ -93,6 +93,21 @@ def load_dynosam_node(context, *args, **kwargs):
     dynosam_dataset_path_config = LaunchConfiguration("dataset_path")
     dynosam_params_folder_config = LaunchConfiguration("params_path")
     glog_verbose_flag_config = LaunchConfiguration("v")
+    online_config = LaunchConfiguration("online")
+    wait_for_camera_params_config = LaunchConfiguration("wait_for_camera_params")
+    camera_params_timeout_config = LaunchConfiguration("camera_params_timeout")
+    output_path_config = LaunchConfiguration("output_path")
+
+    # remap topics
+    camera_info_config = LaunchConfiguration("camera_info")
+    rgb_cam_topic_config = LaunchConfiguration("rgb_cam_topic")
+    depth_cam_topic_config = LaunchConfiguration("depth_cam_topic")
+    motion_mask_cam_topic_config = LaunchConfiguration("motion_mask_cam_topic")
+    optical_flow_cam_topic_config = LaunchConfiguration("optical_flow_cam_topic")
+
+    # additional cmdline arguments
+    # args_config = LaunchConfiguration("argv")
+
 
     # Construct the flagfile arguments given the params folder
     # where we expect to find some files with the suffix .flags (for gflags)
@@ -109,10 +124,33 @@ def load_dynosam_node(context, *args, **kwargs):
     def contruct_glags_verbose_argument(loaded_glog_verbose_flag):
         return "--v={}".format(loaded_glog_verbose_flag)
 
+    # load programatically needed arguments
+    loaded_params_folder = validate_path(dynosam_params_folder_config.perform(context))
+    loaded_glog_verbose_flag = glog_verbose_flag_config.perform(context)
+    loaded_output_path = output_path_config.perform(context)
+
+    # print(args_config.perform(context))
+
+    # arguments to the dynosam Node, these are passed as non-ros args.
+    # these will (mostly) be used as GFLAG arguments
+    arguments = construct_flagfile_arguments(loaded_params_folder)
+    arguments.append(contruct_glags_verbose_argument(loaded_glog_verbose_flag))
+
     # context.argv is parsed in by the LaunchContext and will be the sys.argv[1:] (so not including the system name.)
     # we can use this to append to the actaul arguments we want to pass to the node. This is useful for
     # all the non-ros (ie GFLAGS/GLOG libs) we use  and allow us to modify this from otuside this launch file
-    argv = context.argv
+    import rclpy
+    import copy
+    all_argv = copy.deepcopy(context.argv)
+    non_ros_argv = rclpy.utilities.remove_ros_args(all_argv)
+
+    # print(all_argv)
+    # print(non_ros_argv)
+
+    def list_difference(a, b):
+        return [x for x in a if x not in b]
+    # only_ros_argv = list_difference(all_argv, non_ros_argv)
+    # argv = context.argv
     def construct_additional_arguments(argv):
         argv = list(argv)
         # if empty (the system name is already removed) then no args to add
@@ -122,17 +160,15 @@ def load_dynosam_node(context, *args, **kwargs):
         logger.info("Adding additional sys.argv arguements: {}".format(argv))
         return argv
 
-    loaded_params_folder = validate_path(dynosam_params_folder_config.perform(context))
-    loaded_glog_verbose_flag = glog_verbose_flag_config.perform(context)
-
-    # arguments to the dynosam Node, these are passed as non-ros args
-    arguments = construct_flagfile_arguments(loaded_params_folder)
-    arguments.append(contruct_glags_verbose_argument(loaded_glog_verbose_flag))
 
     # add additional arguments - this will most often be any gflags passed along the command line
-    additional_arguments = construct_additional_arguments(argv)
+    additional_arguments = construct_additional_arguments(non_ros_argv)
     if additional_arguments:
         arguments.extend(additional_arguments)
+    # put output path at end of additional arguments
+    arguments.append("--output_path={}".format(loaded_output_path))
+    # now add the ros args back to the end of the list
+    # arguments.extend(only_ros_argv)
 
     logger.info("Adding arguments {}".format(arguments))
 
@@ -153,7 +189,17 @@ def load_dynosam_node(context, *args, **kwargs):
         executable=executable,
         parameters=[
             {"params_folder_path": dynosam_params_folder_config},
-            {"dataset_path": dynosam_dataset_path_config}
+            {"dataset_path": dynosam_dataset_path_config},
+            {"online": online_config},
+            {"wait_for_camera_params": wait_for_camera_params_config},
+            {"camera_params_timeout": camera_params_timeout_config}
+        ],
+        remappings=[
+            ("dataprovider/image/camera_info", camera_info_config),
+            ("dataprovider/image/rgb", rgb_cam_topic_config),
+            ("dataprovider/image/depth", depth_cam_topic_config),
+            ("dataprovider/image/mask", motion_mask_cam_topic_config),
+            ("dataprovider/image/flow", optical_flow_cam_topic_config)
         ],
         arguments=arguments,
         **node_kwargs
@@ -185,46 +231,54 @@ def load_dynosam_node(context, *args, **kwargs):
 
     return nodes
 
-
-def generate_dynosam_launch_description(**kwargs):
-    # these values can be overwritten by providing launch arguments of the same name, these
-    # just provide the default if no launch arguments are given
-    default_data_set_path = kwargs.get('dataset_path', "/root/data/VDO/kitti/kitti/0004")
-    default_glog_v = kwargs.get('v', 20)
-    default_params_path = kwargs.get('params_path', get_default_dynosam_params_path())
-
-     # declare params path argument
-    dynosam_params_folder_arg = DeclareLaunchArgument(
-        'params_path',
-        default_value=default_params_path)
-
-    # declare dataset path argument
-    dynosam_dataset_path_arg = DeclareLaunchArgument(
-        'dataset_path',
-        default_value=default_data_set_path)
-
-    # # devlare verbosity (glog) argument
-    glog_verbose_flag_arg = DeclareLaunchArgument(
-        'v',
-        default_value=str(default_glog_v))
+def declare_launch_arguments(default_dict, **kwargs):
+    launch_args = []
+    for key, internal_default in default_dict.items():
+        default = kwargs.get(key, internal_default)
+        launch_args.append(DeclareLaunchArgument(key, default_value=str(default)))
 
     # remove the above values from the kwargs so that they are not parsed to the load_dynosam_node function
     clean_kwargs = kwargs
 
-    if "dataset_path" in clean_kwargs:
-        del clean_kwargs["dataset_path"]
+    for provided_key in default_dict.keys():
+        if provided_key in clean_kwargs:
+            del clean_kwargs[provided_key]
 
-    if "v" in clean_kwargs:
-        del clean_kwargs["v"]
+    return launch_args, clean_kwargs
 
-    if "params_path" in clean_kwargs:
-        del clean_kwargs["params_path"]
+def inside_ros_launch():
+    import sys
+    argv = sys.argv
+    exec = os.path.basename(argv[0])
 
+    if exec == "ros2":
+        command = argv[1]
+        return command == "launch"
+    return False
+
+
+
+def generate_dynosam_launch_description(**kwargs):
+    # these values can be overwritten by providing launch arguments of the same name, these
+    # just provide the default if no launch arguments are given
+    # defaults that can be changed via ROS args
+    launch_args, clean_kwargs = declare_launch_arguments(
+        {"dataset_path": "/root/data/VDO/kitti/kitti/0004",
+         "v": 20,
+         "params_path": get_default_dynosam_params_path(),
+         "output_path": "/root/results/DynoSAM/",
+         "online": False,
+         "wait_for_camera_params": True,
+         "camera_params_timeout": -1,
+         "camera_info": "/dyno/camera/camera_info",
+         "rgb_cam_topic": "/dyno/camera/rgb",
+         "depth_cam_topic": "/dyno/camera/depth",
+         "motion_mask_cam_topic": "/dyno/camera/motion_mask",
+         "optical_flow_cam_topic": "/dyno/camera/optical_flow"},
+         **kwargs)
 
     return LaunchDescription([
         # Must be inside launch description to be registered
-        dynosam_params_folder_arg,
-        dynosam_dataset_path_arg,
-        glog_verbose_flag_arg,
+        *launch_args,
         OpaqueFunction(function=load_dynosam_node, kwargs=clean_kwargs)
     ])

@@ -166,7 +166,6 @@ run dynosam_ros run_dynosam_gtest.py --package=dynosam_ros --gtest_filter=TestCo
 
 We provide a number of data providers which process datasets into the input format specified by DynoSAM which includes input images for the pipeline and ground truth data for evaluation.
 
-We are currently working on providing datasets to process live data, along-side pre-processing modules which will be available soon.
 
 [Download](https://unisyd-my.sharepoint.com/:f:/g/personal/jesse_morris_sydney_edu_au/EhK53_rmAqRDtHslS9HEuwwByFpR2oX59A_CKQTKrc9dAA?e=nbmM8h) processed version of the KITTI tracking and OMD sequences. The other sequences were used in their raw form.
 
@@ -195,6 +194,27 @@ Access [raw dataset](https://europe.naverlabs.com/research/computer-vision/proxy
 
 The required dataset loader can be specified by setting `--data_provider_type=1`
 
+### Online Dataprovider
+An online data-provider can be specified using the ROS arg `online:=True`.
+This node subscribes to five topics:
+ - `dataprovider/image/camera_info` (sensor_msgs.msg.CameraInfo)
+ - `dataprovider/image/rgb` (sensor_msgs.msg.Image)
+ - `dataprovider/image/depth` (sensor_msgs.msg.Image)
+ - `dataprovider/image/mask` (sensor_msgs.msg.Image)
+ - `dataprovider/image/flow` (sensor_msgs.msg.Image)
+
+The __rgb__ image is expected to be a valid 8bit image (1, 3 and 4 channel images are accepted).
+The __depth__ must be a _CV_64F_ image where the value of each pixel represents the _metric depth_.
+The __mask__ must be a CV_32SC1 where the static background is of value 0 and all other objects are lablled with a tracking label $j$.
+The __flow__ must be a CV_32FC2 representing a standard optical-flow image representation.
+
+
+We also provide a launch file specified for online usage:
+```
+ros2 launch dynosam_ros dyno_sam_online_launch.py
+```
+> NOTE: see the launch file for example topic remapping
+
 
 ## ROS Visualisation
 All 3D visualisation in DynoSAM is done using RVIZ. Camera pose and point clouds are vizualised using standard ROS messages. Visualising the objects is more complex and we provide two different ways to do this which can be controlled at compile time using the cmake flag `-DENABLE_DYNAMIC_SLAM_INTERFACES=ON/OFF`
@@ -220,10 +240,11 @@ The code used to do this preprocessing is coming soon...
 
 # 3. Parameters
 
-We use a two different sets of parameters for our pipeline
+We use a two different sets of parameters for our pipeline:
 
 - YAML files: contain params for the Pipeline and Frontend and some dataset related parameters. We use the wonderful [config_utilies](https://github.com/MIT-SPARK/config_utilities) library to load these files.
 - [gflag](https://gflags.github.io/gflags/) for all other params which are found in .flag files.
+
 
 Structurally DynoSAM expects all params files (.yaml and .flag) to be found in the same folder. By default we use the param files in this repo but you can specify any path as long as the folder follows the required structure:
 
@@ -249,6 +270,13 @@ To see all gflag options run:
 ros2 run dynosam_ros dynosam_node --help
 ```
 > NOTE: there may be some minor discrepeancies between the parameters as some values that are in the config files are then overwritten by gflag values so we can configure them easily.
+
+During experiments we programatically change gflag by passing them executable node as cmdline arguments. This can be done by
+
+1. Passing arguments to the `unknown_args` arg of [runner.run](./dynosam_utils/dynosam_utils/evaluation/runner.py)
+2. Passing them directly to the `ros2 run` as the additional args.
+
+Gflags cannot be changed when using `ros2 launch` as this command does not allow additional arguments (ie. non-declared ROS arguments) to be passed through. In this case, the gflags can be manually changed in the relevant flag file, or a parameter folder can be specified with your custom settings in it.
 
 
 ## System Parameters

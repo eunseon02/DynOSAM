@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
   options.arguments(non_ros_args);
   options.use_intra_process_comms(true);
 
-  rclcpp::executors::SingleThreadedExecutor exec;
+  rclcpp::executors::MultiThreadedExecutor exec;
   auto ros_pipeline = std::make_shared<dyno::DynoPipelineManagerRos>();
 
   if (FLAGS_show_dyno_args) {

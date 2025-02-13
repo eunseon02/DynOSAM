@@ -32,6 +32,7 @@ find_package(Eigen3 REQUIRED)
 find_package(dynosam REQUIRED)
 find_package(PCL REQUIRED)
 find_package(rclpy REQUIRED)
+find_package(message_filters REQUIRED)
 
 # setup targets
 include_directories(
@@ -48,6 +49,8 @@ set(SRC_FILES
   src/RosUtils.cc
   src/Utils.cc
   src/displays/DisplaysCommon.cc
+  src/DataProviderRos.cc
+  src/OnlineDataProviderRos.cc
 )
 
 set(TARGET_DEPS
@@ -62,6 +65,7 @@ set(TARGET_DEPS
   cv_bridge
   pcl_conversions
   tf2_ros
+  message_filters
 )
 
 set(TARGET_EXPORT_DEPS
@@ -69,6 +73,7 @@ set(TARGET_EXPORT_DEPS
   std_msgs
   sensor_msgs
   dynosam
+  message_filters
 )
 
 
@@ -204,6 +209,8 @@ if(BUILD_TESTING)
   ament_add_gmock(${PROJECT_NAME}_test
     test/test_main.cc
     test/test_ros_utils.cc
+    test/test_adaptors.cc
+    test/test_online_dataprovider_ros.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})
