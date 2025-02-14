@@ -7,7 +7,6 @@ Panels:
         - /Global Options1
         - /Status1
         - /Frontend1
-        - /Frontend1/Visual Odometry1
         - /Ground Truth1/Camera Path1
         - /Ground Truth1/Object Odometry1
       Splitter Ratio: 0.5
@@ -142,9 +141,7 @@ Visualization Manager:
           Enabled: true
           Keep: 100
           Name: Object Odometry
-          Show Object Label: true
-          Show Only Final Pose: true
-          Show Velocity: true
+          Object Label: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -152,12 +149,8 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /dynosam/backend/object_odometry
-          Trajectory:
-            Buffer Length: 1
-            Diameter: 0.20000000298023224
-            Line Style: Billboards
-            Value: true
           Value: true
+          Velocity: true
         - Angle Tolerance: 0.10000000149011612
           Class: rviz_default_plugins/Odometry
           Covariance:
@@ -225,7 +218,7 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /dynosam/backend/odometry_path
           Value: true
-      Enabled: true
+      Enabled: false
       Name: Backend
     - Class: rviz_common/Group
       Displays:
@@ -297,8 +290,8 @@ Visualization Manager:
           Use Fixed Frame: true
           Use rainbow: true
           Value: true
-        - Axes Length: 1
-          Axes Radius: 0.10000000149011612
+        - Axes Length: 0.4000000059604645
+          Axes Radius: 0.029999999329447746
           Class: rviz_dynamic_slam_plugins/ObjectOdometry
           Covariance:
             Orientation:
@@ -314,13 +307,11 @@ Visualization Manager:
               Color: 204; 51; 204
               Scale: 1
               Value: true
-            Value: true
+            Value: false
           Enabled: true
-          Keep: 100
+          Keep: 1
           Name: Object Odometry
-          Show Object Label: true
-          Show Only Final Pose: true
-          Show Velocity: true
+          Object Label: false
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -328,11 +319,27 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /dynosam/frontend/object_odometry
-          Trajectory:
-            Buffer Length: 1
-            Diameter: 0.20000000298023224
-            Line Style: Billboards
-            Value: true
+          Value: true
+          Velocity: true
+        - Buffer Length: 1
+          Class: rviz_dynamic_slam_plugins/ObjectOdometryPath
+          Enabled: true
+          Head Diameter: 0.30000001192092896
+          Head Length: 0.20000000298023224
+          Length: 0.30000001192092896
+          Line Width: 0.029999999329447746
+          Name: ObjectOdometryPath
+          Pose Style: None
+          Radius: 0.029999999329447746
+          Shaft Diameter: 0.10000000149011612
+          Shaft Length: 0.10000000149011612
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /dynosam/frontend/object_odometry_path
           Value: true
         - Angle Tolerance: 0.10000000149011612
           Class: rviz_default_plugins/Odometry
@@ -352,7 +359,7 @@ Visualization Manager:
               Value: true
             Value: true
           Enabled: true
-          Keep: 100
+          Keep: 1
           Name: Visual Odometry
           Position Tolerance: 0.10000000149011612
           Shape:
@@ -493,9 +500,7 @@ Visualization Manager:
           Enabled: true
           Keep: 100
           Name: Object Odometry
-          Show Object Label: true
-          Show Only Final Pose: true
-          Show Velocity: true
+          Object Label: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -503,12 +508,8 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /dynosam/frontend/ground_truth/object_odometry
-          Trajectory:
-            Buffer Length: 1
-            Diameter: 0.20000000298023224
-            Line Style: Billboards
-            Value: true
           Value: true
+          Velocity: true
       Enabled: false
       Name: Ground Truth
     - Class: rviz_default_plugins/Image
@@ -571,25 +572,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 12.20676326751709
+      Distance: 4.948230266571045
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 1.875300407409668
-        Y: 0.6173157095909119
-        Z: 1.7974841594696045
+        X: 0.15764883160591125
+        Y: -0.2291499376296997
+        Z: 3.460571527481079
       Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: -0.32960134744644165
+      Pitch: -0.7046015858650208
       Target Frame: robot
       Value: Orbit (rviz)
-      Yaw: 4.470405578613281
+      Yaw: 4.815402984619141
     Saved: ~
 Window Geometry:
   Displays:
@@ -609,5 +610,5 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1848
-  X: 73
-  Y: 40
+  X: 72
+  Y: 27

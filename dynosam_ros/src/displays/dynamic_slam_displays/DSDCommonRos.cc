@@ -13,6 +13,9 @@ namespace dyno {
 DSDTransport::DSDTransport(rclcpp::Node::SharedPtr node) : node_(node) {
   object_odom_publisher_ =
       node->create_publisher<ObjectOdometry>("object_odometry", 1);
+  multi_object_odom_path_publisher_ =
+      node->create_publisher<MultiObjectOdometryPath>("object_odometry_path",
+                                                      1);
   tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*node_);
 
   VLOG(20) << "Constructed DSDTransport with effective namespace "
@@ -36,14 +39,12 @@ ObjectOdometry DSDTransport::constructObjectOdometry(
   utils::convertWithHeader(pose_k, odom_msg, timestamp_k, frame_id_link,
                            child_frame_id_link);
 
-  std_msgs::msg::ColorRGBA colour_msg;
-  convert(Color::uniqueId(object_id), colour_msg);
-
   object_odom.odom = odom_msg;
+  // TODO: can check if correct representation?
+
+  dyno::convert(motion_k, object_odom.h_w_km1_k.pose);
   // NO velocity!!
   object_odom.object_id = object_id;
-  object_odom.colour = colour_msg;
-
   return object_odom;
 }
 
@@ -80,6 +81,65 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
   return object_odom_map;
 }
 
+MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
+    const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
+    FrameId frame_id_k, Timestamp timestamp_k, rclcpp::Time ros_time_now,
+    const std::string& frame_id_link) {
+  MultiObjectOdometryPath multi_path;
+  multi_path.header.stamp = ros_time_now;
+  multi_path.header.frame_id = frame_id_link;
+
+  // TODO: right now dont have the motion for every timestep so... just leave
+  // blank?
+  for (const auto& [object_id, frame_pose_map] : poses) {
+    const std::string child_frame_id_link = constructObjectFrameLink(object_id);
+    FrameId previous_frame_id = -1;
+    bool first = true;
+    int path_segment = 0;
+
+    std_msgs::msg::ColorRGBA colour_msg;
+    convert(Color::uniqueId(object_id), colour_msg);
+
+    // paths for this object, broken into segments
+    gtsam::FastMap<int, ObjectOdometryPath> segmented_paths;
+
+    for (const auto& [frame_id, object_pose] : frame_pose_map) {
+      if (!first && frame_id != previous_frame_id + 1) {
+        path_segment++;
+      }
+      first = false;
+      previous_frame_id = frame_id;
+
+      // RIGHT NOW MOTION IDENTITY
+      // timestamp is wring
+      gtsam::Pose3 motion;
+      const ObjectOdometry object_odometry =
+          constructObjectOdometry(motion, object_pose, object_id, timestamp_k,
+                                  frame_id_link, child_frame_id_link);
+
+      if (!segmented_paths.exists(path_segment)) {
+        ObjectOdometryPath path;
+        path.colour = colour_msg;
+        path.object_id = object_id;
+        path.path_segment = path_segment;
+
+        path.header = multi_path.header;
+
+        segmented_paths.insert2(path_segment, path);
+      }
+
+      ObjectOdometryPath& path = segmented_paths.at(path_segment);
+      path.object_odometries.push_back(object_odometry);
+    }
+
+    for (const auto& [_, path] : segmented_paths) {
+      multi_path.paths.push_back(path);
+    }
+  }
+
+  return multi_path;
+}
+
 void DSDTransport::Publisher::publishObjectOdometry() {
   for (const auto& [_, object_odom] : object_odometries_)
     object_odom_publisher_->publish(object_odom);
@@ -98,26 +158,35 @@ void DSDTransport::Publisher::publishObjectTransforms() {
   }
 }
 
+void DSDTransport::Publisher::publishObjectPaths() {
+  multi_object_odom_path_publisher_->publish(object_paths_);
+}
+
 DSDTransport::Publisher::Publisher(
     rclcpp::Node::SharedPtr node,
     ObjectOdometryPub::SharedPtr object_odom_publisher,
+    MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher,
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster,
     const MotionEstimateMap& motions, const ObjectPoseMap& poses,
     const std::string& frame_id_link, FrameId frame_id, Timestamp timestamp)
     : node_(node),
       object_odom_publisher_(object_odom_publisher),
+      multi_object_odom_path_publisher_(multi_object_odom_path_publisher),
       tf_broadcaster_(tf_broadcaster),
       frame_id_link_(frame_id_link),
       frame_id_(frame_id),
       timestamp_(timestamp),
       object_odometries_(DSDTransport::constructObjectOdometries(
-          motions, poses, frame_id, timestamp, frame_id_link)) {}
+          motions, poses, frame_id, timestamp, frame_id_link)),
+      object_paths_(DSDTransport::constructMultiObjectOdometryPaths(
+          motions, poses, frame_id, timestamp, node->now(), frame_id_link)) {}
 
 DSDTransport::Publisher DSDTransport::addObjectInfo(
     const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
     const std::string& frame_id_link, FrameId frame_id, Timestamp timestamp) {
-  return Publisher(node_, object_odom_publisher_, tf_broadcaster_, motions_k,
-                   poses, frame_id_link, frame_id, timestamp);
+  return Publisher(node_, object_odom_publisher_,
+                   multi_object_odom_path_publisher_, tf_broadcaster_,
+                   motions_k, poses, frame_id_link, frame_id, timestamp);
 }
 
 DSDRos::DSDRos(const DisplayParams& params, rclcpp::Node::SharedPtr node)
