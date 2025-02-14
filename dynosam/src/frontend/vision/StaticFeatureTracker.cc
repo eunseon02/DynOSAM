@@ -266,9 +266,10 @@ FeatureContainer KltFeatureTracker::trackStatic(
     TrackletIds previous_outliers;
 
     // track features from the previous frame and detect new ones if necessary
-    trackPoints(current_equialized_greyscale, previous_equialized_greyscale,
-                image_container, previous_inliers, new_tracks_and_detections,
-                previous_outliers, tracker_info, detection_mask);
+    CHECK(trackPoints(current_equialized_greyscale,
+                      previous_equialized_greyscale, image_container,
+                      previous_inliers, new_tracks_and_detections,
+                      previous_outliers, tracker_info, detection_mask));
 
     // after tracking, mark features in the older frame as outliers
     // TODO: (jesse) actually not sure we HAVE to do this, but better to keep
@@ -442,8 +443,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     }
   }
 
-  // LOG(INFO) << "Tracked " << verified_current.size() << " on frame " <<
-  // frame_k;
   CHECK_EQ(verified_tracklets.size(), verified_current.size());
 
   // add to tracked features
@@ -570,16 +569,6 @@ Feature::Ptr KltFeatureTracker::constructNewStaticFeature(
       .markInlier()
       .trackletId(tracklet_to_use)
       .keypoint(kp_current);
-  // feature->keypoint_ = kp_current;
-  // // feature->measured_flow_ = flow;
-  // // feature->predicted_keypoint_ = predicted_kp;
-  // feature->age_ = kAge;
-  // feature->tracklet_id_ = tracklet_to_use;
-  // feature->frame_id_ = frame_id;
-  // feature->type_ = KeyPointType::STATIC;
-  // feature->inlier_ = true;
-  // feature->instance_label_ = background_label;
-  // feature->tracking_label_ = background_label;
   return feature;
 }
 

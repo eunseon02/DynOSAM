@@ -67,6 +67,7 @@ void getCorrespondences(FeaturePairs& correspondences,
 }
 
 ObjectIds getObjectLabels(const cv::Mat& image) {
+  CHECK(!image.empty());
   // TODO: this could be optimised by mapping the data directly to a std::set?
   std::set<ObjectId> unique_labels;
   for (int i = 0; i < image.rows; i++) {

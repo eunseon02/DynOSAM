@@ -240,6 +240,15 @@ install(
   DIRECTORY include/
   DESTINATION include
 )
+
+# install test include files for usage in other packges
+# header only files will work since the .cc files are not included in the exported library
+install(
+  DIRECTORY test/internal/
+  DESTINATION include/dynosam/test
+  FILES_MATCHING PATTERN "*.hpp"
+)
+
 install(
   TARGETS ${PROJECT_NAME}
   ARCHIVE DESTINATION lib

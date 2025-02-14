@@ -115,17 +115,18 @@ def run(parsed_args, unknown_args):
     dynosam_launch_file = os.path.join(
             get_package_share_directory('dynosam_ros'), 'launch', launch_file)
 
+    output_folder_path = os.path.join(output_path, name)
+    create_full_path_if_not_exists(output_folder_path)
+
+    # update launch arguments with fully constructed output path
+    launch_arguments.update({"output_path": output_folder_path})
+
+    log.info(f"Setting output folder path: {output_folder_path}")
+
     ld = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([dynosam_launch_file]),
         launch_arguments=launch_arguments.items(),
     )
-
-    output_folder_path = os.path.join(output_path, name)
-    create_full_path_if_not_exists(output_folder_path)
-
-    log.info(f"Setting output folder path: {output_folder_path}")
-
-    unknown_args.append("--output_path={}".format(output_folder_path))
 
     running_success = True
     if run_pipeline:
