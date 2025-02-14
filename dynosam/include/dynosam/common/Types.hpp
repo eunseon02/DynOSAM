@@ -450,6 +450,13 @@ class GenericObjectCentricMap
     return atImpl<This, Value&>(const_cast<This*>(this), object_id, frame_id);
   }
 
+  This& operator+=(const This& rhs) {
+    for (const auto& [key, value] : rhs) {
+      this->operator[](key).insert(value.begin(), value.end());
+    }
+    return *this;
+  }
+
   /**
    * @brief Collect all objects that appear in the query frame, as well as their
    * value.
@@ -522,6 +529,8 @@ class GenericObjectCentricMap
 
 /// @brief Map of object poses per object per frame
 using ObjectPoseMap = GenericObjectCentricMap<gtsam::Pose3>;
+/// @brief Map of object motions per object per frame
+using ObjectMotionMap = GenericObjectCentricMap<ReferenceFrameValue<Motion3>>;
 
 // Optional string that can be modified directly (similar to old-stype
 // boost::optional) to access the mutable reference the internal string must be

@@ -117,6 +117,7 @@ class FrontendModule
   ObjectPoseMap
       object_poses_;  //! Keeps a track of the current object locations by
                       //! propogating the motions. Really just (viz)
+  ObjectMotionMap object_motions_;
   gtsam::Pose3Vector
       camera_poses_;  //! Keeps track of current camera trajectory. Really just
                       //! for (viz) and drawn everytime

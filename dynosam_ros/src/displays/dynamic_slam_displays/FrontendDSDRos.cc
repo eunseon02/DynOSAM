@@ -186,6 +186,7 @@ void FrontendDSDRos::processRGBDOutputpacket(
       rgbd_packet->getFrameId(), rgbd_packet->getTimestamp());
   object_poses_publisher.publishObjectOdometry();
   object_poses_publisher.publishObjectTransforms();
+  object_poses_publisher.publishObjectPaths();
 }
 
 }  // namespace dyno

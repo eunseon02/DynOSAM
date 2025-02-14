@@ -33,7 +33,9 @@
 #include <dynosam/common/Types.hpp>
 #include <dynosam/utils/Macros.hpp>
 
+#include "dynamic_slam_interfaces/msg/multi_object_odometry_path.hpp"
 #include "dynamic_slam_interfaces/msg/object_odometry.hpp"
+#include "dynamic_slam_interfaces/msg/object_odometry_path.hpp"
 #include "dynosam_ros/Display-Definitions.hpp"
 #include "dynosam_ros/displays/DisplaysCommon.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -42,7 +44,12 @@
 namespace dyno {
 
 using ObjectOdometry = dynamic_slam_interfaces::msg::ObjectOdometry;
+using ObjectOdometryPath = dynamic_slam_interfaces::msg::ObjectOdometryPath;
+using MultiObjectOdometryPath =
+    dynamic_slam_interfaces::msg::MultiObjectOdometryPath;
+
 using ObjectOdometryPub = rclcpp::Publisher<ObjectOdometry>;
+using MultiObjectOdometryPathPub = rclcpp::Publisher<MultiObjectOdometryPath>;
 
 //! Map of object id link (child frame id) to ObjectOdometry (for a single
 //! frame, no frame ids)
@@ -85,6 +92,11 @@ class DSDTransport {
       FrameId frame_id_k, Timestamp timestamp_k,
       const std::string& frame_id_link);
 
+  static MultiObjectOdometryPath constructMultiObjectOdometryPaths(
+      const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
+      FrameId frame_id_k, Timestamp timestamp_k, rclcpp::Time ros_time_now,
+      const std::string& frame_id_link);
+
   /**
    * @brief Nested Publisher that publishes all the object odometries for a
    * single frame/timestamp. Object odometries are set on construction.
@@ -109,6 +121,8 @@ class DSDTransport {
      */
     void publishObjectTransforms();
 
+    void publishObjectPaths();
+
     /**
      * @brief Get the frame id
      *
@@ -127,12 +141,15 @@ class DSDTransport {
    private:
     rclcpp::Node::SharedPtr node_;
     ObjectOdometryPub::SharedPtr object_odom_publisher_;
+    MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher_;
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
     std::string frame_id_link_;
     FrameId frame_id_;
     Timestamp timestamp_;
 
+    //! Object odometries for this frame
     ObjectOdometryMap object_odometries_;
+    MultiObjectOdometryPath object_paths_;
 
     friend class DSDTransport;
 
@@ -144,6 +161,8 @@ class DSDTransport {
      * @param node rclcpp::Node::SharedPtr
      * @param object_odom_publisher ObjectOdometryPub::SharedPtr Object odom
      * publisher to share between all Publishers.
+     * @param multi_object_odom_path_publisher
+     * MultiObjectOdometryPathPub::SharedPtr
      * @param tf_broadcaster std::shared_ptr<tf2_ros::TransformBroadcaster> TF
      * broadcaster to share between all Publishers.
      * @param motions const MotionEstimateMap& estimated motions at time (k)
@@ -153,12 +172,14 @@ class DSDTransport {
      * @param frame_id FrameId current frame (k)
      * @param timestamp Timestamp
      */
-    Publisher(rclcpp::Node::SharedPtr node,
-              ObjectOdometryPub::SharedPtr object_odom_publisher,
-              std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster,
-              const MotionEstimateMap& motions, const ObjectPoseMap& poses,
-              const std::string& frame_id_link, FrameId frame_id,
-              Timestamp timestamp);
+    Publisher(
+        rclcpp::Node::SharedPtr node,
+        ObjectOdometryPub::SharedPtr object_odom_publisher,
+        MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher,
+        std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster,
+        const MotionEstimateMap& motions, const ObjectPoseMap& poses,
+        const std::string& frame_id_link, FrameId frame_id,
+        Timestamp timestamp);
   };
 
   /**
@@ -183,6 +204,7 @@ class DSDTransport {
  private:
   rclcpp::Node::SharedPtr node_;
   ObjectOdometryPub::SharedPtr object_odom_publisher_;
+  MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 };
 
