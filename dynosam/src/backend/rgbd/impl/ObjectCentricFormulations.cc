@@ -104,8 +104,8 @@ void DecoupledFormulation::dynamicPointUpdateCallback(
 
     // use first point as initalisation?
     // in this case k is k-1 as we use frame_node_k_1
-    gtsam::Pose3 s0_H_k_world = computeInitialHFromFrontend(
-        context.getObjectId(), frame_node_k_1->getId());
+    gtsam::Pose3 s0_H_k_world =
+        computeInitialH(context.getObjectId(), frame_node_k_1->getId());
     gtsam::Pose3 L_k = s0_H_k_world * L_0;
     // H from k to s0 in frame k (^wL_k)
     //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();

@@ -231,6 +231,11 @@ inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point) {
                        static_cast<double>(point.y));
 }
 
+// inline gtsam::Point2 cvKeypointToGtsam(const cv::KeyPoint& point) {
+//   return gtsam::Point2(static_cast<double>(point.x),
+//                        static_cast<double>(point.y));
+// }
+
 template <typename T = float>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
   gtsam::Point2Vector gtsam_points;
@@ -243,6 +248,14 @@ gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
 template <typename T = float>
 inline cv::Point_<T> gtsamPointToCv(const gtsam::Point2& point) {
   return cv::Point_<T>(static_cast<T>(point(0)), static_cast<T>(point(1)));
+}
+
+inline cv::KeyPoint gtsamPointToKeyPoint(const gtsam::Point2& point,
+                                         float size = 1, float angle = -1,
+                                         float response = 0, int octave = 0,
+                                         int class_id = -1) {
+  return cv::KeyPoint(gtsamPointToCv<float>(point), size, angle, response,
+                      octave, class_id);
 }
 
 template <typename T = float, typename Allocator>

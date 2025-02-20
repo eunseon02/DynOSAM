@@ -63,16 +63,29 @@ MotionEstimateMap Accessor<MAP>::getObjectMotions(FrameId frame_id) const {
   const auto object_seen =
       frame_node->objects_seen.template collectIds<ObjectId>();
   for (ObjectId object_id : object_seen) {
-    StateQuery<Motion3> motion_query =
-        this->getObjectMotion(frame_id, object_id);
+    StateQuery<Motion3ReferenceFrame> motion_query =
+        this->getObjectMotionReferenceFrame(frame_id, object_id);
     if (motion_query) {
-      motion_estimates.insert2(
-          object_id, Motion3ReferenceFrame(
-                         motion_query.get(), Motion3ReferenceFrame::Style::F2F,
-                         ReferenceFrame::GLOBAL, frame_id - 1u, frame_id));
+      motion_estimates.insert2(object_id, motion_query.get());
     }
   }
   return motion_estimates;
+}
+
+template <class MAP>
+StateQuery<Motion3ReferenceFrame> Accessor<MAP>::getObjectMotionReferenceFrame(
+    FrameId frame_id, ObjectId object_id) const {
+  StateQuery<Motion3> motion_query = this->getObjectMotion(frame_id, object_id);
+  if (motion_query) {
+    return StateQuery<Motion3ReferenceFrame>(
+        motion_query.key_,
+        Motion3ReferenceFrame(motion_query.get(),
+                              Motion3ReferenceFrame::Style::F2F,
+                              ReferenceFrame::GLOBAL, frame_id - 1u, frame_id));
+  } else {
+    return StateQuery<Motion3ReferenceFrame>(motion_query.key_,
+                                             motion_query.status_);
+  }
 }
 
 template <class MAP>
@@ -117,6 +130,24 @@ ObjectPoseMap Accessor<MAP>::getObjectPoses() const {
     }
   }
   return object_poses;
+}
+
+template <class MAP>
+ObjectMotionMap Accessor<MAP>::getObjectMotions() const {
+  ObjectMotionMap object_motions;
+  for (FrameId frame_id : map()->getFrameIds()) {
+    MotionEstimateMap per_object_motions = this->getObjectMotions(frame_id);
+
+    for (const auto& [object_id, motion] : per_object_motions) {
+      if (!object_motions.exists(object_id)) {
+        object_motions.insert2(object_id, ObjectMotionMap::NestedBase{});
+      }
+
+      auto& per_frame_motion = object_motions.at(object_id);
+      per_frame_motion.insert2(frame_id, motion);
+    }
+  }
+  return object_motions;
 }
 
 template <class MAP>

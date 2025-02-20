@@ -35,13 +35,13 @@
 namespace dyno {
 
 DecoupledObjectSAM::DecoupledObjectSAM(
-    ObjectId object_id, const NoiseModels& noise_models,
-    const FormulationHooks& formulation_hooks,
-    const gtsam::ISAM2Params& isam_params)
-    : object_id_(object_id),
+    const Params& params, ObjectId object_id, const NoiseModels& noise_models,
+    const FormulationHooks& formulation_hooks)
+    : params_(params),
+      object_id_(object_id),
       map_(Map::create()),
       expected_style_(MotionRepresentationStyle::F2F) {
-  smoother_ = std::make_shared<gtsam::ISAM2>(isam_params);
+  smoother_ = std::make_shared<gtsam::ISAM2>(params_.isam);
 
   FormulationParams formulation_params;
   formulation_params.suffix = "object_" + std::to_string(object_id);
@@ -57,36 +57,25 @@ DecoupledObjectSAM::DecoupledObjectSAM(
 Motion3ReferenceFrame DecoupledObjectSAM::getFrame2FrameMotion(
     FrameId frame_id) const {
   // this is in the form of our accessor
-  StateQuery<gtsam::Pose3> H_W_km1_k =
-      accessor_->getObjectMotion(frame_id, object_id_);
+  StateQuery<Motion3ReferenceFrame> H_W_km1_k =
+      accessor_->getObjectMotionReferenceFrame(frame_id, object_id_);
   CHECK(H_W_km1_k);
+  CHECK(H_W_km1_k->style() == MotionRepresentationStyle::F2F);
+  CHECK(H_W_km1_k->origin() == ReferenceFrame::GLOBAL);
+  CHECK(H_W_km1_k->to() == frame_id);
 
-  return Motion3ReferenceFrame(H_W_km1_k.get(), MotionRepresentationStyle::F2F,
-                               ReferenceFrame::GLOBAL, frame_id - 1u, frame_id);
+  return H_W_km1_k.get();
 }
 
 // currently no way of checking (with the object) the type of motion we have!!
 Motion3ReferenceFrame DecoupledObjectSAM::getKeyFramedMotion(
     FrameId frame_id) const {
-  // not in form of accessor but in form of estimation
-  const auto frame_node_k = map_->getFrame(frame_id);
-  CHECK_NOTNULL(frame_node_k);
-
-  auto motion_key = frame_node_k->makeObjectMotionKey(object_id_);
-  // raw access the theta in the accessor!!
-
-  StateQuery<gtsam::Pose3> H_W_s0_k =
-      accessor_->query<gtsam::Pose3>(motion_key);
-  CHECK(H_W_s0_k);
-
-  CHECK(decoupled_formulation_->hasObjectKeyFrame(object_id_, frame_id));
-  // s0
-  auto [reference_frame, _] =
-      decoupled_formulation_->getObjectKeyFrame(object_id_, frame_id);
-
-  return Motion3ReferenceFrame(H_W_s0_k.get(), MotionRepresentationStyle::KF,
-                               ReferenceFrame::GLOBAL, reference_frame,
-                               frame_id);
+  Motion3ReferenceFrame H_W_s0_k =
+      decoupled_formulation_->getEstimatedMotion(object_id_, frame_id);
+  CHECK(H_W_s0_k.style() == MotionRepresentationStyle::KF);
+  CHECK(H_W_s0_k.origin() == ReferenceFrame::GLOBAL);
+  CHECK(H_W_s0_k.to() == frame_id);
+  return H_W_s0_k;
 }
 
 void DecoupledObjectSAM::updateFormulation(
@@ -114,6 +103,21 @@ bool DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
       decoupled_formulation_->getFullyQualifiedName());
   bool is_smoother_ok = optimize(&result_, new_factors, new_values);
 
+  if (is_smoother_ok) {
+    // use dummy isam result when running optimize without new values/factors
+    // as we want to use the result to determine which values were
+    // changed/marked
+    // TODO: maybe we actually need to append results together?
+    static gtsam::ISAM2Result dummy_result;
+    const auto& max_extra_iterations =
+        static_cast<size_t>(params_.num_optimzie);
+    VLOG(30) << "Doing extra iteration nr: " << max_extra_iterations;
+    for (size_t n_iter = 0; n_iter < max_extra_iterations && is_smoother_ok;
+         ++n_iter) {
+      is_smoother_ok = optimize(&dummy_result);
+    }
+  }
+
   VLOG(5) << "DecoupledObjectSAM: update complete k=" << frame_k
           << " j= " << object_id_
           << "  error before: " << result_.errorBefore.value_or(NaN)
@@ -123,20 +127,49 @@ bool DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
 
 bool DecoupledObjectSAM::optimize(
     gtsam::ISAM2Result* result, const gtsam::NonlinearFactorGraph& new_factors,
-    const gtsam::Values& new_values) {
+    const gtsam::Values& new_values, const ISAM2UpdateParams& update_params) {
   CHECK_NOTNULL(result);
   CHECK(smoother_);
 
   try {
-    *result = smoother_->update(new_factors, new_values);
+    *result = smoother_->update(new_factors, new_values, update_params);
   } catch (gtsam::IndeterminantLinearSystemException& e) {
     LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
                << DynoLikeKeyFormatter(e.nearbyVariable());
   }
-  estimate_ = smoother_->calculateEstimate();
-  decoupled_formulation_->updateTheta(estimate_);
-
   return true;
+}
+
+void DecoupledObjectSAM::updateStates() {
+  gtsam::Values previous_estimate = this->getEstimate();
+  gtsam::Values estimate = smoother_->calculateEstimate();
+
+  // frame ids at which a motion had a large change
+  // TODO: this does not include the new motions?
+  FrameIds motions_changed;
+
+  const double motion_delta = 0.1;  // TODO: ehhhhhh magic number for now!!
+
+  const auto previous_motions = previous_estimate.extract<gtsam::Pose3>(
+      gtsam::Symbol::ChrTest(kObjectMotionSymbolChar));
+  for (const auto& [motion_key, previous_motion_estimate] : previous_motions) {
+    if (estimate.exists(motion_key)) {
+      gtsam::Pose3 new_motion_estimate = estimate.at<gtsam::Pose3>(motion_key);
+      if (!new_motion_estimate.equals(previous_motion_estimate, motion_delta)) {
+        ObjectId object_id;
+        FrameId frame_id;
+        CHECK(reconstructMotionInfo(motion_key, object_id, frame_id));
+        CHECK_EQ(object_id, object_id_);
+
+        motions_changed.push_back(frame_id);
+      }
+    }
+  }
+
+  LOG(INFO) << "Motion change at frames "
+            << container_to_string(motions_changed) << " for j=" << object_id_;
+
+  decoupled_formulation_->updateTheta(estimate);
 }
 
 }  // namespace dyno

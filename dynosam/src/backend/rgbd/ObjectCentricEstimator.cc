@@ -302,6 +302,28 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getObjectKeyFrame(
   return L0_.at(object_id);
 }
 
+Motion3ReferenceFrame ObjectCentricFormulation::getEstimatedMotion(
+    ObjectId object_id, FrameId frame_id) const {
+  // not in form of accessor but in form of estimation
+  const auto frame_node_k = map()->getFrame(frame_id);
+  CHECK_NOTNULL(frame_node_k);
+
+  auto motion_key = frame_node_k->makeObjectMotionKey(object_id);
+  // raw access the theta in the accessor!!
+  auto theta_accessor = this->accessorFromTheta();
+  StateQuery<gtsam::Pose3> H_W_s0_k =
+      theta_accessor->query<gtsam::Pose3>(motion_key);
+  CHECK(H_W_s0_k);
+
+  CHECK(this->hasObjectKeyFrame(object_id, frame_id));
+  // s0
+  auto [reference_frame, _] = this->getObjectKeyFrame(object_id, frame_id);
+
+  return Motion3ReferenceFrame(H_W_s0_k.get(), MotionRepresentationStyle::KF,
+                               ReferenceFrame::GLOBAL, reference_frame,
+                               frame_id);
+}
+
 void ObjectCentricFormulation::dynamicPointUpdateCallback(
     const PointUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
@@ -368,8 +390,8 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
 
     // use first point as initalisation?
     // in this case k is k-1 as we use frame_node_k_1
-    gtsam::Pose3 s0_H_k_world = computeInitialHFromFrontend(
-        context.getObjectId(), frame_node_k_1->getId());
+    gtsam::Pose3 s0_H_k_world =
+        computeInitialH(context.getObjectId(), frame_node_k_1->getId());
     gtsam::Pose3 L_k = s0_H_k_world * L_0;
     // H from k to s0 in frame k (^wL_k)
     //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();
@@ -428,7 +450,7 @@ void ObjectCentricFormulation::objectUpdateContext(
   if (!is_other_values_in_map.exists(object_motion_key_k)) {
     // gtsam::Pose3 motion;
     const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
-    gtsam::Pose3 motion = computeInitialHFromFrontend(object_id, frame_id);
+    gtsam::Pose3 motion = computeInitialH(object_id, frame_id);
     // LOG(INFO) << "Added motion at  "
     //           << DynoLikeKeyFormatter(object_motion_key_k);
     // gtsam::Pose3 motion;
@@ -565,8 +587,8 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
 // should also check if the last object motion from the estimation can be used
 // as the last motion
 //  so only one composition is needed to get the latest motion
-gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
-    ObjectId object_id, FrameId frame_id) {
+gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
+                                                       FrameId frame_id) {
   auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
 
   FrameId current_frame_id = frame_id;
@@ -575,6 +597,17 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialHFromFrontend(
     // same frame so motion between them should be identity!
     // except for rotation?
     return gtsam::Pose3::Identity();
+  }
+
+  bool has_initial = false;
+
+  // check if we have an estimate from the previous frame
+  const FrameId frame_id_km1 = frame_id - 1u;
+  const auto frame_node_km1 = map()->getFrame(frame_id_km1);
+  if (frame_node_km1) {
+    auto motion_key = frame_node_km1->makeObjectMotionKey(object_id);
+    // if(this->exists)
+    // TODO: initalise s -> k-1 from last update and then compound?
   }
 
   // only need an initial motion when k > s0

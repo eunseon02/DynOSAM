@@ -249,8 +249,8 @@ std::optional<size_t> EstimationModuleLogger::logObjectPose(
   for (const auto& [object_id, poses_map] : propogated_poses) {
     // do not draw if in current frame
     if (!poses_map.exists(frame_id)) {
-      VLOG(10) << "Cannot log object pose (id=" << object_id << ") for frame "
-               << frame_id << " as it does not exist in the map";
+      VLOG(100) << "Cannot log object pose (id=" << object_id << ") for frame "
+                << frame_id << " as it does not exist in the map";
       continue;
     }
 

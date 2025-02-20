@@ -773,7 +773,7 @@ class MapPlotter3D(Evaluator):
                 core.plotting.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
 
-        tools.plot_object_trajectories(map_fig,
+        core.plotting.plot_object_trajectories(map_fig,
                                        {"Camera":camera_traj},
                                        {"Camera Ref": camera_traj_ref},
                                        plot_mode=evo_plot.PlotMode.xyz,
@@ -891,7 +891,7 @@ class MapPlotter3D(Evaluator):
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
 
-        tools.plot_object_trajectories(map_fig, all_gt_traj,
+        core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
                                        plot_axis_est=True,

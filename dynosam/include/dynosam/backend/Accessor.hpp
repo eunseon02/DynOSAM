@@ -71,14 +71,28 @@ class Accessor {
    * @brief Get an absolute object motion (_{k-1}^wH_k) from theta the requested
    * time-step (k) and object (j).
    *
-   * //TODO: enforce representation using Motion3ReferenceFrame?
-   *
    * @param frame_id FrameId
    * @param object_id ObjectId
    * @return StateQuery<gtsam::Pose3>
    */
   virtual StateQuery<gtsam::Pose3> getObjectMotion(
       FrameId frame_id, ObjectId object_id) const = 0;
+
+  /**
+   * @brief Gets the absolute motion (_{k-1}^wH_k) from theta the requested
+   * time-step (k) and object (j) with the associated reference frame.
+   * Internally this uses getObjectMotion and constructs a Motion3ReferenceFrame
+   * using the global frame, k-1 and k. No checks are done on the underlying
+   * function call so it assumes that the virtual getObjectMotion function has
+   * been implemented correctly and returns a motion in the right
+   * representation.
+   *
+   * @param frame_id FrameId
+   * @param object_id ObjectId
+   * @return StateQuery<Motion3ReferenceFrame>
+   */
+  StateQuery<Motion3ReferenceFrame> getObjectMotionReferenceFrame(
+      FrameId frame_id, ObjectId object_id) const;
 
   /**
    * @brief Get the pose (^wL_k) of an object (j) at time-step (k).
@@ -165,13 +179,23 @@ class Accessor {
       FrameId frame_id) const;
 
   /**
-   * @brief Collects all object poses for frame 0 to k.
+   * @brief Collects all object poses for frame 0 to K.
    * (Non-pure )Virtual function that may be overwritten - default
    * implementation uses the pure-virtual getObjectPoses to collect all poses.
    *
    * @return ObjectPoseMap
    */
   virtual ObjectPoseMap getObjectPoses() const;
+
+  /**
+   * @brief Collects all object motions from 1 to K (with the first motion being
+   * from k-1 to k). (Non-pure) Virtual function that may be overwritten -
+   * default implementation uses the pure-virtual getObjectPoses to collect all
+   * motions.
+   *
+   * @return ObjectMotionMap
+   */
+  virtual ObjectMotionMap getObjectMotions() const;
 
   /**
    * @brief Get all dynamic landmarks for all objects (\mathcal{J}_k) at

@@ -450,8 +450,8 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   const double H_t_sigma = 0.08;
   const double dynamic_point_sigma = 0.1;
 
-  const double X_R_sigma = 0.05;
-  const double X_t_sigma = 0.03;
+  const double X_R_sigma = 0.0;
+  const double X_t_sigma = 0.0;
 
   dyno_testing::RGBDScenario::NoiseParams noise_params;
   noise_params.H_R_sigma = H_R_sigma;
@@ -478,7 +478,9 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
               gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
                            gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
-              num_points, obj1_overlap));
+              num_points, obj1_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 0,
+                                         .leaves_scenario = 5});
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -487,7 +489,9 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
-              num_points, obj2_overlap));
+              num_points, obj2_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 8,
+                                         .leaves_scenario = 15});
 
   dyno_testing::ObjectBody::Ptr object3 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -498,7 +502,9 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
               gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
                            gtsam::Point3(0.2, 0.3, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
-              num_points, obj3_overlap));
+              num_points, obj3_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 13,
+                                         .leaves_scenario = 19});
 
   scenario.addObjectBody(1, object1);
   scenario.addObjectBody(2, object2);

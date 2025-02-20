@@ -49,14 +49,20 @@ class DecoupledObjectSAM {
  public:
   DYNO_POINTER_TYPEDEFS(DecoupledObjectSAM)
 
+  struct Params {
+    //! Number additional iSAM updates to run
+    int num_optimzie = 2;
+    gtsam::ISAM2Params isam{};
+  };
+
   using Map = DecoupledFormulation::Map;
 
   template <typename DERIVEDSTATUS>
   using MeasurementStatusVector = Map::MeasurementStatusVector<DERIVEDSTATUS>;
 
-  DecoupledObjectSAM(ObjectId object_id, const NoiseModels& noise_models,
-                     const FormulationHooks& formulation_hooks,
-                     const gtsam::ISAM2Params& isam_params);
+  DecoupledObjectSAM(const Params& params, ObjectId object_id,
+                     const NoiseModels& noise_models,
+                     const FormulationHooks& formulation_hooks);
 
   // what motion representation should this be in? GLOBAL? Do ne need a new
   // repsentation for KF object centric?
@@ -69,10 +75,19 @@ class DecoupledObjectSAM {
             << ", j= " << object_id_;
 
     this->updateMap(frame_k, measurements, X_world_k, motion_frame);
-    this->updateSmoother(frame_k);
+
+    // updating the smoothing will update the formulation and run
+    // update on the optimizer. the internal results_ object is updated
+    const bool is_smoother_ok = this->updateSmoother(frame_k);
+
+    if (is_smoother_ok) {
+      updateStates();
+    }
   }
 
-  const gtsam::Values& getEstimate() const { return estimate_; }
+  const gtsam::Values& getEstimate() const {
+    return decoupled_formulation_->getTheta();
+  }
   const gtsam::ISAM2Result& getISAM2Result() const { return result_; }
 
   inline Map::Ptr map() { return map_; }
@@ -118,19 +133,23 @@ class DecoupledObjectSAM {
                          gtsam::NonlinearFactorGraph& new_factors,
                          gtsam::Values& new_values);
 
-  bool optimize(gtsam::ISAM2Result* result,
-                const gtsam::NonlinearFactorGraph& new_factors =
-                    gtsam::NonlinearFactorGraph(),
-                const gtsam::Values& new_values = gtsam::Values());
+  bool optimize(
+      gtsam::ISAM2Result* result,
+      const gtsam::NonlinearFactorGraph& new_factors =
+          gtsam::NonlinearFactorGraph(),
+      const gtsam::Values& new_values = gtsam::Values(),
+      const ISAM2UpdateParams& update_params = gtsam::ISAM2UpdateParams());
+
+  void updateStates();
 
  private:
+  const Params params_;
   const ObjectId object_id_;
   Map::Ptr map_;
   DecoupledFormulation::Ptr decoupled_formulation_;
   Accessor<Map>::Ptr accessor_;
   std::shared_ptr<gtsam::ISAM2> smoother_;
   gtsam::ISAM2Result result_;
-  gtsam::Values estimate_;
   //! style of motion expected to be used as input. Set on the first run and all
   //! motions are expected to then follow the same style
   std::optional<MotionRepresentationStyle> expected_style_;

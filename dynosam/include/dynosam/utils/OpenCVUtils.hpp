@@ -127,12 +127,13 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
  * @param image cv::Mat&
  * @param K const cv::Mat& 3x3 calibration matrix
  * @param D const cv::Mat& distortion coeeffs
- * @param poses_c const std::vector<gtsam::Pose3>&
+ * @param poses_c const std::vector<gtsam::Pose3>& Poses in the camera (local)
+ * frame to be projected
  * @param scale float The size of the axis in 2D after projection (default: 0.2)
  */
-void drawObjectPoses(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
-                     const std::vector<gtsam::Pose3>& poses_c,
-                     float scale = 0.2);
+void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
+                        const std::vector<gtsam::Pose3>& poses_c,
+                        float scale = 0.2);
 
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for

@@ -159,30 +159,31 @@ class StaticPointGeneratorVisitor {
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const = 0;
 };
 
+struct ObjectBodyParams {
+  FrameId enters_scenario = 0;
+  FrameId leaves_scenario = std::numeric_limits<FrameId>::max();
+};
+
 class ObjectBody : public ScenarioBody {
  public:
   DYNO_POINTER_TYPEDEFS(ObjectBody)
 
-  // struct Params {
-  //     double enters_scenario_ = 0.0;
-  //     double leaves_scenario_ = std::numeric_limits<double>::max();
-  // };
-
   ObjectBody(ScenarioBodyVisitor::UniquePtr body_visitor,
-             ObjectPointGeneratorVisitor::UniquePtr points_visitor)
+             ObjectPointGeneratorVisitor::UniquePtr points_visitor,
+             const ObjectBodyParams& params = ObjectBodyParams())
       : ScenarioBody(std::move(body_visitor)),
-        points_visitor_(std::move(points_visitor)) {}
+        points_visitor_(std::move(points_visitor)),
+        params_(params) {}
 
-  virtual FrameId entersScenario() const { return 0; };
-  virtual FrameId leavesScenario() const {
-    return std::numeric_limits<FrameId>::max();
-  };
+  virtual FrameId entersScenario() const { return params_.enters_scenario; };
+  virtual FrameId leavesScenario() const { return params_.leaves_scenario; };
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const {
     return points_visitor_->getPointsWorld(body_visitor_, frame_id);
   };
 
  protected:
   ObjectPointGeneratorVisitor::UniquePtr points_visitor_;
+  ObjectBodyParams params_;
 };
 
 // Motion and pose visotors
@@ -452,7 +453,7 @@ class Scenario {
       const auto& object = object_bodies_.at(object_id);
 
       return frame_id >= object->entersScenario() &&
-             frame_id < object->leavesScenario();
+             frame_id <= object->leavesScenario();
     }
     return false;
   }

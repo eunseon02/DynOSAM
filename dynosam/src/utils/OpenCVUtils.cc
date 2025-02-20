@@ -272,8 +272,8 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
   cv::rectangle(image, bounding_box, colour, 2);
 }
 
-void drawObjectPoses(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
-                     const std::vector<gtsam::Pose3>& poses_c, float scale) {
+void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
+                        const std::vector<gtsam::Pose3>& poses_c, float scale) {
   cv::Mat K_float, D_float;
   K.copyTo(K_float);
   D.copyTo(D_float);
@@ -311,6 +311,50 @@ void drawObjectPoses(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
              2);  // Z-axis in blue
   }
 }
+
+// void drawObjectPoseTrajectory(cv::Mat& image, const cv::Mat& K, const
+// cv::Mat& D, const ObjectPoseMap& poses_c, FrameId frame_k, int keep) {
+//   cv::Mat K_float, D_float;
+//   K.copyTo(K_float);
+//   D.copyTo(D_float);
+
+//   K_float.convertTo(K_float, CV_32F);
+//   D_float.convertTo(D_float, CV_32F);
+
+//   constexpr int line_thickness = 3;
+//   for (const auto& [object_id, per_frame_poses] : poses_c) {
+//     const cv::Scalar colour = Color::uniqueId(object_id).bgra();
+
+//     std::vector<cv::Point> cv_line;
+
+//     size_t traj_size;
+//     // draw all the poses
+//     if (keep == -1) {
+//       traj_size = per_frame_poses.size();
+//     } else {
+//       traj_size = std::min(keep, static_cast<int>(per_frame_poses.size()));
+//     }
+
+//     int count = 0;
+//     for(auto rit = per_frame_poses.rbegin(); rit != per_frame_poses.rend();
+//     ++rit) {
+//       const gtsam::Pose3 pose = rit->second;
+
+//       auto [rot_matrix, tvec] = Pose2cvmats(pose);
+//       rot_matrix.convertTo(rot_matrix, CV_32F);
+//       tvec.convertTo(tvec, CV_32F);
+
+//       cv::Mat rvec;
+//       cv::Rodrigues(rot_matrix,
+//                     rvec);  // Convert rotation matrix to Rodrigues vector
+
+//       std::vector<cv::Point2f> image_points;
+//       cv::projectPoints(axis_points, rvec, tvec, K_float, D_float,
+//       image_points);
+//     }
+
+//   }
+// }
 
 bool compareCvMatsUpToTol(const cv::Mat& mat1, const cv::Mat& mat2,
                           const double& tol) {

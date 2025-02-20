@@ -785,6 +785,10 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   bool hasObjectKeyFrame(ObjectId object_id, FrameId frame_id) const;
   std::pair<FrameId, gtsam::Pose3> getObjectKeyFrame(ObjectId object_id,
                                                      FrameId frame_id) const;
+  // get the estimated motion in the representation used directly by the
+  // estimation (ie. not frame-2-frame)
+  Motion3ReferenceFrame getEstimatedMotion(ObjectId object_id,
+                                           FrameId frame_id) const;
 
  protected:
   AccessorTypePointer createAccessor(
@@ -798,9 +802,7 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
  protected:
   std::pair<FrameId, gtsam::Pose3> getOrConstructL0(ObjectId object_id,
                                                     FrameId frame_id);
-  // TODO: rename to compute initial H
-  gtsam::Pose3 computeInitialHFromFrontend(ObjectId object_id,
-                                           FrameId frame_id);
+  gtsam::Pose3 computeInitialH(ObjectId object_id, FrameId frame_id);
 
   // TODO: in the sliding window case the formulation gets reallcoated every
   // time so that L0 map is different, but the values will share the same H

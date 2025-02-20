@@ -382,19 +382,6 @@ class ObjectMotionSovlerF2F : public ObjectMotionSolver,
       Frame::Ptr frame_k_1, Frame::Ptr frame_k, const gtsam::Pose3& T_world_k,
       ObjectId object_id);
 
-  // Motion3SolverResult geometricOutlierRejection3d3d(
-  //                         Frame::Ptr frame_k_1,
-  //                         Frame::Ptr frame_k,
-  //                         const gtsam::Pose3& T_world_k,
-  //                         ObjectId object_id);
-
-  // Motion3SolverResult motionModelOutlierRejection3d2d(
-  //                         const AbsolutePoseCorrespondences&
-  //                         dynamic_correspondences, Frame::Ptr frame_k_1,
-  //                         Frame::Ptr frame_k,
-  //                         const gtsam::Pose3& T_world_k,
-  //                         ObjectId object_id);
-
   const ObjectMotionSovlerF2F::Params& objectMotionParams() const {
     return object_motion_params;
   }

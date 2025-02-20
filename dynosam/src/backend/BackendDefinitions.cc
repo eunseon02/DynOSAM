@@ -103,6 +103,15 @@ NoiseModels NoiseModels::fromBackendParams(
       gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
   CHECK(noise_models.object_smoothing_noise);
 
+  if (backend_params.use_robust_kernals_) {
+    LOG(INFO) << "Using robust huber loss function: "
+              << backend_params.k_huber_3d_points_;
+    noise_models.landmark_motion_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models.landmark_motion_noise);
+  }
+
   return noise_models;
 }
 

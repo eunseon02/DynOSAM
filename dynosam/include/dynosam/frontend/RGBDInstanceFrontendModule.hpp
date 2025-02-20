@@ -35,6 +35,7 @@
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
+#include "dynosam/frontend/vision/ObjectTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
 namespace dyno {
@@ -55,6 +56,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   ObjectMotionSolver::UniquePtr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
+  //   Object
 
   //   ObjectMotionSolverSAM::UniquePtr experimental_solver_;
 

@@ -305,6 +305,8 @@ class Formulation {
   virtual typename AccessorType::Ptr createAccessor(
       const SharedFormulationData& shared_data) const = 0;
 
+  // virtual void
+
  public:
   /**
    * @brief Get the map used by the formulation

@@ -60,15 +60,20 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
     csvfile = open(csv_file_path, 'r')
     reader = csv.DictReader(csvfile)
     try:
-        header = next(reader)
-        keys = list(header.keys())
-        if keys != expected_header:
-            raise Exception(
-                "Csv file headers were not valid when loading file at path: {}. "
-                "Expected header was {} but actual keys were {}".format(
-                    csv_file_path, expected_header, keys
+
+        try:
+            header = next(reader)
+            keys = list(header.keys())
+            if keys != expected_header:
+                raise Exception(
+                    "Csv file headers were not valid when loading file at path: {}. "
+                    "Expected header was {} but actual keys were {}".format(
+                        csv_file_path, expected_header, keys
+                    )
                 )
-            )
+        except StopIteration as e:
+            print(f"Failed to read header in csv file {csv_file_path}. File may be empty!?")
+            pass
 
         # reset iterator by making new reader
         csvfile = open(csv_file_path, 'r')

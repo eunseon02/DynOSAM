@@ -274,6 +274,10 @@ using LandmarkNodePtrSet = FastMapNodeSet<LandmarkNodePtr<MEASUREMENT>>;
 template <typename MEASUREMENT>
 using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 
+/// @brief Status for a StateQuery<> type. This is defined outside the
+/// StateQuery class so that the type of status is independant of the StateQuery
+/// template.
+enum StateQueryStatus { VALID, NOT_IN_MAP, WAS_IN_MAP, INVALID_MAP };
 /**
  * @brief Represents an optional value with meta-data that is retrieved from the
  * map.
@@ -283,8 +287,12 @@ using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 template <typename ValueType>
 class StateQuery : public std::optional<ValueType> {
  public:
+  //! Base type representing the existance of the query value
   using Base = std::optional<ValueType>;
-  enum Status { VALID, NOT_IN_MAP, WAS_IN_MAP, INVALID_MAP };
+  using Base::value_or;
+
+  //! Status of the state query
+  using Status = StateQueryStatus;
   gtsam::Key key_;
   Status status_;
 
@@ -293,6 +301,8 @@ class StateQuery : public std::optional<ValueType> {
     Base::emplace(v);
   }
   StateQuery(gtsam::Key key, Status status) : key_(key), status_(status) {}
+
+  // template<typename OtherValueType, typename...Args>
 
   const ValueType& get() const {
     if (!Base::has_value())
@@ -313,6 +323,26 @@ class StateQuery : public std::optional<ValueType> {
   static StateQuery WasInMap(gtsam::Key key) {
     return StateQuery(key, WAS_IN_MAP);
   }
+
+ private:
+  // template<typename ValueType, typename OtherValueType, typename...Args>
+  //   struct TemplateHelper {
+  //     using ValueQuery = StateQuery<ValueType>;
+  //     using OtherValueQuery = StateQuery<OtherValueType>;
+
+  //       static OtherValueQuery create(const Args&&... args) {
+  //         ValueQuery& query_input =
+  //         std::get<ValueQuery>(std::forward_as_tuple(std::forward<T>(args)...));
+
+  //         if(!query_input) {
+  //           return OtherValueQuery(query_input.key_, query_input.status_);
+  //         }
+  //         else {
+  //           return
+  //         }
+  //       }
+
+  //   }
 };
 
 /**

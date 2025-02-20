@@ -35,6 +35,7 @@
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
@@ -250,6 +251,116 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
     }
   }
 
+  // struct KepointData {
+  //   OpticalFlow flow;
+  //   Keypoint predicted_kp;
+  // };
+
+  // gtsam::FastMap<ObjectId, KeypointsCV> sampled_keypoints;
+  // gtsam::FastMap<ObjectId, KepointData> sampled_keypoint_data;
+
+  // constexpr static auto step = 4u;
+
+  // for (int i = 0; i < rgb.rows - step; i = i + step) {
+  //     for (int j = 0; j < rgb.cols - step; j = j + step) {
+  //       if (!detection_mask.empty()) {
+  //         const unsigned char valid_detection =
+  //             detection_mask.at<unsigned char>(i, j);
+  //         // //marked invalid by the detection mask
+  //         if (valid_detection == 0) {
+  //           continue;
+  //         }
+  //       }
+
+  //       const ObjectId object_id = motion_mask.at<ObjectId>(i, j);
+
+  //       if (object_id == background_label) {
+  //         continue;
+  //       }
+
+  //       PerObjectStatus& object_tracking_info =
+  //       info_.getObjectStatus(object_id);
+
+  //       double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
+  //       double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
+
+  //       // TODO: close to zero?
+  //       if (flow_xe == 0 || flow_ye == 0) {
+  //         // object_tracking_info.num_zero_flow++;
+  //         continue;
+  //       }
+
+  //       OpticalFlow flow(flow_xe, flow_ye);
+  //       Keypoint keypoint(j, i);
+  //       const Keypoint predicted_kp =
+  //           Feature::CalculatePredictedKeypoint(keypoint, flow);
+  //       const size_t cell_idx = grid.getCellIndex(keypoint);
+
+  //       if (isWithinShrunkenImage(keypoint)) {
+  //         // save correspondences
+  //         auto opencv_keypoint = utils::gtsamPointToKeyPoint(keypoint);
+  //         if(!sampled_keypoints.exists(object_id)) {
+  //           sampled_keypoints.insert2(object_id, KeypointsCV{});
+  //         }
+  //         KeypointsCV& keypoints = sampled_keypoints.at(object_id);
+  //         keypoints.push_back(opencv_keypoint);
+
+  //       } else {
+  //         object_tracking_info.num_outside_shrunken_image++;
+  //       }
+  //     }
+  //   }
+
+  //   const int max_features_to_track = 50;
+  //   static constexpr float tolerance = 0.1;
+  //   Eigen::MatrixXd binning_mask;
+
+  //   AdaptiveNonMaximumSuppression
+  //   non_maximum_supression(AnmsAlgorithmType::RangeTree); for(auto&
+  //   [object_id, opencv_keypoints] : sampled_keypoints) {
+  //     const PerObjectStatus& object_tracking_info =
+  //     info_.getObjectStatus(object_id); const int& number_tracked =
+  //     object_tracking_info.num_track; int nr_corners_needed = std::max(
+  //       max_features_to_track - number_tracked, 0);
+
+  //     std::vector<cv::KeyPoint>& max_keypoints = opencv_keypoints;
+  //     const size_t sampled_size = max_keypoints.size();
+  //     max_keypoints = non_maximum_supression.suppressNonMax(
+  //       opencv_keypoints,
+  //       nr_corners_needed,
+  //       tolerance,
+  //       img_size_.width,
+  //       img_size_.height,
+  //       5,
+  //       5,
+  //       binning_mask);
+
+  //     VLOG(10) << "Kps: " << max_keypoints.size() << " for j=" << object_id
+  //     << " after ANMS (originally " << sampled_size << ")";
+  //     std::vector<cv::Point2f> points;
+  //     cv::KeyPoint::convert(max_keypoints, points);
+
+  //     for(const auto& p : points) {
+  //       Keypoint kp = utils::cvPointToGtsam(p);
+  //       CHECK(isWithinShrunkenImage(kp));
+  //       auto tracklet_id = tracked_id_manager.getTrackletIdCount();
+  //       tracked_id_manager.incrementTrackletIdCount();
+  //       // Feature::Ptr feature = std::make_shared<Feature>();
+  //       // (*feature)
+  //       //     .objectId(label)
+  //       //     .frameId(frame_id)
+  //       //     .keypointType(KeyPointType::DYNAMIC)
+  //       //     .age(0)
+  //       //     .trackletId(tracklet_id)
+  //       //     .keypoint(keypoint)
+  //       //     .measuredFlow(flow)
+  //       //     .predictedKeypoint(predicted_kp);
+
+  //       // dynamic_features.add(feature);
+  //       // instance_labels.push_back(feature->objectId());
+  //     }
+  //   }
+
   int step = params_.semantic_mask_step_size;
   for (int i = 0; i < rgb.rows - step; i = i + step) {
     for (int j = 0; j < rgb.cols - step; j = j + step) {
@@ -285,11 +396,6 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
           Feature::CalculatePredictedKeypoint(keypoint, flow);
       const size_t cell_idx = grid.getCellIndex(keypoint);
 
-      // //TODO: this is a problem for the omd dataset?
-      // if(grid.isOccupied(cell_idx)) {continue;}
-
-      // if ((predicted_kp(0) < rgb.cols && predicted_kp(0) > 0 &&
-      // predicted_kp(1) < rgb.rows && predicted_kp(1) > 0))
       if (isWithinShrunkenImage(keypoint) && !grid.isOccupied(cell_idx)) {
         // save correspondences
         auto tracklet_id = tracked_id_manager.getTrackletIdCount();
@@ -314,28 +420,6 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
       }
     }
   }
-
-  // bit of a hack -> make sure we have enough features on each object (around
-  // 100) for no reason other than there is weird behaviour when a car
-  // disappears (or is disappearing) usually becuase the depth is so bad and so
-  // the object jumps of course this number depends on the size of the frame etc
-  // etc this is just a tempory fix!!
-  //  ObjectIds objects_removed;
-  //  for(const auto& [object_id, status ]:info_.dynamic_track) {
-  //    //cannot jus use the num tracked as on the first frame this will be zero
-  //    //should track object age??
-  //    if(status.num_track + status.num_sampled < 100) {
-  //      VLOG(15) << "Removing object id " << object_id << " from tracks as not
-  //      enough features! (" << (status.num_track + status.num_sampled) << " <
-  //      100)"; dynamic_features.removeByObjectId(object_id);
-  //      objects_removed.push_back(object_id);
-  //    }
-  //  }
-
-  // //remove from info?
-  // for (auto object_id : objects_removed) {
-  //   info_.dynamic_track.erase(object_id);
-  // }
 }
 
 void FeatureTracker::propogateMask(ImageContainer& image_container) {

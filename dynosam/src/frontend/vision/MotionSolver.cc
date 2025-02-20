@@ -942,11 +942,12 @@ DecoupledObjectSAM::Ptr ObjectMotionSolverSAM::getEstimator(
         geometric_solver_->objectMotionParams().ground_truth_packets_request;
 
     BackendParams backend_params;  // TODO: for now
+    DecoupledObjectSAM::Params params;
+    params.isam = isam2_params_;
     sam_estimators_.insert2(
-        object_id,
-        std::make_shared<DecoupledObjectSAM>(
-            object_id, NoiseModels::fromBackendParams(backend_params), hooks,
-            isam2_params_));
+        object_id, std::make_shared<DecoupledObjectSAM>(
+                       params, object_id,
+                       NoiseModels::fromBackendParams(backend_params), hooks));
   }
 
   return sam_estimators_.at(object_id);

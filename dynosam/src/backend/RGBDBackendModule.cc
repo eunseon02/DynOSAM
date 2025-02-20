@@ -203,8 +203,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   {
     LOG(INFO) << "Starting updateStaticObservations";
     utils::TimingStatsCollector timer("backend.update_static_obs");
-    new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
-                                           update_params);
+    // new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
+    //                                        update_params);
   }
 
   gtsam::Values new_dynamic_values;

@@ -357,7 +357,7 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
                    return X_k.inverse() * pair.second;
                  });
 
-  utils::drawObjectPoses(tracking_image, K, D, poses_k_vec);
+  utils::drawObjectPoseAxes(tracking_image, K, D, poses_k_vec);
   return tracking_image;
 }
 

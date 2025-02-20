@@ -192,9 +192,9 @@ struct MotionReferenceFrame : public ReferenceFrameValue<E> {
   // forward the style ;)
   using Style = MotionRepresentationStyle;
 
+  MotionRepresentationStyle style_;
   FrameId from_;
   FrameId to_;
-  MotionRepresentationStyle style_;
 
   inline FrameId from() const { return from_; }
   inline FrameId to() const { return to_; }
@@ -591,7 +591,7 @@ class GenericObjectCentricMap
 /// @brief Map of object poses per object per frame
 using ObjectPoseMap = GenericObjectCentricMap<gtsam::Pose3>;
 /// @brief Map of object motions per object per frame
-using ObjectMotionMap = GenericObjectCentricMap<ReferenceFrameValue<Motion3>>;
+using ObjectMotionMap = GenericObjectCentricMap<Motion3ReferenceFrame>;
 
 // Optional string that can be modified directly (similar to old-stype
 // boost::optional) to access the mutable reference the internal string must be
