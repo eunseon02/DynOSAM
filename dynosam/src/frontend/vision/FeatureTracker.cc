@@ -122,6 +122,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
           << timestamp << ", object ids "
           << container_to_string(new_frame->getObjectIds());
   previous_frame_ = new_frame;
+  boarder_detection_mask_ = boarder_detection_mask;
 
   return new_frame;
 }

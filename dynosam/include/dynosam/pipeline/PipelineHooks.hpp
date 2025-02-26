@@ -28,25 +28,21 @@
  *   SOFTWARE.
  */
 
-#include <dynosam/backend/BackendOutputPacket.hpp>
-#include <dynosam/common/GroundTruthPacket.hpp>
-#include <dynosam/common/SharedModuleInfo.hpp>
-#include <dynosam/visualizer/Display.hpp>
+#pragma once
 
-#include "dynamic_slam_interfaces/msg/object_odometry.hpp"
-#include "dynosam_ros/Display-Definitions.hpp"
-#include "dynosam_ros/displays/DisplaysCommon.hpp"
-#include "dynosam_ros/displays/dynamic_slam_displays/DSDCommonRos.hpp"
-#include "rclcpp/node.hpp"
+#include <functional>
+
+#include "dynosam/common/Types.hpp"
 
 namespace dyno {
 
-class BackendDSDRos : public BackendDisplay, DSDRos {
- public:
-  BackendDSDRos(const DisplayParams params, rclcpp::Node::SharedPtr node);
-  ~BackendDSDRos() = default;
+struct ExternalHooks {
+  DYNO_POINTER_TYPEDEFS(ExternalHooks)
 
-  void spinOnce(const BackendOutputPacket::ConstPtr& backend_output) override;
+  using UpdateTime = std::function<void(Timestamp)>;
+
+  //! Hook to alert an external module as to the new timestamp
+  UpdateTime update_time;
 };
 
 }  // namespace dyno

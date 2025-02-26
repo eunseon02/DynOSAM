@@ -111,7 +111,7 @@ MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
       previous_frame_id = frame_id;
 
       // RIGHT NOW MOTION IDENTITY
-      // timestamp is wring
+      // timestamp is wrong
       gtsam::Pose3 motion;
       const ObjectOdometry object_odometry =
           constructObjectOdometry(motion, object_pose, object_id, timestamp_k,
@@ -150,7 +150,7 @@ void DSDTransport::Publisher::publishObjectTransforms() {
     geometry_msgs::msg::TransformStamped t;
     dyno::convert(object_odom.odom.pose.pose, t.transform);
 
-    t.header.stamp = node_->now();
+    t.header.stamp = utils::toRosTime(timestamp_);
     t.header.frame_id = frame_id_link_;
     t.child_frame_id = object_child_frame;
 
@@ -214,7 +214,8 @@ void DSDRos::publishVisualOdometry(const gtsam::Pose3& T_world_camera,
     dyno::convert<gtsam::Pose3, geometry_msgs::msg::TransformStamped>(
         T_world_camera, t);
 
-    t.header.stamp = node_->now();
+    // t.header.stamp = node_->now();
+    t.header.stamp = utils::toRosTime(timestamp);
     t.header.frame_id = params_.world_frame_id;
     t.child_frame_id = params_.camera_frame_id;
     tf_broadcaster_->sendTransform(t);

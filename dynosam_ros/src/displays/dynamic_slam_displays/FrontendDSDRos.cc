@@ -35,6 +35,7 @@
 #include <dynosam/utils/SafeCast.hpp>
 
 #include "dynosam_ros/RosUtils.hpp"
+#include "rclcpp/qos.hpp"
 
 namespace dyno {
 
@@ -43,6 +44,8 @@ FrontendDSDRos::FrontendDSDRos(const DisplayParams params,
     : FrontendDisplay(), DSDRos(params, node) {
   tracking_image_pub_ =
       image_transport::create_publisher(node.get(), "tracking_image");
+
+  // const rclcpp::SensorDataQoS sensor_qos;
 
   auto ground_truth_node = node->create_sub_node("ground_truth");
   dsd_ground_truth_transport_ =
@@ -53,6 +56,10 @@ FrontendDSDRos::FrontendDSDRos(const DisplayParams params,
   vo_path_ground_truth_publisher_ =
       ground_truth_node->create_publisher<nav_msgs::msg::Path>("odometry_path",
                                                                1);
+
+  dense_dynamic_cloud_pub_ =
+      node->create_publisher<sensor_msgs::msg::PointCloud2>(
+          "dense_labelled_cloud", 1);
 }
 
 void FrontendDSDRos::spinOnce(
@@ -189,6 +196,14 @@ void FrontendDSDRos::processRGBDOutputpacket(
   object_poses_publisher.publishObjectOdometry();
   object_poses_publisher.publishObjectTransforms();
   object_poses_publisher.publishObjectPaths();
+
+  if (rgbd_packet->dense_labelled_cloud_) {
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pcl::toROSMsg(*rgbd_packet->dense_labelled_cloud_, pc2_msg);
+    pc2_msg.header.frame_id = params_.camera_frame_id;
+    pc2_msg.header.stamp = utils::toRosTime(rgbd_packet->getTimestamp());
+    dense_dynamic_cloud_pub_->publish(pc2_msg);
+  }
 }
 
 }  // namespace dyno

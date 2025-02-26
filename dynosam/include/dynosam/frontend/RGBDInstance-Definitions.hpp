@@ -58,6 +58,9 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
                                                  //! esimtate from the frontend
   const gtsam::Pose3Vector
       camera_poses_;  //! Vector of ego-motion poses (drawn everytime)
+  const PointCloudLabelRGB::Ptr
+      dense_labelled_cloud_;  //! Dense point cloud (with label and RGB) in
+                              //! camera frame
 
   RGBDInstanceOutputPacket(
       const StatusKeypointVector& static_keypoint_measurements,
@@ -70,7 +73,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
       const gtsam::Pose3Vector camera_poses = {},
       const Camera::Ptr camera = nullptr,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
-      const DebugImagery::Optional& debug_imagery = std::nullopt)
+      const DebugImagery::Optional& debug_imagery = std::nullopt,
+      const PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr)
       : FrontendOutputPacketBase(
             FrontendType::kRGBD, static_keypoint_measurements,
             dynamic_keypoint_measurements, T_world_camera, timestamp, frame_id,
@@ -79,7 +83,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
         dynamic_landmarks_(dynamic_landmarks),
         estimated_motions_(estimated_motions),
         propogated_object_poses_(propogated_object_poses),
-        camera_poses_(camera_poses) {
+        camera_poses_(camera_poses),
+        dense_labelled_cloud_(dense_labelled_cloud) {
     // they need to be the same size as we expect a 1-to-1 relation between the
     // keypoint and the landmark (which acts as an initalisation point)
     CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());

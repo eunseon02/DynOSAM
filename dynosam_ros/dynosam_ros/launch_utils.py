@@ -184,16 +184,24 @@ def load_dynosam_node(context, *args, **kwargs):
 
     nodes = []
 
+    parameters=[
+        {"params_folder_path": dynosam_params_folder_config},
+        {"dataset_path": dynosam_dataset_path_config},
+        {"online": online_config},
+        {"wait_for_camera_params": wait_for_camera_params_config},
+        {"camera_params_timeout": camera_params_timeout_config}
+    ]
+
+    is_online = bool(online_config.perform(context))
+    # if we're offline we MUST set use_sim_time so that we use the /clock time
+    # this is published in the ROS pipeline (also when is_online is false)
+    if not is_online:
+        parameters.append({"use_sim_time": True})
+
     program_node = Node(
         package='dynosam_ros',
         executable=executable,
-        parameters=[
-            {"params_folder_path": dynosam_params_folder_config},
-            {"dataset_path": dynosam_dataset_path_config},
-            {"online": online_config},
-            {"wait_for_camera_params": wait_for_camera_params_config},
-            {"camera_params_timeout": camera_params_timeout_config}
-        ],
+        parameters=parameters,
         remappings=[
             ("dataprovider/image/camera_info", camera_info_config),
             ("dataprovider/image/rgb", rgb_cam_topic_config),

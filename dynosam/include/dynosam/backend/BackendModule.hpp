@@ -77,6 +77,7 @@ class BackendModule
 
   // if empty, return none
   // TODo: also use this in the frontend!
+  // TODO: used shared module info!!
   std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
     if (gt_packet_map_.empty()) {
       return {};

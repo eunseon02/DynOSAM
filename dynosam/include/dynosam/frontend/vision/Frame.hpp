@@ -34,6 +34,7 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/DynamicObjects.hpp"
 #include "dynosam/common/ImageContainer.hpp"
+#include "dynosam/common/PointCloudProcess.hpp"
 #include "dynosam/common/StructuredContainers.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
@@ -226,6 +227,9 @@ class Frame {
     }
     return object_ids;
   }
+
+  PointCloudLabelRGB::Ptr projectToDenseCloud(
+      const cv::Mat* detection_mask = nullptr) const;
 
   /**
    * @brief Update the depth values on all contained features.

@@ -69,6 +69,10 @@ class DynoNode : public rclcpp::Node {
   // NOT cached!!
   virtual dyno::DataProvider::Ptr createDataProvider();
 
+  //! Set by the param 'online' and indicates if the OnlineDataProviderRos
+  //! should be used or not
+  bool is_online_;
+
  private:
   /**
    * @brief Retrieves a std::string param (under param_name) which is expected

@@ -35,6 +35,7 @@
 
 #include <dynosam/dataprovider/DataProviderFactory.hpp>
 #include <dynosam/dataprovider/DataProviderUtils.hpp>
+#include <dynosam/pipeline/PipelineHooks.hpp>
 #include <dynosam/pipeline/PipelineParams.hpp>
 #include <dynosam/visualizer/OpenCVFrontendDisplay.hpp>
 
@@ -44,6 +45,7 @@
 #include "dynosam_ros/displays/DisplaysImpl.hpp"
 #include "rcl_interfaces/msg/parameter.hpp"
 #include "rclcpp/parameter.hpp"
+#include "rosgraph_msgs/msg/clock.hpp"
 
 namespace dyno {
 
@@ -54,17 +56,17 @@ DynoNode::DynoNode(const std::string& node_name,
   auto params_path = getParamsPath();
   RCLCPP_INFO_STREAM(this->get_logger(),
                      "Loading Dyno VO params from: " << params_path);
+
+  is_online_ = ParameterConstructor(this, "online", false)
+                   .description("If the online DataProvider should be used")
+                   .finish()
+                   .get<bool>();
+
   dyno_params_ = std::make_unique<DynoParams>(params_path);
 }
 
 dyno::DataProvider::Ptr DynoNode::createDataProvider() {
-  const bool online =
-      ParameterConstructor(this, "online", false)
-          .description("If the online DataProvider should be used")
-          .finish()
-          .get<bool>();
-
-  if (online) {
+  if (is_online_) {
     RCLCPP_INFO_STREAM(
         this->get_logger(),
         "Online DataProvider selected. Waiting for ROS topics...");
@@ -147,9 +149,27 @@ void DynoPipelineManagerRos::initalisePipeline() {
   auto backend_display = std::make_shared<dyno::BackendDisplayRos>(
       display_params, this->create_sub_node("backend"));
 
+  ExternalHooks::Ptr hooks = std::make_shared<ExternalHooks>();
+  // if online then we are using OnlineDataProviderRos, which should collect the
+  // timestamp from ROS anyway. Otherwise, the timestamp comes from the dynosam
+  // DataLoaders and so we need to artifially tell the ROS network what the time
+  // is
+  if (!is_online_) {
+    RCLCPP_INFO_STREAM(this->get_logger(),
+                       "Update time external hook created. This will publish "
+                       "internal dynosam timestamp's to /clock!");
+    rclcpp::Publisher<rosgraph_msgs::msg::Clock>::SharedPtr clock_pub =
+        this->create_publisher<rosgraph_msgs::msg::Clock>("/clock", 10);
+    hooks->update_time = [clock_pub](Timestamp timestamp) -> void {
+      auto msg = rosgraph_msgs::msg::Clock();
+      msg.clock = utils::toRosTime(timestamp);
+      CHECK_NOTNULL(clock_pub)->publish(msg);
+    };
+  }
+
   auto data_loader = createDataProvider();
   pipeline_ = std::make_unique<DynoPipelineManager>(
-      params, data_loader, frontend_display, backend_display);
+      params, data_loader, frontend_display, backend_display, hooks);
 }
 
 }  // namespace dyno

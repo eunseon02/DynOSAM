@@ -70,6 +70,9 @@ class FrontendDSDRos : public FrontendDisplay, DSDRos {
 
   OdometryPub::SharedPtr vo_ground_truth_publisher_;
   PathPub::SharedPtr vo_path_ground_truth_publisher_;
+
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
+      dense_dynamic_cloud_pub_;
 };
 
 }  // namespace dyno

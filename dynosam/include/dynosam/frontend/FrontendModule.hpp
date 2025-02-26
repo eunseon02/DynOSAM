@@ -32,6 +32,7 @@
 
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/SharedModuleInfo.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
@@ -56,7 +57,8 @@ struct InvalidImageContainerException : public DynosamException {
  */
 
 class FrontendModule
-    : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase> {
+    : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>,
+      public SharedModuleInterface {
  public:
   DYNO_POINTER_TYPEDEFS(FrontendModule)
 
@@ -86,12 +88,12 @@ class FrontendModule
   };
 
  protected:
-  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
-    if (gt_packet_map_.empty()) {
-      return {};
-    }
-    return gt_packet_map_;
-  }
+  // std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
+  //   if (gt_packet_map_.empty()) {
+  //     return {};
+  //   }
+  //   return gt_packet_map_;
+  // }
 
   void validateInput(
       const FrontendInputPacketBase::ConstPtr& input) const override;
@@ -118,10 +120,11 @@ class FrontendModule
       camera_poses_;  //! Keeps track of current camera trajectory. Really just
                       //! for (viz) and drawn everytime
 
- private:
-  GroundTruthPacketMap
-      gt_packet_map_;  //! Updated in the frontend module base via InputCallback
-                       //! (see FrontendModule constructor)
+  //  private:
+  //   GroundTruthPacketMap
+  //       gt_packet_map_;  //! Updated in the frontend module base via
+  //       InputCallback
+  //                        //! (see FrontendModule constructor)
 };
 
 }  // namespace dyno

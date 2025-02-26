@@ -46,6 +46,9 @@ class CameraParams;
 
 namespace utils {
 
+bool cvSizeEqual(const cv::Size& a, const cv::Size& b);
+bool cvSizeEqual(const cv::Mat& a, const cv::Mat& b);
+
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point,
                        const cv::Scalar& colour, const double msize = 0.4);
 

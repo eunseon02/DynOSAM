@@ -58,6 +58,14 @@ std::string to_string<cv::Rect>(const cv::Rect& t) {
 
 namespace utils {
 
+bool cvSizeEqual(const cv::Size& a, const cv::Size& b) {
+  return a.height == b.height && a.width == b.width;
+}
+
+bool cvSizeEqual(const cv::Mat& a, const cv::Mat& b) {
+  return cvSizeEqual(a.size(), b.size());
+}
+
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point,
                        const cv::Scalar& colour, const double msize) {
   cv::circle(img, point, msize, colour, 2);

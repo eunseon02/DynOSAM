@@ -28,25 +28,42 @@
  *   SOFTWARE.
  */
 
-#include <dynosam/backend/BackendOutputPacket.hpp>
-#include <dynosam/common/GroundTruthPacket.hpp>
-#include <dynosam/common/SharedModuleInfo.hpp>
-#include <dynosam/visualizer/Display.hpp>
+#pragma once
 
-#include "dynamic_slam_interfaces/msg/object_odometry.hpp"
-#include "dynosam_ros/Display-Definitions.hpp"
-#include "dynosam_ros/displays/DisplaysCommon.hpp"
-#include "dynosam_ros/displays/dynamic_slam_displays/DSDCommonRos.hpp"
-#include "rclcpp/node.hpp"
+#include <mutex>
+
+#include "dynosam/common/GroundTruthPacket.hpp"
+#include "dynosam/common/Types.hpp"
 
 namespace dyno {
 
-class BackendDSDRos : public BackendDisplay, DSDRos {
+class SharedModuleInfo {
  public:
-  BackendDSDRos(const DisplayParams params, rclcpp::Node::SharedPtr node);
-  ~BackendDSDRos() = default;
+  static SharedModuleInfo& instance();
 
-  void spinOnce(const BackendOutputPacket::ConstPtr& backend_output) override;
+  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const;
+  const gtsam::FastMap<FrameId, Timestamp>& getTimestampMap() const;
+
+  SharedModuleInfo& updateGroundTruthPacket(
+      FrameId frame_id, const GroundTruthInputPacket& ground_truth_packet);
+  SharedModuleInfo& updateTimestampMapping(FrameId frame_id,
+                                           Timestamp timestamp);
+
+ private:
+  static std::unique_ptr<SharedModuleInfo> instance_;
+
+ private:
+  mutable std::mutex mutex_;
+  GroundTruthPacketMap gt_packet_map_;
+  gtsam::FastMap<FrameId, Timestamp> frame_id_to_timestamp_map_;
+};
+
+struct SharedModuleInterface {
+  SharedModuleInfo& shared_module_info = SharedModuleInfo::instance();
+};
+
+struct ConstSharedModuleInterface {
+  const SharedModuleInfo& shared_module_info = SharedModuleInfo::instance();
 };
 
 }  // namespace dyno

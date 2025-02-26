@@ -42,10 +42,10 @@ DEFINE_bool(use_backend, false, "If any backend should be initalised");
 
 namespace dyno {
 
-DynoPipelineManager::DynoPipelineManager(const DynoParams& params,
-                                         DataProvider::Ptr data_loader,
-                                         FrontendDisplay::Ptr frontend_display,
-                                         BackendDisplay::Ptr backend_display)
+DynoPipelineManager::DynoPipelineManager(
+    const DynoParams& params, DataProvider::Ptr data_loader,
+    FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display,
+    const ExternalHooks::Ptr external_hooks)
     : params_(params),
       use_offline_frontend_(FLAGS_frontend_from_file),
       data_loader_(std::move(data_loader)),
@@ -62,6 +62,19 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params,
   data_loader_->registerImageContainerCallback(
       std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue,
                 data_interface_.get(), std::placeholders::_1));
+
+  // if an external hook exists to update the time, add callback in
+  // datainterface that will be triggered when new data is added to the output
+  // queue (from the DataInterfacePipeline) this is basically used to alert ROS
+  // to a new timestamp which we then publish to /clock
+  if (external_hooks && external_hooks->update_time) {
+    LOG(INFO) << "Added pre-queue callback to register new Timestampd data "
+                 "with an external module";
+    data_interface_->registerPreQueueContainerCallback(
+        [external_hooks](const ImageContainer::Ptr image_container) -> void {
+          external_hooks->update_time(image_container->getTimestamp());
+        });
+  }
 
   // ground truth
   data_loader_->registerGroundTruthPacketCallback(

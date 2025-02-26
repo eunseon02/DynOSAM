@@ -94,7 +94,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
       const Frame& frame, const MotionEstimateMap& estimated_motions,
       const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
-      const DebugImagery::Optional& debug_imagery = std::nullopt);
+      const DebugImagery::Optional& debug_imagery = std::nullopt,
+      const PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr);
 
   cv::Mat createTrackingImage(const Frame::Ptr& frame_k,
                               const Frame::Ptr& frame_k_1,

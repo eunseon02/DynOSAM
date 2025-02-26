@@ -40,9 +40,16 @@
 
 namespace dyno {
 
-// Map of ObjectId's to XYZRGB Point Clouds
+/// @brief Map of ObjectId's to XYZRGB Point Clouds
 using CloudPerObject =
     gtsam::FastMap<ObjectId, pcl::PointCloud<pcl::PointXYZRGB>>;
+
+/// @brief Alias to XYZ point with label (std::uint32_t)
+using PointLabel = pcl::PointXYZL;
+/// @brief Alias to XYZ point with label (std::uint32_t) and RGB values
+using PointLabelRGB = pcl::PointXYZRGBL;
+/// @brief Alias to a PCL Point Cloud of type PointLabelRGB
+using PointCloudLabelRGB = pcl::PointCloud<PointLabelRGB>;
 
 /**
  * @brief Constructs a gtsam::Point3 from the x,y,z components of the PointT.

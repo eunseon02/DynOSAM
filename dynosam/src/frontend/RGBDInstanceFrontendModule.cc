@@ -80,7 +80,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
       frontend_params.object_motion_solver_params;
   // add ground truth hook
   object_motion_solver_params.ground_truth_packets_request = [&]() {
-    return this->getGroundTruthPackets();
+    return this->shared_module_info.getGroundTruthPackets();
   };
 
   object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
@@ -153,8 +153,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   std::tie(motion_estimates, object_poses) =
       object_motion_solver_->solve(frame, previous_frame);
 
+  const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
+  PointCloudLabelRGB::Ptr dense_labelled_cloud =
+      frame->projectToDenseCloud(&board_detection_mask);
+  // PointCloudLabelRGB::Ptr  dense_labelled_cloud = nullptr;
+
   if (logger_) {
-    auto ground_truths = this->getGroundTruthPackets();
+    auto ground_truths = this->shared_module_info.getGroundTruthPackets();
     logger_->logCameraPose(frame->getFrameId(), frame->getPose(),
                            ground_truths);
     logger_->logObjectMotion(frame->getFrameId(), motion_estimates,
@@ -184,7 +189,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, motion_estimates, object_poses, frame->T_world_camera_,
-      input->optional_gt_, debug_imagery);
+      input->optional_gt_, debug_imagery, dense_labelled_cloud);
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});
@@ -196,7 +201,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         *frame->getCamera(), frame->getFrameId());
 
   if (logger_) {
-    auto ground_truths = this->getGroundTruthPackets();
+    auto ground_truths = this->shared_module_info.getGroundTruthPackets();
     logger_->logPoints(output->getFrameId(), output->T_world_camera_,
                        output->dynamic_landmarks_);
     // object_poses_ are in frontend module
@@ -262,7 +267,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     const Frame& frame, const MotionEstimateMap& estimated_motions,
     const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
     const GroundTruthInputPacket::Optional& gt_packet,
-    const DebugImagery::Optional& debug_imagery) {
+    const DebugImagery::Optional& debug_imagery,
+    const PointCloudLabelRGB::Ptr dense_labelled_cloud) {
   StatusKeypointVector static_keypoint_measurements;
   StatusLandmarkVector static_landmarks;
   for (const Feature::Ptr& f : frame.usableStaticFeaturesBegin()) {
@@ -331,7 +337,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
       static_keypoint_measurements, dynamic_keypoint_measurements,
       static_landmarks, dynamic_landmarks, T_world_camera, frame.timestamp_,
       frame.frame_id_, estimated_motions, object_poses, camera_poses_, camera_,
-      gt_packet, debug_imagery);
+      gt_packet, debug_imagery, dense_labelled_cloud);
 }
 
 cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
