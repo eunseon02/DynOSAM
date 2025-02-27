@@ -107,8 +107,11 @@ void FrontendDSDRos::tryPublishGroundTruth(
   if (rgb_image.empty()) return;
 
   // collect gt poses and motions
-  ObjectPoseMap poses;
-  MotionEstimateMap motions;
+  static ObjectPoseMap poses;
+  static ObjectMotionMap motions;
+  static FrameIdTimestampMap timestamp_map;
+  // hack! recreate the timestamp since it is not in the frontend base packet!!
+  timestamp_map.insert2(frame_id, timestamp);
 
   const GroundTruthInputPacket& gt_packet = frontend_output->gt_packet_.value();
 
@@ -127,14 +130,15 @@ void FrontendDSDRos::tryPublishGroundTruth(
     Motion3ReferenceFrame gt_motion(
         *object_pose_gt.prev_H_current_world_, MotionRepresentationStyle::F2F,
         ReferenceFrame::GLOBAL, gt_packet.frame_id_ - 1u, gt_packet.frame_id_);
-    motions.insert({object_pose_gt.object_id_, gt_motion});
+    motions.insert22(object_pose_gt.object_id_, gt_packet.frame_id_, gt_motion);
   }
 
   // will this result in confusing tf's since the gt object and estimated
   // objects use the same link?
   DSDTransport::Publisher publisher =
       dsd_ground_truth_transport_->addObjectInfo(
-          motions, poses, params_.world_frame_id, frame_id, timestamp);
+          motions, poses, params_.world_frame_id, timestamp_map, frame_id,
+          timestamp);
   publisher.publishObjectOdometry();
 
   // publish ground truth odom
@@ -187,11 +191,12 @@ void FrontendDSDRos::processRGBDOutputpacket(
   CloudPerObject clouds_per_obj = this->publishDynamicPointCloud(
       rgbd_packet->dynamic_landmarks_, rgbd_packet->T_world_camera_);
 
-  const auto& object_motions = rgbd_packet->estimated_motions_;
+  const auto& object_motions = rgbd_packet->object_motions_;
   const auto& object_poses = rgbd_packet->propogated_object_poses_;
+  const auto& timestamp_map = rgbd_packet->involved_timestamps_;
 
   DSDTransport::Publisher object_poses_publisher = dsd_transport_.addObjectInfo(
-      object_motions, object_poses, params_.world_frame_id,
+      object_motions, object_poses, params_.world_frame_id, timestamp_map,
       rgbd_packet->getFrameId(), rgbd_packet->getTimestamp());
   object_poses_publisher.publishObjectOdometry();
   object_poses_publisher.publishObjectTransforms();

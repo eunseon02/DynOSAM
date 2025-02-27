@@ -46,14 +46,18 @@ namespace dyno {
 // forward from Tracker
 struct FeatureTrackerInfo;
 
+// TODO: for now just resend ALL history every time
+// TODO: eventually object motions and poses could be a map of new/changes
+// values unsure yet how we want to encapsulate incremental updates!!
 struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
  public:
   DYNO_POINTER_TYPEDEFS(RGBDInstanceOutputPacket)
 
   const StatusLandmarkVector static_landmarks_;   //! in the camera frame
   const StatusLandmarkVector dynamic_landmarks_;  //! in the camera frame
-  const MotionEstimateMap
-      estimated_motions_;  //! Estimated motions in the world frame
+  const ObjectMotionMap object_motions_;
+  // const MotionEstimateMap
+  //     estimated_motions_;  //! Estimated motions in the world frame
   const ObjectPoseMap propogated_object_poses_;  //! Propogated poses using the
                                                  //! esimtate from the frontend
   const gtsam::Pose3Vector
@@ -61,6 +65,7 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   const PointCloudLabelRGB::Ptr
       dense_labelled_cloud_;  //! Dense point cloud (with label and RGB) in
                               //! camera frame
+  const FrameIdTimestampMap involved_timestamps_;
 
   RGBDInstanceOutputPacket(
       const StatusKeypointVector& static_keypoint_measurements,
@@ -68,23 +73,25 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
       const StatusLandmarkVector& static_landmarks,
       const StatusLandmarkVector& dynamic_landmarks,
       const gtsam::Pose3 T_world_camera, const Timestamp timestamp,
-      const FrameId frame_id, const MotionEstimateMap& estimated_motions,
+      const FrameId frame_id, const ObjectMotionMap& object_motions,
       const ObjectPoseMap propogated_object_poses = {},
       const gtsam::Pose3Vector camera_poses = {},
       const Camera::Ptr camera = nullptr,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
       const DebugImagery::Optional& debug_imagery = std::nullopt,
-      const PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr)
+      const PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr,
+      const FrameIdTimestampMap& involved_timestamps = {})
       : FrontendOutputPacketBase(
             FrontendType::kRGBD, static_keypoint_measurements,
             dynamic_keypoint_measurements, T_world_camera, timestamp, frame_id,
             camera, gt_packet, debug_imagery),
         static_landmarks_(static_landmarks),
         dynamic_landmarks_(dynamic_landmarks),
-        estimated_motions_(estimated_motions),
+        object_motions_(object_motions),
         propogated_object_poses_(propogated_object_poses),
         camera_poses_(camera_poses),
-        dense_labelled_cloud_(dense_labelled_cloud) {
+        dense_labelled_cloud_(dense_labelled_cloud),
+        involved_timestamps_(involved_timestamps) {
     // they need to be the same size as we expect a 1-to-1 relation between the
     // keypoint and the landmark (which acts as an initalisation point)
     CHECK_EQ(static_landmarks_.size(), static_keypoint_measurements_.size());

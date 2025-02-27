@@ -178,7 +178,9 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
   const int cols = depth_image.cols;
 
   // Reserve memory for the cloud (approximate max size)
-  cloud->points.reserve(rows * cols);
+  // cloud->points.reserve(rows * cols);
+  cloud->points.resize(rows * cols);
+  std::mutex mutex;
 
   // Iterate using row pointers for fast access
   tbb::parallel_for(0, rows, [&](int i) {  // Use TBB for parallelism
@@ -213,7 +215,14 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
       camera_->backProject(kp, depth, &point);
 
       // Construct point and push to cloud
-      cloud->points.emplace_back(
+      // const std::lock_guard<std::mutex> lock(mutex);
+      // cloud->points.emplace_back(PointLabelRGB(
+      //     static_cast<float>(point(0)), static_cast<float>(point(1)),
+      //     static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
+      //     static_cast<std::uint8_t>(colour.g),
+      //     static_cast<std::uint8_t>(colour.b),
+      //     static_cast<std::uint32_t>(object_id)));
+      cloud->points[i * cols + j] = PointLabelRGB(
           static_cast<float>(point(0)), static_cast<float>(point(1)),
           static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
           static_cast<std::uint8_t>(colour.g),

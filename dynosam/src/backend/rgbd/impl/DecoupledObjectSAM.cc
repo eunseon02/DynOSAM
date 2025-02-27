@@ -67,7 +67,6 @@ Motion3ReferenceFrame DecoupledObjectSAM::getFrame2FrameMotion(
   return H_W_km1_k.get();
 }
 
-// currently no way of checking (with the object) the type of motion we have!!
 Motion3ReferenceFrame DecoupledObjectSAM::getKeyFramedMotion(
     FrameId frame_id) const {
   Motion3ReferenceFrame H_W_s0_k =
@@ -76,6 +75,23 @@ Motion3ReferenceFrame DecoupledObjectSAM::getKeyFramedMotion(
   CHECK(H_W_s0_k.origin() == ReferenceFrame::GLOBAL);
   CHECK(H_W_s0_k.to() == frame_id);
   return H_W_s0_k;
+}
+
+ObjectMotionMap DecoupledObjectSAM::getFrame2FrameMotions() const {
+  ObjectMotionMap motions;
+  for (const FrameId& frame_id : map()->getFrameIds()) {
+    motions.insert22(object_id_, frame_id,
+                     this->getFrame2FrameMotion(frame_id));
+  }
+  return motions;
+}
+
+ObjectMotionMap DecoupledObjectSAM::getKeyFramedMotions() const {
+  ObjectMotionMap motions;
+  for (const FrameId& frame_id : map()->getFrameIds()) {
+    motions.insert22(object_id_, frame_id, this->getKeyFramedMotion(frame_id));
+  }
+  return motions;
 }
 
 void DecoupledObjectSAM::updateFormulation(

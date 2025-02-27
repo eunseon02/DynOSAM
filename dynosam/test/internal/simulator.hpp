@@ -462,6 +462,10 @@ class Scenario {
   ScenarioBody::Ptr camera_body_;
   StaticPointGeneratorVisitor::Ptr static_points_generator_;
   gtsam::FastMap<ObjectId, ObjectBody::Ptr> object_bodies_;
+
+  mutable ObjectMotionMap object_motions_;
+  mutable ObjectMotionMap noisy_object_motions_;
+  // ObjectPoseMap object_poses_;
 };
 
 class RGBDScenario : public Scenario {
@@ -618,16 +622,19 @@ class RGBDScenario : public Scenario {
     ground_truths_.insert2(frame_id, gt_packet);
     noisy_camera_poses_.insert2(frame_id, noisy_X_world_k);
 
-    return {
-        std::make_shared<RGBDInstanceOutputPacket>(
-            static_keypoint_measurements, dynamic_keypoint_measurements,
-            static_landmarks, dynamic_landmarks, X_world_k, frame_id, frame_id,
-            motions, ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr, gt_packet),
-        std::make_shared<RGBDInstanceOutputPacket>(
-            static_keypoint_measurements, dynamic_keypoint_measurements,
-            noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world_k,
-            frame_id, frame_id, noisy_motions, ObjectPoseMap{},
-            gtsam::Pose3Vector{}, nullptr, gt_packet)};
+    object_motions_.insert2(frame_id, motions);
+    noisy_object_motions_.insert2(frame_id, noisy_motions);
+
+    return {std::make_shared<RGBDInstanceOutputPacket>(
+                static_keypoint_measurements, dynamic_keypoint_measurements,
+                static_landmarks, dynamic_landmarks, X_world_k, frame_id,
+                frame_id, object_motions_, ObjectPoseMap{},
+                gtsam::Pose3Vector{}, nullptr, gt_packet),
+            std::make_shared<RGBDInstanceOutputPacket>(
+                static_keypoint_measurements, dynamic_keypoint_measurements,
+                noisy_static_landmarks, noisy_dynamic_landmarks,
+                noisy_X_world_k, frame_id, frame_id, noisy_object_motions_,
+                ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr, gt_packet)};
   }
 
   const GroundTruthPacketMap& getGroundTruths() const { return ground_truths_; }

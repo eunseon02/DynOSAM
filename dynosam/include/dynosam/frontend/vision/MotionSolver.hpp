@@ -343,7 +343,7 @@ class ObjectMotionSolver {
   ObjectMotionSolver() = default;
   virtual ~ObjectMotionSolver() = default;
 
-  using Result = std::pair<MotionEstimateMap, ObjectPoseMap>;
+  using Result = std::pair<ObjectMotionMap, ObjectPoseMap>;
 
   virtual Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) = 0;
 
@@ -392,9 +392,17 @@ class ObjectMotionSovlerF2F : public ObjectMotionSolver,
   const ObjectPoseMap& updatePoses(MotionEstimateMap& motion_estimates,
                                    Frame::Ptr frame_k, Frame::Ptr frame_k_1);
 
+  const ObjectMotionMap& updateMotions(MotionEstimateMap& motion_estimates,
+                                       Frame::Ptr frame_k,
+                                       Frame::Ptr frame_k_1);
+
  private:
-  //! All object poses and updated by updatePoses at each iteration of sovle
+  //! All object poses (from k to K) and updated by updatePoses at each
+  //! iteration of sovle
   ObjectPoseMap object_poses_;
+  //! All object motions (from k to K) and updated by updatedMotions at each
+  //! iteration of sovle
+  ObjectMotionMap object_motions_;
 
  protected:
   const ObjectMotionSovlerF2F::Params object_motion_params;
@@ -420,7 +428,7 @@ class ObjectMotionSolverSAM : public ObjectMotionSolver {
   }
 
  private:
-  ObjectPoseMap mergeObjectMaps() const;
+  Result mergeObjectMaps() const;
 
   GenericTrackedStatusVector<LandmarkKeypointStatus> createMeasurementVector(
       Frame::Ptr frame, ObjectId object_id) const;
@@ -429,6 +437,10 @@ class ObjectMotionSolverSAM : public ObjectMotionSolver {
   Motion3SolverResult initialPnPSolve(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
                                       ObjectId object_id);
   DecoupledObjectSAM::Ptr getEstimator(ObjectId object_id);
+
+  // construct object motion map functor based on outputstyle
+  std::function<ObjectMotionMap(DecoupledObjectSAM::Ptr)>
+  getObjectMotionMapFunc() const;
 
  private:
   const gtsam::ISAM2Params isam2_params_;

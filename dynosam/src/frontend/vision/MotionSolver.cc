@@ -479,7 +479,7 @@ ObjectMotionSovlerF2F::Result ObjectMotionSovlerF2F::solve(
     frame_k->object_observations_.erase(object_id);
   }
 
-  return std::make_pair(motion_estimates,
+  return std::make_pair(updateMotions(motion_estimates, frame_k, frame_k_1),
                         updatePoses(motion_estimates, frame_k, frame_k_1));
 }
 
@@ -542,6 +542,16 @@ const ObjectPoseMap& ObjectMotionSovlerF2F::updatePoses(
   }
 
   return object_poses_;
+}
+
+const ObjectMotionMap& ObjectMotionSovlerF2F::updateMotions(
+    MotionEstimateMap& motion_estimates, Frame::Ptr frame_k, Frame::Ptr) {
+  const FrameId frame_id_k = frame_k->getFrameId();
+  for (const auto& [object_id, motion_reference_frame] : motion_estimates) {
+    // object motions can take motion_reference_frame as an argument due to the
+    // explicit casting operators to a Pose3
+    object_motions_.insert22(object_id, frame_id_k, motion_reference_frame);
+  }
 }
 
 bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
@@ -779,7 +789,7 @@ ObjectMotionSolverSAM::ObjectMotionSolverSAM(
 
 ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
     Frame::Ptr frame_k, Frame::Ptr frame_k_1) {
-  MotionEstimateMap motion_map;
+  // MotionEstimateMap motion_map;
   auto solve_impl =
       [&](const std::pair<ObjectId, DynamicObjectObservation>& pair) -> bool {
     const auto object_id = pair.first;
@@ -851,16 +861,17 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
       estimator->update(frame_k->getFrameId(), measurements, frame_k->getPose(),
                         geometric_sovler_result.best_result);
 
-      Motion3ReferenceFrame motion_result;
-      // get result (depending on estimation)
-      if (output_style_ == MotionRepresentationStyle::F2F) {
-        motion_result = estimator->getFrame2FrameMotion(frame_k->getFrameId());
-      } else {
-        motion_result = estimator->getKeyFramedMotion(frame_k->getFrameId());
-      }
+      // Motion3ReferenceFrame motion_result;
+      // // get result (depending on estimation)
+      // if (output_style_ == MotionRepresentationStyle::F2F) {
+      //   motion_result =
+      //   estimator->getFrame2FrameMotion(frame_k->getFrameId());
+      // } else {
+      //   motion_result = estimator->getKeyFramedMotion(frame_k->getFrameId());
+      // }
 
-      std::lock_guard<std::mutex> lock(mutex_);
-      motion_map.insert2(object_id, motion_result);
+      // std::lock_guard<std::mutex> lock(mutex_);
+      // motion_map.insert2(object_id, motion_result);
       return true;
 
     } else {
@@ -877,20 +888,32 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
                            frame_k->object_observations_.end(), solve_impl);
   }
 
-  return std::make_pair(motion_map, mergeObjectMaps());
+  // return std::make_pair(motion_map, mergeObjectMaps());
+  return mergeObjectMaps();
 }
 
-ObjectPoseMap ObjectMotionSolverSAM::mergeObjectMaps() const {
+ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::mergeObjectMaps() const {
   ObjectPoseMap all_object_poses;
+  ObjectMotionMap all_object_motions;
+
+  std::function<ObjectMotionMap(DecoupledObjectSAM::Ptr)>
+      get_object_motions_func = getObjectMotionMapFunc();
+
   for (const auto& [object_id, estimator] : sam_estimators_) {
-    ObjectPoseMap per_object_poses = estimator->getObjectPoses();
+    const ObjectPoseMap per_object_poses = estimator->getObjectPoses();
+    const ObjectMotionMap per_object_motions =
+        get_object_motions_func(estimator);
     // should only have one object in it
     CHECK_EQ(per_object_poses.size(), 1u);
     CHECK(per_object_poses.exists(object_id));
 
+    CHECK_EQ(per_object_motions.size(), 1u);
+    CHECK(per_object_motions.exists(object_id));
+
     all_object_poses += per_object_poses;
+    all_object_motions += per_object_motions;
   }
-  return all_object_poses;
+  return {all_object_motions, all_object_poses};
 }
 
 // TODO: really horrible I have to remake this data-structure again and
@@ -951,6 +974,21 @@ DecoupledObjectSAM::Ptr ObjectMotionSolverSAM::getEstimator(
   }
 
   return sam_estimators_.at(object_id);
+}
+
+std::function<ObjectMotionMap(DecoupledObjectSAM::Ptr)>
+ObjectMotionSolverSAM::getObjectMotionMapFunc() const {
+  std::function<ObjectMotionMap(DecoupledObjectSAM::Ptr)> func;
+  if (output_style_ == MotionRepresentationStyle::F2F) {
+    func = [](DecoupledObjectSAM::Ptr agent) -> ObjectMotionMap {
+      return agent->getFrame2FrameMotions();
+    };
+  } else {
+    func = [](DecoupledObjectSAM::Ptr agent) -> ObjectMotionMap {
+      return agent->getKeyFramedMotions();
+    };
+  }
+  return func;
 }
 
 }  // namespace dyno

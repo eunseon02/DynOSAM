@@ -84,17 +84,17 @@ class DSDTransport {
   // to get velocity...
   static ObjectOdometry constructObjectOdometry(
       const gtsam::Pose3& motion_k, const gtsam::Pose3& pose_k,
-      ObjectId object_id, Timestamp timestamp_k,
+      ObjectId object_id, FrameId frame_id_k, Timestamp timestamp_k,
       const std::string& frame_id_link, const std::string& child_frame_id_link);
 
   static ObjectOdometryMap constructObjectOdometries(
-      const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
+      const ObjectMotionMap& motions, const ObjectPoseMap& poses,
       FrameId frame_id_k, Timestamp timestamp_k,
       const std::string& frame_id_link);
 
   static MultiObjectOdometryPath constructMultiObjectOdometryPaths(
-      const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
-      FrameId frame_id_k, Timestamp timestamp_k, rclcpp::Time ros_time_now,
+      const ObjectMotionMap& motions, const ObjectPoseMap& poses,
+      Timestamp timestamp_k, const FrameIdTimestampMap& frame_timestamp_map,
       const std::string& frame_id_link);
 
   /**
@@ -165,7 +165,7 @@ class DSDTransport {
      * MultiObjectOdometryPathPub::SharedPtr
      * @param tf_broadcaster std::shared_ptr<tf2_ros::TransformBroadcaster> TF
      * broadcaster to share between all Publishers.
-     * @param motions const MotionEstimateMap& estimated motions at time (k)
+     * @param motions const ObjectMotionMap& motions at time (... to k)
      * @param poses const ObjectPoseMap& poses at time (... to k)
      * @param frame_id_link const std::string& parent tf tree link (e.g.
      * odom/world.)
@@ -177,18 +177,19 @@ class DSDTransport {
         ObjectOdometryPub::SharedPtr object_odom_publisher,
         MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher,
         std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster,
-        const MotionEstimateMap& motions, const ObjectPoseMap& poses,
-        const std::string& frame_id_link, FrameId frame_id,
+        const ObjectMotionMap& motions, const ObjectPoseMap& poses,
+        const std::string& frame_id_link,
+        const FrameIdTimestampMap& frame_timestamp_map, FrameId frame_id,
         Timestamp timestamp);
   };
 
   /**
    * @brief Create a object odometry Publisher given object state (motion and
-   * pose) information for a given frame (k). The resulting publisher can then
+   * pose) information up to a given frame (k). The resulting publisher can then
    * be used to published ObjectOdometry messages and update the tf tree with
    * the object poses w.r.t to the parent frame id link.
    *
-   * @param motions_k const MotionEstimateMap& estimated motions at time (k)
+   * @param motions_k const ObjectMotionMap& motions at time (... to k)
    * @param poses const ObjectPoseMap& poses at time (... to k)
    * @param frame_id_link const std::string& parent tf tree link (e.g.
    * odom/world.)
@@ -196,10 +197,11 @@ class DSDTransport {
    * @param timestamp Timestamp
    * @return Publisher
    */
-  Publisher addObjectInfo(const MotionEstimateMap& motions_k,
+  Publisher addObjectInfo(const ObjectMotionMap& motions,
                           const ObjectPoseMap& poses,
-                          const std::string& frame_id_link, FrameId frame_id,
-                          Timestamp timestamp);
+                          const std::string& frame_id_link,
+                          const FrameIdTimestampMap& frame_timestamp_map,
+                          FrameId frame_id, Timestamp timestamp);
 
  private:
   rclcpp::Node::SharedPtr node_;

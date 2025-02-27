@@ -91,7 +91,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   //                           MotionEstimateMap& motion_estimates);
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
-      const Frame& frame, const MotionEstimateMap& estimated_motions,
+      const Frame& frame, const ObjectMotionMap& object_motions,
       const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
       const DebugImagery::Optional& debug_imagery = std::nullopt,

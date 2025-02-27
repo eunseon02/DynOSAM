@@ -42,7 +42,7 @@ class SharedModuleInfo {
   static SharedModuleInfo& instance();
 
   std::optional<GroundTruthPacketMap> getGroundTruthPackets() const;
-  const gtsam::FastMap<FrameId, Timestamp>& getTimestampMap() const;
+  const FrameIdTimestampMap& getTimestampMap() const;
 
   SharedModuleInfo& updateGroundTruthPacket(
       FrameId frame_id, const GroundTruthInputPacket& ground_truth_packet);
@@ -55,7 +55,7 @@ class SharedModuleInfo {
  private:
   mutable std::mutex mutex_;
   GroundTruthPacketMap gt_packet_map_;
-  gtsam::FastMap<FrameId, Timestamp> frame_id_to_timestamp_map_;
+  FrameIdTimestampMap frame_id_to_timestamp_map_;
 };
 
 struct SharedModuleInterface {

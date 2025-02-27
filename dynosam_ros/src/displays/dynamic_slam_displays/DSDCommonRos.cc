@@ -28,8 +28,8 @@ std::string DSDTransport::constructObjectFrameLink(ObjectId object_id) {
 
 ObjectOdometry DSDTransport::constructObjectOdometry(
     const gtsam::Pose3& motion_k, const gtsam::Pose3& pose_k,
-    ObjectId object_id, Timestamp timestamp_k, const std::string& frame_id_link,
-    const std::string& child_frame_id_link) {
+    ObjectId object_id, FrameId frame_id_k, Timestamp timestamp_k,
+    const std::string& frame_id_link, const std::string& child_frame_id_link) {
   ObjectOdometry object_odom;
 
   // technically this shoudl be k-1
@@ -45,11 +45,12 @@ ObjectOdometry DSDTransport::constructObjectOdometry(
   dyno::convert(motion_k, object_odom.h_w_km1_k.pose);
   // NO velocity!!
   object_odom.object_id = object_id;
+  object_odom.sequence = frame_id_k;
   return object_odom;
 }
 
 ObjectOdometryMap DSDTransport::constructObjectOdometries(
-    const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
+    const ObjectMotionMap& motions, const ObjectPoseMap& poses,
     FrameId frame_id_k, Timestamp timestamp_k,
     const std::string& frame_id_link) {
   // need to get poses for k-1
@@ -58,8 +59,14 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
   // ObjectPoseMap is over all k to K
   //  const FrameId frame_id_k_1 = frame_id_k - 1u;
   ObjectOdometryMap object_odom_map;
-  for (const auto& [object_id, object_motion] : motions_k) {
-    const gtsam::Pose3& motion_k = object_motion;
+  for (const auto& [object_id, per_frame_motions] : motions) {
+    if (!per_frame_motions.exists(frame_id_k)) {
+      LOG(WARNING) << "Cannot construct ObjectOdometry for object " << object_id
+                   << ", at frame " << frame_id_k
+                   << " Missing entry in ObjectMotionMap";
+      continue;
+    }
+    const gtsam::Pose3& motion_k = per_frame_motions.at(frame_id_k);
 
     if (!poses.exists(object_id, frame_id_k)) {
       LOG(WARNING) << "Cannot construct ObjectOdometry for object " << object_id
@@ -67,26 +74,26 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
                    << " Missing entry in ObjectPoseMap";
       continue;
     }
-
     const gtsam::Pose3& pose_k = poses.at(object_id, frame_id_k);
 
     const std::string child_frame_id_link = constructObjectFrameLink(object_id);
 
     object_odom_map.insert2(
         child_frame_id_link,
-        constructObjectOdometry(motion_k, pose_k, object_id, timestamp_k,
-                                frame_id_link, child_frame_id_link));
+        constructObjectOdometry(motion_k, pose_k, object_id, frame_id_k,
+                                timestamp_k, frame_id_link,
+                                child_frame_id_link));
   }
 
   return object_odom_map;
 }
 
 MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
-    const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
-    FrameId frame_id_k, Timestamp timestamp_k, rclcpp::Time ros_time_now,
+    const ObjectMotionMap& motions, const ObjectPoseMap& poses,
+    Timestamp timestamp_k, const FrameIdTimestampMap& frame_timestamp_map,
     const std::string& frame_id_link) {
   MultiObjectOdometryPath multi_path;
-  multi_path.header.stamp = ros_time_now;
+  multi_path.header.stamp = utils::toRosTime(timestamp_k);
   multi_path.header.frame_id = frame_id_link;
 
   // TODO: right now dont have the motion for every timestep so... just leave
@@ -104,6 +111,24 @@ MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
     gtsam::FastMap<int, ObjectOdometryPath> segmented_paths;
 
     for (const auto& [frame_id, object_pose] : frame_pose_map) {
+      if (!motions.exists(object_id, frame_id)) {
+        LOG(WARNING)
+            << "Cannot construct ObjectOdometry for object " << object_id
+            << ", at frame " << frame_id
+            << " for MultiObjectOdometryPath. Missing entry in ObjectMotionMap";
+        continue;
+      }
+      const gtsam::Pose3& object_motion = motions.at(object_id, frame_id);
+
+      if (!frame_timestamp_map.exists(frame_id)) {
+        LOG(WARNING) << "Cannot construct ObjectOdometry for object "
+                     << object_id << ", at frame " << frame_id
+                     << " for MultiObjectOdometryPath. Missing entry in "
+                        "FrameIdTimestampMap";
+        continue;
+      }
+      const Timestamp& timestamp = frame_timestamp_map.at(frame_id);
+
       if (!first && frame_id != previous_frame_id + 1) {
         path_segment++;
       }
@@ -113,9 +138,9 @@ MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
       // RIGHT NOW MOTION IDENTITY
       // timestamp is wrong
       gtsam::Pose3 motion;
-      const ObjectOdometry object_odometry =
-          constructObjectOdometry(motion, object_pose, object_id, timestamp_k,
-                                  frame_id_link, child_frame_id_link);
+      const ObjectOdometry object_odometry = constructObjectOdometry(
+          object_motion, object_pose, object_id, frame_id, timestamp,
+          frame_id_link, child_frame_id_link);
 
       if (!segmented_paths.exists(path_segment)) {
         ObjectOdometryPath path;
@@ -167,8 +192,10 @@ DSDTransport::Publisher::Publisher(
     ObjectOdometryPub::SharedPtr object_odom_publisher,
     MultiObjectOdometryPathPub::SharedPtr multi_object_odom_path_publisher,
     std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster,
-    const MotionEstimateMap& motions, const ObjectPoseMap& poses,
-    const std::string& frame_id_link, FrameId frame_id, Timestamp timestamp)
+    const ObjectMotionMap& motions, const ObjectPoseMap& poses,
+    const std::string& frame_id_link,
+    const FrameIdTimestampMap& frame_timestamp_map, FrameId frame_id,
+    Timestamp timestamp)
     : node_(node),
       object_odom_publisher_(object_odom_publisher),
       multi_object_odom_path_publisher_(multi_object_odom_path_publisher),
@@ -179,14 +206,17 @@ DSDTransport::Publisher::Publisher(
       object_odometries_(DSDTransport::constructObjectOdometries(
           motions, poses, frame_id, timestamp, frame_id_link)),
       object_paths_(DSDTransport::constructMultiObjectOdometryPaths(
-          motions, poses, frame_id, timestamp, node->now(), frame_id_link)) {}
+          motions, poses, timestamp, frame_timestamp_map, frame_id_link)) {}
 
 DSDTransport::Publisher DSDTransport::addObjectInfo(
-    const MotionEstimateMap& motions_k, const ObjectPoseMap& poses,
-    const std::string& frame_id_link, FrameId frame_id, Timestamp timestamp) {
+    const ObjectMotionMap& motions, const ObjectPoseMap& poses,
+    const std::string& frame_id_link,
+    const FrameIdTimestampMap& frame_timestamp_map, FrameId frame_id,
+    Timestamp timestamp) {
   return Publisher(node_, object_odom_publisher_,
-                   multi_object_odom_path_publisher_, tf_broadcaster_,
-                   motions_k, poses, frame_id_link, frame_id, timestamp);
+                   multi_object_odom_path_publisher_, tf_broadcaster_, motions,
+                   poses, frame_id_link, frame_timestamp_map, frame_id,
+                   timestamp);
 }
 
 DSDRos::DSDRos(const DisplayParams& params, rclcpp::Node::SharedPtr node)

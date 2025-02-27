@@ -345,7 +345,14 @@ void RGBDBackendModule::updateMap(gtsam::Pose3& T_world_cam,
   map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
   // update other measurements
   map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
-  map_->updateObjectMotionMeasurements(frame_k, input->estimated_motions_);
+
+  // collected motion estimates for this current frame (ie. new motions!)
+  // not handling the case where the update is incremental and other motions
+  // have changed but right now the backend is not designed to handle this and
+  // we currently dont run the backend with smoothing (tracking) in the
+  // frontend.
+  const auto estimated_motions = input->object_motions_.toEstimateMap(frame_k);
+  map_->updateObjectMotionMeasurements(frame_k, estimated_motions);
 
   T_world_cam = T_world_cam_k_frontend;
 }

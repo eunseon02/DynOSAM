@@ -43,8 +43,7 @@ SharedModuleInfo& SharedModuleInfo::instance() {
   return *instance_;
 }
 
-const gtsam::FastMap<FrameId, Timestamp>& SharedModuleInfo::getTimestampMap()
-    const {
+const FrameIdTimestampMap& SharedModuleInfo::getTimestampMap() const {
   const std::lock_guard<std::mutex> lock(mutex_);
   return frame_id_to_timestamp_map_;
 }

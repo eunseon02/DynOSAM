@@ -148,10 +148,15 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     vision_tools::trackDynamic(base_params_, *previous_frame, frame);
   }
 
+  ObjectMotionMap object_motions;
   ObjectPoseMap object_poses;
-  MotionEstimateMap motion_estimates;
-  std::tie(motion_estimates, object_poses) =
+  // MotionEstimateMap motion_estimates;
+  std::tie(object_motions, object_poses) =
       object_motion_solver_->solve(frame, previous_frame);
+
+  // motions in this frame (ie. new motions!!)
+  MotionEstimateMap motion_estimates =
+      object_motions.toEstimateMap(frame->getFrameId());
 
   const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
   PointCloudLabelRGB::Ptr dense_labelled_cloud =
@@ -162,6 +167,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     auto ground_truths = this->shared_module_info.getGroundTruthPackets();
     logger_->logCameraPose(frame->getFrameId(), frame->getPose(),
                            ground_truths);
+    // TODO: this is now wrong as we dont log all the corrected motions!!!!
     logger_->logObjectMotion(frame->getFrameId(), motion_estimates,
                              ground_truths);
     logger_->logTrackingLengthHistogram(frame);
@@ -188,7 +194,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       processed_image_container.get<ImageType::Depth>());
 
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
-      *frame, motion_estimates, object_poses, frame->T_world_camera_,
+      *frame, object_motions, object_poses, frame->T_world_camera_,
       input->optional_gt_, debug_imagery, dense_labelled_cloud);
 
   if (FLAGS_save_frontend_json)
@@ -264,7 +270,7 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
 }
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
-    const Frame& frame, const MotionEstimateMap& estimated_motions,
+    const Frame& frame, const ObjectMotionMap& object_motions,
     const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
     const GroundTruthInputPacket::Optional& gt_packet,
     const DebugImagery::Optional& debug_imagery,
@@ -333,11 +339,21 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
   // module
   camera_poses_.push_back(T_world_camera);
 
+  // create timestamps for the provided frames
+  // TODO: maybe a more efficient way later!!!
+  const FrameIdTimestampMap& all_timestamp_map =
+      shared_module_info.getTimestampMap();
+  FrameIdTimestampMap involved_timestamps;
+  for (const FrameId& frame_id : object_motions.getInvovledFrameIds()) {
+    CHECK(all_timestamp_map.exists(frame_id));
+    involved_timestamps.insert2(frame_id, all_timestamp_map.at(frame_id));
+  }
+
   return std::make_shared<RGBDInstanceOutputPacket>(
       static_keypoint_measurements, dynamic_keypoint_measurements,
       static_landmarks, dynamic_landmarks, T_world_camera, frame.timestamp_,
-      frame.frame_id_, estimated_motions, object_poses, camera_poses_, camera_,
-      gt_packet, debug_imagery, dense_labelled_cloud);
+      frame.frame_id_, object_motions, object_poses, camera_poses_, camera_,
+      gt_packet, debug_imagery, dense_labelled_cloud, involved_timestamps);
 }
 
 cv::Mat RGBDInstanceFrontendModule::createTrackingImage(

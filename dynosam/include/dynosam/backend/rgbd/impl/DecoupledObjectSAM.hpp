@@ -45,6 +45,7 @@ namespace dyno {
 
 using namespace keyframe_object_centric;
 
+// TODO: should rename to SAMAgent!! (and tracking not decoupled!!)
 class DecoupledObjectSAM {
  public:
   DYNO_POINTER_TYPEDEFS(DecoupledObjectSAM)
@@ -90,13 +91,16 @@ class DecoupledObjectSAM {
   }
   const gtsam::ISAM2Result& getISAM2Result() const { return result_; }
 
-  inline Map::Ptr map() { return map_; }
+  inline Map::Ptr map() const { return map_; }
 
   Motion3ReferenceFrame getFrame2FrameMotion(FrameId frame_id) const;
   Motion3ReferenceFrame getKeyFramedMotion(FrameId frame_id) const;
 
   // all frames
   ObjectPoseMap getObjectPoses() const { return accessor_->getObjectPoses(); }
+  // all frames
+  ObjectMotionMap getFrame2FrameMotions() const;
+  ObjectMotionMap getKeyFramedMotions() const;
 
  private:
   template <typename DERIVEDSTATUS>

@@ -103,6 +103,9 @@ using MotionMap =
     gtsam::FastMap<TrackletId,
                    Motion3>;  //! Map of tracklet ids to Motion3 (gtsam::Pose3)
 
+/// @brief Map of FrameIds (k) to Timestamps
+using FrameIdTimestampMap = gtsam::FastMap<FrameId, Timestamp>;
+
 /**
  * @brief Get demangled class name
  *
@@ -188,6 +191,12 @@ struct MotionReferenceFrame : public ReferenceFrameValue<E> {
   using This = MotionReferenceFrame<E>;
   using Base = ReferenceFrameValue<E>;
   using ConstEstimate = typename Base::ConstEstimate;
+  using Estimate = typename Base::Estimate;
+
+  // explicitly inherit casting operators
+  using Base::operator Estimate&;
+  using Base::operator const Estimate&;
+  using Base::operator const ReferenceFrame&;
 
   // forward the style ;)
   using Style = MotionRepresentationStyle;
@@ -463,6 +472,7 @@ class GenericObjectCentricMap
  public:
   using Base = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, VALUE>>;
   using NestedBase = gtsam::FastMap<FrameId, VALUE>;
+  using EstimateMap = gtsam::FastMap<ObjectId, VALUE>;
 
   using This = GenericObjectCentricMap<VALUE>;
   using Value = VALUE;
@@ -498,6 +508,15 @@ class GenericObjectCentricMap
     return frame_map.insert2(frame_id, value);
   }
 
+  // construct from an estimate map
+  bool insert2(FrameId frame_id, const EstimateMap& estimate_map) {
+    bool result = true;
+    for (const auto& [object_id, estimate_value] : estimate_map) {
+      result &= this->insert22(object_id, frame_id, estimate_value);
+    }
+    return result;
+  }
+
   bool exists(ObjectId object_id, FrameId frame_id) const {
     static size_t out_of_range_flag;
     return existsImpl(object_id, frame_id, out_of_range_flag);
@@ -511,6 +530,7 @@ class GenericObjectCentricMap
     return atImpl<This, Value&>(const_cast<This*>(this), object_id, frame_id);
   }
 
+  // wont update key if exists?
   This& operator+=(const This& rhs) {
     for (const auto& [key, value] : rhs) {
       this->operator[](key).insert(value.begin(), value.end());
@@ -526,13 +546,38 @@ class GenericObjectCentricMap
    * @return gtsam::FastMap<ObjectId, Value>
    */
   gtsam::FastMap<ObjectId, Value> collectByFrame(FrameId frame_id) const {
-    gtsam::FastMap<ObjectId, Value> object_map;
+    return this->toEstimateMap(frame_id);
+  }
+
+  EstimateMap toEstimateMap(FrameId frame_id) const {
+    EstimateMap object_map;
     for (const auto& [object_id, frame_map] : *this) {
       if (frame_map.exists(frame_id)) {
         object_map.insert2(object_id, frame_map.at(frame_id));
       }
     }
     return object_map;
+  }
+
+  ObjectIds gatherInvolvedObjects() const {
+    ObjectIds object_ids;
+    object_ids.reserve(this->size());
+    for (const auto& [object_id, _] : *this) {
+      object_ids.emplace_back(object_id);
+    }
+    return object_ids;
+  }
+
+  // maybe slow!!
+  // TODO: maybe remove and cache frames somewhere else if necessary!!!
+  FrameIds getInvovledFrameIds() const {
+    FrameIds frame_ids;
+    for (const auto& [_, frame_map] : *this) {
+      for (const auto& [frame_id, _] : frame_map) {
+        frame_ids.push_back(frame_id);
+      }
+    }
+    return frame_ids;
   }
 
  private:
