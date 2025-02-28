@@ -943,3 +943,66 @@ TEST(CodeConcepts, testModifyOptionalString) {
 
   EXPECT_EQ(input, "udpated");
 }
+
+#include "dynosam/dataprovider/DataProviderUtils.hpp"
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
+#include "dynosam/frontend/anms/anms/anms.h"
+#include "internal/helpers.hpp"
+
+TEST(CodeConcepts, dynamicObjectSampling) {
+  using namespace dyno;
+  const std::string mask_path = getTestDataPath() + "/kitti_04_mask_000014.txt";
+
+  cv::Size size(1242, 375);
+  cv::Mat mask;
+  dyno::loadSemanticMask(mask_path, size, mask);
+
+  gtsam::FastMap<ObjectId, std::vector<cv::KeyPoint>> sampled_keypoints;
+  for (int i = 0; i < mask.rows; i++) {
+    for (int j = 0; j < mask.cols; j++) {
+      const ObjectId object_id = mask.at<ObjectId>(i, j);
+
+      if (object_id == background_label) {
+        continue;
+      }
+
+      if (!sampled_keypoints.exists(object_id)) {
+        sampled_keypoints.insert2(object_id, KeypointsCV{});
+      }
+      KeypointsCV& keypoints = sampled_keypoints.at(object_id);
+      keypoints.push_back(utils::gtsamPointToKeyPoint(Keypoint(j, i)));
+    }
+  }
+  cv::Mat mask_viz = dyno::ImageType::MotionMask::toRGB(mask);
+
+  const int max_features_to_track = 50;
+  static constexpr float tolerance = 0.001;
+  Eigen::MatrixXd binning_mask;
+
+  AdaptiveNonMaximumSuppression non_maximum_supression(
+      AnmsAlgorithmType::RangeTree);
+  for (auto& [object_id, opencv_keypoints] : sampled_keypoints) {
+    // const int& number_tracked = object_tracking_info.num_track;
+    const int number_tracked = opencv_keypoints.size();
+    // int nr_corners_needed = std::max(
+    //     max_features_to_track - number_tracked, 0);
+
+    // std
+    int nr_corners_needed = 100;
+
+    std::vector<cv::KeyPoint>& max_keypoints = opencv_keypoints;
+    // const size_t sampled_size = max_keypoints.size();
+    max_keypoints = non_maximum_supression.suppressNonMax(
+        opencv_keypoints, nr_corners_needed, tolerance, size.width, size.height,
+        5, 5, binning_mask);
+
+    LOG(INFO) << "Sampled " << number_tracked
+              << " after anmns = " << max_keypoints.size();
+    anms::VisualizeAll(mask_viz, max_keypoints,
+                       "ANMS dynamic " + std::to_string(object_id));
+  }
+  // cv::waitKey(0);
+
+  // cv::imshow("Mask", mask_viz);
+  // cv::waitKey(0);
+}

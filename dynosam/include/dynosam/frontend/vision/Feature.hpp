@@ -68,6 +68,10 @@ struct functional_keypoint {
   }
 };
 
+// /// @brief adaptor struct to allow types to act like a cv::KeyPoint
+// template<typename T>
+// struct cv_keypoint_adaptor;
+
 /**
  * @brief 2D tracking and id information for a feature observation at a single
  * frame.
@@ -364,6 +368,14 @@ class Feature {
   impl data_;
   mutable std::mutex mutex_;
 };
+
+// template<>
+// struct cv_keypoint_adaptor<Feature> {
+//   static float x(const Feature& f) { return
+//   functional_keypoint::u<float>(f.keypoint()); } static float y(const
+//   Feature& f) { return functional_keypoint::v<float>(f.keypoint()); } static
+//   float response(const Feature& f) { return 0; }
+// };
 
 using FeaturePtrs = std::vector<Feature::Ptr>;
 using FeaturePair =

@@ -54,12 +54,26 @@ class TrackletIdManager {
     return *instance_;
   }
 
-  inline TrackletId getTrackletIdCount() const { return tracklet_count_; }
-  inline void incrementTrackletIdCount() { tracklet_count_++; }
+  inline TrackletId getTrackletIdCount() const {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    return tracklet_count_;
+  }
+  inline void incrementTrackletIdCount() {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    tracklet_count_++;
+  }
+
+  inline TrackletId getAndIncrementTrackletId() {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    auto tracklet = tracklet_count_;
+    tracklet_count_++;
+    return tracklet;
+  }
 
  private:
   TrackletIdManager() = default;
   TrackletId tracklet_count_{0};  //! Global TrackletId
+  std::mutex mutex_;
 
   static std::unique_ptr<TrackletIdManager> instance_;
 };

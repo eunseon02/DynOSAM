@@ -91,7 +91,7 @@ def run_tests_for_package(package_name, unknown_args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="""Utility to run gtests for dynsam C++ packages.
+        description="""Utility to run gtests for dynosam C++ packages.
         Additional args (anything besides --package, ie any gflags) are passed to gtest.\n
         Useful flags are --gtest_filter=POSTIVE_PATTERNS[-NEGATIVE_PATTERNS]"""
     )

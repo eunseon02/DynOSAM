@@ -40,9 +40,8 @@
 DEFINE_int32(shrink_row, 0, "Number of rows to shrink the tracking image by");
 DEFINE_int32(shrink_col, 0, "Number of cols to shrink the tracking image by");
 
-DEFINE_int32(
-    semantic_mask_step_size, 3,
-    "The step sized used across the semantic mask when sampling points");
+DEFINE_int32(max_dynamic_features_per_frame, 50,
+             "Maximum dynamic features to detect per object per frame");
 DEFINE_bool(use_propogate_mask, true,
             "If true, the semantic mask will be propogated with optical flow");
 
@@ -116,14 +115,13 @@ void declare_config(TrackerParams& config) {
   field(config.gfft_params, "gfft_params");
   field(config.orb_params, "orb_params");
 
-  field(config.semantic_mask_step_size, "semantic_mask_step_size");
+  field(config.max_dynamic_features_per_frame,
+        "max_dynamic_features_per_frame");
   field(config.use_propogate_mask, "use_propogate_mask");
 
   // update with FLAGS
-  config.semantic_mask_step_size = FLAGS_semantic_mask_step_size;
+  // config.semantic_mask_step_size = FLAGS_semantic_mask_step_size;
   config.use_propogate_mask = FLAGS_use_propogate_mask;
-
-  LOG(INFO) << "Semantic step size " << config.semantic_mask_step_size;
 }
 
 }  // namespace dyno

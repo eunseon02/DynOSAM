@@ -2,7 +2,9 @@
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
 max_background_depth: 40.0
-max_object_depth: 25.0
+# max_object_depth: 25.0
+
+max_object_depth: 8.0 #indoors
 
 # When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp
 use_ego_motion_pnp: True
@@ -38,3 +40,4 @@ tracker_params:
   shrink_col: 0
   max_nr_keypoints_before_anms: 2000
   max_features_per_frame: 800
+  max_dynamic_features_per_frame: 75

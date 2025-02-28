@@ -133,14 +133,14 @@ int main(int argc, char* argv[]) {
 
     LOG(INFO) << to_string(tracker->getTrackerInfo());
     const std::string path = "/root/results/misc/";
-    if ((char)cv::waitKey(0) == 's') {
-      LOG(INFO) << "Saving...";
-      // cv::imwrite(path + "omd_su4_rgb.png", rgb);
-      // cv::imwrite(path + "omd_su4_of.png", of_viz);
-      // cv::imwrite(path + "omd_su4_motion.png", motion_viz);
-      // cv::imwrite(path + "omd_su4_depth.png", depth_viz);
-      cv::imwrite(path + "omd_tracking.png", tracking);
-    }
+    // if ((char)cv::waitKey(0) == 's') {
+    //   LOG(INFO) << "Saving...";
+    //   // cv::imwrite(path + "omd_su4_rgb.png", rgb);
+    //   // cv::imwrite(path + "omd_su4_of.png", of_viz);
+    //   // cv::imwrite(path + "omd_su4_motion.png", motion_viz);
+    //   // cv::imwrite(path + "omd_su4_depth.png", depth_viz);
+    //   cv::imwrite(path + "omd_tracking.png", tracking);
+    // }
     cv::waitKey(1);
 
     return true;

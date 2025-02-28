@@ -231,10 +231,10 @@ inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point) {
                        static_cast<double>(point.y));
 }
 
-// inline gtsam::Point2 cvKeypointToGtsam(const cv::KeyPoint& point) {
-//   return gtsam::Point2(static_cast<double>(point.x),
-//                        static_cast<double>(point.y));
-// }
+inline gtsam::Point2 cvKeypointToGtsam(const cv::KeyPoint& point) {
+  return gtsam::Point2(static_cast<double>(point.pt.x),
+                       static_cast<double>(point.pt.y));
+}
 
 template <typename T = float>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {

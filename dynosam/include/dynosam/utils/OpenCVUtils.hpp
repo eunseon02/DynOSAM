@@ -29,6 +29,7 @@
  */
 #pragma once
 
+#include <opencv4/opencv2/core/types.hpp>
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "dynosam/common/Types.hpp"
@@ -43,6 +44,17 @@
 namespace dyno {
 
 class CameraParams;
+
+// /// @brief adaptor struct to allow types to act like a cv::KeyPoint
+// template<typename T>
+// struct cv_keypoint_adaptor;
+
+// template<>
+// struct cv_keypoint_adaptor<cv::KeyPoint> {
+//   static float x(const cv::KeyPoint& f) { return f.pt.x; }
+//   static float y(const cv::KeyPoint& f) { return f.pt.y; }
+//   static float response(const cv::KeyPoint& f) { return f.response; }
+// };
 
 namespace utils {
 
