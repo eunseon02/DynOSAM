@@ -381,7 +381,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
             const std::lock_guard<std::mutex> lock(mutex);
             tracklet_id = tracked_id_manager.getAndIncrementTrackletId();
           }
-          // tracked_id_manager.incrementTrackletIdCount();
+
           Feature::Ptr feature = std::make_shared<Feature>();
           (*feature)
               .objectId(object_id)
@@ -399,67 +399,6 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
           }
         }
       });
-
-  // int step = params_.semantic_mask_step_size;
-  // for (int i = 0; i < rgb.rows - step; i = i + step) {
-  //   for (int j = 0; j < rgb.cols - step; j = j + step) {
-  //     if (!detection_mask.empty()) {
-  //       const unsigned char valid_detection =
-  //           detection_mask.at<unsigned char>(i, j);
-  //       // //marked invalid by the detection mask
-  //       if (valid_detection == 0) {
-  //         continue;
-  //       }
-  //     }
-
-  //     const ObjectId label = motion_mask.at<ObjectId>(i, j);
-
-  //     if (label == background_label) {
-  //       continue;
-  //     }
-
-  //     PerObjectStatus& object_tracking_info = info_.getObjectStatus(label);
-
-  //     double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
-  //     double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
-
-  //     // TODO: close to zero?
-  //     if (flow_xe == 0 || flow_ye == 0) {
-  //       object_tracking_info.num_zero_flow++;
-  //       continue;
-  //     }
-
-  //     OpticalFlow flow(flow_xe, flow_ye);
-  //     Keypoint keypoint(j, i);
-  //     const Keypoint predicted_kp =
-  //         Feature::CalculatePredictedKeypoint(keypoint, flow);
-  //     // const size_t cell_idx = grid.getCellIndex(keypoint);
-
-  //     if (isWithinShrunkenImage(keypoint) /*&& !grid.isOccupied(cell_idx)*/)
-  //     {
-  //       // save correspondences
-  //       auto tracklet_id = tracked_id_manager.getTrackletIdCount();
-  //       tracked_id_manager.incrementTrackletIdCount();
-  //       Feature::Ptr feature = std::make_shared<Feature>();
-  //       (*feature)
-  //           .objectId(label)
-  //           .frameId(frame_id)
-  //           .keypointType(KeyPointType::DYNAMIC)
-  //           .age(0)
-  //           .trackletId(tracklet_id)
-  //           .keypoint(keypoint)
-  //           .measuredFlow(flow)
-  //           .predictedKeypoint(predicted_kp);
-
-  //       dynamic_features.add(feature);
-  //       instance_labels.push_back(feature->objectId());
-
-  //       object_tracking_info.num_sampled++;
-  //     } else {
-  //       object_tracking_info.num_outside_shrunken_image++;
-  //     }
-  //   }
-  // }
 }
 
 void FeatureTracker::propogateMask(ImageContainer& image_container) {

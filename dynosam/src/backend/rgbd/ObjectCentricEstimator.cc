@@ -165,7 +165,10 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
   // first object motion (ie s0 -> s1)
   if (!frame_node_k_1) {
     CHECK_NOTNULL(frame_node_k);
-    FrameId s0 = L0_values_->at(object_id).first;
+    // FrameId s0 = L0_values_->at(object_id).first;
+    const auto range =
+        CHECK_NOTNULL(key_frame_data_->find(object_id, frame_id));
+    const auto [s0, L0] = range->dataPair();
     // check that the first frame of the object motion is actually this frame
     // this motion should actually be identity
     CHECK_EQ(s0, frame_id);
@@ -210,13 +213,14 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
   // CHECK(false);
 
   if (motion_s0_k) {
-    CHECK(L0_values_->exists(object_id));
-    const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
-    // LOG(INFO) << "Frame " << frame_id << " obj id " << object_id;
-    // LOG(INFO) << "Object pose s0 " << L0;
-    // LOG(INFO) << "Object motion " << motion_s0_k.get();
+    // CHECK(L0_values_->exists(object_id));
+    // const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
+
+    const auto range =
+        CHECK_NOTNULL(key_frame_data_->find(object_id, frame_id));
+    const auto [s0, L0] = range->dataPair();
+
     const gtsam::Pose3 L_k = motion_s0_k.get() * L0;
-    // LOG(INFO) << "Object pose " << L_k;
 
     return StateQuery<gtsam::Pose3>(pose_key, L_k);
   } else {
@@ -249,8 +253,11 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   //                       << " but no motion at frame " << frame_id << " with
   //                       key: " << DynoLikeKeyFormatter(motion_key);
   if (point_local && motion_s0_k) {
-    CHECK(L0_values_->exists(object_id));
-    const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
+    // CHECK(L0_values_->exists(object_id));
+    // const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
+    const auto range =
+        CHECK_NOTNULL(key_frame_data_->find(object_id, frame_id));
+    const auto [s0, L0] = range->dataPair();
     // point in world at k
     const gtsam::Point3 m_k = motion_s0_k.get() * L0 * point_local.get();
     return StateQuery<gtsam::Point3>(point_key, m_k);
@@ -293,13 +300,16 @@ StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
 
 // TODO: no keyframing
 bool ObjectCentricFormulation::hasObjectKeyFrame(ObjectId object_id,
-                                                 FrameId) const {
-  return L0_.exists(object_id);
+                                                 FrameId frame_id) const {
+  // return L0_.exists(object_id);
+  return static_cast<bool>(key_frame_data_.find(object_id, frame_id));
 }
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getObjectKeyFrame(
     ObjectId object_id, FrameId frame_id) const {
-  CHECK(hasObjectKeyFrame(object_id, frame_id));
-  return L0_.at(object_id);
+  const KeyFrameRange::ConstPtr range =
+      key_frame_data_.find(object_id, frame_id);
+  CHECK_NOTNULL(range);
+  return range->dataPair();
 }
 
 Motion3ReferenceFrame ObjectCentricFormulation::getEstimatedMotion(
@@ -390,8 +400,16 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
 
     // use first point as initalisation?
     // in this case k is k-1 as we use frame_node_k_1
-    gtsam::Pose3 s0_H_k_world =
-        computeInitialH(context.getObjectId(), frame_node_k_1->getId());
+    bool keyframe_updated;
+    gtsam::Pose3 s0_H_k_world = computeInitialH(
+        context.getObjectId(), frame_node_k_1->getId(), &keyframe_updated);
+
+    if (keyframe_updated) {
+      // TODO: gross I have to reget them again!!
+      std::tie(s0, L_0) =
+          getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
+    }
+
     gtsam::Pose3 L_k = s0_H_k_world * L_0;
     // H from k to s0 in frame k (^wL_k)
     //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();
@@ -519,68 +537,16 @@ void ObjectCentricFormulation::objectUpdateContext(
 
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
     ObjectId object_id, FrameId frame_id) {
-  if (L0_.exists(object_id)) {
-    // LOG(INFO) << "Getting L0 from cache " << object_id << " SE(3) "
-    //           << L0_.at(object_id).second;
-    return L0_.at(object_id);
+  const KeyFrameRange::ConstPtr range =
+      key_frame_data_.find(object_id, frame_id);
+  if (range) {
+    // operater casting allows return of std::pair
+    return range->dataPair();
   }
 
-  if (FLAGS_init_object_pose_from_gt) {
-    const auto gt_packets = hooks().ground_truth_packets_request();
-    if (gt_packets && gt_packets->exists(frame_id)) {
-      const auto& gt_packet = gt_packets->at(frame_id);
-
-      ObjectPoseGT object_gt;
-      if (gt_packet.getObject(object_id, object_gt)) {
-        L0_.insert2(object_id, std::make_pair(frame_id, object_gt.L_world_));
-        return L0_.at(object_id);
-      }
-    }
-  }
-
-  // else initalise from centroid?
-  auto object_node = map()->getObject(object_id);
-  CHECK(object_node);
-
-  auto frame_node = map()->getFrame(frame_id);
-  CHECK(frame_node);
-  CHECK(frame_node->objectObserved(object_id));
-
-  StatusLandmarkVector dynamic_landmarks;
-
-  // measured/linearized camera pose at the first frame this object has been
-  // seen
-  const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
-  auto measurement_pairs = frame_node->getDynamicMeasurements(object_id);
-
-  for (const auto& [lmk_node, measurement] : measurement_pairs) {
-    CHECK(lmk_node->seenAtFrame(frame_id));
-    CHECK_EQ(lmk_node->object_id, object_id);
-
-    const gtsam::Point3 landmark_measurement_local = measurement.landmark;
-    // const gtsam::Point3 landmark_measurement_world = X_world *
-    // landmark_measurement_local;
-
-    dynamic_landmarks.push_back(
-        LandmarkStatus::DynamicInGLobal(landmark_measurement_local, frame_id,
-                                        lmk_node->tracklet_id, object_id));
-  }
-
-  CloudPerObject object_clouds = groupObjectCloud(dynamic_landmarks, X_world);
-  CHECK_EQ(object_clouds.size(), 1u);
-
-  CHECK(object_clouds.exists(object_id));
-
-  const auto dynamic_point_cloud = object_clouds.at(object_id);
-  pcl::PointXYZ centroid;
-  pcl::computeCentroid(dynamic_point_cloud, centroid);
-  // TODO: outlier reject?
-  gtsam::Point3 translation = pclPointToGtsam(centroid);
-  gtsam::Pose3 center(gtsam::Rot3::Identity(), X_world * translation);
-
-  // frame id should coincide with the first seen frame of this object...?
-  L0_.insert2(object_id, std::make_pair(frame_id, center));
-  return L0_.at(object_id);
+  gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
+  return key_frame_data_.startNewActiveRange(object_id, frame_id, center)
+      ->dataPair();
 }
 
 // TODO: can be massively more efficient
@@ -588,7 +554,9 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
 // as the last motion
 //  so only one composition is needed to get the latest motion
 gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
-                                                       FrameId frame_id) {
+                                                       FrameId frame_id,
+                                                       bool* keyframe_updated) {
+  // TODO: could this ever update the keyframe?
   auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
 
   FrameId current_frame_id = frame_id;
@@ -645,11 +613,24 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
     FrameId diff = current_frame_id - previous_frame;
 
     // TODO:hack!! This really depends on framerate etc...!!! just for now!!!!
-    if (diff > 5) {
-      LOG(FATAL) << "Motion intalisation failed for j= " << object_id
-                 << ", motion missing at " << current_frame_id
-                 << " and previous seen frame " << previous_frame
-                 << " too far away!";
+    if (diff > 2) {
+      LOG(WARNING) << "Motion intalisation failed for j= " << object_id
+                   << ", motion missing at " << current_frame_id
+                   << " and previous seen frame " << previous_frame
+                   << " too far away!";
+      // start new key frame
+      gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
+      key_frame_data_.startNewActiveRange(object_id, frame_id, center);
+
+      // sanity check
+      std::tie(s0, L_0) = getOrConstructL0(object_id, frame_id);
+      LOG(INFO) << "Creating new KF for j=" << object_id << " k=" << frame_id;
+      CHECK_EQ(s0, frame_id);
+      // TODO: need to tell other systems that the
+      if (keyframe_updated) *keyframe_updated = true;
+
+      return gtsam::Pose3::Identity();
+
     } else {
       // TODO: just use previous motion???
       CHECK(map()->hasInitialObjectMotion(previous_frame, object_id,
@@ -690,8 +671,8 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
         // object_id;
         Motion3ReferenceFrame motion_frame;  // if fail just use identity?
         if (!map()->hasInitialObjectMotion(frame, object_id, &motion_frame)) {
-          LOG(WARNING) << "No frontend motion at frame " << frame
-                       << " object id " << object_id;
+          // LOG(WARNING) << "No frontend motion at frame " << frame
+          //              << " object id " << object_id;
           CHECK_EQ(motion_frame.style(), MotionRepresentationStyle::F2F)
               << "Motion representation is inconsistent!! ";
           initalised_from_frontend = false;
@@ -711,6 +692,149 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       // }
     }
   }
+  if (keyframe_updated) *keyframe_updated = false;
+}
+
+gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
+    ObjectId object_id, FrameId frame_id) const {
+  if (FLAGS_init_object_pose_from_gt) {
+    const auto gt_packets = hooks().ground_truth_packets_request();
+    if (gt_packets && gt_packets->exists(frame_id)) {
+      const auto& gt_packet = gt_packets->at(frame_id);
+
+      ObjectPoseGT object_gt;
+      if (gt_packet.getObject(object_id, object_gt)) {
+        return object_gt.L_world_;
+        // L0_.insert2(object_id, std::make_pair(frame_id, object_gt.L_world_));
+        // return L0_.at(object_id);
+      }
+      // TODO: throw warning?
+    }
+  }
+
+  // else initalise from centroid?
+  auto object_node = map()->getObject(object_id);
+  CHECK(object_node);
+
+  auto frame_node = map()->getFrame(frame_id);
+  CHECK(frame_node);
+  CHECK(frame_node->objectObserved(object_id));
+
+  StatusLandmarkVector dynamic_landmarks;
+
+  // measured/linearized camera pose at the first frame this object has been
+  // seen
+  const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
+  auto measurement_pairs = frame_node->getDynamicMeasurements(object_id);
+
+  for (const auto& [lmk_node, measurement] : measurement_pairs) {
+    CHECK(lmk_node->seenAtFrame(frame_id));
+    CHECK_EQ(lmk_node->object_id, object_id);
+
+    const gtsam::Point3 landmark_measurement_local = measurement.landmark;
+    // const gtsam::Point3 landmark_measurement_world = X_world *
+    // landmark_measurement_local;
+
+    dynamic_landmarks.push_back(
+        LandmarkStatus::DynamicInGLobal(landmark_measurement_local, frame_id,
+                                        lmk_node->tracklet_id, object_id));
+  }
+
+  CloudPerObject object_clouds = groupObjectCloud(dynamic_landmarks, X_world);
+  CHECK_EQ(object_clouds.size(), 1u);
+
+  CHECK(object_clouds.exists(object_id));
+
+  const auto dynamic_point_cloud = object_clouds.at(object_id);
+  pcl::PointXYZ centroid;
+  pcl::computeCentroid(dynamic_point_cloud, centroid);
+  // TODO: outlier reject?
+  gtsam::Point3 translation = pclPointToGtsam(centroid);
+  gtsam::Pose3 center(gtsam::Rot3::Identity(), X_world * translation);
+  return center;
+}
+
+bool KeyFrameRange::contains(FrameId frame_id) const {
+  bool r = start <= frame_id;
+  // only check against the end frame if not active
+  if (!is_active) {
+    r &= frame_id < end;
+  }
+  // does not include the end frame
+  return r;
+}
+
+const std::shared_ptr<const KeyFrameRange> KeyFrameData::find(
+    ObjectId object_id, FrameId frame_id) const {
+  // check if we have an object layer
+  KeyFrameRange::Ptr active_range = getActiveRange(object_id);
+  if (!active_range) {
+    // no range means no object
+    return nullptr;
+  }
+
+  // sanity check
+  CHECK(active_range->is_active);
+  if (active_range->contains(frame_id)) {
+    return active_range;
+  } else {
+    CHECK(data.exists(object_id));
+    const KeyFrameRangeVector& ranges = data.at(object_id);
+    CHECK_GE(ranges.size(), 1u);
+    // iterate over ranges
+    for (const KeyFrameRange::Ptr& range : ranges) {
+      if (range->contains(frame_id)) {
+        return range;
+      }
+    }
+  }
+  return nullptr;
+}
+
+const std::shared_ptr<const KeyFrameRange> KeyFrameData::startNewActiveRange(
+    ObjectId object_id, FrameId frame_id, const gtsam::Pose3& pose) {
+  KeyFrameRange::Ptr old_active_range = getActiveRange(object_id);
+
+  auto new_range = std::make_shared<KeyFrameRange>();
+  new_range->start = frame_id;
+  // dont set end (yet) but make active
+  new_range->is_active = true;
+  new_range->L = pose;
+
+  if (!old_active_range) {
+    // no range at all so new object
+    data.insert2(object_id, KeyFrameRangeVector{});
+    // add to list of ranges
+    data.at(object_id).push_back(new_range);
+    // set new active range
+    active_ranges[object_id] = new_range;
+  } else {
+    // modify existing range so that the end is the start of the next (new
+    // range)
+    old_active_range->end = frame_id;
+    old_active_range->is_active = false;
+  }
+
+  // set new active range
+  active_ranges[object_id] = new_range;
+  return new_range;
+}
+
+std::shared_ptr<KeyFrameRange> KeyFrameData::getActiveRange(
+    ObjectId object_id) const {
+  // check if we have an object layer
+  if (!data.exists(object_id)) {
+    return nullptr;
+  }
+
+  // first check the active range pointer
+  CHECK(active_ranges.exists(object_id));
+  KeyFrameRange::Ptr active_range = active_ranges.at(object_id);
+  // if we have any range for this object there MUST be an active range
+  CHECK_NOTNULL(active_range);
+  // sanity check
+  CHECK(active_range->is_active);
+  return active_range;
 }
 
 }  // namespace dyno

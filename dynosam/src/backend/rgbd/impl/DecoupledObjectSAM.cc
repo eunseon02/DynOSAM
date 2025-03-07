@@ -46,11 +46,10 @@ DecoupledObjectSAM::DecoupledObjectSAM(
   FormulationParams formulation_params;
   formulation_params.suffix = "object_" + std::to_string(object_id);
   // HACK for now so that we get object motions at every frame!!!?
-  formulation_params.min_dynamic_observations = 1u;
+  formulation_params.min_dynamic_observations = 2u;
 
-  decoupled_formulation_ =
-      std::make_shared<keyframe_object_centric::DecoupledFormulation>(
-          formulation_params, map_, noise_models, formulation_hooks);
+  decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
+      formulation_params, map_, noise_models, formulation_hooks);
   accessor_ = decoupled_formulation_->accessorFromTheta();
 }
 
@@ -95,9 +94,31 @@ ObjectMotionMap DecoupledObjectSAM::getKeyFramedMotions() const {
 }
 
 void DecoupledObjectSAM::updateFormulation(
-    FrameId frame_k, gtsam::NonlinearFactorGraph& new_factors,
-    gtsam::Values& new_values) {
-  // no need to update and static or odometry things ;)
+    FrameId frame_k, const gtsam::Pose3& X_world_k,
+    gtsam::NonlinearFactorGraph& new_factors, gtsam::Values& new_values) {
+  // no need to update and static things ;)
+  // TODO: hack to ensure we add the pose to the internal values on the first
+  // run for the previous frame!!
+  if (frame_k > 0) {
+    auto frame_km1 = frame_k - 1u;
+
+    if (!accessor_->exists(CameraPoseSymbol(frame_km1))) {
+      LOG(INFO) << "Previous camera pose does not exist!! k=" << frame_km1;
+      gtsam::Pose3 T_world_camera_km1;
+      CHECK(this->map()->hasInitialSensorPose(frame_km1, &T_world_camera_km1));
+      decoupled_formulation_->setInitialPose(T_world_camera_km1, frame_km1,
+                                             new_values);
+      decoupled_formulation_->setInitialPosePrior(T_world_camera_km1, frame_km1,
+                                                  new_factors);
+    }
+  }
+
+  // TODO: misleading API, this should just be add pose
+  decoupled_formulation_->setInitialPose(X_world_k, frame_k, new_values);
+  decoupled_formulation_->setInitialPosePrior(X_world_k, frame_k, new_factors);
+  // decoupled_formulation_->addOdometry(frame_k, X_world_k, new_values,
+  // new_factors);
+
   UpdateObservationParams update_params;
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
@@ -107,16 +128,16 @@ void DecoupledObjectSAM::updateFormulation(
                                                     new_factors, update_params);
 }
 
-bool DecoupledObjectSAM::updateSmoother(FrameId frame_k) {
+bool DecoupledObjectSAM::updateSmoother(FrameId frame_k,
+                                        const gtsam::Pose3& X_world_k) {
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  updateFormulation(frame_k, new_factors, new_values);
+  updateFormulation(frame_k, X_world_k, new_factors, new_values);
 
   // do first optimisation
   dyno::utils::TimingStatsCollector timer(
-      "decoupled_object_sam.optimize." +
-      decoupled_formulation_->getFullyQualifiedName());
+      "object_sam.optimize." + decoupled_formulation_->getFullyQualifiedName());
   bool is_smoother_ok = optimize(&result_, new_factors, new_values);
 
   if (is_smoother_ok) {

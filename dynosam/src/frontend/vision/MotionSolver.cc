@@ -844,6 +844,9 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
         map->updateSensorPoseMeasurement(frame_k_1->getFrameId(),
                                          frame_k_1->getPose());
 
+        LOG(INFO) << "Adding previous measurerments for "
+                  << info_string(frame_k_1->getFrameId(), object_id);
+
       } else {
         const auto& object_node = map->getObject(object_id);
         CHECK_NOTNULL(object_node);
@@ -860,18 +863,6 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
           createMeasurementVector(frame_k, object_id);
       estimator->update(frame_k->getFrameId(), measurements, frame_k->getPose(),
                         geometric_sovler_result.best_result);
-
-      // Motion3ReferenceFrame motion_result;
-      // // get result (depending on estimation)
-      // if (output_style_ == MotionRepresentationStyle::F2F) {
-      //   motion_result =
-      //   estimator->getFrame2FrameMotion(frame_k->getFrameId());
-      // } else {
-      //   motion_result = estimator->getKeyFramedMotion(frame_k->getFrameId());
-      // }
-
-      // std::lock_guard<std::mutex> lock(mutex_);
-      // motion_map.insert2(object_id, motion_result);
       return true;
 
     } else {
@@ -888,7 +879,6 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
                            frame_k->object_observations_.end(), solve_impl);
   }
 
-  // return std::make_pair(motion_map, mergeObjectMaps());
   return mergeObjectMaps();
 }
 
@@ -967,10 +957,13 @@ DecoupledObjectSAM::Ptr ObjectMotionSolverSAM::getEstimator(
     BackendParams backend_params;  // TODO: for now
     DecoupledObjectSAM::Params params;
     params.isam = isam2_params_;
+    auto noise_models = NoiseModels::fromBackendParams(backend_params);
+    // make this prior not SO small
+    noise_models.initial_pose_prior =
+        gtsam::noiseModel::Isotropic::Sigma(6u, 0.001);
     sam_estimators_.insert2(
-        object_id, std::make_shared<DecoupledObjectSAM>(
-                       params, object_id,
-                       NoiseModels::fromBackendParams(backend_params), hooks));
+        object_id, std::make_shared<DecoupledObjectSAM>(params, object_id,
+                                                        noise_models, hooks));
   }
 
   return sam_estimators_.at(object_id);

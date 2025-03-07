@@ -36,16 +36,18 @@
 #include <gtsam/nonlinear/Values.h>
 
 #include "dynosam/backend/BackendDefinitions.hpp"
-#include "dynosam/backend/rgbd/impl/ObjectCentricFormulations.hpp"
+#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/Types.hpp"  //only needed for factors
 
 namespace dyno {
 
-using namespace keyframe_object_centric;
+// using namespace keyframe_object_centric;
 
 // TODO: should rename to SAMAgent!! (and tracking not decoupled!!)
+// Incremental tracking SAMAgent (with camera pose stuff!!)
+// to make it truly incremental!!!
 class DecoupledObjectSAM {
  public:
   DYNO_POINTER_TYPEDEFS(DecoupledObjectSAM)
@@ -56,7 +58,7 @@ class DecoupledObjectSAM {
     gtsam::ISAM2Params isam{};
   };
 
-  using Map = DecoupledFormulation::Map;
+  using Map = ObjectCentricFormulation::Map;
 
   template <typename DERIVEDSTATUS>
   using MeasurementStatusVector = Map::MeasurementStatusVector<DERIVEDSTATUS>;
@@ -79,7 +81,7 @@ class DecoupledObjectSAM {
 
     // updating the smoothing will update the formulation and run
     // update on the optimizer. the internal results_ object is updated
-    const bool is_smoother_ok = this->updateSmoother(frame_k);
+    const bool is_smoother_ok = this->updateSmoother(frame_k, X_world_k);
 
     if (is_smoother_ok) {
       updateStates();
@@ -125,15 +127,17 @@ class DecoupledObjectSAM {
       CHECK_EQ(expected_style_.value(), motion_frame.style());
     }
 
+    // TODO: now we have camera pose ;)
+
     // do we want global?
     MotionEstimateMap motion_estimate;
     motion_estimate.insert({object_id_, motion_frame});
     map_->updateObjectMotionMeasurements(frame_k, motion_estimate);
   }
 
-  bool updateSmoother(FrameId frame_k);
+  bool updateSmoother(FrameId frame_k, const gtsam::Pose3& X_world_k);
 
-  void updateFormulation(FrameId frame_k,
+  void updateFormulation(FrameId frame_k, const gtsam::Pose3& X_world_k,
                          gtsam::NonlinearFactorGraph& new_factors,
                          gtsam::Values& new_values);
 
@@ -150,7 +154,7 @@ class DecoupledObjectSAM {
   const Params params_;
   const ObjectId object_id_;
   Map::Ptr map_;
-  DecoupledFormulation::Ptr decoupled_formulation_;
+  ObjectCentricFormulation::Ptr decoupled_formulation_;
   Accessor<Map>::Ptr accessor_;
   std::shared_ptr<gtsam::ISAM2> smoother_;
   gtsam::ISAM2Result result_;

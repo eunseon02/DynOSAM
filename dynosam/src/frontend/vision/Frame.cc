@@ -166,7 +166,6 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
   }
 
   PointCloudLabelRGB::Ptr cloud = pcl::make_shared<PointCloudLabelRGB>();
-  // TODO: how to integrate boarder detection mask from tracker!!
   const cv::Mat& depth_image = image_container_.get<ImageType::Depth>();
   const cv::Mat& motion_mask = image_container_.get<ImageType::MotionMask>();
 
@@ -206,7 +205,7 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
         colour = Color::uniqueId(object_id);
       }
 
-      if (depth > depth_thresh || depth <= 0) continue;
+      if (depth > depth_thresh || depth <= 0 || !std::isfinite(depth)) continue;
 
       // Back-projection
       const Keypoint kp(j, i);
@@ -214,14 +213,6 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
       // this call is probably very slow
       camera_->backProject(kp, depth, &point);
 
-      // Construct point and push to cloud
-      // const std::lock_guard<std::mutex> lock(mutex);
-      // cloud->points.emplace_back(PointLabelRGB(
-      //     static_cast<float>(point(0)), static_cast<float>(point(1)),
-      //     static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
-      //     static_cast<std::uint8_t>(colour.g),
-      //     static_cast<std::uint8_t>(colour.b),
-      //     static_cast<std::uint32_t>(object_id)));
       cloud->points[i * cols + j] = PointLabelRGB(
           static_cast<float>(point(0)), static_cast<float>(point(1)),
           static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
@@ -232,7 +223,6 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
   });
 
   cloud->width = cloud->points.size();
-  LOG(INFO) << "Cloud " << cloud->width;
   cloud->height = 1;
   cloud->is_dense = false;
   return cloud;

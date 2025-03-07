@@ -128,6 +128,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/rgbd/ObjectCentricEstimator.cc
   src/backend/rgbd/impl/ObjectCentricFormulations.cc
   src/backend/rgbd/impl/DecoupledObjectSAM.cc
+  #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc

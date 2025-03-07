@@ -723,14 +723,41 @@ struct ObjectCentricProperties {
   }
 };
 
+struct KeyFrameRange {
+  using Ptr = std::shared_ptr<KeyFrameRange>;
+  using ConstPtr = std::shared_ptr<const KeyFrameRange>;
+  FrameId start;
+  FrameId end;
+  gtsam::Pose3 L;
+  //! indicates that this is the current keyframe range for the latest frame id
+  //! and therefore the end value is not valid
+  bool is_active = false;
+
+  bool contains(FrameId frame_id) const;
+
+  std::pair<FrameId, gtsam::Pose3> dataPair() const { return {start, L}; }
+};
+
+struct KeyFrameData {
+  using KeyFrameRangeVector = std::vector<KeyFrameRange::Ptr>;
+  gtsam::FastMap<ObjectId, KeyFrameRangeVector> data;
+  gtsam::FastMap<ObjectId, KeyFrameRange::Ptr> active_ranges;
+
+  const KeyFrameRange::ConstPtr find(ObjectId object_id,
+                                     FrameId frame_id) const;
+  const KeyFrameRange::ConstPtr startNewActiveRange(ObjectId object_id,
+                                                    FrameId frame_id,
+                                                    const gtsam::Pose3& pose);
+
+  KeyFrameRange::Ptr getActiveRange(ObjectId object_id) const;
+};
+
 class ObjectCentricAccessor : public Accessor<Map3d2d>,
                               public ObjectCentricProperties {
  public:
-  ObjectCentricAccessor(
-      const SharedFormulationData& shared_data, Map3d2d::Ptr map,
-      const gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>*
-          L0_values)
-      : Accessor<Map3d2d>(shared_data, map), L0_values_(L0_values) {}
+  ObjectCentricAccessor(const SharedFormulationData& shared_data,
+                        Map3d2d::Ptr map, const KeyFrameData* key_frame_data)
+      : Accessor<Map3d2d>(shared_data, map), key_frame_data_(key_frame_data) {}
   virtual ~ObjectCentricAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
@@ -745,8 +772,7 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
       FrameId frame_id, ObjectId object_id) const override;
 
  private:
-  const gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>>*
-      L0_values_;  // for now!!
+  const KeyFrameData* key_frame_data_;
 };
 
 // TODO: should all be in keyframe_object_centric namespace!!
@@ -794,7 +820,7 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
     return std::make_shared<ObjectCentricAccessor>(shared_data, this->map(),
-                                                   &L0_);
+                                                   &key_frame_data_);
   }
 
   virtual std::string loggerPrefix() const override { return "object_centric"; }
@@ -802,14 +828,21 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
  protected:
   std::pair<FrameId, gtsam::Pose3> getOrConstructL0(ObjectId object_id,
                                                     FrameId frame_id);
-  gtsam::Pose3 computeInitialH(ObjectId object_id, FrameId frame_id);
+
+  // hacky update solution for now!!
+  gtsam::Pose3 computeInitialH(ObjectId object_id, FrameId frame_id,
+                               bool* keyframe_updated = nullptr);
+
+  gtsam::Pose3 calculateObjectCentroid(ObjectId object_id,
+                                       FrameId frame_id) const;
 
   // TODO: in the sliding window case the formulation gets reallcoated every
   // time so that L0 map is different, but the values will share the same H
   // (which is now from a different L0)!! make static (hack) for now
   // TODO: bad!! should not be static as this will also get held between
   // estimators!!!?
-  gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>> L0_;
+  // gtsam::FastMap<ObjectId, std::pair<FrameId, gtsam::Pose3>> L0_;
+  // gtsam::FastMap<ObjectId, std::vector<KeyFrameRange>> L0_;
 
   // we need a separate way of tracking if a dynamic tracklet is in the map,
   // since each point is modelled uniquely simply used as an O(1) lookup, the
@@ -820,6 +853,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
                                     //! added by this updater. We use a separate
                                     //! map containing the tracklets as the keys
                                     //! are non-unique
+
+ private:
+  KeyFrameData key_frame_data_;
 };
 
 }  // namespace dyno

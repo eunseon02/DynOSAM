@@ -61,9 +61,7 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
   ObjectOdometryMap object_odom_map;
   for (const auto& [object_id, per_frame_motions] : motions) {
     if (!per_frame_motions.exists(frame_id_k)) {
-      LOG(WARNING) << "Cannot construct ObjectOdometry for object " << object_id
-                   << ", at frame " << frame_id_k
-                   << " Missing entry in ObjectMotionMap";
+      // object does not exist at this frame.
       continue;
     }
     const gtsam::Pose3& motion_k = per_frame_motions.at(frame_id_k);
@@ -71,7 +69,8 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
     if (!poses.exists(object_id, frame_id_k)) {
       LOG(WARNING) << "Cannot construct ObjectOdometry for object " << object_id
                    << ", at frame " << frame_id_k
-                   << " Missing entry in ObjectPoseMap";
+                   << " Missing entry in ObjectPoseMap (but object motion "
+                      "entry found!!)";
       continue;
     }
     const gtsam::Pose3& pose_k = poses.at(object_id, frame_id_k);

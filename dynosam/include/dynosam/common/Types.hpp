@@ -663,6 +663,10 @@ inline std::string container_to_string(const Container& container,
   return ss.str();
 }
 
+inline std::string info_string(FrameId frame_id, ObjectId object_id) {
+  return "j= " + std::to_string(object_id) + ", k=" + std::to_string(frame_id);
+}
+
 // template<typename T>
 // struct io_traits {
 

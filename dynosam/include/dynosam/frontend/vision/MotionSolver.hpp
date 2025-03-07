@@ -451,6 +451,8 @@ class ObjectMotionSolverSAM : public ObjectMotionSolver {
   MotionRepresentationStyle output_style_;
 };
 
+class TrackingIsamAgent {};
+
 void declare_config(OpticalFlowAndPoseOptimizer::Params& config);
 void declare_config(MotionOnlyRefinementOptimizer::Params& config);
 
