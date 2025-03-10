@@ -63,6 +63,11 @@ class LooselyDistributedRGBDBackendModule
       RGBDInstanceOutputPacket::ConstPtr input) override;
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
+  SensorPoseMeasurement bootstrapUpdateStaticEstimator(
+      RGBDInstanceOutputPacket::ConstPtr input);
+  SensorPoseMeasurement nominalUpdateStaticEstimator(
+      RGBDInstanceOutputPacket::ConstPtr input);
+
   struct PerObjectUpdate {
     FrameId frame_id;
     ObjectId object_id;
@@ -88,8 +93,11 @@ class LooselyDistributedRGBDBackendModule
 
   mutable std::mutex mutex_;
 
-  gtsam::ISAM2Params dynamic_isam2_params_;
   gtsam::ISAM2Params static_isam2_params_;
+  ObjectCentricFormulation::UniquePtr static_formulation_;
+  gtsam::ISAM2 static_estimator_;
+
+  gtsam::ISAM2Params dynamic_isam2_params_;
   gtsam::FastMap<ObjectId, LooselyCoupledObjectSAM::Ptr> sam_estimators_;
 };
 

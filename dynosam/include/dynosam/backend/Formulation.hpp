@@ -352,6 +352,7 @@ class Formulation {
   const gtsam::NonlinearFactorGraph& getGraph() const { return factors_; }
 
   const FormulationHooks& hooks() const { return hooks_; }
+  const NoiseModels& noiseModels() const { return noise_models_; }
 
   /**
    * @brief Custom gtsam::Key formatter for this formulation.
@@ -386,6 +387,12 @@ class Formulation {
   BackendLogger::UniquePtr makeFullyQualifiedLogger() const;
 
   // Factor Graph build functions.
+  void addSensorPoseValue(const gtsam::Pose3& X_W_k, FrameId frame_id_k,
+                          gtsam::Values& new_values);
+  void addSensorPosePriorFactor(const gtsam::Pose3& X_W_k,
+                                gtsam::SharedNoiseModel noise_model,
+                                FrameId frame_id_k,
+                                gtsam::NonlinearFactorGraph& new_factors);
 
   /**
    * @brief Adds a gtsam::Pose3 as a value in the graph at frame k.

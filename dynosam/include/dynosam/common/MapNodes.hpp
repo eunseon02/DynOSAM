@@ -296,6 +296,8 @@ class StateQuery : public std::optional<ValueType> {
   gtsam::Key key_;
   Status status_;
 
+  inline gtsam::Key key() const { return key_; }
+
   StateQuery() {}
   StateQuery(gtsam::Key key, const ValueType& v) : key_(key), status_(VALID) {
     Base::emplace(v);

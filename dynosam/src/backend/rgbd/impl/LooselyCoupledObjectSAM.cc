@@ -58,7 +58,8 @@ Motion3ReferenceFrame LooselyCoupledObjectSAM::getFrame2FrameMotion(
   // this is in the form of our accessor
   StateQuery<Motion3ReferenceFrame> H_W_km1_k =
       accessor_->getObjectMotionReferenceFrame(frame_id, object_id_);
-  CHECK(H_W_km1_k);
+  CHECK(H_W_km1_k) << "Failed to get object motion at j=" << object_id_
+                   << " k=" << frame_id;
   CHECK(H_W_km1_k->style() == MotionRepresentationStyle::F2F);
   CHECK(H_W_km1_k->origin() == ReferenceFrame::GLOBAL);
   CHECK(H_W_km1_k->to() == frame_id);
