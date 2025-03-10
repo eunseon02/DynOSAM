@@ -328,6 +328,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
   BackendOutputPacket::Ptr backend_output =
       constructOutputPacket(frame_k, timestamp);
+  backend_output->involved_timestamp = input->involved_timestamps_;
 
   debug_info_ = DebugInfo();
 
@@ -545,8 +546,8 @@ BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(
   backend_output->frame_id = frame_k;
   backend_output->T_world_camera = accessor->getSensorPose(frame_k).get();
   backend_output->static_landmarks = accessor->getFullStaticMap();
-  backend_output->optimized_object_motions =
-      accessor->getObjectMotions(frame_k);
+  // backend_output->optimized_object_motions =
+  //     accessor->getObjectMotions(frame_k);
   backend_output->dynamic_landmarks =
       accessor->getDynamicLandmarkEstimates(frame_k);
   auto map = formulation->map();
@@ -555,6 +556,7 @@ BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(
         accessor->getSensorPose(frame_id).get());
   }
 
+  backend_output->optimized_object_motions = accessor->getObjectMotions();
   backend_output->optimized_object_poses = accessor->getObjectPoses();
   return backend_output;
 }

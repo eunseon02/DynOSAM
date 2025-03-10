@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -30,30 +30,24 @@
 
 #pragma once
 
-#include "dynosam/common/Types.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/backend/BackendInputPacket.hpp"
+#include "dynosam/backend/BackendModule.hpp"
 
 namespace dyno {
 
-struct BackendOutputPacket {
-  DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
+using RGBDBackendModuleTraits =
+    BackendModuleTraits<RGBDInstanceOutputPacket, LandmarkKeypoint>;
 
-  StatusLandmarkVector static_landmarks;   // all frames?
-  StatusLandmarkVector dynamic_landmarks;  // only this frame?
-  FrameIdTimestampMap involved_timestamp;
-  // LandmarkMap static_lmks_;
-  // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-  // StatusLandmarkEstimates initial_dynamic_lmks_;
-  // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
-  gtsam::Pose3 T_world_camera;
-  FrameId frame_id;
-  Timestamp timestamp;
-  ObjectMotionMap optimized_object_motions;
-  ObjectPoseMap optimized_object_poses;
-  gtsam::Pose3Vector optimized_camera_poses;
-
-  inline FrameId getFrameId() const { return frame_id; }
-  inline Timestamp getTimestamp() const { return timestamp; }
-  const gtsam::Pose3& pose() const { return T_world_camera; }
+// TODO: cleanup types and where and how they are used!!!!
+enum RGBDUpdaterType {
+  MotionInWorld = 0,
+  LLWorld = 1,
+  ObjectCentric = 2,
+  OC_SD = 3,
+  OC_D = 4,
+  OC_S = 5,
+  Incremental = 6  // for now incremental means LooselyDistributed for ECMR
 };
 
 }  // namespace dyno

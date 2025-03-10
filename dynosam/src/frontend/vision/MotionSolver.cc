@@ -478,9 +478,12 @@ ObjectMotionSovlerF2F::Result ObjectMotionSovlerF2F::solve(
   for (auto object_id : failed_object_tracks) {
     frame_k->object_observations_.erase(object_id);
   }
-
-  return std::make_pair(updateMotions(motion_estimates, frame_k, frame_k_1),
-                        updatePoses(motion_estimates, frame_k, frame_k_1));
+  LOG(INFO) << "Updating F2F stuff";
+  auto motions = updateMotions(motion_estimates, frame_k, frame_k_1);
+  LOG(INFO) << "Updated motions";
+  auto poses = updatePoses(motion_estimates, frame_k, frame_k_1);
+  LOG(INFO) << "Updated poses";
+  return std::make_pair(motions, poses);
 }
 
 const ObjectPoseMap& ObjectMotionSovlerF2F::updatePoses(
@@ -548,10 +551,9 @@ const ObjectMotionMap& ObjectMotionSovlerF2F::updateMotions(
     MotionEstimateMap& motion_estimates, Frame::Ptr frame_k, Frame::Ptr) {
   const FrameId frame_id_k = frame_k->getFrameId();
   for (const auto& [object_id, motion_reference_frame] : motion_estimates) {
-    // object motions can take motion_reference_frame as an argument due to the
-    // explicit casting operators to a Pose3
     object_motions_.insert22(object_id, frame_id_k, motion_reference_frame);
   }
+  return object_motions_;
 }
 
 bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,

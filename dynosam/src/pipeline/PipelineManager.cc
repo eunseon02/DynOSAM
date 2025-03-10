@@ -32,6 +32,7 @@
 
 #include <glog/logging.h>
 
+#include "dynosam/backend/LooselyDistributedRGBDBackendModule.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
@@ -293,14 +294,22 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
       if (FLAGS_use_backend) {
         LOG(INFO) << "Construcing RGBD backend";
 
-        // TODO: make better params!!
-        auto updater_type = static_cast<RGBDBackendModule::UpdaterType>(
-            FLAGS_backend_updater_enum);
+        // TODO: make better params and hhow they are used in each backend!
+        // right now they affect which backend is used AND the formulation in
+        // that backend
+        auto updater_type =
+            static_cast<RGBDUpdaterType>(FLAGS_backend_updater_enum);
 
-        params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
+        if (updater_type == RGBDUpdaterType::Incremental) {
+          backend = std::make_shared<LooselyDistributedRGBDBackendModule>(
+              params_.backend_params_, camera, &display_queue_);
+        } else {
+          params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
 
-        backend = std::make_shared<RGBDBackendModule>(
-            params_.backend_params_, camera, updater_type, &display_queue_);
+          backend = std::make_shared<RGBDBackendModule>(
+              params_.backend_params_, camera, updater_type, &display_queue_);
+        }
+
       } else if (use_offline_frontend_) {
         LOG(WARNING)
             << "FLAGS_use_backend is false but use_offline_frontend "

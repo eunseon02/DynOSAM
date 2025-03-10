@@ -158,7 +158,7 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
   if (!motion_s0_k) {
     LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
                  << " object id=" << object_id
-                 << ". Frame exists by motion is missing!!!";
+                 << ". Frame exists but motion is missing!!!";
     return StateQuery<gtsam::Pose3>::InvalidMap();
   }
 
@@ -245,20 +245,17 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
   StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
 
-  // TODO: I guess can happen if we miss a motion becuae an object is not seen
-  // for one frame?!?
-  //  if (point_local)
-  //    CHECK(motion_s0_k) << "We have a point " <<
-  //    DynoLikeKeyFormatter(point_key)
-  //                       << " but no motion at frame " << frame_id << " with
-  //                       key: " << DynoLikeKeyFormatter(motion_key);
   if (point_local && motion_s0_k) {
     // CHECK(L0_values_->exists(object_id));
     // const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
     const auto range =
         CHECK_NOTNULL(key_frame_data_->find(object_id, frame_id));
     const auto [s0, L0] = range->dataPair();
-    // point in world at k
+    // TODO: this will not work when keyframing if the point in question
+    // is initalised in a different L (at a different timestep!!!)
+    // how to cahce the L0 and therefore the s, the frame is represented in!!!
+    // since the motion has a range (and therefore may not be valid!!!)
+    //  point in world at k
     const gtsam::Point3 m_k = motion_s0_k.get() * L0 * point_local.get();
     return StateQuery<gtsam::Point3>(point_key, m_k);
   } else {
@@ -405,7 +402,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
         context.getObjectId(), frame_node_k_1->getId(), &keyframe_updated);
 
     if (keyframe_updated) {
-      // TODO: gross I have to reget them again!!
+      // TODO: gross I have to re-get them again!!
       std::tie(s0, L_0) =
           getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
     }
@@ -427,6 +424,8 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     Landmark lmk_L0;
     getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
                  lmk_L0_init);
+    // TODO: cache what s0 the landmark is made at so we can propogate them
+    // later using the right motions within the correct Keyframe range!!!!
     new_values.insert(point_key, lmk_L0);
     result.updateAffectedObject(frame_node_k_1->frame_id,
                                 context.getObjectId());

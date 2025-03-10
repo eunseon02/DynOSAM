@@ -72,9 +72,9 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     logger_ = std::make_unique<RGBDFrontendLogger>();
   }
 
-  gtsam::ISAM2Params isam2_params;
-  isam2_params.keyFormatter = DynoLikeKeyFormatter;
-  isam2_params.evaluateNonlinearError = true;
+  // gtsam::ISAM2Params isam2_params;
+  // isam2_params.keyFormatter = DynoLikeKeyFormatter;
+  // isam2_params.evaluateNonlinearError = true;
 
   ObjectMotionSovlerF2F::Params object_motion_solver_params =
       frontend_params.object_motion_solver_params;
@@ -83,8 +83,10 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     return this->shared_module_info.getGroundTruthPackets();
   };
 
-  object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
-      object_motion_solver_params, camera->getParams(), isam2_params);
+  // object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
+  //     object_motion_solver_params, camera->getParams(), isam2_params);
+  object_motion_solver_ = std::make_unique<ObjectMotionSovlerF2F>(
+      object_motion_solver_params, camera->getParams());
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {

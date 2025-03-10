@@ -38,15 +38,13 @@
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendModule.hpp"
 #include "dynosam/backend/Formulation.hpp"
+#include "dynosam/backend/RGBDBackendDefinitions.hpp"
 #include "dynosam/backend/rgbd/WorldMotionEstimator.hpp"
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
 
 namespace dyno {
-
-using RGBDBackendModuleTraits =
-    BackendModuleTraits<RGBDInstanceOutputPacket, LandmarkKeypoint>;
 
 class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
  public:
@@ -55,14 +53,8 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
   using Base = BackendModuleType<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
-  enum UpdaterType {
-    MotionInWorld = 0,
-    LLWorld = 1,
-    ObjectCentric = 2,
-    OC_SD = 3,
-    OC_D = 4,
-    OC_S = 5
-  };
+  // for backwards compatability!
+  using UpdaterType = RGBDUpdaterType;
 
   RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
                     const UpdaterType& updater_type,

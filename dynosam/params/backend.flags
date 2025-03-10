@@ -35,8 +35,8 @@
 
 # currently only for rgbd, indicates which updater the rgbd backend should use
 # i.e which formulation is used for solving
-# MotionInWorld = 0, LLWorld=1
---backend_updater_enum=0
+# MotionInWorld = 0, LLWorld=1, Incremental=6
+--backend_updater_enum=6
 
 --init_H_with_identity=true
 --updater_suffix=

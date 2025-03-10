@@ -53,16 +53,16 @@ void BackendDSDRos::spinOnce(
   this->publishDynamicPointCloud(backend_output->dynamic_landmarks,
                                  backend_output->pose());
 
-  // const auto& object_motions = backend_output->optimized_object_motions;
-  // const auto& object_poses = backend_output->optimized_object_poses;
+  const auto& object_motions = backend_output->optimized_object_motions;
+  const auto& object_poses = backend_output->optimized_object_poses;
+  const auto& timestamp_map = backend_output->involved_timestamp;
 
   // // publish objects
-  // DSDTransport::Publisher object_poses_publisher =
-  // dsd_transport_.addObjectInfo(
-  //     object_motions, object_poses, params_.world_frame_id,
-  //     backend_output->getFrameId(), backend_output->getTimestamp());
-  // object_poses_publisher.publishObjectOdometry();
-  // object_poses_publisher.publishObjectPaths();
+  DSDTransport::Publisher object_poses_publisher = dsd_transport_.addObjectInfo(
+      object_motions, object_poses, params_.world_frame_id, timestamp_map,
+      backend_output->getFrameId(), backend_output->getTimestamp());
+  object_poses_publisher.publishObjectOdometry();
+  object_poses_publisher.publishObjectPaths();
 }
 
 }  // namespace dyno
