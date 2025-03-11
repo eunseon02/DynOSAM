@@ -843,8 +843,9 @@ ObjectMotionSolverSAM::Result ObjectMotionSolverSAM::solve(
             createMeasurementVector(frame_k_1, object_id);
 
         map->updateObservations(measurements_k_1);
-        map->updateSensorPoseMeasurement(frame_k_1->getFrameId(),
-                                         frame_k_1->getPose());
+        // No noise model!!
+        map->updateSensorPoseMeasurement(
+            frame_k_1->getFrameId(), Pose3Measurement(frame_k_1->getPose()));
 
         LOG(INFO) << "Adding previous measurerments for "
                   << info_string(frame_k_1->getFrameId(), object_id);

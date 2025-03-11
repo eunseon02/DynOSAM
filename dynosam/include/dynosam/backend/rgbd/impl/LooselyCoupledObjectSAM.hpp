@@ -74,7 +74,7 @@ class LooselyCoupledObjectSAM {
   template <typename DERIVEDSTATUS>
   void update(FrameId frame_k,
               const MeasurementStatusVector<DERIVEDSTATUS>& measurements,
-              const gtsam::Pose3& X_world_k,
+              const Pose3Measurement& X_world_k,
               const Motion3ReferenceFrame& motion_frame) {
     VLOG(5) << "LooselyCoupledObjectSAM::update running for k= " << frame_k
             << ", j= " << object_id_;
@@ -113,7 +113,7 @@ class LooselyCoupledObjectSAM {
   template <typename DERIVEDSTATUS>
   void updateMap(FrameId frame_k,
                  const MeasurementStatusVector<DERIVEDSTATUS>& measurements,
-                 const gtsam::Pose3& X_world_k,
+                 const Pose3Measurement& X_world_k,
                  const Motion3ReferenceFrame& motion_frame) {
     map_->updateObservations(measurements);
     map_->updateSensorPoseMeasurement(frame_k, X_world_k);
@@ -132,17 +132,15 @@ class LooselyCoupledObjectSAM {
       CHECK_EQ(expected_style_.value(), motion_frame.style());
     }
 
-    // TODO: now we have camera pose ;)
-
     // do we want global?
     MotionEstimateMap motion_estimate;
     motion_estimate.insert({object_id_, motion_frame});
     map_->updateObjectMotionMeasurements(frame_k, motion_estimate);
   }
 
-  bool updateSmoother(FrameId frame_k, const gtsam::Pose3& X_world_k);
+  bool updateSmoother(FrameId frame_k, const Pose3Measurement& X_world_k);
 
-  void updateFormulation(FrameId frame_k, const gtsam::Pose3& X_world_k,
+  void updateFormulation(FrameId frame_k, const Pose3Measurement& X_world_k,
                          gtsam::NonlinearFactorGraph& new_factors,
                          gtsam::Values& new_values);
 

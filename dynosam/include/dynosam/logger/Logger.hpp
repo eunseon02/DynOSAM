@@ -256,9 +256,17 @@ class EstimationModuleLogger {
       FrameId frame_id, const MotionEstimateMap& motion_estimates,
       const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
+  virtual std::optional<size_t> logObjectMotion(
+      const ObjectMotionMap& object_motions,
+      const std::optional<GroundTruthPacketMap>& gt_packets = {});
+
   // logs object pose (to a differnet file)
   virtual std::optional<size_t> logObjectPose(
       FrameId frame_id, const ObjectPoseMap& propogated_poses,
+      const std::optional<GroundTruthPacketMap>& gt_packets = {});
+
+  virtual std::optional<size_t> logObjectPose(
+      const ObjectPoseMap& object_poses,
       const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
   // logs camera pose (to a differnet file)
@@ -279,6 +287,16 @@ class EstimationModuleLogger {
   void logFrameIdToTimestamp(FrameId frame_id, Timestamp timestamp);
 
   inline const std::string& moduleName() const { return module_name_; }
+
+ protected:
+  bool logObjectMotion(
+      CsvWriter& writer, const Motion3ReferenceFrame& motion, FrameId frame_id,
+      ObjectId object_id,
+      const std::optional<GroundTruthPacketMap>& gt_packets = {});
+  bool logObjectPose(
+      CsvWriter& writer, const gtsam::Pose3& pose, FrameId frame_id,
+      ObjectId object_id,
+      const std::optional<GroundTruthPacketMap>& gt_packets = {});
 
  protected:
   const std::string module_name_;

@@ -417,7 +417,7 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   ObjectNodePtrSet<MEASUREMENT> objects_seen;
 
   /// @brief Optional initial camera pose in world, provided by the front-end
-  std::optional<gtsam::Pose3> X_world;
+  std::optional<Pose3Measurement> X_world;
   /// @brief Optional initial object motions in the world, provided by the
   /// front-end
   std::optional<MotionEstimateMap> motions;

@@ -568,9 +568,9 @@ class RGBDScenario : public Scenario {
         for (const TrackedPoint& tracked_p_world : points_world) {
           auto tracklet_id = tracked_p_world.first;
           auto p_world = tracked_p_world.second;
-          const gtsam::Point3 p_camera = X_world_k.inverse() * p_world;
-          const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
-              p_camera, noise_params_.dynamic_point_sigma);
+          const Point3Measurement p_camera(X_world_k.inverse() * p_world);
+          const Point3Measurement noisy_p_camera(dyno::utils::perturbWithNoise(
+              p_camera.measurement(), noise_params_.dynamic_point_sigma));
 
           // LOG(INFO) << p_camera;
           // LOG(INFO) << noisy_p_camera;
@@ -586,7 +586,8 @@ class RGBDScenario : public Scenario {
           // the keypoint sttatus should be unused in the RGBD case but
           // we need it to fill out the data structures
           auto keypoint_status = dyno::KeypointStatus::DynamicInLocal(
-              dyno::Keypoint(), frame_id, tracklet_id, object_id);
+              KeypointMeasurement(dyno::Keypoint()), frame_id, tracklet_id,
+              object_id);
           dynamic_keypoint_measurements.push_back(keypoint_status);
         }
       }
@@ -600,9 +601,9 @@ class RGBDScenario : public Scenario {
     for (const TrackedPoint& tracked_p_world : static_points_world) {
       auto tracklet_id = tracked_p_world.first;
       auto p_world = tracked_p_world.second;
-      const gtsam::Point3 p_camera = X_world_k.inverse() * p_world;
-      const gtsam::Point3 noisy_p_camera = dyno::utils::perturbWithNoise(
-          p_camera, noise_params_.static_point_sigma);
+      const Point3Measurement p_camera(X_world_k.inverse() * p_world);
+      const Point3Measurement noisy_p_camera(dyno::utils::perturbWithNoise(
+          p_camera.measurement(), noise_params_.static_point_sigma));
 
       auto landmark_status =
           dyno::LandmarkStatus::StaticInLocal(p_camera, frame_id, tracklet_id);
@@ -615,7 +616,7 @@ class RGBDScenario : public Scenario {
       // the keypoint sttatus should be unused in the RGBD case but
       // we need it to fill out the data structures
       auto keypoint_status = dyno::KeypointStatus::StaticInLocal(
-          dyno::Keypoint(), frame_id, tracklet_id);
+          KeypointMeasurement(dyno::Keypoint()), frame_id, tracklet_id);
       static_keypoint_measurements.push_back(keypoint_status);
     }
 

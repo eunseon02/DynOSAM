@@ -54,8 +54,6 @@ class LooselyDistributedRGBDBackendModule
       ImageDisplayQueue* display_queue = nullptr);
   ~LooselyDistributedRGBDBackendModule();
 
-  using SensorPoseMeasurement = MeasurementWithCovariance<gtsam::Pose3>;
-
  private:
   using SpinReturn = Base::SpinReturn;
 
@@ -63,22 +61,22 @@ class LooselyDistributedRGBDBackendModule
       RGBDInstanceOutputPacket::ConstPtr input) override;
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
-  SensorPoseMeasurement bootstrapUpdateStaticEstimator(
+  Pose3Measurement bootstrapUpdateStaticEstimator(
       RGBDInstanceOutputPacket::ConstPtr input);
-  SensorPoseMeasurement nominalUpdateStaticEstimator(
+  Pose3Measurement nominalUpdateStaticEstimator(
       RGBDInstanceOutputPacket::ConstPtr input);
 
   struct PerObjectUpdate {
     FrameId frame_id;
     ObjectId object_id;
     GenericTrackedStatusVector<LandmarkKeypointStatus> measurements;
-    SensorPoseMeasurement X_k_measurement;
+    Pose3Measurement X_k_measurement;
     Motion3ReferenceFrame H_k_measurement;
   };
 
   std::vector<PerObjectUpdate> collectMeasurements(
       RGBDInstanceOutputPacket::ConstPtr input,
-      const SensorPoseMeasurement& X_k_measurement) const;
+      const Pose3Measurement& X_k_measurement) const;
 
   LooselyCoupledObjectSAM::Ptr getEstimator(ObjectId object_id,
                                             bool* is_object_new = nullptr);
@@ -87,6 +85,8 @@ class LooselyDistributedRGBDBackendModule
 
   BackendOutputPacket::Ptr constructOutputPacket(FrameId frame_k,
                                                  Timestamp timestamp) const;
+
+  void logBackendFromEstimators();
 
  private:
   Camera::Ptr camera_;

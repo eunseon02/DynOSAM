@@ -100,7 +100,7 @@ StatusLandmarkVector LooselyCoupledObjectSAM::getDynamicLandmarks(
 }
 
 void LooselyCoupledObjectSAM::updateFormulation(
-    FrameId frame_k, const gtsam::Pose3& X_world_k,
+    FrameId frame_k, const Pose3Measurement& X_W_k,
     gtsam::NonlinearFactorGraph& new_factors, gtsam::Values& new_values) {
   // no need to update and static things ;)
   // TODO: hack to ensure we add the pose to the internal values on the first
@@ -110,19 +110,32 @@ void LooselyCoupledObjectSAM::updateFormulation(
 
     if (!accessor_->exists(CameraPoseSymbol(frame_km1))) {
       LOG(INFO) << "Previous camera pose does not exist!! k=" << frame_km1;
-      gtsam::Pose3 T_world_camera_km1;
-      CHECK(this->map()->hasInitialSensorPose(frame_km1, &T_world_camera_km1));
-      decoupled_formulation_->setInitialPose(T_world_camera_km1, frame_km1,
-                                             new_values);
-      decoupled_formulation_->setInitialPosePrior(T_world_camera_km1, frame_km1,
-                                                  new_factors);
+      Pose3Measurement T_W_cam_km1;
+      CHECK(this->map()->hasInitialSensorPose(frame_km1, &T_W_cam_km1));
+
+      const gtsam::Pose3& initial_X_W_km1 = T_W_cam_km1.measurement();
+      CHECK(T_W_cam_km1.hasModel());
+      const gtsam::SharedGaussian& uncertainty_X_W_km1 = T_W_cam_km1.model();
+
+      decoupled_formulation_->addSensorPoseValue(initial_X_W_km1, frame_km1,
+                                                 new_values);
+      decoupled_formulation_->addSensorPosePriorFactor(
+          initial_X_W_km1, uncertainty_X_W_km1, frame_km1, new_factors);
     }
   }
 
   // TODO: misleading API, this should just be add pose
-  decoupled_formulation_->setInitialPose(X_world_k, frame_k, new_values);
-  decoupled_formulation_->setInitialPosePrior(X_world_k, frame_k, new_factors);
-  // decoupled_formulation_->addOdometry(frame_k, X_world_k, new_values,
+  const gtsam::Pose3& initial_X_W_k = X_W_k.measurement();
+  CHECK(X_W_k.hasModel());
+  const gtsam::SharedGaussian& uncertainty_X_W_k = X_W_k.model();
+
+  // LOG(INFO) << "Adding sensor pose prior " << X_W_k;
+
+  decoupled_formulation_->addSensorPoseValue(initial_X_W_k, frame_k,
+                                             new_values);
+  decoupled_formulation_->addSensorPosePriorFactor(
+      initial_X_W_k, uncertainty_X_W_k, frame_k, new_factors);
+  // decoupled_formulation_->addOdometry(frame_k, X_W_k, new_values,
   // new_factors);
 
   UpdateObservationParams update_params;
@@ -135,11 +148,11 @@ void LooselyCoupledObjectSAM::updateFormulation(
 }
 
 bool LooselyCoupledObjectSAM::updateSmoother(FrameId frame_k,
-                                             const gtsam::Pose3& X_world_k) {
+                                             const Pose3Measurement& X_W_k) {
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  updateFormulation(frame_k, X_world_k, new_factors, new_values);
+  updateFormulation(frame_k, X_W_k, new_factors, new_values);
 
   // do first optimisation
   dyno::utils::TimingStatsCollector timer(

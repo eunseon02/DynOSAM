@@ -31,6 +31,7 @@
 #include "dynosam/backend/LooselyDistributedRGBDBackendModule.hpp"
 
 #include <glog/logging.h>
+#include <gtsam/nonlinear/Marginals.h>
 #include <tbb/tbb.h>
 
 namespace dyno {
@@ -68,6 +69,10 @@ LooselyDistributedRGBDBackendModule::LooselyDistributedRGBDBackendModule(
 
 LooselyDistributedRGBDBackendModule::~LooselyDistributedRGBDBackendModule() {
   LOG(INFO) << "Desctructing LooselyDistributedRGBDBackendModule";
+
+  if (base_params_.use_logger_) {
+    logBackendFromEstimators();
+  }
 }
 
 // implementation taken from ObjectMotionSolverSAM
@@ -79,21 +84,16 @@ LooselyDistributedRGBDBackendModule::boostrapSpinImpl(
   const Timestamp timestamp = input->getTimestamp();
   // TODO: sovle smoother
   //  non-sequentially?
-  SensorPoseMeasurement optimized_camera_pose =
+  Pose3Measurement optimized_camera_pose =
       bootstrapUpdateStaticEstimator(input);
 
   // collect measurements into dynamic and static
   std::vector<PerObjectUpdate> dynamic_updates =
       collectMeasurements(input, optimized_camera_pose);
-  // //get estimator
 
   tbb::parallel_for_each(
       dynamic_updates.begin(), dynamic_updates.end(),
       [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
-  // updaet map
-  // update estimator
-  //  auto backend_output = constructOutputPacket(frame_k, timestamp);
-  //  backend_output->involved_timestamp = input->involved_timestamps_;
 
   return {State::Nominal, nullptr};
 }
@@ -105,8 +105,7 @@ LooselyDistributedRGBDBackendModule::nominalSpinImpl(
   const Timestamp timestamp = input->getTimestamp();
   // TODO: sovle smoother
   //  non-sequentially?
-  SensorPoseMeasurement optimized_camera_pose =
-      nominalUpdateStaticEstimator(input);
+  Pose3Measurement optimized_camera_pose = nominalUpdateStaticEstimator(input);
   // collect measurements into dynamic and static
   std::vector<PerObjectUpdate> dynamic_updates =
       collectMeasurements(input, optimized_camera_pose);
@@ -123,7 +122,7 @@ LooselyDistributedRGBDBackendModule::nominalSpinImpl(
   return {State::Nominal, backend_output};
 }
 
-LooselyDistributedRGBDBackendModule::SensorPoseMeasurement
+Pose3Measurement
 LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
@@ -131,7 +130,7 @@ LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
 
   map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
 
-  const gtsam::Pose3 T_W_k_frontend = input->T_world_camera_;
+  Pose3Measurement T_W_k_frontend(input->T_world_camera_);
   map->updateSensorPoseMeasurement(frame_k, T_W_k_frontend);
 
   gtsam::Values new_values;
@@ -152,10 +151,10 @@ LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
   CHECK(gaussian_pose_prior)
       << "initial pose prior must be a Gaussian noise model!";
 
-  return SensorPoseMeasurement(T_W_k_frontend, gaussian_pose_prior);
+  return Pose3Measurement(T_W_k_frontend, gaussian_pose_prior);
 }
 
-LooselyDistributedRGBDBackendModule::SensorPoseMeasurement
+Pose3Measurement
 LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
@@ -163,7 +162,8 @@ LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
 
   map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
 
-  const gtsam::Pose3 T_W_k_frontend = input->T_world_camera_;
+  Pose3Measurement T_W_k_frontend(input->T_world_camera_);
+  // we dont have an uncertainty from the frontend
   map->updateSensorPoseMeasurement(frame_k, T_W_k_frontend);
 
   gtsam::Values new_values;
@@ -195,16 +195,19 @@ LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
   gtsam::Matrix66 T_w_k_cov;
   {
     utils::TimingStatsCollector timer("lc_rgbd_backend.camera_pose_cov_calc");
-    // T_w_k_cov = static_estimator_.marginalCovariance(T_w_k_opt_query.key());
+    gtsam::Marginals marginals(static_estimator_.getFactorsUnsafe(),
+                               optimised_values,
+                               gtsam::Marginals::Factorization::CHOLESKY);
+    T_w_k_cov = marginals.marginalCovariance(T_w_k_opt_query.key());
   }
 
-  return SensorPoseMeasurement(T_w_k_opt_query.get(), T_w_k_cov);
+  return Pose3Measurement(T_w_k_opt_query.get(), T_w_k_cov);
 }
 
 std::vector<LooselyDistributedRGBDBackendModule::PerObjectUpdate>
 LooselyDistributedRGBDBackendModule::collectMeasurements(
     RGBDInstanceOutputPacket::ConstPtr input,
-    const SensorPoseMeasurement& X_k_measurement) const {
+    const Pose3Measurement& X_k_measurement) const {
   GenericTrackedStatusVector<LandmarkKeypointStatus> all_dynamic_measurements =
       input->collectDynamicLandmarkKeypointMeasurements();
 
@@ -250,15 +253,15 @@ LooselyCoupledObjectSAM::Ptr LooselyDistributedRGBDBackendModule::getEstimator(
     LOG(INFO) << "Making new DecoupledObjectSAM for object " << object_id;
 
     FormulationHooks hooks;
-    // hooks.ground_truth_packets_request =
-    //     geometric_solver_->objectMotionParams().ground_truth_packets_request;
+    hooks.ground_truth_packets_request =
+        [&]() -> std::optional<GroundTruthPacketMap> {
+      return this->getGroundTruthPackets();
+    };
 
     LooselyCoupledObjectSAM::Params params;
     params.isam = dynamic_isam2_params_;
     // // make this prior not SO small
     NoiseModels noise_models = NoiseModels::fromBackendParams(base_params_);
-    noise_models.initial_pose_prior =
-        gtsam::noiseModel::Isotropic::Sigma(6u, 0.001);
     sam_estimators_.insert2(object_id,
                             std::make_shared<LooselyCoupledObjectSAM>(
                                 params, object_id, noise_models, hooks));
@@ -284,17 +287,17 @@ bool LooselyDistributedRGBDBackendModule::implSolvePerObject(
   CHECK_NOTNULL(estimator);
   auto map = estimator->map();
 
-  const gtsam::Pose3& X_W_k = object_update.X_k_measurement;
-  const auto H_k = object_update.H_k_measurement;
+  const Pose3Measurement& X_k_measurement = object_update.X_k_measurement;
+  const Motion3ReferenceFrame& H_k = object_update.H_k_measurement;
 
   // hack for now - if the object is new only update its map
   // this will create nodes in the Map but not update the estimator
   // only update the estimator otherwise!!
   if (is_object_new) {
     map->updateObservations(measurements);
-    map->updateSensorPoseMeasurement(frame_id_k, X_W_k);
+    map->updateSensorPoseMeasurement(frame_id_k, X_k_measurement);
   } else {
-    estimator->update(frame_id_k, measurements, X_W_k, H_k);
+    estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
   }
 }
 
@@ -327,6 +330,38 @@ LooselyDistributedRGBDBackendModule::constructOutputPacket(
   }
 
   return backend_output;
+}
+
+void LooselyDistributedRGBDBackendModule::logBackendFromEstimators() {
+  // TODO: name + suffix
+  const std::string name = "parallel_object_centric";
+
+  BackendLogger::UniquePtr logger = std::make_unique<BackendLogger>(name);
+
+  Timestamp timestamp_k = this->spin_state_.timestamp;
+  FrameId frame_id_k = this->spin_state_.frame_id;
+
+  LOG(INFO) << "Logging Parallel RGBD backend at frame " << frame_id_k;
+
+  BackendOutputPacket::Ptr output =
+      constructOutputPacket(frame_id_k, timestamp_k);
+
+  const auto& gt_packets = this->getGroundTruthPackets();
+
+  logger->logObjectMotion(output->optimized_object_motions, gt_packets);
+  logger->logObjectPose(output->optimized_object_poses, gt_packets);
+
+  // duplicated code from constructOutputPacket but we need the frame ids!!!
+  auto accessor = static_formulation_->accessorFromTheta();
+  auto map = static_formulation_->map();
+  for (FrameId frame_id : map->getFrameIds()) {
+    StateQuery<gtsam::Pose3> X_k_query = accessor->getSensorPose(frame_id);
+    logger->logCameraPose(frame_id, X_k_query.get(), gt_packets);
+  }
+
+  // TODO: not logging points!!!
+
+  logger.reset();
 }
 
 }  // namespace dyno

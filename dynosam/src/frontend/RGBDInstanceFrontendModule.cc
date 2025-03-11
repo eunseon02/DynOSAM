@@ -82,6 +82,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   object_motion_solver_params.ground_truth_packets_request = [&]() {
     return this->shared_module_info.getGroundTruthPackets();
   };
+  object_motion_solver_params.refine_motion_with_3d = false;
 
   // object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
   //     object_motion_solver_params, camera->getParams(), isam2_params);

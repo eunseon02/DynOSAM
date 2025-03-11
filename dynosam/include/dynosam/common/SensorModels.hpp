@@ -34,6 +34,7 @@
 #include <gtsam/base/Vector.h>
 #include <gtsam/linear/NoiseModel.h>
 
+#include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 
@@ -176,14 +177,14 @@ struct VisualMeasurementStatus : public TrackedValueStatus<T> {
 };
 
 /**
- * @brief Defines a measurement with associated covariance matrix.
+ * @brief Defines a measurement/value with associated covariance matrix.
  *
  * Depending on the context, this model can either represent the uncertainty on
  * a measurement or the marginal covariance of an estimate. In the latter
  * context, the name "Measurement"WithCovariance is misleading (as it would not
  * be a measurement), so to all state-estimation people I profusely apologise.
  *
- * The covariance can be optionallty provided.
+ * The covariance can be optionally provided.
  *
  * We define the dimensions of this type and provide an equals function to make
  * it compatible with gtsam::traits<T>::dimension and gtsam::traits<T>::Equals.
@@ -199,25 +200,79 @@ class MeasurementWithCovariance {
  public:
   using This = MeasurementWithCovariance<T, D>;
   //! Need to have dimension to satisfy gtsam::dimemsions
-  enum { dimension = D };
+  inline constexpr static auto dimension = D;
   //! D x D covariance matrix
   using Covariance = Eigen::Matrix<double, D, D>;
   //! D x 1 sigma matrix used to construct the covariance matrix
   using Sigmas = Eigen::Matrix<double, D, 1>;
+
+  /**
+   * @brief Empty constructor
+   *
+   */
   MeasurementWithCovariance() = default;
+
+  /**
+   * @brief Construct object using a measurement and a gtsam::SharedGaussian,
+   * representing the noise model/uncertainty of the measurement.
+   *
+   * @throw DynosamException If the provided model has dimensions that do not
+   * match the templated dimensions D.
+   *
+   * @param measurement const T&
+   * @param model const gtsam::SharedGaussian&
+   */
   MeasurementWithCovariance(const T& measurement,
                             const gtsam::SharedGaussian& model)
-      : measurement_(measurement), model_(model) {}
-  MeasurementWithCovariance(const T& measurement)
+      : measurement_(measurement), model_(CHECK_NOTNULL(model)) {
+    if (static_cast<int>(model->dim()) != This::dimension) {
+      throw DynosamException(
+          "Invalid gtsam::SharedGaussian model provided to "
+          "MeasurementWithCovariance. Type dimensions are " +
+          std::to_string(This::dimension) + " but noise models dims are " +
+          std::to_string(model->dim()));
+    }
+  }
+
+  /**
+   * @brief Construct object using only a measurement type, indicatating there
+   * is no associated noise model/uncertainty. The resulting model will be none
+   * and the covariance matrix will be all zeros.
+   *
+   * We ensure this constructor is explicit to prevent unintended implicit
+   * conversions
+   *
+   * @param measurement const T&
+   */
+  explicit MeasurementWithCovariance(const T& measurement)
       : measurement_(measurement), model_(nullptr) {}
+
+  /**
+   * @brief Construct object using a measurement type and associated covariance
+   * matrix. The covariance matrix is used to construct the underlying sensor
+   * noise model using gtsam::noiseModel::Gaussian.
+   *
+   * @param measurement const T&
+   * @param covariance const Covariance&
+   */
   MeasurementWithCovariance(const T& measurement, const Covariance& covariance)
       : measurement_(measurement),
         model_(gtsam::noiseModel::Gaussian::Covariance(covariance)) {}
+
+  /**
+   * @brief Construct object using a measurement type and associated sigma
+   * vector. The sigma's represent the on-diagonal values for the covariance
+   * matrix and are used to construct the underlying sensor noise model using
+   * gtsam::noiseModel::Gaussian.
+   *
+   * @param measurement const T&
+   * @param sigmas const Sigmas&
+   */
   MeasurementWithCovariance(const T& measurement, const Sigmas& sigmas)
       : measurement_(measurement),
         model_(gtsam::noiseModel::Diagonal::Sigmas(sigmas)) {}
 
-  MeasurementWithCovariance(const std::pair<T, Covariance>& pair)
+  explicit MeasurementWithCovariance(const std::pair<T, Covariance>& pair)
       : MeasurementWithCovariance(pair.first, pair.second) {}
 
   const T& measurement() const { return measurement_; }
@@ -264,6 +319,15 @@ class MeasurementWithCovariance {
   gtsam::SharedGaussian model_{nullptr};
 };
 
+/// @brief (gtsam) Pose3 with covariance
+typedef MeasurementWithCovariance<gtsam::Pose3> Pose3Measurement;
+
+/// @brief (gtsam) Point3 with covariance
+typedef MeasurementWithCovariance<gtsam::Point3> Point3Measurement;
+
+/// @brief Keypoint with covariance
+typedef MeasurementWithCovariance<Keypoint> KeypointMeasurement;
+
 /**
  * @brief Struct containing landmark and keypoint measurements (with covariance)
  * Landmark is constructed from the depth measurement and the associated
@@ -275,6 +339,25 @@ class MeasurementWithCovariance {
  */
 struct LandmarkKeypoint {
   LandmarkKeypoint() = default;
+
+  /**
+   * @brief Construct a LandmarkKeypoint struct using measurement only values
+   * (no noise model/covariance)
+   *
+   * @param l const Landmark&
+   * @param kp  const Keypoint&
+   */
+  LandmarkKeypoint(const Landmark& l, const Keypoint& kp)
+      : landmark(Point3Measurement(l)), keypoint(KeypointMeasurement(kp)) {}
+
+  /**
+   * @brief  Construct a LandmarkKeypoint struct using full
+   * MeasurementWithCovariance objects (which may or may not contain noise
+   * models)/.
+   *
+   * @param l const MeasurementWithCovariance<Landmark>&
+   * @param kp const MeasurementWithCovariance<Keypoint>&
+   */
   LandmarkKeypoint(const MeasurementWithCovariance<Landmark>& l,
                    const MeasurementWithCovariance<Keypoint>& kp)
       : landmark(l), keypoint(kp) {}
@@ -336,4 +419,8 @@ struct VisualNoiseParams {
 
 template <typename T, int D>
 struct gtsam::traits<dyno::MeasurementWithCovariance<T, D>>
+    : public gtsam::Testable<dyno::MeasurementWithCovariance<T, D>> {};
+
+template <typename T, int D>
+struct gtsam::traits<const dyno::MeasurementWithCovariance<T, D>>
     : public gtsam::Testable<dyno::MeasurementWithCovariance<T, D>> {};

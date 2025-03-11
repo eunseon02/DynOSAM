@@ -111,7 +111,9 @@ class DecoupledObjectSAM {
                  const gtsam::Pose3& X_world_k,
                  const Motion3ReferenceFrame& motion_frame) {
     map_->updateObservations(measurements);
-    map_->updateSensorPoseMeasurement(frame_k, X_world_k);
+
+    // no sensor noise model!!
+    map_->updateSensorPoseMeasurement(frame_k, Pose3Measurement(X_world_k));
 
     const FrameId to = motion_frame.to();
     if (to != frame_k) {

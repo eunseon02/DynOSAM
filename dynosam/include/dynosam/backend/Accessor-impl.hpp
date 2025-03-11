@@ -188,10 +188,10 @@ StatusLandmarkVector Accessor<MAP>::getDynamicLandmarkEstimates(
     StateQuery<gtsam::Point3> lmk_query =
         this->getDynamicLandmark(frame_id, tracklet_id);
     if (lmk_query) {
-      estimates.push_back(
-          LandmarkStatus::DynamicInGLobal(lmk_query.get(),  // estimate
-                                          frame_id, tracklet_id,
-                                          object_id)  // status
+      estimates.push_back(LandmarkStatus::DynamicInGLobal(
+          Point3Measurement(lmk_query.get()),  // estimate
+          frame_id, tracklet_id,
+          object_id)  // status
       );
     }
   }
@@ -215,7 +215,7 @@ StatusLandmarkVector Accessor<MAP>::getStaticLandmarkEstimates(
           getStaticLandmark(landmark_node->tracklet_id);
       if (lmk_query) {
         estimates.push_back(LandmarkStatus::StaticInGlobal(
-            lmk_query.get(),  // estimate
+            Point3Measurement(lmk_query.get()),  // estimate
             LandmarkStatus::MeaninglessFrame,
             landmark_node->getId()  // tracklet id
             )                       // status
@@ -239,7 +239,7 @@ StatusLandmarkVector Accessor<MAP>::getFullStaticMap() const {
           getStaticLandmark(landmark_node->tracklet_id);
       if (lmk_query) {
         estimates.push_back(LandmarkStatus::StaticInGlobal(
-            lmk_query.get(),  // estimate
+            Point3Measurement(lmk_query.get()),  // estimate
             LandmarkStatus::MeaninglessFrame,
             landmark_node->getId()  // tracklet id
             )                       // status

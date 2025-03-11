@@ -287,9 +287,9 @@ StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
     StateQuery<gtsam::Point3> lmk_query =
         this->getDynamicLandmark(frame_id, tracklet_id);
     if (lmk_query) {
-      estimates.push_back(
-          LandmarkStatus::DynamicInGLobal(lmk_query.get(),  // estimate
-                                          frame_id, tracklet_id, object_id));
+      estimates.push_back(LandmarkStatus::DynamicInGLobal(
+          Point3Measurement(lmk_query.get()),  // estimate
+          frame_id, tracklet_id, object_id));
     }
   }
   return estimates;
@@ -412,15 +412,12 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();
     gtsam::Pose3 k_H_s0_k = (L_0.inverse() * s0_H_k_world * L_0).inverse();
     gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
-    // LOG(INFO) << "s0_H_k " << s0_H_k;
-    // measured point in camera frame
     const gtsam::Point3 m_camera =
         lmk_node->getMeasurement(frame_node_k_1).landmark;
     Landmark lmk_L0_init =
         L_0.inverse() * k_H_s0_W * context.X_k_1_measured * m_camera;
 
-    // initalise value //cannot initalise again the same -> it depends where L_0
-    // is created, no?
+    // TODO: this should not every be true as this is a new value!!!
     Landmark lmk_L0;
     getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
                  lmk_L0_init);
@@ -457,6 +454,7 @@ void ObjectCentricFormulation::objectUpdateContext(
     const ObjectUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
   auto frame_node_k = context.frame_node_k;
+  auto object_node = context.object_node;
   const gtsam::Key object_motion_key_k =
       frame_node_k->makeObjectMotionKey(context.getObjectId());
 
@@ -480,6 +478,12 @@ void ObjectCentricFormulation::objectUpdateContext(
       new_factors.addPrior<gtsam::Pose3>(object_motion_key_k,
                                          gtsam::Pose3::Identity(),
                                          noise_models_.initial_pose_prior);
+    }
+
+    // test stuff
+    FrameId first_seen_object_frame = object_node->getFirstSeenFrame();
+    if (first_seen_object_frame == frame_id) {
+      CHECK_EQ(s0, frame_id);
     }
   }
 
@@ -539,13 +543,19 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
   const KeyFrameRange::ConstPtr range =
       key_frame_data_.find(object_id, frame_id);
   if (range) {
-    // operater casting allows return of std::pair
     return range->dataPair();
   }
 
+  LOG(INFO) << "Starting new range of object k=" << frame_id
+            << " j=" << object_id;
   gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
-  return key_frame_data_.startNewActiveRange(object_id, frame_id, center)
-      ->dataPair();
+  auto result =
+      key_frame_data_.startNewActiveRange(object_id, frame_id, center)
+          ->dataPair();
+
+  // sanity check
+  CHECK_EQ(result.first, frame_id);
+  return result;
 }
 
 // TODO: can be massively more efficient
@@ -703,11 +713,16 @@ gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
 
       ObjectPoseGT object_gt;
       if (gt_packet.getObject(object_id, object_gt)) {
+        // return gtsam::Pose3(gtsam::Rot3::Identity(),
+        // object_gt.L_world_.translation());
         return object_gt.L_world_;
         // L0_.insert2(object_id, std::make_pair(frame_id, object_gt.L_world_));
         // return L0_.at(object_id);
+      } else {
+        LOG(FATAL) << "COuld not get gt! object centroid";
       }
-      // TODO: throw warning?
+    } else {
+      LOG(FATAL) << "COuld not get gt! object centroid";
     }
   }
 
@@ -720,6 +735,8 @@ gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
   CHECK(frame_node->objectObserved(object_id));
 
   StatusLandmarkVector dynamic_landmarks;
+
+  // TODO: could use computeObjectCentroid in accessor!!!?
 
   // measured/linearized camera pose at the first frame this object has been
   // seen
@@ -734,9 +751,9 @@ gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
     // const gtsam::Point3 landmark_measurement_world = X_world *
     // landmark_measurement_local;
 
-    dynamic_landmarks.push_back(
-        LandmarkStatus::DynamicInGLobal(landmark_measurement_local, frame_id,
-                                        lmk_node->tracklet_id, object_id));
+    dynamic_landmarks.push_back(LandmarkStatus::DynamicInGLobal(
+        Point3Measurement(landmark_measurement_local), frame_id,
+        lmk_node->tracklet_id, object_id));
   }
 
   CloudPerObject object_clouds = groupObjectCloud(dynamic_landmarks, X_world);

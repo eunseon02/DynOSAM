@@ -129,7 +129,8 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     }
   }
 
-  void updateSensorPoseMeasurement(FrameId frame_id, const gtsam::Pose3& X) {
+  void updateSensorPoseMeasurement(FrameId frame_id,
+                                   const Pose3Measurement& X) {
     auto frame_node = this->getFrame(frame_id);
     CHECK_NOTNULL(frame_node);
     // TODO: overwrites if currently set
@@ -284,7 +285,8 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
   }
 
   // TODO: test
-  bool hasInitialSensorPose(FrameId frame_id, gtsam::Pose3* X = nullptr) const {
+  bool hasInitialSensorPose(FrameId frame_id,
+                            Pose3Measurement* X = nullptr) const {
     auto frame_node = this->getFrame(frame_id);
     if (!frame_node) {
       return false;
@@ -297,6 +299,15 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     } else {
       return false;
     }
+  }
+
+  bool hasInitialSensorPose(FrameId frame_id, gtsam::Pose3* X = nullptr) const {
+    Pose3Measurement frame;
+    if (hasInitialSensorPose(frame_id, &frame)) {
+      if (X) *X = frame;  // implicit cast
+      return true;
+    }
+    return false;
   }
 
   /**

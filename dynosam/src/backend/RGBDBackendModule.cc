@@ -345,7 +345,9 @@ void RGBDBackendModule::updateMap(gtsam::Pose3& T_world_cam,
   map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
   map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
   // update other measurements
-  map_->updateSensorPoseMeasurement(frame_k, T_world_cam_k_frontend);
+  // no sensor noise model!!
+  map_->updateSensorPoseMeasurement(frame_k,
+                                    Pose3Measurement(T_world_cam_k_frontend));
 
   // collected motion estimates for this current frame (ie. new motions!)
   // not handling the case where the update is incremental and other motions
