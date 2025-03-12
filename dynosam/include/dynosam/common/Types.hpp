@@ -649,6 +649,13 @@ using OptionalString = std::optional<std::reference_wrapper<std::string>>;
 template <typename T>
 std::string to_string(const T& t);
 
+// template <typename T>
+// std::string to_string(const T& t) {
+//     std::ostringstream t;
+//     oss << value;
+//     return oss.str();
+// }
+
 template <typename Input, typename Output>
 bool convert(const Input&, Output&);
 

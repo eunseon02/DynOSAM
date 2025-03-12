@@ -155,6 +155,8 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
 
   auto motion_key = frame_node_k->makeObjectMotionKey(object_id);
   StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
+  // TODO: this might be okay ---- its becuase we addd the sensor pose everytime
+  // (since we dont know when the object will be added)
   if (!motion_s0_k) {
     LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
                  << " object id=" << object_id
@@ -266,9 +268,15 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
 StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node = map()->getFrame(frame_id);
+
+  // object may not exist at the frame query so allow invalid frame
+  if (!frame_node) {
+    return StatusLandmarkVector{};
+  }
+
   const auto object_node = map()->getObject(object_id);
-  CHECK_NOTNULL(frame_node);
-  CHECK_NOTNULL(object_node);
+  CHECK(frame_node) << "Frame Null at k=" << frame_id << " j=" << object_id;
+  CHECK(object_node) << "Object Null at k=" << frame_id << " j=" << object_id;
 
   if (!frame_node->objectObserved(object_id)) {
     return StatusLandmarkVector{};
@@ -426,6 +434,9 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     new_values.insert(point_key, lmk_L0);
     result.updateAffectedObject(frame_node_k_1->frame_id,
                                 context.getObjectId());
+    if (result.debug_info)
+      result.debug_info->getObjectInfo(context.getObjectId())
+          .num_new_dynamic_points++;
   }
 
   auto dynamic_point_noise = noise_models_.dynamic_point_noise;
@@ -437,6 +448,9 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
         object_motion_key_k_1, point_key,
         lmk_node->getMeasurement(frame_node_k_1).landmark, L_0,
         dynamic_point_noise);
+    if (result.debug_info)
+      result.debug_info->getObjectInfo(context.getObjectId())
+          .num_dynamic_factors++;
   }
 
   // add factor at k
@@ -448,6 +462,9 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
       dynamic_point_noise);
 
   result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+  if (result.debug_info)
+    result.debug_info->getObjectInfo(context.getObjectId())
+        .num_dynamic_factors++;
 }
 
 void ObjectCentricFormulation::objectUpdateContext(
@@ -471,6 +488,11 @@ void ObjectCentricFormulation::objectUpdateContext(
     // gtsam::Pose3 motion;
     new_values.insert(object_motion_key_k, motion);
     is_other_values_in_map.insert2(object_motion_key_k, true);
+
+    // for now lets treat num_motion_factors as motion (values) added!!
+    if (result.debug_info)
+      result.debug_info->getObjectInfo(context.getObjectId())
+          .num_motion_factors++;
 
     FrameId s0 = getOrConstructL0(object_id, frame_id).first;
     if (s0 == frame_id) {

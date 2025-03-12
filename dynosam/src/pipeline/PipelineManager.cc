@@ -32,7 +32,7 @@
 
 #include <glog/logging.h>
 
-#include "dynosam/backend/LooselyDistributedRGBDBackendModule.hpp"
+#include "dynosam/backend/ParallelRGBDBackendModule.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
@@ -301,7 +301,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
             static_cast<RGBDUpdaterType>(FLAGS_backend_updater_enum);
 
         if (updater_type == RGBDUpdaterType::Incremental) {
-          backend = std::make_shared<LooselyDistributedRGBDBackendModule>(
+          backend = std::make_shared<ParallelRGBDBackendModule>(
               params_.backend_params_, camera, &display_queue_);
         } else {
           params_.backend_params_.full_batch_frame = (int)get_dataset_size_();

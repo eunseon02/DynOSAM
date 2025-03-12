@@ -343,7 +343,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
   });
 
   const int& max_features_to_track = params_.max_dynamic_features_per_frame;
-  static constexpr float tolerance = 0.1;
+  static constexpr float tolerance = 0.01;
   Eigen::MatrixXd binning_mask;
 
   tbb::parallel_for_each(
@@ -354,8 +354,12 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
             info_.getObjectStatus(object_id);
         const int& number_tracked = object_tracking_info.num_track;
         // const int number_tracked = 10;
-        int nr_corners_needed =
-            std::max(max_features_to_track - number_tracked, 0);
+
+        // TODO: just detect way more than needed
+        int nr_corners_needed = max_features_to_track;
+        // TODO: detect correct amount only wheen we re-track after outlier
+        // rejection to see acually how many we need!!
+        //      std::max(max_features_to_track - number_tracked, 0);
 
         std::vector<KeypointCV>& max_keypoints = opencv_keypoints;
         const size_t sampled_size = max_keypoints.size();
@@ -368,6 +372,10 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
         VLOG(10) << "Kps: " << max_keypoints.size() << " for j=" << object_id
                  << " after ANMS (originally " << sampled_size << ")";
+        {
+          const std::lock_guard<std::mutex> lock(mutex);
+          info_.getObjectStatus(object_id).num_sampled = max_keypoints.size();
+        }
 
         for (const KeypointCV& cv_keypoint : max_keypoints) {
           Keypoint keypoint = utils::cvKeypointToGtsam(cv_keypoint);

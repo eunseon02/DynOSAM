@@ -30,7 +30,9 @@
 #pragma once
 
 #include <gtsam/geometry/Pose3.h>
+#include <gtsam/nonlinear/ISAM2Result.h>
 
+#include <boost/optional.hpp>  //only becuase current gtsam version needs this!!!
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -115,6 +117,27 @@ struct adl_serializer<std::optional<T>> {
   static void from_json(const json& j, std::optional<T>& opt) {
     if (j.is_null()) {
       opt = std::nullopt;
+    } else {
+      opt = j.template get<T>();  // same as above, but with
+                                  // adl_serializer<T>::from_json
+    }
+  }
+};
+
+template <typename T>
+struct adl_serializer<boost::optional<T>> {
+  static void to_json(json& j, const boost::optional<T>& opt) {
+    if (opt == boost::none) {
+      j = nullptr;
+    } else {
+      j = *opt;  // this will call adl_serializer<T>::to_json which will
+                 // find the free function to_json in T's namespace!
+    }
+  }
+
+  static void from_json(const json& j, boost::optional<T>& opt) {
+    if (j.is_null()) {
+      opt = boost::none;
     } else {
       opt = j.template get<T>();  // same as above, but with
                                   // adl_serializer<T>::from_json
@@ -218,20 +241,153 @@ struct adl_serializer<gtsam::Pose3> {
 };
 // end POSE3
 
+namespace internal {
+
+template <typename KEY, typename VALUE>
+struct StringMapConverterBase {
+  //! Alias to base type of gtsam::FastMap<KEY, VALUE> which is a std::map with
+  //! custom allocator
+  using Stdmap_with_allocator_KEY = typename gtsam::FastMap<KEY, VALUE>::Base;
+  //! Alias to base type of gtsam::FastMap<std::string, VALUE> which is a
+  //! std::map with custom allocator
+  using Stdmap_with_allocator_STRING =
+      typename gtsam::FastMap<std::string, VALUE>::Base;
+};
+
+/**
+ * @brief Special handling of the std::Map/gtsam::FastMap case - nlohmann will
+ * not properly convert the map to json format if the KEY is not a std::string.
+ * We want to therere apply conversion as best we can to do this. We also try to
+ * use the inbuit std::map conversion functionality where possible. since we
+ * pretty much always use gtsam::FastMap (which is built on std::map with custom
+ * allocators) I write custom functions for gtsam::FastMap::Base, in the case
+ * that the KEY is not a std::string
+ *
+ * @tparam KEY
+ * @tparam VALUE
+ */
+template <typename KEY, typename VALUE>
+struct StringMapConverter : public StringMapConverterBase<KEY, VALUE> {
+  using Base = StringMapConverterBase<KEY, VALUE>;
+  using Stdmap_with_allocator_KEY = typename Base::Stdmap_with_allocator_KEY;
+  using Stdmap_with_allocator_STRING =
+      typename Base::Stdmap_with_allocator_STRING;
+
+  static Stdmap_with_allocator_STRING to_string_map(
+      const Stdmap_with_allocator_KEY& typed_map) {
+    Stdmap_with_allocator_STRING string_map;
+    for (const auto& [key, value] : typed_map) {
+      string_map[std::to_string(key)] = value;
+    }
+    return string_map;
+  }
+
+  static Stdmap_with_allocator_KEY from_string_map(
+      const Stdmap_with_allocator_STRING& string_map) {
+    Stdmap_with_allocator_KEY typed_map;
+    for (const auto& [string_key, value] : string_map) {
+      KEY key;
+
+      if constexpr (std::is_integral_v<KEY>) {
+        key = static_cast<KEY>(std::stoll(string_key));
+      } else if constexpr (std::is_floating_point_v<KEY>) {
+        key = static_cast<KEY>(std::stod(string_key));
+      } else {
+        throw std::invalid_argument(
+            "Unsupported key type for deserialization. Type is " +
+            dyno::type_name<KEY>());
+      }
+
+      typed_map[key] = value;
+    }
+    return typed_map;
+  }
+};
+
+/**
+ * @brief Specalise StringMapConverter for the case when the map already as
+ * std::string as its KEY type.
+ *
+ * @tparam VALUE
+ */
+template <typename VALUE>
+struct StringMapConverter<std::string, VALUE>
+    : public StringMapConverterBase<std::string, VALUE> {
+  using Base = StringMapConverterBase<std::string, VALUE>;
+  using Stdmap_with_allocator_KEY = typename Base::Stdmap_with_allocator_KEY;
+  using Stdmap_with_allocator_STRING =
+      typename Base::Stdmap_with_allocator_STRING;
+
+  // still copying so could be more efficient!
+  static Stdmap_with_allocator_STRING to_string_map(
+      const Stdmap_with_allocator_KEY& typed_map) {
+    return typed_map;
+  }
+
+  // still copying so could be more efficient!
+  static Stdmap_with_allocator_KEY from_string_map(
+      const Stdmap_with_allocator_STRING& string_map) {
+    return string_map;
+  }
+};
+
+}  // namespace internal
+
 // begin gtsam::FastMap
+// in the case where key is NOT an std::string we have to do some versions
+// as nlohmann will not properly convert the map to json format if the KEY is
+// not a std::string
 template <typename KEY, typename VALUE>
 struct adl_serializer<gtsam::FastMap<KEY, VALUE>> {
   using Map = gtsam::FastMap<KEY, VALUE>;
 
   static void to_json(json& j, const gtsam::FastMap<KEY, VALUE>& map) {
-    j = static_cast<typename Map::Base>(map);
+    j = internal::StringMapConverter<KEY, VALUE>::to_string_map(
+        static_cast<typename Map::Base>(map));
   }
 
   static void from_json(const json& j, gtsam::FastMap<KEY, VALUE>& map) {
+    // this is a truly truly awful line of code...
+    // now all maps will be string -> value so all stored maps will be a string
+    // map therefore need to tell JSON to to expect the type as a string map
+    // before converting it into the expected std::map type (e.g. with correct
+    // KEY, VALUE) and then loading it into to fast map. lots of copying etc but
+    // this should not happen often...
+    map = Map(internal::StringMapConverter<KEY, VALUE>::from_string_map(
+        j.template get<typename internal::StringMapConverter<
+            KEY, VALUE>::Stdmap_with_allocator_STRING>()));
+  }
+};
+
+// specalise for when the key is std::string as no special behaviour is needed
+template <typename VALUE>
+struct adl_serializer<gtsam::FastMap<std::string, VALUE>> {
+  using Map = gtsam::FastMap<std::string, VALUE>;
+
+  static void to_json(json& j, const Map& map) {
+    j = static_cast<typename Map::Base>(map);
+  }
+
+  static void from_json(const json& j, Map& map) {
     map = Map(j.template get<typename Map::Base>());
   }
 };
 // end gtsam::FastMap
+
+// begin gtsam::FastSet
+template <typename VALUE>
+struct adl_serializer<gtsam::FastSet<VALUE>> {
+  using Set = gtsam::FastSet<VALUE>;
+
+  static void to_json(json& j, const Set& set) {
+    j = static_cast<typename Set::Base>(set);
+  }
+
+  static void from_json(const json& j, Set& set) {
+    set = Set(j.template get<typename Set::Base>());
+  }
+};
+// end gtsam::FastSet
 
 // begin dyno::GenericObjectCentricMap
 template <typename VALUE>
@@ -268,6 +424,67 @@ struct adl_serializer<cv::Rect_<T>> {
     rect = cv::Rect_<T>(x, y, width, height);
   }
 };
+
+// begin ISAM2Result::DetailedResults::VariableStatus
+template <>
+struct adl_serializer<gtsam::ISAM2Result::DetailedResults::VariableStatus> {
+  static void to_json(json& j,
+                      const gtsam::ISAM2Result::DetailedResults::VariableStatus&
+                          variable_status) {
+    j["is_reeliminated"] = variable_status.isReeliminated;
+    j["is_above_relin_threshold"] = variable_status.isAboveRelinThreshold;
+    j["is_relinearized_involved"] = variable_status.isRelinearizeInvolved;
+    j["is_relinearized"] = variable_status.isRelinearized;
+    j["is_observed"] = variable_status.isObserved;
+    j["is_new"] = variable_status.isNew;
+    j["is_root_clique"] = variable_status.inRootClique;
+  }
+
+  static void from_json(const json&,
+                        gtsam::ISAM2Result::DetailedResults::VariableStatus&) {
+    // TODO:
+  }
+};
+// end ISAM2Result::DetailedResults::VariableStatus
+
+// begin ISAM2Result::DetailedResults
+template <>
+struct adl_serializer<gtsam::ISAM2Result::DetailedResults> {
+  static void to_json(
+      json& j, const gtsam::ISAM2Result::DetailedResults& detailed_result) {
+    j["variable_status"] = detailed_result.variableStatus;
+  }
+
+  static void from_json(const json&, gtsam::ISAM2Result::DetailedResults&) {
+    // TODO:
+  }
+};
+// end ISAM2Result::DetailedResults
+
+// begin ISAM2Result
+template <>
+struct adl_serializer<gtsam::ISAM2Result> {
+  static void to_json(json& j, const gtsam::ISAM2Result& result) {
+    j["error_before"] = result.errorBefore;
+    j["error_after"] = result.errorAfter;
+    j["variables_relinearized"] = result.variablesRelinearized;
+    j["variables_reeliminated"] = result.variablesReeliminated;
+    j["factors_recalculated"] = result.factorsRecalculated;
+    j["cliques"] = result.cliques;
+    j["error_after"] = result.errorAfter;
+    j["unused_keys"] = result.unusedKeys;
+    j["observed_keys"] = result.observedKeys;
+    j["observed_keys"] = result.observedKeys;
+    j["keys_with_factors_removed"] = result.keysWithRemovedFactors;
+    j["marked_keys"] = result.markedKeys;
+    j["detailed_results"] = result.detail;
+  }
+
+  static void from_json(const json&, gtsam::ISAM2Result&) {
+    // TODO
+  }
+};
+// end ISAM2Result
 
 // definitions of seralization functions.
 // implementation in .cc

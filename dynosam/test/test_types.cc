@@ -751,6 +751,32 @@ TEST(JsonIO, eigenJsonIO) {
   EXPECT_TRUE(gtsam::assert_equal(m, m2));
 }
 
+TEST(JsonIO, testGenericObjectCentricMap) {
+  using Map = GenericObjectCentricMap<gtsam::Pose3>;
+
+  Map map;
+  // add two frames for object 1
+  map.insert22(1, 1, gtsam::Pose3::Identity());
+  map.insert22(1, 2, gtsam::Pose3::Identity());
+
+  // one frame for object 2
+  map.insert22(2, 1, gtsam::Pose3::Identity());
+  nlohmann::json j = map;
+  std::cout << j << std::endl;
+
+  gtsam::FastMap<FrameId, int> gtsam_map;
+  gtsam_map.insert2(1, 10);
+  gtsam_map.insert2(2, 10);
+  j = gtsam_map;
+  std::cout << "gtsam map " << j << std::endl;
+
+  std::map<std::string, int> std_map;
+  std_map["1"] = 10;
+  std_map["2"] = 10;
+  j = std_map;
+  std::cout << "std_map " << j << std::endl;
+}
+
 namespace fs = std::filesystem;
 class JsonIOWithFiles : public ::testing::Test {
  public:

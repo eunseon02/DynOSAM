@@ -28,13 +28,13 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/rgbd/impl/LooselyCoupledObjectSAM.hpp"
+#include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
 
 #include "dynosam/utils/TimingStats.hpp"
 
 namespace dyno {
 
-LooselyCoupledObjectSAM::LooselyCoupledObjectSAM(
+ParallelObjectISAM::ParallelObjectISAM(
     const Params& params, ObjectId object_id, const NoiseModels& noise_models,
     const FormulationHooks& formulation_hooks)
     : params_(params),
@@ -53,22 +53,24 @@ LooselyCoupledObjectSAM::LooselyCoupledObjectSAM(
   accessor_ = decoupled_formulation_->accessorFromTheta();
 }
 
-Motion3ReferenceFrame LooselyCoupledObjectSAM::getFrame2FrameMotion(
+StateQuery<Motion3ReferenceFrame> ParallelObjectISAM::getFrame2FrameMotion(
     FrameId frame_id) const {
   // this is in the form of our accessor
   StateQuery<Motion3ReferenceFrame> H_W_km1_k =
       accessor_->getObjectMotionReferenceFrame(frame_id, object_id_);
-  CHECK(H_W_km1_k) << "Failed to get object motion at j=" << object_id_
-                   << " k=" << frame_id;
+  if (!H_W_km1_k) return H_W_km1_k;
+  // CHECK(H_W_km1_k) << "Failed to get object motion at j=" << object_id_
+  //                  << " k=" << frame_id;
   CHECK(H_W_km1_k->style() == MotionRepresentationStyle::F2F);
   CHECK(H_W_km1_k->origin() == ReferenceFrame::GLOBAL);
   CHECK(H_W_km1_k->to() == frame_id);
 
-  return H_W_km1_k.get();
+  return H_W_km1_k;
 }
 
-Motion3ReferenceFrame LooselyCoupledObjectSAM::getKeyFramedMotion(
+Motion3ReferenceFrame ParallelObjectISAM::getKeyFramedMotion(
     FrameId frame_id) const {
+  // assumes the motion actually exists??!!!
   Motion3ReferenceFrame H_W_s0_k =
       decoupled_formulation_->getEstimatedMotion(object_id_, frame_id);
   CHECK(H_W_s0_k.style() == MotionRepresentationStyle::KF);
@@ -77,16 +79,16 @@ Motion3ReferenceFrame LooselyCoupledObjectSAM::getKeyFramedMotion(
   return H_W_s0_k;
 }
 
-ObjectMotionMap LooselyCoupledObjectSAM::getFrame2FrameMotions() const {
+ObjectMotionMap ParallelObjectISAM::getFrame2FrameMotions() const {
   ObjectMotionMap motions;
   for (const FrameId& frame_id : map()->getFrameIds()) {
-    motions.insert22(object_id_, frame_id,
-                     this->getFrame2FrameMotion(frame_id));
+    auto f2f_motion = this->getFrame2FrameMotion(frame_id);
+    if (f2f_motion) motions.insert22(object_id_, frame_id, f2f_motion.get());
   }
   return motions;
 }
 
-ObjectMotionMap LooselyCoupledObjectSAM::getKeyFramedMotions() const {
+ObjectMotionMap ParallelObjectISAM::getKeyFramedMotions() const {
   ObjectMotionMap motions;
   for (const FrameId& frame_id : map()->getFrameIds()) {
     motions.insert22(object_id_, frame_id, this->getKeyFramedMotion(frame_id));
@@ -94,12 +96,12 @@ ObjectMotionMap LooselyCoupledObjectSAM::getKeyFramedMotions() const {
   return motions;
 }
 
-StatusLandmarkVector LooselyCoupledObjectSAM::getDynamicLandmarks(
+StatusLandmarkVector ParallelObjectISAM::getDynamicLandmarks(
     FrameId frame_id) const {
   return accessor_->getDynamicLandmarkEstimates(frame_id, object_id_);
 }
 
-void LooselyCoupledObjectSAM::updateFormulation(
+void ParallelObjectISAM::updateFormulation(
     FrameId frame_k, const Pose3Measurement& X_W_k,
     gtsam::NonlinearFactorGraph& new_factors, gtsam::Values& new_values) {
   // no need to update and static things ;)
@@ -109,7 +111,8 @@ void LooselyCoupledObjectSAM::updateFormulation(
     auto frame_km1 = frame_k - 1u;
 
     if (!accessor_->exists(CameraPoseSymbol(frame_km1))) {
-      LOG(INFO) << "Previous camera pose does not exist!! k=" << frame_km1;
+      LOG(INFO) << "Previous camera pose does not exist!! k=" << frame_km1
+                << "j=" << object_id_;
       Pose3Measurement T_W_cam_km1;
       CHECK(this->map()->hasInitialSensorPose(frame_km1, &T_W_cam_km1));
 
@@ -124,31 +127,30 @@ void LooselyCoupledObjectSAM::updateFormulation(
     }
   }
 
-  // TODO: misleading API, this should just be add pose
   const gtsam::Pose3& initial_X_W_k = X_W_k.measurement();
   CHECK(X_W_k.hasModel());
   const gtsam::SharedGaussian& uncertainty_X_W_k = X_W_k.model();
-
-  // LOG(INFO) << "Adding sensor pose prior " << X_W_k;
 
   decoupled_formulation_->addSensorPoseValue(initial_X_W_k, frame_k,
                                              new_values);
   decoupled_formulation_->addSensorPosePriorFactor(
       initial_X_W_k, uncertainty_X_W_k, frame_k, new_factors);
-  // decoupled_formulation_->addOdometry(frame_k, X_W_k, new_values,
-  // new_factors);
 
   UpdateObservationParams update_params;
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
-  VLOG(10) << "LooselyCoupledObjectSAM: Starting formulation update k="
-           << frame_k << " j= " << object_id_;
+  VLOG(10) << "ParallelObjectISAM: Starting formulation update k=" << frame_k
+           << " j= " << object_id_;
   decoupled_formulation_->updateDynamicObservations(frame_k, new_values,
                                                     new_factors, update_params);
+  // TODO: use update result - if the object is not updated, should we remove
+  // the frame node at k-1...?
 }
 
-bool LooselyCoupledObjectSAM::updateSmoother(FrameId frame_k,
-                                             const Pose3Measurement& X_W_k) {
+bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
+                                        const Pose3Measurement& X_W_k) {
+  // only clear result when we update the smoother...
+  // result_ = Result();
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
@@ -156,8 +158,10 @@ bool LooselyCoupledObjectSAM::updateSmoother(FrameId frame_k,
 
   // do first optimisation
   dyno::utils::TimingStatsCollector timer(
-      "object_sam.optimize." + decoupled_formulation_->getFullyQualifiedName());
-  bool is_smoother_ok = optimize(&result_, new_factors, new_values);
+      "parallel_object_sam.optimize." +
+      decoupled_formulation_->getFullyQualifiedName());
+
+  bool is_smoother_ok = optimize(&result_.isam_result, new_factors, new_values);
 
   if (is_smoother_ok) {
     // use dummy isam result when running optimize without new values/factors
@@ -174,14 +178,16 @@ bool LooselyCoupledObjectSAM::updateSmoother(FrameId frame_k,
     }
   }
 
-  VLOG(5) << "LooselyCoupledObjectSAM: update complete k=" << frame_k
+  result_.was_smoother_ok = is_smoother_ok;
+
+  VLOG(5) << "ParallelObjectISAM: update complete k=" << frame_k
           << " j= " << object_id_
-          << "  error before: " << result_.errorBefore.value_or(NaN)
-          << " error after: " << result_.errorAfter.value_or(NaN);
+          << " error before: " << result_.isam_result.errorBefore.value_or(NaN)
+          << " error after: " << result_.isam_result.errorAfter.value_or(NaN);
   return is_smoother_ok;
 }
 
-bool LooselyCoupledObjectSAM::optimize(
+bool ParallelObjectISAM::optimize(
     gtsam::ISAM2Result* result, const gtsam::NonlinearFactorGraph& new_factors,
     const gtsam::Values& new_values, const ISAM2UpdateParams& update_params) {
   CHECK_NOTNULL(result);
@@ -196,7 +202,7 @@ bool LooselyCoupledObjectSAM::optimize(
   return true;
 }
 
-void LooselyCoupledObjectSAM::updateStates() {
+void ParallelObjectISAM::updateStates() {
   gtsam::Values previous_estimate = this->getEstimate();
   gtsam::Values estimate = smoother_->calculateEstimate();
 
@@ -222,10 +228,54 @@ void LooselyCoupledObjectSAM::updateStates() {
     }
   }
 
+  result_.motions_with_large_change = motions_changed;
+  result_.large_motion_change_delta = motion_delta;
+  result_.motion_variable_status.clear();
+
+  // update with detailed results
+  auto detailed_results = result_.isam_result.details();
+  CHECK(detailed_results);
+  if (result_.was_smoother_ok && detailed_results) {
+    // get all motion symbols
+    const auto motion_symbols = estimate.extract<gtsam::Pose3>(
+        gtsam::Symbol::ChrTest(kObjectMotionSymbolChar));
+    for (const auto& [motion_key, _] : motion_symbols) {
+      // TODO: unclear if variables not involved with anything will be in the
+      // variable status at all!!
+      if (detailed_results->variableStatus.exists(motion_key)) {
+        ObjectId object_id;
+        FrameId frame_id;
+        CHECK(reconstructMotionInfo(motion_key, object_id, frame_id));
+
+        // LOG(INFO) << "Motion key" << DynoLikeKeyFormatter(motion_key) << " at
+        // k=" << frame_id << " key= "<< motion_key;
+        CHECK_EQ(object_id, object_id_);
+        // add variable status associated with the frame id of this motion
+        result_.motion_variable_status.insert2(
+            frame_id, detailed_results->variableStatus.at(motion_key));
+      }
+    }
+  } else {
+    LOG(WARNING) << "Could not update detailed motion results for frame "
+                 << result_.frame_id << " as smoother status is "
+                 << std::boolalpha << " " << result_.was_smoother_ok
+                 << " or detailed results not available "
+                 << (bool)detailed_results;
+  }
+
   LOG(INFO) << "Motion change at frames "
             << container_to_string(motions_changed) << " for j=" << object_id_;
 
   decoupled_formulation_->updateTheta(estimate);
+}
+
+void to_json(json& j, const ParallelObjectISAM::Result& result) {
+  j["was_smoother_ok"] = result.was_smoother_ok;
+  j["frame_id"] = result.frame_id;
+  j["isam_result"] = result.isam_result;
+  j["motions_with_large_change"] = result.motions_with_large_change;
+  j["large_motion_change_delta"] = result.large_motion_change_delta;
+  j["motion_variable_status"] = result.motion_variable_status;
 }
 
 }  // namespace dyno

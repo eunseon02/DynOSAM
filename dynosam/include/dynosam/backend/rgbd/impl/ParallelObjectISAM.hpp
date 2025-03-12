@@ -35,6 +35,8 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
 
+#include <nlohmann/json.hpp>
+
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
 #include "dynosam/common/Exceptions.hpp"
@@ -50,9 +52,9 @@ namespace dyno {
 // to make it truly incremental!!!
 // TODO: right now copy of DecoupledObjectSAM which is used in the front-end
 // (when first developed)
-class LooselyCoupledObjectSAM {
+class ParallelObjectISAM {
  public:
-  DYNO_POINTER_TYPEDEFS(LooselyCoupledObjectSAM)
+  DYNO_POINTER_TYPEDEFS(ParallelObjectISAM)
 
   struct Params {
     //! Number additional iSAM updates to run
@@ -60,14 +62,27 @@ class LooselyCoupledObjectSAM {
     gtsam::ISAM2Params isam{};
   };
 
+  struct Result {
+    //! If smoother is not okay, then all results other than frame id will be
+    //! invalid!
+    bool was_smoother_ok{false};
+    FrameId frame_id{0};
+    gtsam::ISAM2Result isam_result;
+    FrameIds motions_with_large_change;
+    double large_motion_change_delta;
+
+    using VariableStatus = gtsam::ISAM2Result::DetailedResults::VariableStatus;
+    gtsam::FastMap<FrameId, VariableStatus> motion_variable_status{};
+  };
+
   using Map = ObjectCentricFormulation::Map;
 
   template <typename DERIVEDSTATUS>
   using MeasurementStatusVector = Map::MeasurementStatusVector<DERIVEDSTATUS>;
 
-  LooselyCoupledObjectSAM(const Params& params, ObjectId object_id,
-                          const NoiseModels& noise_models,
-                          const FormulationHooks& formulation_hooks);
+  ParallelObjectISAM(const Params& params, ObjectId object_id,
+                     const NoiseModels& noise_models,
+                     const FormulationHooks& formulation_hooks);
 
   // what motion representation should this be in? GLOBAL? Do ne need a new
   // repsentation for KF object centric?
@@ -75,11 +90,21 @@ class LooselyCoupledObjectSAM {
   void update(FrameId frame_k,
               const MeasurementStatusVector<DERIVEDSTATUS>& measurements,
               const Pose3Measurement& X_world_k,
-              const Motion3ReferenceFrame& motion_frame) {
-    VLOG(5) << "LooselyCoupledObjectSAM::update running for k= " << frame_k
+              const Motion3ReferenceFrame& motion_frame,
+              bool update_smoother = true) {
+    VLOG(5) << "ParallelObjectISAM::update running for k= " << frame_k
             << ", j= " << object_id_;
+    // frame id must get updated each time regardless as things outside this
+    // class depend on it maybe need finer-grained variables in result struct
+    // (e.g last map update / last smoother update)
+    result_.frame_id = frame_k;
+    result_.was_smoother_ok = false;
 
     this->updateMap(frame_k, measurements, X_world_k, motion_frame);
+
+    if (!update_smoother) {
+      return;
+    }
 
     // updating the smoothing will update the formulation and run
     // update on the optimizer. the internal results_ object is updated
@@ -93,11 +118,14 @@ class LooselyCoupledObjectSAM {
   const gtsam::Values& getEstimate() const {
     return decoupled_formulation_->getTheta();
   }
-  const gtsam::ISAM2Result& getISAM2Result() const { return result_; }
+  const Result& getResult() const { return result_; }
 
   inline Map::Ptr map() const { return map_; }
 
-  Motion3ReferenceFrame getFrame2FrameMotion(FrameId frame_id) const;
+  StateQuery<Motion3ReferenceFrame> getFrame2FrameMotion(
+      FrameId frame_id) const;
+  // this assumes the motion exists for this frame... which it may not, I
+  // guess....
   Motion3ReferenceFrame getKeyFramedMotion(FrameId frame_id) const;
 
   // all frames
@@ -121,7 +149,7 @@ class LooselyCoupledObjectSAM {
     const FrameId to = motion_frame.to();
     if (to != frame_k) {
       throw DynosamException(
-          "LooselyCoupledObjectSAM::updateMap failed as the 'to' frame of the "
+          "ParallelObjectISAM::updateMap failed as the 'to' frame of the "
           "initial motion was not the same as expected frame id");
     }
 
@@ -160,10 +188,14 @@ class LooselyCoupledObjectSAM {
   ObjectCentricFormulation::Ptr decoupled_formulation_;
   Accessor<Map>::Ptr accessor_;
   std::shared_ptr<gtsam::ISAM2> smoother_;
-  gtsam::ISAM2Result result_;
+  Result result_;
   //! style of motion expected to be used as input. Set on the first run and all
   //! motions are expected to then follow the same style
   std::optional<MotionRepresentationStyle> expected_style_;
 };
+
+using json = nlohmann::json;
+
+void to_json(json& j, const ParallelObjectISAM::Result& result);
 
 }  // namespace dyno

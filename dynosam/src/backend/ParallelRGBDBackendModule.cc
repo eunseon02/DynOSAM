@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/LooselyDistributedRGBDBackendModule.hpp"
+#include "dynosam/backend/ParallelRGBDBackendModule.hpp"
 
 #include <glog/logging.h>
 #include <gtsam/nonlinear/Marginals.h>
@@ -36,15 +36,18 @@
 
 namespace dyno {
 
-LooselyDistributedRGBDBackendModule::LooselyDistributedRGBDBackendModule(
+ParallelRGBDBackendModule::ParallelRGBDBackendModule(
     const BackendParams& backend_params, Camera::Ptr camera,
     ImageDisplayQueue* display_queue)
     : Base(backend_params, display_queue), camera_(CHECK_NOTNULL(camera)) {
-  LOG(INFO) << "Creating LooselyDistributedRGBDBackendModule";
+  LOG(INFO) << "Creating ParallelRGBDBackendModule";
 
   // TODO: set isam params
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   dynamic_isam2_params_.evaluateNonlinearError = true;
+  dynamic_isam2_params_.enableDetailedResults = true;
+  dynamic_isam2_params_.relinearizeThreshold = 0.01;
+  dynamic_isam2_params_.relinearizeSkip = 1;
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
@@ -67,18 +70,23 @@ LooselyDistributedRGBDBackendModule::LooselyDistributedRGBDBackendModule(
       formulation_params, RGBDMap::create(), noise_models_, hooks);
 }
 
-LooselyDistributedRGBDBackendModule::~LooselyDistributedRGBDBackendModule() {
-  LOG(INFO) << "Desctructing LooselyDistributedRGBDBackendModule";
+ParallelRGBDBackendModule::~ParallelRGBDBackendModule() {
+  LOG(INFO) << "Desctructing ParallelRGBDBackendModule";
 
   if (base_params_.use_logger_) {
     logBackendFromEstimators();
+
+    const std::string file_path =
+        getOutputFilePath("parallel_isam2_results.bson");
+    JsonConverter::WriteOutJson(result_map_, file_path,
+                                JsonConverter::Format::BSON);
   }
 }
 
 // implementation taken from ObjectMotionSolverSAM
 // TODO: update api
-LooselyDistributedRGBDBackendModule::SpinReturn
-LooselyDistributedRGBDBackendModule::boostrapSpinImpl(
+ParallelRGBDBackendModule::SpinReturn
+ParallelRGBDBackendModule::boostrapSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
   const Timestamp timestamp = input->getTimestamp();
@@ -95,11 +103,28 @@ LooselyDistributedRGBDBackendModule::boostrapSpinImpl(
       dynamic_updates.begin(), dynamic_updates.end(),
       [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
 
+  // lazy update (not parallel)
+  for (const PerObjectUpdate& update : dynamic_updates) {
+    const auto object_id = update.object_id;
+    ParallelObjectISAM::Ptr estimator = getEstimator(object_id);
+    const auto result = estimator->getResult();
+
+    if (!result.was_smoother_ok) {
+      LOG(WARNING) << "Could not record results for object smoother j="
+                   << object_id << " as smoother was not ok";
+      continue;
+    }
+
+    CHECK_EQ(result.frame_id, frame_k);
+    result_map_.insert22(object_id, result.frame_id, result);
+  }
+
+  new_objects_estimators_.clear();
   return {State::Nominal, nullptr};
 }
 
-LooselyDistributedRGBDBackendModule::SpinReturn
-LooselyDistributedRGBDBackendModule::nominalSpinImpl(
+ParallelRGBDBackendModule::SpinReturn
+ParallelRGBDBackendModule::nominalSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
   const Timestamp timestamp = input->getTimestamp();
@@ -119,12 +144,29 @@ LooselyDistributedRGBDBackendModule::nominalSpinImpl(
   auto backend_output = constructOutputPacket(frame_k, timestamp);
   backend_output->involved_timestamp = input->involved_timestamps_;
 
+  for (const PerObjectUpdate& update : dynamic_updates) {
+    const auto object_id = update.object_id;
+    ParallelObjectISAM::Ptr estimator = getEstimator(object_id);
+    const auto result = estimator->getResult();
+
+    if (!result.was_smoother_ok) {
+      LOG(WARNING) << "Could not record results for object smoother j="
+                   << object_id << " as smoother was not ok";
+      continue;
+    }
+
+    CHECK_EQ(result.frame_id, frame_k);
+    result_map_.insert22(object_id, result.frame_id, result);
+  }
+
+  new_objects_estimators_.clear();
   return {State::Nominal, backend_output};
 }
 
-Pose3Measurement
-LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
+Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input) {
+  utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
+
   const FrameId frame_k = input->getFrameId();
   auto map = static_formulation_->map();
 
@@ -143,7 +185,11 @@ LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
   static_formulation_->addSensorPosePriorFactor(
       T_W_k_frontend, initial_pose_prior, frame_k, new_factors);
 
-  static_estimator_.update(new_factors, new_values);
+  {
+    utils::TimingStatsCollector timer(
+        "parallel_object_sam.static_estimator.update");
+    static_estimator_.update(new_factors, new_values);
+  }
 
   gtsam::SharedGaussian gaussian_pose_prior =
       boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(
@@ -154,9 +200,10 @@ LooselyDistributedRGBDBackendModule::bootstrapUpdateStaticEstimator(
   return Pose3Measurement(T_W_k_frontend, gaussian_pose_prior);
 }
 
-Pose3Measurement
-LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
+Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input) {
+  utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
+
   const FrameId frame_k = input->getFrameId();
   auto map = static_formulation_->map();
 
@@ -178,7 +225,12 @@ LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
   static_formulation_->updateStaticObservations(frame_k, new_values,
                                                 new_factors, update_params);
 
-  gtsam::ISAM2Result result = static_estimator_.update(new_factors, new_values);
+  gtsam::ISAM2Result result;
+  {
+    utils::TimingStatsCollector timer(
+        "parallel_object_sam.static_estimator.update");
+    result = static_estimator_.update(new_factors, new_values);
+  }
 
   VLOG(5) << "Finished LC Static update k" << frame_k
           << "  error before: " << result.errorBefore.value_or(NaN)
@@ -194,7 +246,8 @@ LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
 
   gtsam::Matrix66 T_w_k_cov;
   {
-    utils::TimingStatsCollector timer("lc_rgbd_backend.camera_pose_cov_calc");
+    utils::TimingStatsCollector timer(
+        "parallel_object_sam.camera_pose_cov_calc");
     gtsam::Marginals marginals(static_estimator_.getFactorsUnsafe(),
                                optimised_values,
                                gtsam::Marginals::Factorization::CHOLESKY);
@@ -204,8 +257,8 @@ LooselyDistributedRGBDBackendModule::nominalUpdateStaticEstimator(
   return Pose3Measurement(T_w_k_opt_query.get(), T_w_k_cov);
 }
 
-std::vector<LooselyDistributedRGBDBackendModule::PerObjectUpdate>
-LooselyDistributedRGBDBackendModule::collectMeasurements(
+std::vector<ParallelRGBDBackendModule::PerObjectUpdate>
+ParallelRGBDBackendModule::collectMeasurements(
     RGBDInstanceOutputPacket::ConstPtr input,
     const Pose3Measurement& X_k_measurement) const {
   GenericTrackedStatusVector<LandmarkKeypointStatus> all_dynamic_measurements =
@@ -227,6 +280,8 @@ LooselyDistributedRGBDBackendModule::collectMeasurements(
       input->object_motions_.toEstimateMap(frame_id_k);
 
   std::vector<PerObjectUpdate> object_updates;
+  std::stringstream ss;
+  ss << "Objects with updates: ";
   for (const auto& [object_id, collected_measurements] :
        measurements_by_object) {
     PerObjectUpdate object_update;
@@ -239,18 +294,23 @@ LooselyDistributedRGBDBackendModule::collectMeasurements(
     object_update.H_k_measurement = estimated_motions.at(object_id);
 
     object_updates.push_back(object_update);
+    ss << object_id << " ";
   }
+
+  // log inf
+  LOG(INFO) << ss.str();
 
   return object_updates;
 }
 
-LooselyCoupledObjectSAM::Ptr LooselyDistributedRGBDBackendModule::getEstimator(
+ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
     ObjectId object_id, bool* is_object_new) {
   std::lock_guard<std::mutex> lock(mutex_);
 
+  bool is_new = false;
   // make new estimator if needed
   if (!sam_estimators_.exists(object_id)) {
-    LOG(INFO) << "Making new DecoupledObjectSAM for object " << object_id;
+    LOG(INFO) << "Making new ParallelObjectISAM for object " << object_id;
 
     FormulationHooks hooks;
     hooks.ground_truth_packets_request =
@@ -258,31 +318,35 @@ LooselyCoupledObjectSAM::Ptr LooselyDistributedRGBDBackendModule::getEstimator(
       return this->getGroundTruthPackets();
     };
 
-    LooselyCoupledObjectSAM::Params params;
+    ParallelObjectISAM::Params params;
+    params.num_optimzie = 4u;
     params.isam = dynamic_isam2_params_;
     // // make this prior not SO small
     NoiseModels noise_models = NoiseModels::fromBackendParams(base_params_);
-    sam_estimators_.insert2(object_id,
-                            std::make_shared<LooselyCoupledObjectSAM>(
-                                params, object_id, noise_models, hooks));
+    sam_estimators_.insert2(
+        object_id, std::make_shared<ParallelObjectISAM>(params, object_id,
+                                                        noise_models, hooks));
 
-    if (is_object_new) *is_object_new = true;
-  } else {
-    if (is_object_new) *is_object_new = false;
+    is_new = true;
   }
+  if (is_object_new) *is_object_new = is_new;
+
+  if (is_new) new_objects_estimators_.push_back(object_id);
 
   return sam_estimators_.at(object_id);
 }
 
-bool LooselyDistributedRGBDBackendModule::implSolvePerObject(
+bool ParallelRGBDBackendModule::implSolvePerObject(
     const PerObjectUpdate& object_update) {
   const auto object_id = object_update.object_id;
   const auto frame_id_k = object_update.frame_id;
   const auto& measurements = object_update.measurements;
 
   bool is_object_new;
-  LooselyCoupledObjectSAM::Ptr estimator =
-      getEstimator(object_id, &is_object_new);
+  ParallelObjectISAM::Ptr estimator = getEstimator(object_id, &is_object_new);
+
+  // if object is new, dont update the smoother
+  bool should_update_smoother = !is_object_new;
 
   CHECK_NOTNULL(estimator);
   auto map = estimator->map();
@@ -293,28 +357,72 @@ bool LooselyDistributedRGBDBackendModule::implSolvePerObject(
   // hack for now - if the object is new only update its map
   // this will create nodes in the Map but not update the estimator
   // only update the estimator otherwise!!
-  if (is_object_new) {
-    map->updateObservations(measurements);
-    map->updateSensorPoseMeasurement(frame_id_k, X_k_measurement);
-  } else {
-    estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
+
+  // if new or last object update was more than 1 frame ago
+  // this may be wrong if the smoother was not updated correctly...
+  FrameId last_update_frame = estimator->getResult().frame_id;
+
+  // Should this be last_update_frame == frame_id_k - 1u
+  // if its more than that.... unsure
+  if (!is_object_new && (frame_id_k > 0) &&
+      (last_update_frame < (frame_id_k - 1u))) {
+    VLOG(5) << "Only update k=" << frame_id_k << " j= " << object_id
+            << " as object is not new but has reappeared. Previous update was "
+            << last_update_frame;
+    should_update_smoother = false;
   }
+
+  // only update acts like the boostrap mode of the BackendModule
+  // we dont want to update the smoother or add dynamic measurements yet
+  // since we need at least two valid frames
+  //  if (only_update) {
+  //    map->updateObservations(measurements);
+  //    map->updateSensorPoseMeasurement(frame_id_k, X_k_measurement);
+
+  //   MotionEstimateMap motion_estimate;
+  //   motion_estimate.insert({object_id, H_k});
+  //   map->updateObjectMotionMeasurements(frame_id_k, motion_estimate);
+  // } else {
+  //   estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
+  // }
+
+  estimator->update(frame_id_k, measurements, X_k_measurement, H_k,
+                    should_update_smoother);
+
+  // if (only_update) {
+
+  // } else {
+  //   estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
+  // }
 }
 
-BackendOutputPacket::Ptr
-LooselyDistributedRGBDBackendModule::constructOutputPacket(
+BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
     FrameId frame_k, Timestamp timestamp) const {
   auto backend_output = std::make_shared<BackendOutputPacket>();
   backend_output->timestamp = timestamp;
   backend_output->frame_id = frame_k;
 
   for (const auto& [object_id, estimator] : sam_estimators_) {
+    // slow lookup for now!!
+    // dont construct output if object is new
+    // same logic as implSolvePerObject where we dont update the estimator on
+    // the first pass, we just update the initial measurements etc...
+    if (std::find(new_objects_estimators_.begin(),
+                  new_objects_estimators_.end(),
+                  object_id) != new_objects_estimators_.end()) {
+      continue;
+    }
+
     const ObjectPoseMap per_object_poses = estimator->getObjectPoses();
     const ObjectMotionMap per_object_motions =
         estimator->getFrame2FrameMotions();
 
     backend_output->optimized_object_motions += per_object_motions;
     backend_output->optimized_object_poses += per_object_poses;
+
+    // since we only show the current object map, get the landmarks only at the
+    // current frame this should return an empty vector if the object does not
+    // exist at the current frame
     backend_output->dynamic_landmarks +=
         estimator->getDynamicLandmarks(frame_k);
   }
@@ -332,7 +440,7 @@ LooselyDistributedRGBDBackendModule::constructOutputPacket(
   return backend_output;
 }
 
-void LooselyDistributedRGBDBackendModule::logBackendFromEstimators() {
+void ParallelRGBDBackendModule::logBackendFromEstimators() {
   // TODO: name + suffix
   const std::string name = "parallel_object_centric";
 

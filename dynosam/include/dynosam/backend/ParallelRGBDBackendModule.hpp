@@ -35,24 +35,24 @@
 #include "dynosam/backend/BackendModule.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
-#include "dynosam/backend/rgbd/impl/LooselyCoupledObjectSAM.hpp"
+#include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
 
 namespace dyno {
 
-class LooselyDistributedRGBDBackendModule
+class ParallelRGBDBackendModule
     : public BackendModuleType<RGBDBackendModuleTraits> {
  public:
-  DYNO_POINTER_TYPEDEFS(LooselyDistributedRGBDBackendModule)
+  DYNO_POINTER_TYPEDEFS(ParallelRGBDBackendModule)
 
   using Base = BackendModuleType<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
-  LooselyDistributedRGBDBackendModule(
-      const BackendParams& backend_params, Camera::Ptr camera,
-      ImageDisplayQueue* display_queue = nullptr);
-  ~LooselyDistributedRGBDBackendModule();
+  ParallelRGBDBackendModule(const BackendParams& backend_params,
+                            Camera::Ptr camera,
+                            ImageDisplayQueue* display_queue = nullptr);
+  ~ParallelRGBDBackendModule();
 
  private:
   using SpinReturn = Base::SpinReturn;
@@ -78,8 +78,8 @@ class LooselyDistributedRGBDBackendModule
       RGBDInstanceOutputPacket::ConstPtr input,
       const Pose3Measurement& X_k_measurement) const;
 
-  LooselyCoupledObjectSAM::Ptr getEstimator(ObjectId object_id,
-                                            bool* is_object_new = nullptr);
+  ParallelObjectISAM::Ptr getEstimator(ObjectId object_id,
+                                       bool* is_object_new = nullptr);
 
   bool implSolvePerObject(const PerObjectUpdate& object_update);
 
@@ -98,7 +98,13 @@ class LooselyDistributedRGBDBackendModule
   gtsam::ISAM2 static_estimator_;
 
   gtsam::ISAM2Params dynamic_isam2_params_;
-  gtsam::FastMap<ObjectId, LooselyCoupledObjectSAM::Ptr> sam_estimators_;
+  gtsam::FastMap<ObjectId, ParallelObjectISAM::Ptr> sam_estimators_;
+
+  //! Vector of object ids that are new for this frame. Cleared after each spin
+  ObjectIds new_objects_estimators_;
+
+  //! used to cache the result of each update which will we log to file
+  GenericObjectCentricMap<ParallelObjectISAM::Result> result_map_;
 };
 
 }  // namespace dyno
