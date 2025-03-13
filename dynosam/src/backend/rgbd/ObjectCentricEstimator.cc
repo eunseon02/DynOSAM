@@ -147,9 +147,8 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
   const auto frame_node_k_1 = map()->getFrame(frame_id - 1u);
 
   if (!frame_node_k) {
-    LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
-                 << " object id=" << object_id
-                 << " as the frame does not exist!";
+    VLOG(30) << "Could not construct object motion frame id=" << frame_id
+             << " object id=" << object_id << " as the frame does not exist!";
     return StateQuery<gtsam::Pose3>::InvalidMap();
   }
 
@@ -158,9 +157,9 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
   // TODO: this might be okay ---- its becuase we addd the sensor pose everytime
   // (since we dont know when the object will be added)
   if (!motion_s0_k) {
-    LOG(WARNING) << "Could not construct object motion frame id=" << frame_id
-                 << " object id=" << object_id
-                 << ". Frame exists but motion is missing!!!";
+    VLOG(30) << "Could not construct object motion frame id=" << frame_id
+             << " object id=" << object_id
+             << ". Frame exists but motion is missing!!!";
     return StateQuery<gtsam::Pose3>::InvalidMap();
   }
 
@@ -792,87 +791,87 @@ gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
   return center;
 }
 
-bool KeyFrameRange::contains(FrameId frame_id) const {
-  bool r = start <= frame_id;
-  // only check against the end frame if not active
-  if (!is_active) {
-    r &= frame_id < end;
-  }
-  // does not include the end frame
-  return r;
-}
+// bool KeyFrameRange::contains(FrameId frame_id) const {
+//   bool r = start <= frame_id;
+//   // only check against the end frame if not active
+//   if (!is_active) {
+//     r &= frame_id < end;
+//   }
+//   // does not include the end frame
+//   return r;
+// }
 
-const std::shared_ptr<const KeyFrameRange> KeyFrameData::find(
-    ObjectId object_id, FrameId frame_id) const {
-  // check if we have an object layer
-  KeyFrameRange::Ptr active_range = getActiveRange(object_id);
-  if (!active_range) {
-    // no range means no object
-    return nullptr;
-  }
+// const std::shared_ptr<const KeyFrameRange> KeyFrameData::find(
+//     ObjectId object_id, FrameId frame_id) const {
+//   // check if we have an object layer
+//   KeyFrameRange::Ptr active_range = getActiveRange(object_id);
+//   if (!active_range) {
+//     // no range means no object
+//     return nullptr;
+//   }
 
-  // sanity check
-  CHECK(active_range->is_active);
-  if (active_range->contains(frame_id)) {
-    return active_range;
-  } else {
-    CHECK(data.exists(object_id));
-    const KeyFrameRangeVector& ranges = data.at(object_id);
-    CHECK_GE(ranges.size(), 1u);
-    // iterate over ranges
-    for (const KeyFrameRange::Ptr& range : ranges) {
-      if (range->contains(frame_id)) {
-        return range;
-      }
-    }
-  }
-  return nullptr;
-}
+//   // sanity check
+//   CHECK(active_range->is_active);
+//   if (active_range->contains(frame_id)) {
+//     return active_range;
+//   } else {
+//     CHECK(data.exists(object_id));
+//     const KeyFrameRangeVector& ranges = data.at(object_id);
+//     CHECK_GE(ranges.size(), 1u);
+//     // iterate over ranges
+//     for (const KeyFrameRange::Ptr& range : ranges) {
+//       if (range->contains(frame_id)) {
+//         return range;
+//       }
+//     }
+//   }
+//   return nullptr;
+// }
 
-const std::shared_ptr<const KeyFrameRange> KeyFrameData::startNewActiveRange(
-    ObjectId object_id, FrameId frame_id, const gtsam::Pose3& pose) {
-  KeyFrameRange::Ptr old_active_range = getActiveRange(object_id);
+// const std::shared_ptr<const KeyFrameRange> KeyFrameData::startNewActiveRange(
+//     ObjectId object_id, FrameId frame_id, const gtsam::Pose3& pose) {
+//   KeyFrameRange::Ptr old_active_range = getActiveRange(object_id);
 
-  auto new_range = std::make_shared<KeyFrameRange>();
-  new_range->start = frame_id;
-  // dont set end (yet) but make active
-  new_range->is_active = true;
-  new_range->L = pose;
+//   auto new_range = std::make_shared<KeyFrameRange>();
+//   new_range->start = frame_id;
+//   // dont set end (yet) but make active
+//   new_range->is_active = true;
+//   new_range->L = pose;
 
-  if (!old_active_range) {
-    // no range at all so new object
-    data.insert2(object_id, KeyFrameRangeVector{});
-    // add to list of ranges
-    data.at(object_id).push_back(new_range);
-    // set new active range
-    active_ranges[object_id] = new_range;
-  } else {
-    // modify existing range so that the end is the start of the next (new
-    // range)
-    old_active_range->end = frame_id;
-    old_active_range->is_active = false;
-  }
+//   if (!old_active_range) {
+//     // no range at all so new object
+//     data.insert2(object_id, KeyFrameRangeVector{});
+//     // add to list of ranges
+//     data.at(object_id).push_back(new_range);
+//     // set new active range
+//     active_ranges[object_id] = new_range;
+//   } else {
+//     // modify existing range so that the end is the start of the next (new
+//     // range)
+//     old_active_range->end = frame_id;
+//     old_active_range->is_active = false;
+//   }
 
-  // set new active range
-  active_ranges[object_id] = new_range;
-  return new_range;
-}
+//   // set new active range
+//   active_ranges[object_id] = new_range;
+//   return new_range;
+// }
 
-std::shared_ptr<KeyFrameRange> KeyFrameData::getActiveRange(
-    ObjectId object_id) const {
-  // check if we have an object layer
-  if (!data.exists(object_id)) {
-    return nullptr;
-  }
+// std::shared_ptr<KeyFrameRange> KeyFrameData::getActiveRange(
+//     ObjectId object_id) const {
+//   // check if we have an object layer
+//   if (!data.exists(object_id)) {
+//     return nullptr;
+//   }
 
-  // first check the active range pointer
-  CHECK(active_ranges.exists(object_id));
-  KeyFrameRange::Ptr active_range = active_ranges.at(object_id);
-  // if we have any range for this object there MUST be an active range
-  CHECK_NOTNULL(active_range);
-  // sanity check
-  CHECK(active_range->is_active);
-  return active_range;
-}
+//   // first check the active range pointer
+//   CHECK(active_ranges.exists(object_id));
+//   KeyFrameRange::Ptr active_range = active_ranges.at(object_id);
+//   // if we have any range for this object there MUST be an active range
+//   CHECK_NOTNULL(active_range);
+//   // sanity check
+//   CHECK(active_range->is_active);
+//   return active_range;
+// }
 
 }  // namespace dyno

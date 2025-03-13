@@ -227,7 +227,7 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
   typename Map::Ptr map = this->map();
   auto accessor = this->accessorFromTheta();
 
-  auto static_point_noise = noise_models_.static_point_noise;
+  auto static_point_noise = CHECK_NOTNULL(noise_models_.static_point_noise);
   // keep track of the new factors added in this function
   // these are then appended to the internal factors_ and new_factors
   gtsam::NonlinearFactorGraph internal_new_factors;

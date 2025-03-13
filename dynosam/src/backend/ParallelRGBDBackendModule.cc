@@ -459,15 +459,19 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
   logger->logObjectMotion(output->optimized_object_motions, gt_packets);
   logger->logObjectPose(output->optimized_object_poses, gt_packets);
 
+  StatusLandmarkVector all_points = output->static_landmarks;
   // duplicated code from constructOutputPacket but we need the frame ids!!!
   auto accessor = static_formulation_->accessorFromTheta();
   auto map = static_formulation_->map();
   for (FrameId frame_id : map->getFrameIds()) {
     StateQuery<gtsam::Pose3> X_k_query = accessor->getSensorPose(frame_id);
     logger->logCameraPose(frame_id, X_k_query.get(), gt_packets);
-  }
 
-  // TODO: not logging points!!!
+    for (const auto& [object_id, estimator] : sam_estimators_) {
+      all_points += estimator->getDynamicLandmarks(frame_id);
+    }
+  }
+  logger->logMapPoints(all_points);
 
   logger.reset();
 }

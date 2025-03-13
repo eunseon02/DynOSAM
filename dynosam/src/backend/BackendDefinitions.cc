@@ -79,6 +79,7 @@ NoiseModels NoiseModels::fromBackendParams(
     const BackendParams& backend_params) {
   NoiseModels noise_models;
 
+  // odometry
   gtsam::Vector6 odom_sigmas;
   odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);
   odom_sigmas.tail<3>().setConstant(backend_params.odometry_translation_sigma_);
@@ -86,14 +87,18 @@ NoiseModels NoiseModels::fromBackendParams(
       gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
   CHECK(noise_models.odometry_noise);
 
+  // first pose prior (world frame)
   noise_models.initial_pose_prior =
       gtsam::noiseModel::Isotropic::Sigma(6u, 0.000001);
   CHECK(noise_models.initial_pose_prior);
 
+  // landmark motion noise (needed for some formulations ie world-centric)
   noise_models.landmark_motion_noise = gtsam::noiseModel::Isotropic::Sigma(
       3u, backend_params.motion_ternary_factor_noise_sigma_);
   CHECK(noise_models.landmark_motion_noise);
 
+  // smoothing factor noise model (can be any variant of the smoothing factor as
+  // long as the dimensions are 6, ie. pose)
   gtsam::Vector6 object_constant_vel_sigmas;
   object_constant_vel_sigmas.head<3>().setConstant(
       backend_params.constant_object_motion_rotation_sigma_);
@@ -103,9 +108,25 @@ NoiseModels NoiseModels::fromBackendParams(
       gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
   CHECK(noise_models.object_smoothing_noise);
 
+  noise_models.static_point_noise = gtsam::noiseModel::Isotropic::Sigma(
+      3u, backend_params.static_point_noise_sigma_);
+  noise_models.dynamic_point_noise = gtsam::noiseModel::Isotropic::Sigma(
+      3u, backend_params.dynamic_point_noise_sigma_);
+
   if (backend_params.use_robust_kernals_) {
     LOG(INFO) << "Using robust huber loss function: "
               << backend_params.k_huber_3d_points_;
+    noise_models.static_point_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models.static_point_noise);
+
+    noise_models.dynamic_point_noise = gtsam::noiseModel::Robust::Create(
+        gtsam::noiseModel::mEstimator::Huber::Create(
+            backend_params.k_huber_3d_points_),
+        noise_models.dynamic_point_noise);
+
+    // TODO: not k_huber_3d_points_ not just used for 3d points
     noise_models.landmark_motion_noise = gtsam::noiseModel::Robust::Create(
         gtsam::noiseModel::mEstimator::Huber::Create(
             backend_params.k_huber_3d_points_),

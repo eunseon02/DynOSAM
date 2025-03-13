@@ -58,16 +58,18 @@ plot_collection = evo_plot.PlotCollection("Map")
 # make_plot("/root/results/misc/", "rgbd_motion_world_LM_opt_backend", plot_collection)
 # make_plot("/root/results/misc/", "rgbd_motion_world_backend", plot_collection)
 
-make_plot("/root/results/misc/test_oc/", "object_centric_backend", plot_collection)
-make_plot("/root/results/misc/test_oc/", "object_centric_isam_opt_backend", plot_collection)
+# make_plot("/root/results/misc/test_oc/", "object_centric_backend", plot_collection)
+# make_plot("/root/results/misc/test_oc/", "object_centric_isam_opt_backend", plot_collection)
 
-# make_plot("/root/results/misc/test_oc/", "object_centric_structureless_decoupled_backend", plot_collection)
-make_plot("/root/results/misc/test_oc/", "object_centric_structureless_decoupled_isam_opt_backend", plot_collection)
+# # make_plot("/root/results/misc/test_oc/", "object_centric_structureless_decoupled_backend", plot_collection)
+# make_plot("/root/results/misc/test_oc/", "object_centric_structureless_decoupled_isam_opt_backend", plot_collection)
 
-# make_plot("/root/results/misc/test_oc/", "object_centric_decoupled_backend", plot_collection)
-make_plot("/root/results/misc/test_oc/", "object_centric_decoupled_isam_opt_backend", plot_collection)
+# # make_plot("/root/results/misc/test_oc/", "object_centric_decoupled_backend", plot_collection)
+# make_plot("/root/results/misc/test_oc/", "object_centric_decoupled_isam_opt_backend", plot_collection)
 
-# make_plot("/root/results/misc/test_oc/", "object_centric_structureless_backend", plot_collection)
-make_plot("/root/results/misc/test_oc/", "object_centric_structureless_isam_opt_backend", plot_collection)
+# # make_plot("/root/results/misc/test_oc/", "object_centric_structureless_backend", plot_collection)
+# make_plot("/root/results/misc/test_oc/", "object_centric_structureless_isam_opt_backend", plot_collection)
+
+make_plot("/root/results/misc/test_parallel_oc/", "parallel_object_centric_backend", plot_collection)
 
 plot_collection.show()

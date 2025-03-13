@@ -136,6 +136,21 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   return new_frame;
 }
 
+// void FeatureTracker::resampleDynamicTracks() {
+//   if(!previous_frame_) {
+//     return;
+//   }
+
+//   //after outlier rejection - recheck how many points are inliers
+//   CHECK(previous_frame_->tracking_info_) << "Cannot resample Dynamic T"
+//   //TODO: slow!!
+//   for (Feature::Ptr previous_dynamic_feature :
+//   previous_frame_->usableDynamicFeaturesBegin()) {
+//     ObjectId object_id =
+//   }
+
+// }
+
 void FeatureTracker::trackDynamic(FrameId frame_id,
                                   const ImageContainer& image_container,
                                   FeatureContainer& dynamic_features,
@@ -266,10 +281,26 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
     }
   }
 
+  sampleDynamic(frame_id, image_container, dynamic_features,
+                detection_mask_impl);
+}
+
+void FeatureTracker::sampleDynamic(FrameId frame_id,
+                                   const ImageContainer& image_container,
+                                   FeatureContainer& dynamic_features,
+                                   const cv::Mat& detection_mask) {
   struct KeypointData {
     OpticalFlow flow;
     Keypoint predicted_kp;
   };
+
+  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  // flow is going to take us from THIS frame to the next frame (which does not
+  // make sense for a realtime system)
+  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
+  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+
+  TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
   // std::set<ObjectId> unique_object_ids(instance_labels.begin(),
   // instance_labels.end());
@@ -286,8 +317,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
   // frame!!!
   std::mutex mutex;
   tbb::parallel_for(0, rows, [&](int i) {
-    const unsigned char* detection_ptr =
-        detection_mask_impl.ptr<unsigned char>(i);
+    const unsigned char* detection_ptr = detection_mask.ptr<unsigned char>(i);
     const ObjectId* motion_ptr = motion_mask.ptr<ObjectId>(i);
     const cv::Vec2f* flow_ptr = flow.ptr<cv::Vec2f>(i);
 
@@ -353,13 +383,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
         const PerObjectStatus& object_tracking_info =
             info_.getObjectStatus(object_id);
         const int& number_tracked = object_tracking_info.num_track;
-        // const int number_tracked = 10;
-
-        // TODO: just detect way more than needed
-        int nr_corners_needed = max_features_to_track;
-        // TODO: detect correct amount only wheen we re-track after outlier
-        // rejection to see acually how many we need!!
-        //      std::max(max_features_to_track - number_tracked, 0);
+        int nr_corners_needed =
+            std::max(max_features_to_track - number_tracked, 0);
 
         std::vector<KeypointCV>& max_keypoints = opencv_keypoints;
         const size_t sampled_size = max_keypoints.size();

@@ -878,8 +878,8 @@ class MapPlotter3D(Evaluator):
         # static points
         # some of these params are after handtuning on particular datasets for pretty figures ;)
         ax.scatter(x_points, y_points, z_points, s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
-        # for (_, data), object_colour in zip(object_points.items(), colour_list):
-        #     ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
+        for (_, data), object_colour in zip(object_points.items(), colour_list):
+            ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
         core.plotting.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,

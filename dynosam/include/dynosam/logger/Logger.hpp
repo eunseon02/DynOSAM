@@ -277,6 +277,8 @@ class EstimationModuleLogger {
   virtual void logPoints(FrameId frame_id, const gtsam::Pose3& T_world_local_k,
                          const StatusLandmarkVector& landmarks);
 
+  virtual void logMapPoints(const StatusLandmarkVector& landmarks);
+
   // logs to object bounding boxes
   virtual void logObjectBbxes(FrameId frame_id,
                               const BbxPerObject& object_bbxes);

@@ -137,6 +137,8 @@ class ParallelObjectISAM {
   // due to the nature of this formulation, this will be the accumulated cloud!!
   StatusLandmarkVector getDynamicLandmarks(FrameId frame_id) const;
 
+  // TODO: is motion in map (not just observed but we have a motion )
+
  private:
   template <typename DERIVEDSTATUS>
   void updateMap(FrameId frame_k,

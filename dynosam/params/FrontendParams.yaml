@@ -40,4 +40,4 @@ tracker_params:
   shrink_col: 0
   max_nr_keypoints_before_anms: 2000
   max_features_per_frame: 800
-  max_dynamic_features_per_frame: 40
+  max_dynamic_features_per_frame: 250

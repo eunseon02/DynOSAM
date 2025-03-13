@@ -46,7 +46,7 @@ ParallelObjectISAM::ParallelObjectISAM(
   FormulationParams formulation_params;
   formulation_params.suffix = "object_" + std::to_string(object_id);
   // HACK for now so that we get object motions at every frame!!!?
-  formulation_params.min_dynamic_observations = 2u;
+  formulation_params.min_dynamic_observations = 3u;
 
   decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
       formulation_params, map_, noise_models, formulation_hooks);
@@ -195,6 +195,8 @@ bool ParallelObjectISAM::optimize(
 
   try {
     *result = smoother_->update(new_factors, new_values, update_params);
+    // decoupled_formulation_->updateTheta(new_values);
+
   } catch (gtsam::IndeterminantLinearSystemException& e) {
     LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
                << DynoLikeKeyFormatter(e.nearbyVariable());
@@ -205,6 +207,7 @@ bool ParallelObjectISAM::optimize(
 void ParallelObjectISAM::updateStates() {
   gtsam::Values previous_estimate = this->getEstimate();
   gtsam::Values estimate = smoother_->calculateEstimate();
+  // gtsam::Values estimate = previous_estimate;
 
   // frame ids at which a motion had a large change
   // TODO: this does not include the new motions?
@@ -234,7 +237,7 @@ void ParallelObjectISAM::updateStates() {
 
   // update with detailed results
   auto detailed_results = result_.isam_result.details();
-  CHECK(detailed_results);
+  // CHECK(detailed_results);
   if (result_.was_smoother_ok && detailed_results) {
     // get all motion symbols
     const auto motion_symbols = estimate.extract<gtsam::Pose3>(

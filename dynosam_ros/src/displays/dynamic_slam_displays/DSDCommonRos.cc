@@ -67,10 +67,10 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
     const gtsam::Pose3& motion_k = per_frame_motions.at(frame_id_k);
 
     if (!poses.exists(object_id, frame_id_k)) {
-      LOG(WARNING) << "Cannot construct ObjectOdometry for object " << object_id
-                   << ", at frame " << frame_id_k
-                   << " Missing entry in ObjectPoseMap (but object motion "
-                      "entry found!!)";
+      VLOG(30) << "Cannot construct ObjectOdometry for object " << object_id
+               << ", at frame " << frame_id_k
+               << " Missing entry in ObjectPoseMap (but object motion "
+                  "entry found!!)";
       continue;
     }
     const gtsam::Pose3& pose_k = poses.at(object_id, frame_id_k);

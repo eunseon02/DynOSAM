@@ -45,6 +45,7 @@
 
 #include "dynosam/backend/BackendPipeline.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
+#include "dynosam/backend/ParallelRGBDBackendModule.hpp"
 #include "dynosam/backend/RGBDBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
@@ -433,6 +434,105 @@ TEST(RGBDBackendModule, smallKITTIDataset) {
 //   cv::imshow("Block Jacobians", block_jacobians);
 //   cv::waitKey(0);
 // }
+
+TEST(RGBDBackendModule, testParallelRGBDBackend) {
+  dyno_testing::ScenarioBody::Ptr camera =
+      std::make_shared<dyno_testing::ScenarioBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3::Identity(),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.1, 0.0),
+                           gtsam::Point3(0.1, 0.05, 0))));
+  // needs to be at least 3 overlap so we can meet requirements in graph
+  // TODO: how can we do 1 point but with lots of overlap (even infinity
+  // overlap?)
+
+  const double H_R_sigma = 0.09;
+  const double H_t_sigma = 0.2;
+  const double dynamic_point_sigma = 0.1;
+
+  const double X_R_sigma = 0.0;
+  const double X_t_sigma = 0.0;
+
+  dyno_testing::RGBDScenario::NoiseParams noise_params;
+  noise_params.H_R_sigma = H_R_sigma;
+  noise_params.H_t_sigma = H_t_sigma;
+  noise_params.dynamic_point_sigma = dynamic_point_sigma;
+  noise_params.X_R_sigma = X_R_sigma;
+  noise_params.X_t_sigma = X_t_sigma;
+
+  dyno_testing::RGBDScenario scenario(
+      camera,
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(25, 15),
+      noise_params);
+
+  // add one obect
+  const size_t num_points = 10;
+  const size_t obj1_overlap = 5;
+  const size_t obj2_overlap = 4;
+  const size_t obj3_overlap = 5;
+  dyno_testing::ObjectBody::Ptr object1 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(2, 0, 0)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
+                           gtsam::Point3(0.2, 0, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj1_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 0,
+                                         .leaves_scenario = 5});
+
+  dyno_testing::ObjectBody::Ptr object2 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(1, 0.4, 0.1)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj2_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 8,
+                                         .leaves_scenario = 15});
+
+  dyno_testing::ObjectBody::Ptr object3 =
+      std::make_shared<dyno_testing::ObjectBody>(
+          std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.2, 0.1),
+                           gtsam::Point3(1.1, 0.2, 1.2)),
+              // motion only in x
+              gtsam::Pose3(gtsam::Rot3::RzRyRx(0.2, 0.1, 0.0),
+                           gtsam::Point3(0.2, 0.3, 0))),
+          std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
+              num_points, obj3_overlap),
+          dyno_testing::ObjectBodyParams{.enters_scenario = 1,
+                                         .leaves_scenario = 19});
+
+  scenario.addObjectBody(1, object1);
+  scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(3, object3);
+
+  dyno::BackendParams backend_params;
+  backend_params.useLogger(true);
+  backend_params.min_dynamic_obs_ = 3u;
+  backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
+  backend_params.odometry_rotation_sigma_ = X_R_sigma;
+  backend_params.odometry_translation_sigma_ = X_t_sigma;
+
+  dyno::ParallelRGBDBackendModule backend(backend_params,
+                                          dyno_testing::makeDefaultCameraPtr());
+
+  for (size_t i = 0; i < 20; i++) {
+    dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
+    std::tie(output_gt, output_noisy) = scenario.getOutput(i);
+
+    backend.spinOnce(output_noisy);
+
+    //   tester.processAll(output_noisy);
+  }
+
+  dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
+  dyno::writeStatisticsModuleSummariesToFile();
+}
 
 TEST(RGBDBackendModule, testObjectCentricFormulations) {
   dyno_testing::ScenarioBody::Ptr camera =

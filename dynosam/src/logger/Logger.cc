@@ -371,6 +371,24 @@ void EstimationModuleLogger::logPoints(FrameId frame_id,
   }
 }
 
+void EstimationModuleLogger::logMapPoints(
+    const StatusLandmarkVector& landmarks) {
+  for (const auto& status_lmks : landmarks) {
+    const TrackletId tracklet_id = status_lmks.trackletId();
+    ObjectId object_id = status_lmks.objectId();
+    Landmark lmk_world = status_lmks.value();
+    FrameId frame_id = status_lmks.frameId();
+
+    if (status_lmks.referenceFrame() != ReferenceFrame::GLOBAL) {
+      throw DynosamException(
+          "Failure in logMapPoints(): Map point is not in the GLOBAL frame");
+    }
+
+    *map_points_csv_ << frame_id << object_id << tracklet_id << lmk_world(0)
+                     << lmk_world(1) << lmk_world(2);
+  }
+}
+
 void EstimationModuleLogger::logObjectBbxes(FrameId frame_id,
                                             const BbxPerObject& object_bbxes) {
   for (const auto& [object_id, this_object_bbx] : object_bbxes) {

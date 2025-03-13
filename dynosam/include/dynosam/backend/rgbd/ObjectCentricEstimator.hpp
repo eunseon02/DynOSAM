@@ -35,7 +35,8 @@
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/common/Map.hpp"
-#include "dynosam/common/Types.hpp"  //only needed for factors
+#include "dynosam/common/StructuredContainers.hpp"  //for FrameRange
+#include "dynosam/common/Types.hpp"                 //only needed for factors
 
 namespace dyno {
 
@@ -723,34 +724,39 @@ struct ObjectCentricProperties {
   }
 };
 
-struct KeyFrameRange {
-  using Ptr = std::shared_ptr<KeyFrameRange>;
-  using ConstPtr = std::shared_ptr<const KeyFrameRange>;
-  FrameId start;
-  FrameId end;
-  gtsam::Pose3 L;
-  //! indicates that this is the current keyframe range for the latest frame id
-  //! and therefore the end value is not valid
-  bool is_active = false;
+// struct KeyFrameRange {
+//   using Ptr = std::shared_ptr<KeyFrameRange>;
+//   using ConstPtr = std::shared_ptr<const KeyFrameRange>;
+//   FrameId start;
+//   FrameId end;
+//   gtsam::Pose3 L;
+//   //! indicates that this is the current keyframe range for the latest frame
+//   id
+//   //! and therefore the end value is not valid
+//   bool is_active = false;
 
-  bool contains(FrameId frame_id) const;
+//   bool contains(FrameId frame_id) const;
 
-  std::pair<FrameId, gtsam::Pose3> dataPair() const { return {start, L}; }
-};
+//   std::pair<FrameId, gtsam::Pose3> dataPair() const { return {start, L}; }
+// };
 
-struct KeyFrameData {
-  using KeyFrameRangeVector = std::vector<KeyFrameRange::Ptr>;
-  gtsam::FastMap<ObjectId, KeyFrameRangeVector> data;
-  gtsam::FastMap<ObjectId, KeyFrameRange::Ptr> active_ranges;
+// struct KeyFrameData {
+//   using KeyFrameRangeVector = std::vector<KeyFrameRange::Ptr>;
+//   gtsam::FastMap<ObjectId, KeyFrameRangeVector> data;
+//   gtsam::FastMap<ObjectId, KeyFrameRange::Ptr> active_ranges;
 
-  const KeyFrameRange::ConstPtr find(ObjectId object_id,
-                                     FrameId frame_id) const;
-  const KeyFrameRange::ConstPtr startNewActiveRange(ObjectId object_id,
-                                                    FrameId frame_id,
-                                                    const gtsam::Pose3& pose);
+//   const KeyFrameRange::ConstPtr find(ObjectId object_id,
+//                                      FrameId frame_id) const;
+//   const KeyFrameRange::ConstPtr startNewActiveRange(ObjectId object_id,
+//                                                     FrameId frame_id,
+//                                                     const gtsam::Pose3&
+//                                                     pose);
 
-  KeyFrameRange::Ptr getActiveRange(ObjectId object_id) const;
-};
+//   KeyFrameRange::Ptr getActiveRange(ObjectId object_id) const;
+// };
+
+using KeyFrameData = MultiFrameRangeData<ObjectId, gtsam::Pose3>;
+using KeyFrameRange = KeyFrameData::FrameRangeT;
 
 class ObjectCentricAccessor : public Accessor<Map3d2d>,
                               public ObjectCentricProperties {
