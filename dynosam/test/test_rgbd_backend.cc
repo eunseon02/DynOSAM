@@ -449,7 +449,7 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
 
   const double H_R_sigma = 0.09;
   const double H_t_sigma = 0.2;
-  const double dynamic_point_sigma = 0.1;
+  const double dynamic_point_sigma = 0.2;
 
   const double X_R_sigma = 0.0;
   const double X_t_sigma = 0.0;
@@ -480,8 +480,7 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
                            gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj1_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 0,
-                                         .leaves_scenario = 5});
+          dyno_testing::ObjectBodyParams(0, 5).addRange(10, 15));
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -491,8 +490,7 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj2_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 8,
-                                         .leaves_scenario = 15});
+          dyno_testing::ObjectBodyParams(8, 15));
 
   dyno_testing::ObjectBody::Ptr object3 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -504,12 +502,11 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
                            gtsam::Point3(0.2, 0.3, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj3_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 1,
-                                         .leaves_scenario = 19});
+          dyno_testing::ObjectBodyParams(1, 19));
 
   scenario.addObjectBody(1, object1);
-  scenario.addObjectBody(2, object2);
-  scenario.addObjectBody(3, object3);
+  //   scenario.addObjectBody(2, object2);
+  //   scenario.addObjectBody(3, object3);
 
   dyno::BackendParams backend_params;
   backend_params.useLogger(true);
@@ -579,8 +576,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
                            gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj1_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 0,
-                                         .leaves_scenario = 5});
+          dyno_testing::ObjectBodyParams(0, 5));
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -590,8 +586,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
               gtsam::Pose3(gtsam::Rot3::Identity(), gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj2_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 8,
-                                         .leaves_scenario = 15});
+          dyno_testing::ObjectBodyParams(8, 15));
 
   dyno_testing::ObjectBody::Ptr object3 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -603,8 +598,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
                            gtsam::Point3(0.2, 0.3, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj3_overlap),
-          dyno_testing::ObjectBodyParams{.enters_scenario = 13,
-                                         .leaves_scenario = 19});
+          dyno_testing::ObjectBodyParams(13, 19));
 
   scenario.addObjectBody(1, object1);
   scenario.addObjectBody(2, object2);

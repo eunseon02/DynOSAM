@@ -518,13 +518,16 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
   cv::Mat thicc_boarder;  // god im so funny
   cv::Scalar fill_colour;
 
+  thicc_boarder = cv::Mat::zeros(mask.size(), CV_8UC1);
+  const int outer_thickness = thickness;
+
   // background should be 255 as we're can detect in this region and boarder
   // region should be zero
   if (use_as_feature_detection_mask) {
-    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(255));
+    boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(255));
     fill_colour = cv::Scalar(0);
   } else {
-    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
+    boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
     fill_colour = cv::Scalar(255);
   }
 
@@ -533,11 +536,34 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
     std::vector<std::vector<cv::Point>> detected_contours;
     vision_tools::findObjectBoundingBox(mask, object_id, detected_contours);
 
-    cv::drawContours(thicc_boarder, detected_contours, -1, fill_colour,
-                     thickness);
+    cv::drawContours(thicc_boarder, detected_contours, -1, 255, cv::FILLED);
   }
 
-  boundary_mask = thicc_boarder;
+  // Dilate the mask to expand outwards by 'thickness' pixels
+  cv::Mat dilated_mask;
+  cv::dilate(thicc_boarder, dilated_mask,
+             cv::getStructuringElement(
+                 cv::MORPH_ELLIPSE,
+                 cv::Size(2 * outer_thickness + 1, 2 * outer_thickness + 1)));
+  // Compute the outer border mask
+  cv::Mat thicc_outer_boarder_mask = dilated_mask - thicc_boarder;
+
+  // Additionally erode a little but on the inner-side of the mask
+  // This helps get rid of pixels directly on the boarder which often have poor
+  // depth
+  static constexpr int inner_thickness = 4;
+  // Generate the inner border
+  cv::Mat eroded_mask;
+  cv::erode(thicc_boarder, eroded_mask,
+            cv::getStructuringElement(
+                cv::MORPH_ELLIPSE,
+                cv::Size(2 * inner_thickness + 1, 2 * inner_thickness + 1)));
+  cv::Mat thicc_inner_boarder_mask = thicc_boarder - eroded_mask;
+
+  // set boarder pixels to fill colour (e.g. zero if to be used as feature
+  // detection mask)
+  boundary_mask.setTo(fill_colour, thicc_outer_boarder_mask);
+  boundary_mask.setTo(fill_colour, thicc_inner_boarder_mask);
 }
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask,

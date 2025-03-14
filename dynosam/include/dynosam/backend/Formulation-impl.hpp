@@ -406,6 +406,10 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
         // have seen them enough times start from +1, becuase the motion index
         // is k-1 to k and there is no motion k-2 to k-1 but the first poitns we
         // want to add are at k-1
+        // TODO: shouldnt this actually just be frame_id_k -
+        // params_.min_dynamic_observations
+        // TODO: how to handle the if starting_motion_frame < a frame actually
+        // seen in!
         FrameId starting_motion_frame;
         if (update_params.do_backtrack) {
           starting_motion_frame =

@@ -282,6 +282,27 @@ gtsam::Vector ObjectCentricSmoothing::residual(const gtsam::Pose3& motion_k_2,
 
   return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(),
                                             relative_motion);
+
+  // const gtsam::Pose3 L_W_km2 = motion_k_2 * L_0;
+  // const gtsam::Pose3 L_W_km1 = motion_k_1 * L_0;
+  // const gtsam::Pose3 L_W_k = motion_k * L_0;
+
+  // //in local
+  // gtsam::Pose3 H_Lkm2_km1 = L_W_km2.inverse() * L_W_km1;
+  // gtsam::Pose3 H_Lkm1_k = L_W_km1.inverse() * L_W_k;
+
+  // gtsam::Pose3 H_W_km2_km1 = L_W_km1 * L_W_km2.inverse();
+  // gtsam::Pose3 H_W_km1_k = L_W_k * L_W_km1.inverse();
+
+  // //change in motion in the world frame (rotation), which is invariant
+  // gtsam::Rot3 delta_W = (H_W_km2_km1.inverse() * H_W_km1_k).rotation();
+  // //change in motion in the local frame (translation), which is invariant
+  // gtsam::Point3 delta_local = (H_Lkm2_km1.inverse() *
+  // H_Lkm1_k).translation();
+
+  // return gtsam::traits<gtsam::Pose3>::Local(gtsam::Pose3::Identity(),
+  //                                           gtsam::Pose3(delta_W,
+  //                                           delta_local));
 }
 
 }  // namespace dyno

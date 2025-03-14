@@ -138,6 +138,9 @@ class ParallelObjectISAM {
   StatusLandmarkVector getDynamicLandmarks(FrameId frame_id) const;
 
   // TODO: is motion in map (not just observed but we have a motion )
+  std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id) {
+    return decoupled_formulation_->forceNewKeyFrame(frame_id, object_id_);
+  }
 
  private:
   template <typename DERIVEDSTATUS>

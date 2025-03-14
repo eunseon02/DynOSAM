@@ -92,7 +92,7 @@ class FeatureTracker : public FeatureTrackerBase {
     return boarder_detection_mask_;
   }
 
-  void resampleDynamicTracks();
+  // void resampleDynamicTracks();
 
  protected:
   // detection mask is additional mask It must be a 8-bit integer matrix with
@@ -104,6 +104,7 @@ class FeatureTracker : public FeatureTrackerBase {
 
   void sampleDynamic(FrameId frame_id, const ImageContainer& image_container,
                      FeatureContainer& dynamic_features,
+                     std::set<ObjectId>& objects_sampled,
                      const cv::Mat& detection_mask = cv::Mat());
 
   void propogateMask(ImageContainer& image_container);

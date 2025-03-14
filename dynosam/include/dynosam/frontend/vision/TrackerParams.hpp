@@ -104,7 +104,8 @@ struct TrackerParams {
   int max_nr_keypoints_before_anms = 2000;
   //! Used to grid the newly detected features and also used for the detection
   //! mask
-  int min_distance_btw_tracked_and_detected_features = 8;
+  int min_distance_btw_tracked_and_detected_static_features = 8;
+  int min_distance_btw_tracked_and_detected_dynamic_features = 2;
   //! Threshold for the number of features to keep tracking - if num tracks drop
   //! below this number, new features are detected
   int max_features_per_frame = 400;

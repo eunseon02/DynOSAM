@@ -112,9 +112,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
   ImageContainer::Ptr image_container = input->image_container_;
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container);
-  // LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
   CHECK(frame->updateDepths());
-  // LOG(INFO) << "Num usable static " << frame->numStaticUsableFeatures();
 
   return {State::Nominal, nullptr};
 }
@@ -195,6 +193,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       processed_image_container.get<ImageType::MotionMask>());
   debug_imagery.depth_viz = ImageType::Depth::toRGB(
       processed_image_container.get<ImageType::Depth>());
+
+  if (display_queue_)
+    display_queue_->push(ImageToDisplay("Motion Mask", debug_imagery.mask_viz));
 
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, object_motions, object_poses, frame->T_world_camera_,

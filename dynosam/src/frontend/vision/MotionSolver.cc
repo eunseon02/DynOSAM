@@ -478,11 +478,8 @@ ObjectMotionSovlerF2F::Result ObjectMotionSovlerF2F::solve(
   for (auto object_id : failed_object_tracks) {
     frame_k->object_observations_.erase(object_id);
   }
-  LOG(INFO) << "Updating F2F stuff";
   auto motions = updateMotions(motion_estimates, frame_k, frame_k_1);
-  LOG(INFO) << "Updated motions";
   auto poses = updatePoses(motion_estimates, frame_k, frame_k_1);
-  LOG(INFO) << "Updated poses";
   return std::make_pair(motions, poses);
 }
 
@@ -577,7 +574,6 @@ bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
   if (result.status == TrackingStatus::VALID) {
     frame_k->dynamic_features_.markOutliers(result.outliers);
 
-    // TODO: need to assert we have F2F motion?
     motion_estimates.insert({object_id, result.best_result});
     return true;
   } else {
@@ -596,6 +592,8 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
       frame_k->landmarkWorldKeypointCorrespondance());
 
   const size_t& n_matches = dynamic_correspondences.size();
+  LOG(INFO) << n_matches << " geometricOutlierRejection3d2d "
+            << info_string(frame_k->getFrameId(), object_id);
 
   TrackletIds all_tracklets;
   std::transform(dynamic_correspondences.begin(), dynamic_correspondences.end(),
@@ -616,6 +614,9 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
     TrackletIds refined_inlier_tracklets = pose_result.inliers;
 
     {
+      CHECK_EQ(pose_result.inliers.size() + pose_result.outliers.size(),
+               n_matches);
+
       // debug only (just checking that the inlier/outliers we get from the
       // geometric rejection match the original one)
       TrackletIds extracted_all_tracklets = refined_inlier_tracklets;
@@ -668,9 +669,12 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
     motion_result.inliers = refined_inlier_tracklets;
     determineOutlierIds(motion_result.inliers, all_tracklets,
                         motion_result.outliers);
+
+    // sanity check that we have accounted for all initial matches
+    CHECK_EQ(motion_result.inliers.size() + motion_result.outliers.size(),
+             n_matches);
   }
 
-  // if not valid, return motion result as is
   return motion_result;
 }
 

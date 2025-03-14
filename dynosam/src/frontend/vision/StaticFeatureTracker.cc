@@ -333,9 +333,10 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
       const ObjectId label = motion_mask.at<ObjectId>(i, j);
 
       if (label != background_label) {
-        cv::circle(detection_mask_impl, cv::Point2f(j, i),
-                   params_.min_distance_btw_tracked_and_detected_features,
-                   cv::Scalar(0), cv::FILLED);
+        cv::circle(
+            detection_mask_impl, cv::Point2f(j, i),
+            params_.min_distance_btw_tracked_and_detected_static_features,
+            cv::Scalar(0), cv::FILLED);
       }
     }
   }
@@ -345,7 +346,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     const Keypoint kp = feature->keypoint();
     CHECK(feature->usable());
     cv::circle(detection_mask_impl, cv::Point2f(kp(0), kp(1)),
-               params_.min_distance_btw_tracked_and_detected_features,
+               params_.min_distance_btw_tracked_and_detected_static_features,
                cv::Scalar(0), cv::FILLED);
   }
 

@@ -209,7 +209,7 @@ struct FrameRange : public FrameRangeBase {
   FrameRange() {}
   FrameRange(FrameId start_, FrameId end_, const T& data_,
              bool is_active_ = false)
-      : FrameRangeBase(start_, end, is_active), data(data_) {}
+      : FrameRangeBase(start_, end_, is_active_), data(data_) {}
 
   T data;
   std::pair<FrameId, T> dataPair() const { return {start, data}; }

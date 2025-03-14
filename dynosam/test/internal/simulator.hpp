@@ -34,6 +34,7 @@
 
 #include <optional>
 
+#include "dynosam/common/StructuredContainers.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
@@ -159,9 +160,42 @@ class StaticPointGeneratorVisitor {
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const = 0;
 };
 
+using Range = FrameRange<int>;
+
+class RangesWithEnd : public std::vector<Range::Ptr> {
+ public:
+  using Base = std::vector<Range>;
+
+  Range::Ptr find(FrameId query) const {
+    for (const Range::Ptr& r : *this) {
+      if (r->contains(query)) {
+        return r;
+      }
+    }
+    return nullptr;
+  }
+
+  RangesWithEnd& add(FrameId start, FrameId end) {
+    this->push_back(std::make_shared<Range>(start, end, 0, false));
+    return *this;
+  }
+};
+
 struct ObjectBodyParams {
-  FrameId enters_scenario = 0;
-  FrameId leaves_scenario = std::numeric_limits<FrameId>::max();
+  // FrameId enters_scenario = 0;
+  // FrameId leaves_scenario = std::numeric_limits<FrameId>::max();
+  RangesWithEnd ranges;
+
+  ObjectBodyParams(
+      FrameId enters_scenario = 0,
+      FrameId leaves_scenario = std::numeric_limits<FrameId>::max()) {
+    addRange(enters_scenario, leaves_scenario);
+  }
+
+  ObjectBodyParams& addRange(FrameId enters_scenario, FrameId leaves_scenario) {
+    ranges.add(enters_scenario, leaves_scenario);
+    return *this;
+  }
 };
 
 class ObjectBody : public ScenarioBody {
@@ -175,8 +209,9 @@ class ObjectBody : public ScenarioBody {
         points_visitor_(std::move(points_visitor)),
         params_(params) {}
 
-  virtual FrameId entersScenario() const { return params_.enters_scenario; };
-  virtual FrameId leavesScenario() const { return params_.leaves_scenario; };
+  virtual bool inFrame(FrameId frame_id) const {
+    return (bool)params_.ranges.find(frame_id);
+  }
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const {
     return points_visitor_->getPointsWorld(body_visitor_, frame_id);
   };
@@ -452,8 +487,7 @@ class Scenario {
     if (object_bodies_.exists(object_id)) {
       const auto& object = object_bodies_.at(object_id);
 
-      return frame_id >= object->entersScenario() &&
-             frame_id <= object->leavesScenario();
+      return object->inFrame(frame_id);
     }
     return false;
   }

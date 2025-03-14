@@ -19,8 +19,9 @@
 --refine_with_optical_flow=true
 
 # kitti values
---shrink_row=25
---shrink_col=50
+# --shrink_row=25
+# --shrink_col=50
+# --shrink_col=200 # for KITTI 0000
 
-# --shrink_row=0
-# --shrink_col=0
+--shrink_row=0
+--shrink_col=0

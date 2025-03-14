@@ -21,7 +21,7 @@
 
 
 --static_point_noise_sigma=0.01
---dynamic_point_noise_sigma=0.001
+--dynamic_point_noise_sigma=0.01
 # --dynamic_point_noise_sigma=0.00006
 
 --opt_window_size=10

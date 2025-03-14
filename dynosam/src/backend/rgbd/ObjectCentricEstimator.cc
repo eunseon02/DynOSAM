@@ -30,6 +30,8 @@
 
 #include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
 
+#include <gtsam/slam/PoseRotationPrior.h>
+
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/factors/ObjectCentricFactors.hpp"
 
@@ -302,6 +304,20 @@ StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
   return estimates;
 }
 
+std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::forceNewKeyFrame(
+    FrameId frame_id, ObjectId object_id) {
+  LOG(INFO) << "Starting new range of object k=" << frame_id
+            << " j=" << object_id;
+  gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
+  auto result =
+      key_frame_data_.startNewActiveRange(object_id, frame_id, center)
+          ->dataPair();
+
+  // sanity check
+  CHECK_EQ(result.first, frame_id);
+  return result;
+}
+
 // TODO: no keyframing
 bool ObjectCentricFormulation::hasObjectKeyFrame(ObjectId object_id,
                                                  FrameId frame_id) const {
@@ -414,15 +430,18 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
           getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
     }
 
-    gtsam::Pose3 L_k = s0_H_k_world * L_0;
-    // H from k to s0 in frame k (^wL_k)
-    //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() *  L_0.inverse();
-    gtsam::Pose3 k_H_s0_k = (L_0.inverse() * s0_H_k_world * L_0).inverse();
-    gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
-    const gtsam::Point3 m_camera =
-        lmk_node->getMeasurement(frame_node_k_1).landmark;
+    // gtsam::Pose3 L_k = s0_H_k_world * L_0;
+    // // H from k to s0 in frame k (^wL_k)
+    // //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() * L_0.inverse();
+    // gtsam::Pose3 k_H_s0_k = (L_0.inverse() * s0_H_k_world * L_0).inverse();
+    // gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
+    // const gtsam::Point3 m_camera =
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark;
+    // Landmark lmk_L0_init =
+    //     L_0.inverse() * k_H_s0_W * context.X_k_1_measured * m_camera;
     Landmark lmk_L0_init =
-        L_0.inverse() * k_H_s0_W * context.X_k_1_measured * m_camera;
+        projectToObject(context.X_k_1_measured, s0_H_k_world, L_0,
+                        lmk_node->getMeasurement(frame_node_k_1).landmark);
 
     // TODO: this should not every be true as this is a new value!!!
     Landmark lmk_L0;
@@ -493,7 +512,7 @@ void ObjectCentricFormulation::objectUpdateContext(
       result.debug_info->getObjectInfo(context.getObjectId())
           .num_motion_factors++;
 
-    FrameId s0 = getOrConstructL0(object_id, frame_id).first;
+    const auto [s0, L0] = getOrConstructL0(object_id, frame_id);
     if (s0 == frame_id) {
       // add prior
       new_factors.addPrior<gtsam::Pose3>(object_motion_key_k,
@@ -567,16 +586,7 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
     return range->dataPair();
   }
 
-  LOG(INFO) << "Starting new range of object k=" << frame_id
-            << " j=" << object_id;
-  gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
-  auto result =
-      key_frame_data_.startNewActiveRange(object_id, frame_id, center)
-          ->dataPair();
-
-  // sanity check
-  CHECK_EQ(result.first, frame_id);
-  return result;
+  return forceNewKeyFrame(frame_id, object_id);
 }
 
 // TODO: can be massively more efficient
@@ -588,6 +598,10 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
                                                        bool* keyframe_updated) {
   // TODO: could this ever update the keyframe?
   auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
+
+  LOG(INFO) << "computeInitialH " << info_string(frame_id, object_id);
+
+  if (keyframe_updated) *keyframe_updated = false;
 
   FrameId current_frame_id = frame_id;
   CHECK_LE(s0, current_frame_id);
@@ -601,12 +615,6 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
 
   // check if we have an estimate from the previous frame
   const FrameId frame_id_km1 = frame_id - 1u;
-  const auto frame_node_km1 = map()->getFrame(frame_id_km1);
-  if (frame_node_km1) {
-    auto motion_key = frame_node_km1->makeObjectMotionKey(object_id);
-    // if(this->exists)
-    // TODO: initalise s -> k-1 from last update and then compound?
-  }
 
   // only need an initial motion when k > s0
   Motion3ReferenceFrame initial_motion_frame;
@@ -668,12 +676,14 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       // update current_frame_id to previous frame so that the composition loop
       // below stops at the right place!
       // TODO: will this mess up the frame_id - 1 check?
-      //  LOG(INFO) << "Updating current frame id to previous frame " <<
-      //  previous_frame << " to account for missing frame at " <<
-      //  current_frame_id;
+      LOG(INFO) << "Updating current frame id to previous frame "
+                << previous_frame << " to account for missing frame at "
+                << current_frame_id;
       current_frame_id = previous_frame;
     }
   }
+
+  LOG(INFO) << "Gotten initial motion " << initial_motion_frame;
 
   // << "Missing initial motion at k= " << frame_id << " j= " << object_id;
   CHECK_EQ(initial_motion_frame.to(), current_frame_id);
@@ -690,6 +700,24 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       CHECK_EQ(initial_motion_frame.from(), s0);
       return initial_motion_frame;
     } else if (initial_motion_frame.style() == MotionRepresentationStyle::F2F) {
+      // we have a motion from the frontend that is k-1 to k
+      // first check if we have a previous estimation motion that takes us from
+      // s0 to k-1 in the map
+      const auto frame_node_km1 = map()->getFrame(frame_id_km1);
+      if (frame_node_km1) {
+        auto motion_key_km1 = frame_node_km1->makeObjectMotionKey(object_id);
+
+        Motion3ReferenceFrame H_W_s0_km1 =
+            getEstimatedMotion(object_id, frame_id_km1);
+        CHECK_EQ(H_W_s0_km1.from(), s0);
+        CHECK_EQ(H_W_s0_km1.to(), frame_id_km1);
+
+        Motion3 H_W_km1_k = initial_motion_frame;
+        Motion3 H_w_s0_k = H_W_km1_k * H_W_s0_km1;
+        return H_w_s0_k;
+      }
+      // if we cant do this, try compouding all initial motions from s0 to k
+
       // compose frame-to-frame motion to construct the keyframe motion
       Motion3 composed_motion;
       Motion3 initial_motion = initial_motion_frame;
@@ -722,7 +750,6 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       // }
     }
   }
-  if (keyframe_updated) *keyframe_updated = false;
 }
 
 gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(

@@ -46,7 +46,7 @@ ParallelObjectISAM::ParallelObjectISAM(
   FormulationParams formulation_params;
   formulation_params.suffix = "object_" + std::to_string(object_id);
   // HACK for now so that we get object motions at every frame!!!?
-  formulation_params.min_dynamic_observations = 3u;
+  formulation_params.min_dynamic_observations = 2u;
 
   decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
       formulation_params, map_, noise_models, formulation_hooks);
@@ -137,6 +137,9 @@ void ParallelObjectISAM::updateFormulation(
       initial_X_W_k, uncertainty_X_W_k, frame_k, new_factors);
 
   UpdateObservationParams update_params;
+  // TODO: setting this to true breaks the formulation as it does not understand
+  // object path segments ie. the first seen frame of an object is not
+  // necessarily what we want to backtrack too!!!
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
   VLOG(10) << "ParallelObjectISAM: Starting formulation update k=" << frame_k
@@ -194,12 +197,15 @@ bool ParallelObjectISAM::optimize(
   CHECK(smoother_);
 
   try {
-    *result = smoother_->update(new_factors, new_values, update_params);
+    ISAM2UpdateParams up = update_params;
+    // up.forceFullSolve = true;
+    *result = smoother_->update(new_factors, new_values, up);
     // decoupled_formulation_->updateTheta(new_values);
 
   } catch (gtsam::IndeterminantLinearSystemException& e) {
     LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
-               << DynoLikeKeyFormatter(e.nearbyVariable());
+               << DynoLikeKeyFormatter(e.nearbyVariable())
+               << " j=" << object_id_;
   }
   return true;
 }

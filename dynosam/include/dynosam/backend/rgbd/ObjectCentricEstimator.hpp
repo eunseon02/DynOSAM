@@ -825,6 +825,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   Motion3ReferenceFrame getEstimatedMotion(ObjectId object_id,
                                            FrameId frame_id) const;
 
+  std::pair<FrameId, gtsam::Pose3> forceNewKeyFrame(FrameId frame_id,
+                                                    ObjectId object_id);
+
  protected:
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {

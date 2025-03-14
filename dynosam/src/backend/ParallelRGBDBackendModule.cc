@@ -362,6 +362,7 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
   // this may be wrong if the smoother was not updated correctly...
   FrameId last_update_frame = estimator->getResult().frame_id;
 
+  bool needs_new_key_frame = false;
   // Should this be last_update_frame == frame_id_k - 1u
   // if its more than that.... unsure
   if (!is_object_new && (frame_id_k > 0) &&
@@ -369,7 +370,10 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
     VLOG(5) << "Only update k=" << frame_id_k << " j= " << object_id
             << " as object is not new but has reappeared. Previous update was "
             << last_update_frame;
+    // only works if should_update_smoother makes sure that the formulation is
+    // not updated but the map is
     should_update_smoother = false;
+    needs_new_key_frame = true;
   }
 
   // only update acts like the boostrap mode of the BackendModule
@@ -388,6 +392,14 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
 
   estimator->update(frame_id_k, measurements, X_k_measurement, H_k,
                     should_update_smoother);
+
+  if (needs_new_key_frame) {
+    // needs the map to be updated for frame_id_k
+    // this should happen in update
+    // we dont want to update the formulation until the keyframe is inserted so
+    // should_update_smoother must be false
+    estimator->insertNewKeyFrame(frame_id_k);
+  }
 
   // if (only_update) {
 

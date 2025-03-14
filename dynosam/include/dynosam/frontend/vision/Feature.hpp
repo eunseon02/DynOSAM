@@ -478,7 +478,8 @@ class FeatureContainer {
   /// iterator, pointer.... typedefs as internal::filter_iterator<> expects the
   /// type defined to have a valid iterator.
   using FilterIterator = internal::filter_iterator<FeatureContainer>;
-  using ConstFilterIterator = internal::filter_const_iterator<FeatureContainer>;
+  using ConstFilterIterator =
+      internal::filter_const_iterator<const FeatureContainer>;
 
   FeatureContainer();
   FeatureContainer(const FeaturePtrs feature_vector);
@@ -560,6 +561,14 @@ class FeatureContainer {
    * @return size_t
    */
   size_t size() const;
+
+  /**
+   * @brief Returns number of features in the container per object id.
+   *
+   * @param object_id ObjectId
+   * @return size_t
+   */
+  size_t size(ObjectId object_id) const;
 
   /**
    * @brief Gets a feature given its tracklet id.

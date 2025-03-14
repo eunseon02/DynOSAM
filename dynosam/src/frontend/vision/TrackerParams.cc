@@ -97,8 +97,10 @@ void declare_config(TrackerParams& config) {
         "use_subpixel_corner_refinement");
   field(config.use_clahe_filter, "use_clahe_filter");
   field(config.max_nr_keypoints_before_anms, "max_nr_keypoints_before_anms");
-  field(config.min_distance_btw_tracked_and_detected_features,
-        "min_distance_btw_tracked_and_detected_features");
+  field(config.min_distance_btw_tracked_and_detected_static_features,
+        "min_distance_btw_tracked_and_detected_static_features");
+  field(config.min_distance_btw_tracked_and_detected_dynamic_features,
+        "min_distance_btw_tracked_and_detected_dynamic_features");
   field(config.max_features_per_frame, "max_features_per_frame");
   field(config.max_feature_track_age, "max_feature_track_age");
 

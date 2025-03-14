@@ -164,7 +164,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
-  ObjectIds instance_labels;
+  std::set<ObjectId> instance_labels;
   dynamic_features.clear();
 
   // internal detection mask that is appended with new invalid pixels
@@ -268,26 +268,39 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
             .predictedKeypoint(predicted_kp);
 
         dynamic_features.add(feature);
-        instance_labels.push_back(feature->objectId());
+        instance_labels.insert(feature->objectId());
 
         object_tracking_info.num_track++;
 
         // add zero fill to detection mask to indicate the existance of a
         // tracked point at this feature location
-        cv::circle(detection_mask_impl, cv::Point2f(y, x),
-                   params_.min_distance_btw_tracked_and_detected_features,
-                   cv::Scalar(0), cv::FILLED);
+        cv::circle(
+            detection_mask_impl, cv::Point2f(x, y),
+            params_.min_distance_btw_tracked_and_detected_dynamic_features,
+            cv::Scalar(0), cv::FILLED);
       }
     }
   }
 
-  sampleDynamic(frame_id, image_container, dynamic_features,
+  cv::imshow("detection_mask_impl", detection_mask_impl);
+  cv::waitKey(1);
+
+  // sanity check
+  //  for(ObjectId object_id : instance_labels) {
+  //    size_t n = dynamic_features.size(object_id);
+  //    LOG(INFO) << "Number actual dynamic features " <<  n << " for j=" <<
+  //    object_id; CHECK_EQ(n, info_.getObjectStatus(object_id).num_track);
+  //  }
+
+  std::set<ObjectId> objects_sampled;
+  sampleDynamic(frame_id, image_container, dynamic_features, objects_sampled,
                 detection_mask_impl);
 }
 
 void FeatureTracker::sampleDynamic(FrameId frame_id,
                                    const ImageContainer& image_container,
                                    FeatureContainer& dynamic_features,
+                                   std::set<ObjectId>& objects_sampled,
                                    const cv::Mat& detection_mask) {
   struct KeypointData {
     OpticalFlow flow;
@@ -301,9 +314,6 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
   const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
-
-  // std::set<ObjectId> unique_object_ids(instance_labels.begin(),
-  // instance_labels.end());
 
   // container to store keypoints per object
   tbb::concurrent_hash_map<ObjectId, KeypointsCV> sampled_keypoints;
@@ -350,7 +360,6 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
         opencv_keypoint.class_id = cache_index;
 
         tbb::concurrent_hash_map<ObjectId, KeypointsCV>::accessor acc;
-        // tbb::mutex sampled_keypoints_mutex;
         if (sampled_keypoints.insert(acc, object_id)) {
           acc->second = KeypointsCV{};  // Initialize with an empty vector
         }
@@ -389,6 +398,7 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
         std::vector<KeypointCV>& max_keypoints = opencv_keypoints;
         const size_t sampled_size = max_keypoints.size();
 
+        // TODO: Ssc better but maybe bad alloc????
         AdaptiveNonMaximumSuppression non_maximum_supression(
             AnmsAlgorithmType::RangeTree);
         max_keypoints = non_maximum_supression.suppressNonMax(
@@ -429,6 +439,7 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
           {
             const std::lock_guard<std::mutex> lock(mutex);
             dynamic_features.add(feature);
+            objects_sampled.insert(feature->objectId());
           }
         }
       });
