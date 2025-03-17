@@ -30,6 +30,7 @@
 
 #include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
 
+#include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/utils/TimingStats.hpp"
 
 namespace dyno {
@@ -47,6 +48,7 @@ ParallelObjectISAM::ParallelObjectISAM(
   formulation_params.suffix = "object_" + std::to_string(object_id);
   // HACK for now so that we get object motions at every frame!!!?
   formulation_params.min_dynamic_observations = 2u;
+  formulation_params.use_smoothing_factor = FLAGS_use_smoothing_factor;
 
   decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
       formulation_params, map_, noise_models, formulation_hooks);
@@ -70,13 +72,13 @@ StateQuery<Motion3ReferenceFrame> ParallelObjectISAM::getFrame2FrameMotion(
 
 Motion3ReferenceFrame ParallelObjectISAM::getKeyFramedMotion(
     FrameId frame_id) const {
-  // assumes the motion actually exists??!!!
-  Motion3ReferenceFrame H_W_s0_k =
+  StateQuery<Motion3ReferenceFrame> H_W_s0_k =
       decoupled_formulation_->getEstimatedMotion(object_id_, frame_id);
-  CHECK(H_W_s0_k.style() == MotionRepresentationStyle::KF);
-  CHECK(H_W_s0_k.origin() == ReferenceFrame::GLOBAL);
-  CHECK(H_W_s0_k.to() == frame_id);
-  return H_W_s0_k;
+  CHECK(H_W_s0_k);
+  CHECK(H_W_s0_k->style() == MotionRepresentationStyle::KF);
+  CHECK(H_W_s0_k->origin() == ReferenceFrame::GLOBAL);
+  CHECK(H_W_s0_k->to() == frame_id);
+  return H_W_s0_k.get();
 }
 
 ObjectMotionMap ParallelObjectISAM::getFrame2FrameMotions() const {
@@ -160,10 +162,10 @@ bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
   updateFormulation(frame_k, X_W_k, new_factors, new_values);
 
   // do first optimisation
-  dyno::utils::TimingStatsCollector timer(
-      "parallel_object_sam.optimize." +
-      decoupled_formulation_->getFullyQualifiedName());
-
+  utils::StatsCollector stats("parallel_object_sam.optimize." +
+                              decoupled_formulation_->getFullyQualifiedName() +
+                              " [ms]");
+  auto tic = utils::Timer::tic();
   bool is_smoother_ok = optimize(&result_.isam_result, new_factors, new_values);
 
   if (is_smoother_ok) {
@@ -180,7 +182,12 @@ bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
       is_smoother_ok = optimize(&dummy_result);
     }
   }
+  auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
+  int64_t milliseconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(toc).count();
+  stats.AddSample(static_cast<double>(milliseconds));
 
+  result_.timing = milliseconds;
   result_.was_smoother_ok = is_smoother_ok;
 
   VLOG(5) << "ParallelObjectISAM: update complete k=" << frame_k
@@ -237,8 +244,11 @@ void ParallelObjectISAM::updateStates() {
     }
   }
 
+  // update statistics
   result_.motions_with_large_change = motions_changed;
   result_.large_motion_change_delta = motion_delta;
+  std::tie(result_.max_clique_size, result_.average_clique_size) =
+      factor_graph_tools::getCliqueSize(*smoother_);
   result_.motion_variable_status.clear();
 
   // update with detailed results
@@ -282,9 +292,12 @@ void to_json(json& j, const ParallelObjectISAM::Result& result) {
   j["was_smoother_ok"] = result.was_smoother_ok;
   j["frame_id"] = result.frame_id;
   j["isam_result"] = result.isam_result;
+  j["timing"] = result.timing;
   j["motions_with_large_change"] = result.motions_with_large_change;
   j["large_motion_change_delta"] = result.large_motion_change_delta;
   j["motion_variable_status"] = result.motion_variable_status;
+  j["average_clique_size"] = result.average_clique_size;
+  j["max_clique_size"] = result.max_clique_size;
 }
 
 }  // namespace dyno

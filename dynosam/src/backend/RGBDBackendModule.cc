@@ -198,13 +198,13 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
   update_params.do_backtrack =
-      true;  // apparently this is v important for making the results == ICRA
+      false;  // apparently this is v important for making the results == ICRA
 
   {
     LOG(INFO) << "Starting updateStaticObservations";
     utils::TimingStatsCollector timer("backend.update_static_obs");
-    // new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
-    //                                        update_params);
+    new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
+                                           update_params);
   }
 
   gtsam::Values new_dynamic_values;

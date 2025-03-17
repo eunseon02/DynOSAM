@@ -8,7 +8,7 @@
 # --semantic_mask_step_size=16
 
 #we turn off for cluster as there is some problem with the OF I think?
---use_propogate_mask=false
+--use_propogate_mask=true
 
 # we turn off for OMD as there is some problem
 --use_dynamic_track=false
@@ -19,9 +19,10 @@
 --refine_with_optical_flow=true
 
 # kitti values
-# --shrink_row=25
+--shrink_row=25
 # --shrink_col=50
-# --shrink_col=200 # for KITTI 0000
+# for KITTI 0000
+--shrink_col=200
 
---shrink_row=0
---shrink_col=0
+# --shrink_row=0
+# --shrink_col=0

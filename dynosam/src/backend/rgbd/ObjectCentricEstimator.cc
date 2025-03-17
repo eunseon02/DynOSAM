@@ -240,23 +240,34 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   CHECK_NOTNULL(lmk_node);
   const auto object_id = lmk_node->object_id;
   // point in L_{s0}
-  // NOTE: we use STATIC point key here
   gtsam::Key point_key = this->makeDynamicKey(tracklet_id);
-  StateQuery<gtsam::Point3> point_local = this->query<gtsam::Point3>(point_key);
 
+  // the (key)frame the point is stored in
+  // this also indicates its existance in the optimisation problem
+  if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
+    return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  }
+  FrameId m_s0 = tracklet_id_to_keyframe_->at(tracklet_id);
+  const auto range = key_frame_data_->find(object_id, frame_id);
+  // On a frame where the object has no motion (possibly between keyframes)
+  // there will be no valid range!!
+  if (!range) {
+    return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  }
+  // if the active keyframe is not the same as the reference frame the point is
+  // represented in we (currentlly) have no way of propogating the point to the
+  // query frame
+  if (range->start != m_s0) {
+    return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  }
+
+  StateQuery<gtsam::Point3> point_local = this->query<gtsam::Point3>(point_key);
   // get motion from S0 to k
   gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
   StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
 
   if (point_local && motion_s0_k) {
-    // CHECK(L0_values_->exists(object_id));
-    // const gtsam::Pose3& L0 = L0_values_->at(object_id).second;
-    const auto range =
-        CHECK_NOTNULL(key_frame_data_->find(object_id, frame_id));
     const auto [s0, L0] = range->dataPair();
-    // TODO: this will not work when keyframing if the point in question
-    // is initalised in a different L (at a different timestep!!!)
-    // how to cahce the L0 and therefore the s, the frame is represented in!!!
     // since the motion has a range (and therefore may not be valid!!!)
     //  point in world at k
     const gtsam::Point3 m_k = motion_s0_k.get() * L0 * point_local.get();
@@ -332,7 +343,7 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getObjectKeyFrame(
   return range->dataPair();
 }
 
-Motion3ReferenceFrame ObjectCentricFormulation::getEstimatedMotion(
+StateQuery<Motion3ReferenceFrame> ObjectCentricFormulation::getEstimatedMotion(
     ObjectId object_id, FrameId frame_id) const {
   // not in form of accessor but in form of estimation
   const auto frame_node_k = map()->getFrame(frame_id);
@@ -343,15 +354,19 @@ Motion3ReferenceFrame ObjectCentricFormulation::getEstimatedMotion(
   auto theta_accessor = this->accessorFromTheta();
   StateQuery<gtsam::Pose3> H_W_s0_k =
       theta_accessor->query<gtsam::Pose3>(motion_key);
-  CHECK(H_W_s0_k);
+
+  if (!H_W_s0_k) {
+    return StateQuery<Motion3ReferenceFrame>(H_W_s0_k.key(), H_W_s0_k.status());
+  }
 
   CHECK(this->hasObjectKeyFrame(object_id, frame_id));
   // s0
   auto [reference_frame, _] = this->getObjectKeyFrame(object_id, frame_id);
 
-  return Motion3ReferenceFrame(H_W_s0_k.get(), MotionRepresentationStyle::KF,
+  Motion3ReferenceFrame motion(H_W_s0_k.get(), MotionRepresentationStyle::KF,
                                ReferenceFrame::GLOBAL, reference_frame,
                                frame_id);
+  return StateQuery<Motion3ReferenceFrame>(H_W_s0_k.key(), motion);
 }
 
 void ObjectCentricFormulation::dynamicPointUpdateCallback(
@@ -414,21 +429,26 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
     //  //this is a totally new tracklet so should be the first time we've seen
     //  it! CHECK_EQ(lmk_node->getFirstSeenFrame(), frame_node_k_1->getId());
 
-    // mark as now in map
-    is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), true);
-    CHECK(isDynamicTrackletInMap(lmk_node));
-
     // use first point as initalisation?
     // in this case k is k-1 as we use frame_node_k_1
     bool keyframe_updated;
     gtsam::Pose3 s0_H_k_world = computeInitialH(
         context.getObjectId(), frame_node_k_1->getId(), &keyframe_updated);
 
+    // TODO: we should never actually let this happen during an update
+    //  it should only happen before measurements are added
+    // want to avoid somehow a situation where some (landmark)variables are at
+    // an old keyframe I dont think this will happen with the current
+    // implementation...
     if (keyframe_updated) {
       // TODO: gross I have to re-get them again!!
       std::tie(s0, L_0) =
           getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
     }
+
+    // mark as now in map and include associated frame!!s
+    is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), s0);
+    CHECK(isDynamicTrackletInMap(lmk_node));
 
     // gtsam::Pose3 L_k = s0_H_k_world * L_0;
     // // H from k to s0 in frame k (^wL_k)
@@ -599,7 +619,7 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
   // TODO: could this ever update the keyframe?
   auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
 
-  LOG(INFO) << "computeInitialH " << info_string(frame_id, object_id);
+  // LOG(INFO) << "computeInitialH " << info_string(frame_id, object_id);
 
   if (keyframe_updated) *keyframe_updated = false;
 
@@ -656,15 +676,16 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
                    << ", motion missing at " << current_frame_id
                    << " and previous seen frame " << previous_frame
                    << " too far away!";
+      std::tie(s0, L_0) = forceNewKeyFrame(frame_id, object_id);
       // start new key frame
-      gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
-      key_frame_data_.startNewActiveRange(object_id, frame_id, center);
+      // gtsam::Pose3 center = calculateObjectCentroid(object_id, frame_id);
+      // key_frame_data_.startNewActiveRange(object_id, frame_id, center);
 
-      // sanity check
-      std::tie(s0, L_0) = getOrConstructL0(object_id, frame_id);
-      LOG(INFO) << "Creating new KF for j=" << object_id << " k=" << frame_id;
-      CHECK_EQ(s0, frame_id);
-      // TODO: need to tell other systems that the
+      // // sanity check
+      // std::tie(s0, L_0) = getOrConstructL0(object_id, frame_id);
+      // LOG(INFO) << "Creating new KF for j=" << object_id << " k=" <<
+      // frame_id; CHECK_EQ(s0, frame_id);
+      // // TODO: need to tell other systems that the
       if (keyframe_updated) *keyframe_updated = true;
 
       return gtsam::Pose3::Identity();
@@ -676,14 +697,14 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       // update current_frame_id to previous frame so that the composition loop
       // below stops at the right place!
       // TODO: will this mess up the frame_id - 1 check?
-      LOG(INFO) << "Updating current frame id to previous frame "
-                << previous_frame << " to account for missing frame at "
-                << current_frame_id;
+      // LOG(INFO) << "Updating current frame id to previous frame "
+      //           << previous_frame << " to account for missing frame at "
+      //           << current_frame_id;
       current_frame_id = previous_frame;
     }
   }
 
-  LOG(INFO) << "Gotten initial motion " << initial_motion_frame;
+  // LOG(INFO) << "Gotten initial motion " << initial_motion_frame;
 
   // << "Missing initial motion at k= " << frame_id << " j= " << object_id;
   CHECK_EQ(initial_motion_frame.to(), current_frame_id);
@@ -703,17 +724,14 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
       // we have a motion from the frontend that is k-1 to k
       // first check if we have a previous estimation motion that takes us from
       // s0 to k-1 in the map
-      const auto frame_node_km1 = map()->getFrame(frame_id_km1);
-      if (frame_node_km1) {
-        auto motion_key_km1 = frame_node_km1->makeObjectMotionKey(object_id);
-
-        Motion3ReferenceFrame H_W_s0_km1 =
-            getEstimatedMotion(object_id, frame_id_km1);
-        CHECK_EQ(H_W_s0_km1.from(), s0);
-        CHECK_EQ(H_W_s0_km1.to(), frame_id_km1);
+      StateQuery<Motion3ReferenceFrame> H_W_s0_km1 =
+          getEstimatedMotion(object_id, frame_id_km1);
+      if (H_W_s0_km1) {
+        CHECK_EQ(H_W_s0_km1->from(), s0);
+        CHECK_EQ(H_W_s0_km1->to(), frame_id_km1);
 
         Motion3 H_W_km1_k = initial_motion_frame;
-        Motion3 H_w_s0_k = H_W_km1_k * H_W_s0_km1;
+        Motion3 H_w_s0_k = H_W_km1_k * H_W_s0_km1.get();
         return H_w_s0_k;
       }
       // if we cant do this, try compouding all initial motions from s0 to k

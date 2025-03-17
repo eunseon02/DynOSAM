@@ -592,8 +592,6 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
       frame_k->landmarkWorldKeypointCorrespondance());
 
   const size_t& n_matches = dynamic_correspondences.size();
-  LOG(INFO) << n_matches << " geometricOutlierRejection3d2d "
-            << info_string(frame_k->getFrameId(), object_id);
 
   TrackletIds all_tracklets;
   std::transform(dynamic_correspondences.begin(), dynamic_correspondences.end(),

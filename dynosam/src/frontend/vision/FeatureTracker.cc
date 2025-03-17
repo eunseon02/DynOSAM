@@ -282,8 +282,8 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
     }
   }
 
-  cv::imshow("detection_mask_impl", detection_mask_impl);
-  cv::waitKey(1);
+  // cv::imshow("detection_mask_impl", detection_mask_impl);
+  // cv::waitKey(1);
 
   // sanity check
   //  for(ObjectId object_id : instance_labels) {

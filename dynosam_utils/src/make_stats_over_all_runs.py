@@ -52,6 +52,7 @@ def parser():
 def get_stats(results_path, stats_keys):
     print(f"Iterating over parent results path {results_path}")
     sub_folders = [os.path.join(results_path, name) for name in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, name))]
+    sub_folders.append(results_path)
     stats_dict = {stats_key : {"mean": [], "stddev": []} for stats_key in stats_keys.keys()}
 
     keys = list(stats_keys.keys())
@@ -79,6 +80,9 @@ def plot(results_path, details_list):
     from string import ascii_lowercase
 
     alphabet = iter(ascii_lowercase)
+
+    if num_details == 1:
+        axes = [axes]
 
     for ax, details in zip(axes, details_list):
         letter = next(alphabet)
@@ -222,14 +226,17 @@ REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
 # OPT_STATS_KEYS=["batch_opt [ms]", "sliding_window_optimise [ms]"]
 # OPT_STATS_KEYS=["batch_opt_num_vars", "sliding_window_optimise_num_vars"]
 
-STATS_KEYS = REFINEMENT_STATS_KEYS
 
+INCREMENTAL_STATS = {"name": "Parallel Object Estimation",
+                         "log_scale":False,
+                       "keys":{"parallel_object_sam.optimize": {"label":"P-Opt"}}
+                      }
 
 if __name__ == "__main__":
     parser = parser()
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-    if plot(args.dynosam_results_path, [TRACKING_STATS_KEYS,REFINEMENT_STATS_KEYS,BACKEND_STATS_KEYS]):
+    if plot(args.dynosam_results_path, [INCREMENTAL_STATS]):
         sys.exit(os.EX_OK)
     else:
         sys.exit(os.EX_IOERR)

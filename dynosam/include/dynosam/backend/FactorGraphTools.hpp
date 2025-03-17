@@ -276,6 +276,34 @@ struct travsersal {
   }
 };
 
+/**
+ * @brief Calculate the max clique size and the average clique size given a
+ * BayesTree
+ *
+ * @tparam CLIQUE
+ * @param tree
+ * @return std::pair<size_t, double>
+ */
+template <typename CLIQUE>
+std::pair<size_t, double> getCliqueSize(const gtsam::BayesTree<CLIQUE>& isam2) {
+  std::set<typename gtsam::BayesTree<CLIQUE>::sharedClique> isam2_cliques;
+  auto nodes = isam2.nodes();
+  for (const auto& it : nodes) {
+    isam2_cliques.insert(it.second);
+  }
+  size_t max_clique_size = 0;
+  size_t total_clique_size = 0;
+  for (auto& isam2_clique : isam2_cliques) {
+    size_t clique_size = isam2_clique->conditional()->frontals().size() +
+                         isam2_clique->conditional()->parents().size();
+    total_clique_size += clique_size;
+    max_clique_size = std::max(max_clique_size, clique_size);
+  }
+  double avg_clique_size =
+      (double)total_clique_size / (double)isam2_cliques.size();
+  return std::make_pair(max_clique_size, avg_clique_size);
+}
+
 struct SparsityStats {
   gtsam::Matrix matrix;
   size_t nr_zero_elements{0};

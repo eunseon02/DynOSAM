@@ -320,45 +320,6 @@ class MultiFrameRangeData {
 
  private:
   gtsam::FastMap<V, FrameRangeDataTVector> ranges;
-
-  //     typename FrameRangeT::Ptr getActiveRange(V query) const {
-  //         // check if we have an object layer
-  //         if (!ranges.exists(query)) {
-  //             return nullptr;
-  //         }
-
-  //         // first check the active range pointer
-  //         CHECK(active_ranges.exists(query));
-  //         typename FrameRangeT::Ptr active_range = active_ranges.at(query);
-  //         // if we have any range for this object there MUST be an active
-  //         range CHECK_NOTNULL(active_range);
-  //         // sanity check
-  //         CHECK(active_range->is_active);
-  //         return active_range;
-  //     }
-
-  //     typename FrameRangeT::Ptr updateRanges(typename FrameRangeT::Ptr
-  //     new_range, typename FrameRangeT::Ptr old_active_range = nullptr) {
-  //         CHECK_NOTNULL(new_range);
-  //         if (!old_active_range) {
-  //             // no range at all so new object
-  //             ranges.insert2(query, FrameRangeTVector{});
-  //             // add to list of ranges
-  //             ranges.at(query).push_back(new_range);
-  //             // set new active range
-  //             active_ranges[query] = new_range;
-  //         } else {
-  //             // modify existing range so that the end is the start of the
-  //             next (new
-  //             // range)
-  //             old_active_range->end = frame_id;
-  //             old_active_range->is_active = false;
-  //         }
-
-  //         // set new active range
-  //         active_ranges[query] = new_range;
-  //         return new_range;
-  //     }
 };
 
 }  // namespace dyno

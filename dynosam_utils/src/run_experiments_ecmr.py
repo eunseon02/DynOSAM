@@ -1,0 +1,165 @@
+from dynosam_utils.evaluation.runner import run
+import os
+import sys
+
+# runs new incremental backend
+increment_backend_type = 6
+# runs object centric backend as batch
+object_centric_batch=2
+# runs world centric backend as batch
+motion_world_backend_type = 0
+
+def run_sequnce(path, name, data_loader_num, run_as_frontend=True, backend_type=increment_backend_type, *args):
+    parsed_args = {
+        "dataset_path": path,
+        "output_path": "/root/results/Dynosam_ecmr2024/",
+        "name": name,
+        "run_pipeline": True,
+        "run_analysis": False,
+    }
+
+    additional_args = [
+        "--data_provider_type={}".format(data_loader_num),
+        "--v=20"
+    ]
+    if run_as_frontend:
+        additional_args.extend([
+            "--use_backend=0",
+            "--save_frontend_json=true"
+        ])
+        parsed_args["launch_file"] = "dyno_sam_launch.py"
+    else:
+        additional_args.extend([
+            "--backend_updater_enum={}".format(backend_type),
+            "--use_backend=1"
+        ])
+        parsed_args["launch_file"] = "dyno_sam_experiments_launch.py"
+
+    if len(args) > 0:
+        additional_args.extend(list(args))
+
+    # print(additional_args)
+    run(parsed_args, additional_args)
+
+def run_analysis(name):
+    parsed_args = {
+        "dataset_path": "",
+        "output_path": "/root/results/Dynosam_ecmr2024/",
+        "name": name,
+        "run_pipeline": False,
+        "run_analysis": True,
+    }
+    parsed_args["launch_file"] = "dyno_sam_launch.py"
+    run(parsed_args, [])
+
+kitti_dataset = 0
+virtual_kitti_dataset = 1
+cluster_dataset = 2
+omd_dataset = 3
+
+def prep_dataset(path, name, data_loader_num, *args):
+    run_as_frontend=True
+    run_sequnce(
+        path,
+        name,
+        data_loader_num,
+        run_as_frontend,
+        *args)
+
+# from saved data
+def run_saved_sequence(path, name, data_loader_num, backend_type=increment_backend_type, *args):
+    run_as_frontend=False
+    run_sequnce(
+        path,
+        name,
+        data_loader_num,
+        run_as_frontend,
+        backend_type=backend_type,
+        *args)
+
+
+# kitti stuff
+def prep_kitti_sequence(path, name, *args):
+    args_list = list(args)
+    args_list.append("--shrink_row=25")
+    args_list.append("--shrink_col=50")
+    # args_list.append("--use_propogate_mask=true")
+    prep_dataset(path, name, kitti_dataset, *args_list)
+
+def run_kitti_sequence(path, name, backend_type=increment_backend_type, *args):
+    run_saved_sequence(path, name, kitti_dataset, backend_type=backend_type, *args)
+    # run_analysis(name)
+
+# cluster
+def prep_cluster_sequence(path, name, *args):
+    prep_dataset(path, name, cluster_dataset, *args)
+
+# def run_cluster_sequence(path, name, backend_type, *args):
+#     run_saved_sequence(path, name, cluster_dataset, backend_type, *args)
+
+# omd
+def prep_omd_sequence(path, name, *args):
+    args_list = list(args)
+    args_list.append("--shrink_row=0")
+    args_list.append("--shrink_col=0")
+    prep_dataset(path, name, omd_dataset, *args_list)
+
+def run_omd_sequence(path, name, backend_type=increment_backend_type, *args):
+    run_saved_sequence(path, name, omd_dataset, backend_type=backend_type, *args)
+
+if __name__ == '__main__':
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004",
+    #     "--ending_frame=150"
+    # )
+
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000"
+    # )
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003"
+    # )
+
+    # prep_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained",
+    #     "--ending_frame=150")
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     # backend_type=motion_world_backend_type
+    # )
+    # run_analysis("kitti_0000")
+
+    # run_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained"
+    # )
+
+    # run_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained",
+    #     backend_type=motion_world_backend_type
+    # )
+
+    # run_analysis("omd_swinging_4_unconstrained")
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004",
+    #     # backend_type=object_centric_batch
+    # )
+    # run_analysis("kitti_0004")
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003",
+    #     backend_type=object_centric_batch
+    # )
+    run_analysis("kitti_0003")

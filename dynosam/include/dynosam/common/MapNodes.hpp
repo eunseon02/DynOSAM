@@ -297,6 +297,7 @@ class StateQuery : public std::optional<ValueType> {
   Status status_;
 
   inline gtsam::Key key() const { return key_; }
+  inline Status status() const { return status_; }
 
   StateQuery() {}
   StateQuery(gtsam::Key key, const ValueType& v) : key_(key), status_(VALID) {
@@ -309,7 +310,7 @@ class StateQuery : public std::optional<ValueType> {
   const ValueType& get() const {
     if (!Base::has_value())
       throw DynosamException("StateQuery has no value for query type " +
-                             type_name<ValueType>() + " with key" +
+                             type_name<ValueType>() + " with key " +
                              DynoLikeKeyFormatter(key_));
     return Base::value();
   }

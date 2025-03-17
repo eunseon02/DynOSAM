@@ -30,6 +30,7 @@
 
 #include <glog/logging.h>
 
+#include <dynosam/backend/ParallelRGBDBackendModule.hpp>
 #include <dynosam/backend/RGBDBackendModule.hpp>
 #include <dynosam/common/Map.hpp>
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
@@ -87,10 +88,24 @@ class BackendExperimentsNode : public DynoNode {
     auto updater_type =
         static_cast<RGBDBackendModule::UpdaterType>(FLAGS_backend_updater_enum);
 
-    params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
+    BackendModuleType<RGBDBackendModuleTraits>::Ptr backend = nullptr;
 
-    auto backend = std::make_shared<RGBDBackendModule>(params.backend_params_,
-                                                       camera, updater_type);
+    if (updater_type == RGBDUpdaterType::Incremental) {
+      backend = std::make_shared<ParallelRGBDBackendModule>(
+          params.backend_params_, camera);
+    } else {
+      params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
+
+      backend = std::make_shared<RGBDBackendModule>(params.backend_params_,
+                                                    camera, updater_type);
+    }
+
+    // params.backend_params_.full_batch_frame =
+    // offline_frontend->endingFrame();
+
+    // auto backend =
+    // std::make_shared<RGBDBackendModule>(params.backend_params_,
+    //                                                    camera, updater_type);
 
     backend_pipeline_ = std::make_unique<BackendPipeline>(
         "backend-pipeline", &backend_input_queue_, backend);

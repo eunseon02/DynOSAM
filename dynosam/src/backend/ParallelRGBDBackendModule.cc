@@ -46,8 +46,8 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   dynamic_isam2_params_.evaluateNonlinearError = true;
   dynamic_isam2_params_.enableDetailedResults = true;
-  dynamic_isam2_params_.relinearizeThreshold = 0.01;
-  dynamic_isam2_params_.relinearizeSkip = 1;
+  // dynamic_isam2_params_.relinearizeThreshold = 0.01;
+  // dynamic_isam2_params_.relinearizeSkip = 1;
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
@@ -99,9 +99,7 @@ ParallelRGBDBackendModule::boostrapSpinImpl(
   std::vector<PerObjectUpdate> dynamic_updates =
       collectMeasurements(input, optimized_camera_pose);
 
-  tbb::parallel_for_each(
-      dynamic_updates.begin(), dynamic_updates.end(),
-      [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
+  parallelObjectSolve(dynamic_updates);
 
   // lazy update (not parallel)
   for (const PerObjectUpdate& update : dynamic_updates) {
@@ -134,9 +132,7 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   // collect measurements into dynamic and static
   std::vector<PerObjectUpdate> dynamic_updates =
       collectMeasurements(input, optimized_camera_pose);
-  tbb::parallel_for_each(
-      dynamic_updates.begin(), dynamic_updates.end(),
-      [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
+  parallelObjectSolve(dynamic_updates);
   // get estimator
   // should add previous measurements
   // updaet map
@@ -319,7 +315,7 @@ ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
     };
 
     ParallelObjectISAM::Params params;
-    params.num_optimzie = 4u;
+    params.num_optimzie = 1u;
     params.isam = dynamic_isam2_params_;
     // // make this prior not SO small
     NoiseModels noise_models = NoiseModels::fromBackendParams(base_params_);
@@ -334,6 +330,14 @@ ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
   if (is_new) new_objects_estimators_.push_back(object_id);
 
   return sam_estimators_.at(object_id);
+}
+
+void ParallelRGBDBackendModule::parallelObjectSolve(
+    const std::vector<PerObjectUpdate>& object_updates) {
+  utils::TimingStatsCollector timer("parallel_object_sam.dynamic_estimator");
+  tbb::parallel_for_each(
+      object_updates.begin(), object_updates.end(),
+      [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
 }
 
 bool ParallelRGBDBackendModule::implSolvePerObject(

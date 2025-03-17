@@ -761,9 +761,13 @@ using KeyFrameRange = KeyFrameData::FrameRangeT;
 class ObjectCentricAccessor : public Accessor<Map3d2d>,
                               public ObjectCentricProperties {
  public:
-  ObjectCentricAccessor(const SharedFormulationData& shared_data,
-                        Map3d2d::Ptr map, const KeyFrameData* key_frame_data)
-      : Accessor<Map3d2d>(shared_data, map), key_frame_data_(key_frame_data) {}
+  ObjectCentricAccessor(
+      const SharedFormulationData& shared_data, Map3d2d::Ptr map,
+      const KeyFrameData* key_frame_data,
+      const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe)
+      : Accessor<Map3d2d>(shared_data, map),
+        key_frame_data_(key_frame_data),
+        tracklet_id_to_keyframe_(tracklet_id_to_keyframe) {}
   virtual ~ObjectCentricAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
@@ -782,6 +786,8 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
 
  private:
   const KeyFrameData* key_frame_data_;
+  //! Tracklet Id to the Keyframe the point is represented in (ie. which frame)
+  const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe_;
 };
 
 // TODO: should all be in keyframe_object_centric namespace!!
@@ -822,8 +828,8 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
                                                      FrameId frame_id) const;
   // get the estimated motion in the representation used directly by the
   // estimation (ie. not frame-2-frame)
-  Motion3ReferenceFrame getEstimatedMotion(ObjectId object_id,
-                                           FrameId frame_id) const;
+  StateQuery<Motion3ReferenceFrame> getEstimatedMotion(ObjectId object_id,
+                                                       FrameId frame_id) const;
 
   std::pair<FrameId, gtsam::Pose3> forceNewKeyFrame(FrameId frame_id,
                                                     ObjectId object_id);
@@ -831,8 +837,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
  protected:
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
-    return std::make_shared<ObjectCentricAccessor>(shared_data, this->map(),
-                                                   &key_frame_data_);
+    return std::make_shared<ObjectCentricAccessor>(
+        shared_data, this->map(), &key_frame_data_,
+        &is_dynamic_tracklet_in_map_);
   }
 
   virtual std::string loggerPrefix() const override { return "object_centric"; }
@@ -860,7 +867,9 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   // since each point is modelled uniquely simply used as an O(1) lookup, the
   // value is not actually used. If the key exists, we assume that the tracklet
   // is in the map
-  gtsam::FastMap<TrackletId, bool>
+  // tracklet Id associated with reference frame (to track which KeyFrame the
+  // point is in!!!)
+  gtsam::FastMap<TrackletId, FrameId>
       is_dynamic_tracklet_in_map_;  //! thr set of dynamic points that have been
                                     //! added by this updater. We use a separate
                                     //! map containing the tracklets as the keys

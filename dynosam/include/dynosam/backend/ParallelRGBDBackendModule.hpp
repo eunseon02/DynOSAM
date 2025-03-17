@@ -81,6 +81,7 @@ class ParallelRGBDBackendModule
   ParallelObjectISAM::Ptr getEstimator(ObjectId object_id,
                                        bool* is_object_new = nullptr);
 
+  void parallelObjectSolve(const std::vector<PerObjectUpdate>& object_updates);
   bool implSolvePerObject(const PerObjectUpdate& object_update);
 
   BackendOutputPacket::Ptr constructOutputPacket(FrameId frame_k,

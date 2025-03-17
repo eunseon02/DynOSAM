@@ -70,6 +70,11 @@ class ParallelObjectISAM {
     gtsam::ISAM2Result isam_result;
     FrameIds motions_with_large_change;
     double large_motion_change_delta;
+    //! Timing (in ms) for optimisation
+    int64_t timing;
+
+    double average_clique_size;
+    double max_clique_size;
 
     using VariableStatus = gtsam::ISAM2Result::DetailedResults::VariableStatus;
     gtsam::FastMap<FrameId, VariableStatus> motion_variable_status{};

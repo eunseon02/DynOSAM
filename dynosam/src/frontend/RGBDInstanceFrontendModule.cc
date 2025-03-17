@@ -194,8 +194,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   debug_imagery.depth_viz = ImageType::Depth::toRGB(
       processed_image_container.get<ImageType::Depth>());
 
-  if (display_queue_)
-    display_queue_->push(ImageToDisplay("Motion Mask", debug_imagery.mask_viz));
+  // if (display_queue_)
+  //   display_queue_->push(ImageToDisplay("Motion Mask",
+  //   debug_imagery.mask_viz));
 
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, object_motions, object_poses, frame->T_world_camera_,

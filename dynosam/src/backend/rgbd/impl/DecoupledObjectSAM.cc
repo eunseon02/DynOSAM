@@ -68,12 +68,13 @@ Motion3ReferenceFrame DecoupledObjectSAM::getFrame2FrameMotion(
 
 Motion3ReferenceFrame DecoupledObjectSAM::getKeyFramedMotion(
     FrameId frame_id) const {
-  Motion3ReferenceFrame H_W_s0_k =
+  StateQuery<Motion3ReferenceFrame> H_W_s0_k =
       decoupled_formulation_->getEstimatedMotion(object_id_, frame_id);
-  CHECK(H_W_s0_k.style() == MotionRepresentationStyle::KF);
-  CHECK(H_W_s0_k.origin() == ReferenceFrame::GLOBAL);
-  CHECK(H_W_s0_k.to() == frame_id);
-  return H_W_s0_k;
+  CHECK(H_W_s0_k);
+  CHECK(H_W_s0_k->style() == MotionRepresentationStyle::KF);
+  CHECK(H_W_s0_k->origin() == ReferenceFrame::GLOBAL);
+  CHECK(H_W_s0_k->to() == frame_id);
+  return H_W_s0_k.get();
 }
 
 ObjectMotionMap DecoupledObjectSAM::getFrame2FrameMotions() const {
