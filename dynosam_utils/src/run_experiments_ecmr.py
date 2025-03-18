@@ -133,6 +133,7 @@ if __name__ == '__main__':
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0000/",
     #     "kitti_0000",
+    #     backend_type=increment_backend_type,
     #     # backend_type=motion_world_backend_type
     # )
     # run_analysis("kitti_0000")
@@ -145,10 +146,10 @@ if __name__ == '__main__':
     # run_omd_sequence(
     #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
     #     "omd_swinging_4_unconstrained",
-    #     backend_type=motion_world_backend_type
+    #     # backend_type=motion_world_backend_type
     # )
 
-    # run_analysis("omd_swinging_4_unconstrained")
+    run_analysis("omd_swinging_4_unconstrained")
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",
@@ -162,4 +163,4 @@ if __name__ == '__main__':
     #     "kitti_0003",
     #     backend_type=object_centric_batch
     # )
-    run_analysis("kitti_0003")
+    # run_analysis("kitti_0003")

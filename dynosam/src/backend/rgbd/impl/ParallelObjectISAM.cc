@@ -205,6 +205,7 @@ bool ParallelObjectISAM::optimize(
 
   try {
     ISAM2UpdateParams up = update_params;
+    // up.constrainedKeys = constrain;
     // up.forceFullSolve = true;
     *result = smoother_->update(new_factors, new_values, up);
     // decoupled_formulation_->updateTheta(new_values);
@@ -249,38 +250,64 @@ void ParallelObjectISAM::updateStates() {
   result_.large_motion_change_delta = motion_delta;
   std::tie(result_.max_clique_size, result_.average_clique_size) =
       factor_graph_tools::getCliqueSize(*smoother_);
+  result_.num_factors = smoother_->getFactorsUnsafe().size();
+  result_.num_variables = estimate.size();
   result_.motion_variable_status.clear();
 
-  // update with detailed results
-  auto detailed_results = result_.isam_result.details();
-  // CHECK(detailed_results);
-  if (result_.was_smoother_ok && detailed_results) {
-    // get all motion symbols
-    const auto motion_symbols = estimate.extract<gtsam::Pose3>(
-        gtsam::Symbol::ChrTest(kObjectMotionSymbolChar));
-    for (const auto& [motion_key, _] : motion_symbols) {
-      // TODO: unclear if variables not involved with anything will be in the
-      // variable status at all!!
-      if (detailed_results->variableStatus.exists(motion_key)) {
-        ObjectId object_id;
-        FrameId frame_id;
-        CHECK(reconstructMotionInfo(motion_key, object_id, frame_id));
+  if (result_.was_smoother_ok) {
+    // update with detailed results
+    auto detailed_results = result_.isam_result.details();
+    if (detailed_results) {
+      // get all motion symbols
+      const auto motion_symbols = estimate.extract<gtsam::Pose3>(
+          gtsam::Symbol::ChrTest(kObjectMotionSymbolChar));
+      for (const auto& [motion_key, _] : motion_symbols) {
+        // TODO: unclear if variables not involved with anything will be in the
+        // variable status at all!!
+        if (detailed_results->variableStatus.exists(motion_key)) {
+          ObjectId object_id;
+          FrameId frame_id;
+          CHECK(reconstructMotionInfo(motion_key, object_id, frame_id));
 
-        // LOG(INFO) << "Motion key" << DynoLikeKeyFormatter(motion_key) << " at
-        // k=" << frame_id << " key= "<< motion_key;
-        CHECK_EQ(object_id, object_id_);
-        // add variable status associated with the frame id of this motion
-        result_.motion_variable_status.insert2(
-            frame_id, detailed_results->variableStatus.at(motion_key));
+          // LOG(INFO) << "Motion key" << DynoLikeKeyFormatter(motion_key) << "
+          // at k=" << frame_id << " key= "<< motion_key;
+          CHECK_EQ(object_id, object_id_);
+          // add variable status associated with the frame id of this motion
+          result_.motion_variable_status.insert2(
+              frame_id, detailed_results->variableStatus.at(motion_key));
+        }
       }
     }
-  } else {
-    LOG(WARNING) << "Could not update detailed motion results for frame "
-                 << result_.frame_id << " as smoother status is "
-                 << std::boolalpha << " " << result_.was_smoother_ok
-                 << " or detailed results not available "
-                 << (bool)detailed_results;
+
+    // calculate what type of variables were involved in the update (marked
+    // variables)
+    size_t num_points_involved = 0;
+    size_t num_motions_involved = 0;
+    const gtsam::KeySet& marked_keys = result_.isam_result.markedKeys;
+
+    ApplyFunctionalSymbol afs;
+    afs.dynamicLandmark(
+           [&num_points_involved](TrackletId, const DynamicPointSymbol&) {
+             num_points_involved++;
+           })
+        .objectMotion([&num_motions_involved](FrameId, ObjectId,
+                                              const gtsam::LabeledSymbol&) {
+          num_motions_involved++;
+        });
+    for (const gtsam::Key& key : marked_keys) {
+      afs(key);
+    }
+
+    result_.num_landmarks_marked = num_points_involved;
+    result_.num_motions_marked = num_motions_involved;
   }
+  // else {
+  //   LOG(WARNING) << "Could not update detailed motion results for frame "
+  //                << result_.frame_id << " as smoother status is "
+  //                << std::boolalpha << " " << result_.was_smoother_ok
+  //                << " or detailed results not available "
+  //                << (bool)detailed_results;
+  // }
 
   LOG(INFO) << "Motion change at frames "
             << container_to_string(motions_changed) << " for j=" << object_id_;
@@ -298,6 +325,10 @@ void to_json(json& j, const ParallelObjectISAM::Result& result) {
   j["motion_variable_status"] = result.motion_variable_status;
   j["average_clique_size"] = result.average_clique_size;
   j["max_clique_size"] = result.max_clique_size;
+  j["num_factors"] = result.num_factors;
+  j["num_variables"] = result.num_variables;
+  j["num_landmarks_marked"] = result.num_landmarks_marked;
+  j["num_motions_marked"] = result.num_motions_marked;
 }
 
 }  // namespace dyno

@@ -75,6 +75,12 @@ class ParallelObjectISAM {
 
     double average_clique_size;
     double max_clique_size;
+    size_t num_factors;
+    size_t num_variables;
+
+    // Information about marked variables
+    size_t num_landmarks_marked = 0;
+    size_t num_motions_marked = 0;
 
     using VariableStatus = gtsam::ISAM2Result::DetailedResults::VariableStatus;
     gtsam::FastMap<FrameId, VariableStatus> motion_variable_status{};
@@ -143,9 +149,12 @@ class ParallelObjectISAM {
   StatusLandmarkVector getDynamicLandmarks(FrameId frame_id) const;
 
   // TODO: is motion in map (not just observed but we have a motion )
+
   std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id) {
     return decoupled_formulation_->forceNewKeyFrame(frame_id, object_id_);
   }
+
+  const gtsam::ISAM2& getSmoother() const { return *smoother_; }
 
  private:
   template <typename DERIVEDSTATUS>

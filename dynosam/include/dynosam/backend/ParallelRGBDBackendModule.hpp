@@ -54,6 +54,8 @@ class ParallelRGBDBackendModule
                             ImageDisplayQueue* display_queue = nullptr);
   ~ParallelRGBDBackendModule();
 
+  void logGraphs();
+
  private:
   using SpinReturn = Base::SpinReturn;
 

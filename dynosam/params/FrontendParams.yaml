@@ -42,3 +42,4 @@ tracker_params:
   max_features_per_frame: 800
   max_dynamic_features_per_frame: 220
   min_distance_btw_tracked_and_detected_dynamic_features: 2
+  max_dynamic_feature_age: 10

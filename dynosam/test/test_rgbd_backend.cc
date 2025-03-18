@@ -468,8 +468,8 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
 
   // add one obect
   const size_t num_points = 10;
-  const size_t obj1_overlap = 5;
-  const size_t obj2_overlap = 4;
+  const size_t obj1_overlap = 3;
+  const size_t obj2_overlap = 3;
   const size_t obj3_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -480,7 +480,7 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
                            gtsam::Point3(0.2, 0, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj1_overlap),
-          dyno_testing::ObjectBodyParams(0, 5).addRange(10, 15));
+          dyno_testing::ObjectBodyParams(0, 10));
 
   dyno_testing::ObjectBody::Ptr object2 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -505,7 +505,7 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
           dyno_testing::ObjectBodyParams(1, 19));
 
   scenario.addObjectBody(1, object1);
-  //   scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(2, object2);
   //   scenario.addObjectBody(3, object3);
 
   dyno::BackendParams backend_params;
@@ -518,11 +518,12 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
   dyno::ParallelRGBDBackendModule backend(backend_params,
                                           dyno_testing::makeDefaultCameraPtr());
 
-  for (size_t i = 0; i < 20; i++) {
+  for (size_t i = 0; i < 16; i++) {
     dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
     std::tie(output_gt, output_noisy) = scenario.getOutput(i);
 
     backend.spinOnce(output_noisy);
+    backend.logGraphs();
 
     //   tester.processAll(output_noisy);
   }

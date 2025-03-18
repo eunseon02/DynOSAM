@@ -46,8 +46,9 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   dynamic_isam2_params_.evaluateNonlinearError = true;
   dynamic_isam2_params_.enableDetailedResults = true;
-  // dynamic_isam2_params_.relinearizeThreshold = 0.01;
-  // dynamic_isam2_params_.relinearizeSkip = 1;
+  dynamic_isam2_params_.relinearizeThreshold = 0.01;
+  dynamic_isam2_params_.relinearizeSkip = 1;
+  dynamic_isam2_params_.optimizationParams = gtsam::ISAM2DoglegParams();
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
@@ -490,6 +491,28 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
   logger->logMapPoints(all_points);
 
   logger.reset();
+}
+
+void ParallelRGBDBackendModule::logGraphs() {
+  FrameId frame_id_k = this->spin_state_.frame_id;
+  for (const auto& [object_id, estimator] : sam_estimators_) {
+    const auto& smoother = estimator->getSmoother();
+
+    smoother.getFactorsUnsafe().saveGraph(
+        dyno::getOutputFilePath("parallel_object_sam_k" +
+                                std::to_string(frame_id_k) + "_j" +
+                                std::to_string(object_id) + ".dot"),
+        dyno::DynoLikeKeyFormatter);
+
+    if (!smoother.empty()) {
+      dyno::factor_graph_tools::saveBayesTree(
+          smoother,
+          dyno::getOutputFilePath("parallel_object_sam_btree_k" +
+                                  std::to_string(frame_id_k) + "_j" +
+                                  std::to_string(object_id) + ".dot"),
+          dyno::DynoLikeKeyFormatter);
+    }
+  }
 }
 
 }  // namespace dyno

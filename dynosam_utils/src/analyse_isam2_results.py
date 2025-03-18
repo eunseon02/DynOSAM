@@ -3,10 +3,13 @@ import matplotlib.pyplot as plt
 
 import sys
 
-# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained/parallel_isam2_results.bson")[0]['data']
-results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+plt.rcdefaults()
+results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained/parallel_isam2_results.bson")[0]['data']
+# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
 
+# results = load_bson("/root/results/DynoSAM/incremental_omd_test_25_feature_track/parallel_isam2_results.bson")[0]['data']
 
+# results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
 # results = load_bson("/root/results/DynoSAM/incremental_test/parallel_isam2_results.bson")[0]['data']
 
 # per object at frame how many variables were involved
@@ -33,7 +36,10 @@ for object_id, per_frame_results in results.items():
                 "variables_relinearized": [],
                 "timing": [],
                 "average_clique_size": [],
-                "max_clique_size": []   }
+                "max_clique_size": [],
+                "num_variables": [] ,
+                "num_landmarks_marked": [] ,
+                "num_motions_marked": []   }
 
         object_map[object_id]["frames"].append(frame_id)
         object_map[object_id]["variables_reeliminated"].append(int(full_isam2_result["variables_reeliminated"]))
@@ -41,6 +47,9 @@ for object_id, per_frame_results in results.items():
         object_map[object_id]["timing"].append(timing)
         object_map[object_id]["average_clique_size"].append(float(object_isam_result["average_clique_size"]))
         object_map[object_id]["max_clique_size"].append(float(object_isam_result["max_clique_size"]))
+        object_map[object_id]["num_variables"].append(int(object_isam_result["num_variables"]))
+        object_map[object_id]["num_landmarks_marked"].append(int(object_isam_result["num_landmarks_marked"]))
+        object_map[object_id]["num_motions_marked"].append(int(object_isam_result["num_motions_marked"]))
 
 
 
@@ -56,6 +65,8 @@ def plot_variable(variable_name, ylabel, title, **kwargs):
         frames = data["frames"]
         values = data[variable_name]
 
+        # print(values)
+
         # Sort frames and associated values
         sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
         frames = [frames[i] for i in sorted_indices]
@@ -68,11 +79,15 @@ def plot_variable(variable_name, ylabel, title, **kwargs):
     plt.title(title)
     plt.legend()
     plt.grid()
-    plt.show()
 
 # Plot each variable
 plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
 plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
-plot_variable("timing", "Timing", "Timing Per Frame Per Object")
+plot_variable("timing", "Timing [ms]", "Timing Per Frame Per Object")
 plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size Per Frame Per Object")
 plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
+plot_variable("num_variables", "Num Vars", "Num vars Per Frame Per Object")
+plot_variable("num_landmarks_marked", "Num landmarks", "Num landmarks involved in opt")
+plot_variable("num_motions_marked", "Num motions", "Num motions involved in opt")
+
+plt.show()

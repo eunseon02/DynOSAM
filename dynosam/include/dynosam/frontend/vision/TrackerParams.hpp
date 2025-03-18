@@ -121,7 +121,8 @@ struct TrackerParams {
   OrbParams orb_params = OrbParams();
 
   // Dynamic tracking specific
-  size_t max_dynamic_features_per_frame = 50;
+  size_t max_dynamic_features_per_frame = 50u;
+  size_t max_dynamic_feature_age = 25u;
   bool use_propogate_mask = false;
 };
 
