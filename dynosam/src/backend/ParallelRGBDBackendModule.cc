@@ -30,9 +30,16 @@
 
 #include "dynosam/backend/ParallelRGBDBackendModule.hpp"
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <tbb/tbb.h>
+
+DEFINE_double(relinearize_threshold, 0.01,
+              "Relinearize threshold for ISAM2 params");
+DEFINE_int32(relinearize_skip, 1, "Relinearize skip for ISAM2 params");
+DEFINE_int32(num_dynamic_optimize, 1,
+             "Number of update steps to run for the object ISAM estimators");
 
 namespace dyno {
 
@@ -46,9 +53,9 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   dynamic_isam2_params_.evaluateNonlinearError = true;
   dynamic_isam2_params_.enableDetailedResults = true;
-  dynamic_isam2_params_.relinearizeThreshold = 0.01;
-  dynamic_isam2_params_.relinearizeSkip = 1;
-  dynamic_isam2_params_.optimizationParams = gtsam::ISAM2DoglegParams();
+  dynamic_isam2_params_.relinearizeThreshold = FLAGS_relinearize_threshold;
+  dynamic_isam2_params_.relinearizeSkip = FLAGS_relinearize_skip;
+  // dynamic_isam2_params_.optimizationParams = gtsam::ISAM2DoglegParams();
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
@@ -316,7 +323,7 @@ ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
     };
 
     ParallelObjectISAM::Params params;
-    params.num_optimzie = 1u;
+    params.num_optimzie = FLAGS_num_dynamic_optimize;
     params.isam = dynamic_isam2_params_;
     // // make this prior not SO small
     NoiseModels noise_models = NoiseModels::fromBackendParams(base_params_);
@@ -512,6 +519,20 @@ void ParallelRGBDBackendModule::logGraphs() {
                                   std::to_string(object_id) + ".dot"),
           dyno::DynoLikeKeyFormatter);
     }
+  }
+
+  // static
+  static_estimator_.getFactorsUnsafe().saveGraph(
+      dyno::getOutputFilePath("parallel_object_sam_k" +
+                              std::to_string(frame_id_k) + "_static.dot"),
+      dyno::DynoLikeKeyFormatter);
+
+  if (!static_estimator_.empty()) {
+    dyno::factor_graph_tools::saveBayesTree(
+        static_estimator_,
+        dyno::getOutputFilePath("parallel_object_sam_btree_k" +
+                                std::to_string(frame_id_k) + "_static.dot"),
+        dyno::DynoLikeKeyFormatter);
   }
 }
 

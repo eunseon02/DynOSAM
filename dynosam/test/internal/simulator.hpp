@@ -307,7 +307,8 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
   };
 
   Point generatePoint(FrameId frame) const {
-    std::uniform_int_distribution<> distrib(2, overlap_);
+    std::uniform_int_distribution<> distrib(std::max(1, (int)overlap_ - 2),
+                                            (int)overlap_ + 2);
     auto O = distrib(gen);
     auto ending_frame = frame + O;
 

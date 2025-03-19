@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 import sys
 
 plt.rcdefaults()
-results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained/parallel_isam2_results.bson")[0]['data']
-# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained/parallel_isam2_results.bson")[0]['data']
+results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0018/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/DynoSAM/incremental_omd_test_25_feature_track/parallel_isam2_results.bson")[0]['data']
 

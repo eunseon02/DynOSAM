@@ -204,16 +204,54 @@ bool ParallelObjectISAM::optimize(
   CHECK(smoother_);
 
   try {
+    // gtsam::FastMap<gtsam::Key, int> constrain;
+    // gtsam::KeyList additionalMarkedKeys;
+    // gtsam::Key motion_key_km1 = ObjectMotionSymbol(object_id_,
+    // result_.frame_id - 1u); gtsam::KeyVector marginalizableKeys;
+    // if(smoother_->valueExists(motion_key_km1)) {
+    //   marginalizableKeys.push_back(motion_key_km1);
+
+    //   gtsam::Key camera_pose_key = CameraPoseSymbol(result_.frame_id - 1u);
+    //   marginalizableKeys.push_back(camera_pose_key);
+
+    //   for(const auto& key : new_values.keys()) {
+    //     constrain[key] = 1;
+    //   }
+
+    //   for(const auto& key : smoother_->getLinearizationPoint().keys()) {
+    //     constrain[key] = 1;
+    //   }
+
+    //   constrain[motion_key_km1] = 0;
+    //   constrain[camera_pose_key] = 0;
+
+    //   std::unordered_set<gtsam::Key> additionalKeys =
+    //     BayesTreeMarginalizationHelper<ISAM2>::gatherAdditionalKeysToReEliminate(
+    //         *smoother_, marginalizableKeys);
+    //   additionalMarkedKeys = gtsam::KeyList(additionalKeys.begin(),
+    //   additionalKeys.end());
+    // }
+
     ISAM2UpdateParams up = update_params;
     // up.constrainedKeys = constrain;
+    // up.extraReelimKeys = additionalMarkedKeys;
     // up.forceFullSolve = true;
     *result = smoother_->update(new_factors, new_values, up);
     // decoupled_formulation_->updateTheta(new_values);
+
+    // if (marginalizableKeys.size() > 0) {
+    //   gtsam::FastList<gtsam::Key> leafKeys(marginalizableKeys.begin(),
+    //       marginalizableKeys.end());
+    //       smoother_->marginalizeLeaves(leafKeys);
+    // }
 
   } catch (gtsam::IndeterminantLinearSystemException& e) {
     LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
                << DynoLikeKeyFormatter(e.nearbyVariable())
                << " j=" << object_id_;
+  } catch (gtsam::ValuesKeyDoesNotExist& e) {
+    LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist with variable "
+               << DynoLikeKeyFormatter(e.key()) << " j=" << object_id_;
   }
   return true;
 }

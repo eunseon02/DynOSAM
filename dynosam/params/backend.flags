@@ -29,8 +29,11 @@
 
 
 --use_vo_factor=true
---use_smoothing_factor=false
+--use_smoothing_factor=true
 --use_full_batch_opt=true
+
+--relinearize_threshold=0.1
+--num_dynamic_optimize=1
 
 
 # currently only for rgbd, indicates which updater the rgbd backend should use

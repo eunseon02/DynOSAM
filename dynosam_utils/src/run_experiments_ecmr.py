@@ -9,7 +9,7 @@ object_centric_batch=2
 # runs world centric backend as batch
 motion_world_backend_type = 0
 
-def run_sequnce(path, name, data_loader_num, run_as_frontend=True, backend_type=increment_backend_type, *args):
+def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
     parsed_args = {
         "dataset_path": path,
         "output_path": "/root/results/Dynosam_ecmr2024/",
@@ -58,24 +58,29 @@ cluster_dataset = 2
 omd_dataset = 3
 
 def prep_dataset(path, name, data_loader_num, *args):
+    backend_type = increment_backend_type
     run_as_frontend=True
     run_sequnce(
         path,
         name,
         data_loader_num,
+        backend_type,
         run_as_frontend,
         *args)
 
 # from saved data
-def run_saved_sequence(path, name, data_loader_num, backend_type=increment_backend_type, *args):
+def run_saved_sequence(path, name, data_loader_num, *args, **kwargs):
+    backend_type = kwargs.get("backend_type", increment_backend_type)
     run_as_frontend=False
+    args_list = list(args)
+    args_list.append("--init_object_pose_from_gt=true")
     run_sequnce(
         path,
         name,
         data_loader_num,
+        backend_type,
         run_as_frontend,
-        backend_type=backend_type,
-        *args)
+        *args_list)
 
 
 # kitti stuff
@@ -86,26 +91,26 @@ def prep_kitti_sequence(path, name, *args):
     # args_list.append("--use_propogate_mask=true")
     prep_dataset(path, name, kitti_dataset, *args_list)
 
-def run_kitti_sequence(path, name, backend_type=increment_backend_type, *args):
-    run_saved_sequence(path, name, kitti_dataset, backend_type=backend_type, *args)
+def run_kitti_sequence(path, name, *args, **kwargs):
+    run_saved_sequence(path, name, kitti_dataset, *args, **kwargs)
     # run_analysis(name)
 
 # cluster
-def prep_cluster_sequence(path, name, *args):
-    prep_dataset(path, name, cluster_dataset, *args)
+def prep_cluster_sequence(path, name, *args, **kwargs):
+    prep_dataset(path, name, cluster_dataset, *args, **kwargs)
 
-# def run_cluster_sequence(path, name, backend_type, *args):
-#     run_saved_sequence(path, name, cluster_dataset, backend_type, *args)
+def run_cluster_sequence(path, name, *args, **kwargs):
+    run_saved_sequence(path, name, cluster_dataset, *args, **kwargs)
 
 # omd
-def prep_omd_sequence(path, name, *args):
+def prep_omd_sequence(path, name, *args, **kwargs):
     args_list = list(args)
     args_list.append("--shrink_row=0")
     args_list.append("--shrink_col=0")
-    prep_dataset(path, name, omd_dataset, *args_list)
+    prep_dataset(path, name, omd_dataset, *args_list, **kwargs)
 
-def run_omd_sequence(path, name, backend_type=increment_backend_type, *args):
-    run_saved_sequence(path, name, omd_dataset, backend_type=backend_type, *args)
+def run_omd_sequence(path, name, *args, **kwargs):
+    run_saved_sequence(path, name, omd_dataset, *args, **kwargs)
 
 if __name__ == '__main__':
     # prep_kitti_sequence(
@@ -120,10 +125,78 @@ if __name__ == '__main__':
     #     "kitti_0000"
     # )
 
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000"
+    # )
+    # run_analysis("kitti_0000")
+
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0003/",
     #     "kitti_0003"
     # )
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0005/",
+    #     "kitti_0005"
+    # )
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0003/",
+    #     "kitti_0003"
+    # )
+    # run_analysis("kitti_0003")
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0004/",
+    #     "kitti_0004"
+    # )
+    # run_analysis("kitti_0004")
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0006/",
+    #     "kitti_0006"
+    # )
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0005/",
+    #     "kitti_0005"
+    # )
+    # run_analysis("kitti_0005")
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0006/",
+    #     "kitti_0006"
+    # )
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0006/",
+    #     "kitti_0006"
+    # )
+    # run_analysis("kitti_0006")
+
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0018/",
+    #     "kitti_0018"
+    # )
+
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0018/",
+    #     "kitti_0018"
+    # )
+    # run_analysis("kitti_0018")
+
+    # prep_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0020/",
+    #     "kitti_0020",
+    #     "--ending_frame=550"
+    # )
+    run_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0020/",
+        "kitti_0020"
+    )
+    run_analysis("kitti_0020")
 
     # prep_omd_sequence(
     #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
@@ -143,13 +216,39 @@ if __name__ == '__main__':
     #     "omd_swinging_4_unconstrained"
     # )
 
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "cluster_l1",
+    #     "--starting_frame=33",
+    #     "--ending_frame=385",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # run_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "cluster_l1",
+    #     "--init_object_pose_from_gt=false",
+    #     "--num_dynamic_optimize=4"
+    # )
+
+    # run_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "cluster_l1",
+    #     "--init_object_pose_from_gt=false",
+    #     "--num_dynamic_optimize=4",
+    #     backend_type=motion_world_backend_type
+
+    # )
+    # run_analysis("cluster_l1")
+
     # run_omd_sequence(
     #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
     #     "omd_swinging_4_unconstrained",
+    #     "--relinearize_thereshold=0.1"
     #     # backend_type=motion_world_backend_type
     # )
 
-    run_analysis("omd_swinging_4_unconstrained")
+    # run_analysis("omd_swinging_4_unconstrained")
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",

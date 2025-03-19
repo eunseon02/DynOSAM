@@ -463,12 +463,12 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
 
   dyno_testing::RGBDScenario scenario(
       camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(25, 15),
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(10, 7),
       noise_params);
 
   // add one obect
   const size_t num_points = 10;
-  const size_t obj1_overlap = 3;
+  const size_t obj1_overlap = 2;
   const size_t obj2_overlap = 3;
   const size_t obj3_overlap = 5;
   dyno_testing::ObjectBody::Ptr object1 =
@@ -530,6 +530,17 @@ TEST(RGBDBackendModule, testParallelRGBDBackend) {
 
   dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
   dyno::writeStatisticsModuleSummariesToFile();
+
+  //   dyno::NonlinearFactorGraphManager nlfgm(full_graph, initial_estimate);
+  //   auto options =
+  //       dyno::factor_graph_tools::DrawBlockJacobiansOptions::makeDynoSamOptions();
+  //   options.desired_size = cv::Size(1200, 700);
+  //   cv::Mat block_jacobians =
+  //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
+  //       options);
+
+  //   cv::imshow("Block Jacobians", block_jacobians);
+  //   cv::waitKey(0);
 }
 
 TEST(RGBDBackendModule, testObjectCentricFormulations) {
@@ -560,7 +571,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
 
   dyno_testing::RGBDScenario scenario(
       camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(25, 15),
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(10, 7),
       noise_params);
 
   // add one obect

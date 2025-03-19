@@ -504,7 +504,6 @@ class MotionErrorEvaluator(Evaluator):
         # must be floats if we want to align/sync
         timestamps = []
 
-        # assume frames are ordered!!!
         # used to construct the pose trajectires with evo
         object_poses_tmp_dict = {}
         object_poses_ref_tmp_dict = {}
@@ -525,6 +524,27 @@ class MotionErrorEvaluator(Evaluator):
             object_poses_tmp_dict[object_id]["timestamps"].append(frame_id)
             object_poses_ref_tmp_dict[object_id]["traj"].append(T_ref)
             object_poses_ref_tmp_dict[object_id]["timestamps"].append(frame_id)
+
+        def sort_by_frame_order(object_T_dict: Dict):
+            for object_id, data in object_T_dict.items():
+                frames = data["timestamps"]
+                traj = data["traj"]
+
+                # Sort frames and associated values
+                sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
+                frames = [frames[i] for i in sorted_indices]
+                traj = [traj[i] for i in sorted_indices]
+
+                # Update map data
+                object_T_dict[object_id]["timestamps"] = frames
+                object_T_dict[object_id]["traj"] = traj
+
+            return object_T_dict
+
+        # frameids may not be in order.
+        object_poses_tmp_dict = sort_by_frame_order(object_poses_tmp_dict)
+        object_poses_ref_tmp_dict = sort_by_frame_order(object_poses_ref_tmp_dict)
+
 
 
         # {object_id: trajectory.PosePath3D}
