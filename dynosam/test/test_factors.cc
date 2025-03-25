@@ -287,30 +287,42 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
   gtsam::Point3 noise(10.0, 0.0, 7.0);
   gtsam::Point3 measured = point + noise;
 
+  // with two sets of emasurements (2 * (1 pose + 1 motion) the number of blocks
+  // is 3
+  // motion + pose form a single block currently + 1 block for error
+
   gtsam::Key pose_key(1);
   gtsam::Key motion_key(2);
 
   gtsam::Key pose_key1(3);
   gtsam::Key motion_key1(4);
+
+  gtsam::Key pose_key2(5);
+  gtsam::Key motion_key2(6);
   gtsam::Values values;
   values.insert(pose_key, pose1);
   values.insert(motion_key, motion);
   values.insert(pose_key1, pose2);
   values.insert(motion_key1, motion);
+  // values.insert(pose_key2, pose2);
+  // values.insert(motion_key2, motion);
 
   SmartFactor factor(L_s, gtsam::noiseModel::Isotropic::Sigma(3, 0.05), point);
   factor.add(measured, motion_key, pose_key);
   factor.add(measured + 2 * noise, motion_key1, pose_key1);
+  // factor.add(measured + 3 * noise, motion_key2, pose_key2);
 
   LOG(INFO) << "createReducedMatrix";
 
   gtsam::SymmetricBlockMatrix actualReduced =
       factor.createReducedMatrix(values);
 
-  LOG(INFO) << "N blocks " << actualReduced.nBlocks();
+  LOG(INFO) << "N blocks " << actualReduced.nBlocks()
+            << " rows=" << actualReduced.rows()
+            << " cols=" << actualReduced.cols();
 
   gtsam::Matrix adjoint_view = actualReduced.selfadjointView();
-  LOG(INFO) << "adjoint_view " << adjoint_view;
+  // LOG(INFO) << "adjoint_view " << adjoint_view;
 
   SmartFactor::GBlocks Gs;
   SmartFactor::FBlocks Fs;
@@ -355,9 +367,75 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
       Eigen::Matrix<double, 3, 12>::Zero(), F2;
   gtsam::Matrix Ft = F.transpose();
 
+  LOG(INFO) << "F=" << F;
+
   Eigen::Matrix<double, 24, 1> g = Ft * (b - E * P * Et * b);
   Eigen::Matrix<double, 24, 24> G = Ft * F - Ft * E * P * Et * F;
 
+  gtsam::Matrix schur(25, 25);
+  schur << G, g, g.transpose(), b.squaredNorm();
+
+  // test programatic construction
+  {
+    constexpr static auto HDim = 6;
+    constexpr static auto XDim = 6;
+    constexpr static auto HessianDim = 12;
+    size_t m = 2;  // measurements
+    std::vector<Eigen::DenseIndex> f_block_dims(2 * m);
+    std::fill(f_block_dims.begin(), f_block_dims.end(),
+              HDim);  // assuming HDim and Xdim are the same size
+    // dims.back() = 1;
+
+    // Make full stock block matrix
+    gtsam::Matrix F_block_matrix(m * 3, m * HessianDim);
+    F_block_matrix.setZero();
+    LOG(INFO) << "F=" << F_block_matrix;
+    // gtsam::SymmetricBlockMatrix F_block_matrix(f_block_dims);
+    // size_t block_idx = 0;
+    for (size_t i = 0; i < m; i++) {
+      const Eigen::Matrix<double, 3, HessianDim>& GFblock = GFs.at(i);
+      LOG(INFO) << GFblock;
+
+      // Eigen::Matrix<double, 3, HDim> gblock = GFblock.leftCols(HDim);
+      // Eigen::Matrix<double, 3, HDim> fblock = GFblock.rightCols(XDim);
+
+      // Eigen::Matrix<double, 3, HessianDim> GF
+      // set along diagonals i, j, p,q
+      LOG(INFO) << 3 * i << " " << HessianDim * i;
+      // F_block_matrix.block( 3*i, HessianDim*i, 3, HessianDim) = GFblock;
+      F_block_matrix.block<3, HessianDim>(3 * i, HessianDim * i) = GFblock;
+
+      // F_block_matrix.setDiagonalBlock(2*i, gblock);
+      // F_block_matrix.setDiagonalBlock(2*i+1, fblock);
+    }
+
+    gtsam::Matrix F = F_block_matrix;
+    gtsam::Matrix Ft = F.transpose();
+    // LOG(INFO) << "F=" << F;
+
+    gtsam::Matrix g = Ft * (b - E * P * Et * b);
+    gtsam::Matrix G = Ft * F - Ft * E * P * Et * F;
+
+    // size of schur = num measurements * Hessian size + 1
+    size_t aug_hessian_size = m * HessianDim + 1;
+    gtsam::Matrix other_schur(aug_hessian_size, aug_hessian_size);
+
+    other_schur << G, g, g.transpose(), b.squaredNorm();
+
+    EXPECT_TRUE(gtsam::assert_equal(schur, other_schur, 1E-5));
+
+    std::vector<Eigen::DenseIndex> dims(2 * m + 1);  // includes b term
+    std::fill(dims.begin(), dims.end() - 1,
+              HDim);  // assuming HDim and Xdim are the same size
+    dims.back() = 1;
+
+    gtsam::SymmetricBlockMatrix augmented_hessian(dims, other_schur);
+    gtsam::RegularHessianFactor<XDim> hessian_factor(factor.keys(),
+                                                     augmented_hessian);
+
+    // boost::make_shared<gtsam::RegularHessianFactor<HessianDim>>(
+    // this->keys_, augmented_hessian
+  }
   // LOG(INFO) << "g Matrix size: " << g.rows() << " x " << g.cols();
   // LOG(INFO) << "G Matrix size: " << G.rows() << " x " << G.cols();
   // LOG(INFO) << "adjoint_view Matrix size: " << adjoint_view.rows() << " x "
@@ -365,9 +443,6 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
 
   // LOG(INFO) << "g:\n " << g;
   // LOG(INFO) << "G:\n " << G;
-
-  gtsam::Matrix schur(25, 25);
-  schur << G, g, g.transpose(), b.squaredNorm();
   // LOG(INFO) << "schur:\n" << schur;
   // LOG(INFO) << "adjoint_view:\n" << adjoint_view;
   EXPECT_TRUE(gtsam::assert_equal(schur, adjoint_view, 1E-5));
@@ -431,8 +506,13 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   lmParams.maxIterations = 20;
 
   gtsam::Values result;
+  values.print("Before ");
   gtsam::LevenbergMarquardtOptimizer optimizer(graph, values, lmParams);
   result = optimizer.optimize();
+  result.print("After ");
+
+  LOG(INFO) << graph.error(values);
+  LOG(INFO) << graph.error(result);
 }
 
 // TEST(SmartMotionFactor, LostTriangulation3D) {

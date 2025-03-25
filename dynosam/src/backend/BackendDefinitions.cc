@@ -53,7 +53,7 @@ static bool internalReconstructInfo(gtsam::Key key, SymbolChar expected_chr,
 
   frame_id = static_cast<FrameId>(as_labeled_symbol.index());
 
-  char label = as_labeled_symbol.label();
+  SymbolChar label = as_labeled_symbol.label();
   object_label = label - '0';
   return true;
 }
@@ -120,6 +120,14 @@ bool ApplyFunctionalSymbol::operator()(gtsam::Key key) const {
     default:
       return false;
   }
+}
+
+void ApplyFunctionalSymbol::reset() {
+  pose_func_ = nullptr;
+  object_motion_func_ = nullptr;
+  object_pose_func_ = nullptr;
+  static_lmk_func_ = nullptr;
+  dynamic_lmk_func_ = nullptr;
 }
 
 ApplyFunctionalSymbol& ApplyFunctionalSymbol::cameraPose(

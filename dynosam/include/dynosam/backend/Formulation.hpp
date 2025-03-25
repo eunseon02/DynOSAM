@@ -49,10 +49,29 @@ struct MapTraits {
   using LandmarkNodePtr = typename LandmarkNode::Ptr;
 };
 
+struct UpdateObservationParams {
+  //! If true, vision related updated will backtrack to the start of a new
+  //! tracklet and all the measurements to the graph should make false in batch
+  //! case where we want to be explicit about which frames are added!
+  bool do_backtrack = false;
+  bool enable_debug_info = true;
+  bool enable_incremental_detail = false;
+};
+
 struct UpdateObservationResult {
   gtsam::FastMap<ObjectId, std::set<FrameId>>
       objects_affected_per_frame;  // per frame
   DebugInfo::Optional debug_info{};
+
+  // struct IncrementalDetail {
+
+  // };
+
+  UpdateObservationResult(const UpdateObservationParams& update_params) {
+    if (update_params.enable_debug_info) {
+      this->debug_info = DebugInfo();
+    }
+  }
 
   // TODO: debug info
   inline UpdateObservationResult& operator+=(
@@ -116,14 +135,6 @@ struct ObjectUpdateContext {
 
   inline FrameId getFrameId() const { return frame_node_k->template getId(); }
   inline ObjectId getObjectId() const { return object_node->template getId(); }
-};
-
-struct UpdateObservationParams {
-  //! If true, vision related updated will backtrack to the start of a new
-  //! tracklet and all the measurements to the graph should make false in batch
-  //! case where we want to be explicit about which frames are added!
-  bool do_backtrack = false;
-  bool enable_debug_info = true;
 };
 
 // forward declare
@@ -524,6 +535,8 @@ class Formulation {
 
  protected:
   gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;
+
+  void clearGraph() { factors_.resize(0); }
 
  private:
   std::string setFullyQualifiedName() const;  // but isnt actually const ;)

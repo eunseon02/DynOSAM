@@ -35,8 +35,30 @@
 #include <gtsam/nonlinear/Marginals.h>
 #include <tbb/tbb.h>
 
+DEFINE_bool(use_relinearize_threshold_as_double, false,
+            "If only a single value should be used as the realinerization "
+            "threshold for all variables.");
 DEFINE_double(relinearize_threshold, 0.01,
               "Relinearize threshold for ISAM2 params");
+
+DEFINE_double(
+    X_trans_relinearize_threshold, 0.01,
+    "Relinearize threshold for X (cam pose) translation in ISAM2 params");
+DEFINE_double(
+    X_rot_relinearize_threshold, 0.01,
+    "Relinearize threshold for X (cam pose) rotation in ISAM2 params");
+
+DEFINE_double(
+    H_trans_relinearize_threshold, 0.01,
+    "Relinearize threshold for H (object motion) translation in ISAM2 params");
+DEFINE_double(
+    H_rot_relinearize_threshold, 0.01,
+    "Relinearize threshold for H (object motion) rotation in ISAM2 params");
+
+DEFINE_double(
+    m_relinearize_threshold, 0.01,
+    "Relinearize threshold for m (dynamic object point) in ISAM2 params");
+
 DEFINE_int32(relinearize_skip, 1, "Relinearize skip for ISAM2 params");
 DEFINE_int32(num_dynamic_optimize, 1,
              "Number of update steps to run for the object ISAM estimators");
@@ -53,9 +75,38 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   dynamic_isam2_params_.evaluateNonlinearError = true;
   dynamic_isam2_params_.enableDetailedResults = true;
-  dynamic_isam2_params_.relinearizeThreshold = FLAGS_relinearize_threshold;
   dynamic_isam2_params_.relinearizeSkip = FLAGS_relinearize_skip;
-  // dynamic_isam2_params_.optimizationParams = gtsam::ISAM2DoglegParams();
+
+  if (FLAGS_use_relinearize_threshold_as_double) {
+    LOG(INFO) << "Using FLAGS_relinearize_threshold for Parallel Object ISAM: "
+              << FLAGS_relinearize_threshold;
+    dynamic_isam2_params_.relinearizeThreshold = FLAGS_relinearize_threshold;
+  } else {
+    LOG(INFO) << "Using per-variable-type set of relinearisation thresholds "
+                 "for Parallel Object ISAM";
+    // Camera pose
+    gtsam::Vector6 X_relinearize_threshold;
+    X_relinearize_threshold.head<3>().setConstant(
+        FLAGS_X_trans_relinearize_threshold);
+    X_relinearize_threshold.head<3>().setConstant(
+        FLAGS_X_rot_relinearize_threshold);
+    // Object Motion
+    gtsam::Vector6 H_relinearize_threshold;
+    H_relinearize_threshold.head<3>().setConstant(
+        FLAGS_H_trans_relinearize_threshold);
+    H_relinearize_threshold.head<3>().setConstant(
+        FLAGS_H_rot_relinearize_threshold);
+    // Dynamic object point
+    gtsam::Vector3 m_relinearize_threshold;
+    m_relinearize_threshold.setConstant(FLAGS_m_relinearize_threshold);
+
+    gtsam::FastMap<char, gtsam::Vector> thresholds;
+    thresholds[kPoseSymbolChar] = X_relinearize_threshold;
+    thresholds[kObjectMotionSymbolChar] = H_relinearize_threshold;
+    thresholds[kDynamicLandmarkSymbolChar] = m_relinearize_threshold;
+
+    dynamic_isam2_params_.relinearizeThreshold = thresholds;
+  }
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
@@ -84,8 +135,14 @@ ParallelRGBDBackendModule::~ParallelRGBDBackendModule() {
   if (base_params_.use_logger_) {
     logBackendFromEstimators();
 
-    const std::string file_path =
-        getOutputFilePath("parallel_isam2_results.bson");
+    std::string file_name = "parallel_isam2_results";
+    const std::string suffix = FLAGS_updater_suffix;
+    if (!suffix.empty()) {
+      file_name += ("_" + suffix);
+    }
+    file_name += ".bson";
+
+    const std::string file_path = getOutputFilePath(file_name);
     JsonConverter::WriteOutJson(result_map_, file_path,
                                 JsonConverter::Format::BSON);
   }
@@ -466,7 +523,12 @@ BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
 
 void ParallelRGBDBackendModule::logBackendFromEstimators() {
   // TODO: name + suffix
-  const std::string name = "parallel_object_centric";
+  std::string name = "parallel_object_centric";
+
+  const std::string suffix = FLAGS_updater_suffix;
+  if (!suffix.empty()) {
+    name += ("_" + suffix);
+  }
 
   BackendLogger::UniquePtr logger = std::make_unique<BackendLogger>(name);
 

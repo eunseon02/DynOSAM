@@ -232,10 +232,7 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
   // these are then appended to the internal factors_ and new_factors
   gtsam::NonlinearFactorGraph internal_new_factors;
 
-  UpdateObservationResult result;
-  if (update_params.enable_debug_info) {
-    result.debug_info = DebugInfo();
-  }
+  UpdateObservationResult result(update_params);
 
   const auto frame_node_k = map->getFrame(frame_id_k);
   CHECK_NOTNULL(frame_node_k);
@@ -337,11 +334,7 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
   // these are then appended to the internal factors_ and new_factors
   gtsam::NonlinearFactorGraph internal_new_factors;
 
-  UpdateObservationResult result;
-  if (update_params.enable_debug_info) {
-    result.debug_info = DebugInfo();
-  }
-
+  UpdateObservationResult result(update_params);
   //! At least three points on the object are required to solve
   //! otherise the system is indeterminate
   // constexpr static size_t kMinNumberPoints = 3u;

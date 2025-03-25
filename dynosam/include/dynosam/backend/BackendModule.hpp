@@ -42,6 +42,8 @@
 #include "dynosam/utils/SafeCast.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional
 
+DECLARE_string(updater_suffix);
+
 namespace dyno {
 
 template <typename DERIVED_INPUT_PACKET, typename MEASUREMENT_TYPE,
@@ -84,6 +86,8 @@ class BackendModule
     }
     return gt_packet_map_;
   }
+
+  const BackendParams& getParams() const { return base_params_; }
 
  protected:
   // called in ModuleBase immediately before the spin function is called

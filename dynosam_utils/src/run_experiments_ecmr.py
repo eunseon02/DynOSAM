@@ -73,7 +73,7 @@ def run_saved_sequence(path, name, data_loader_num, *args, **kwargs):
     backend_type = kwargs.get("backend_type", increment_backend_type)
     run_as_frontend=False
     args_list = list(args)
-    args_list.append("--init_object_pose_from_gt=true")
+    # args_list.append("--init_object_pose_from_gt=true")
     run_sequnce(
         path,
         name,
@@ -124,10 +124,24 @@ if __name__ == '__main__':
     #     "/root/data/vdo_slam/kitti/kitti/0000/",
     #     "kitti_0000"
     # )
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     "--updater_suffix=beta_001",
+    #     "--relinearize_threshold=0.01"
+    # )
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0000/",
-    #     "kitti_0000"
+    #     "kitti_0000",
+    #     "--updater_suffix=beta_01",
+    #     "--relinearize_threshold=0.1"
+    # )
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0000/",
+    #     "kitti_0000",
+    #     "--updater_suffix=beta_1",
+    #     "--relinearize_threshold=1.0"
     # )
     # run_analysis("kitti_0000")
 
@@ -149,19 +163,23 @@ if __name__ == '__main__':
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0004/",
-    #     "kitti_0004"
+    #     "kitti_0004",
+    #     backend_type = motion_world_backend_type
     # )
     # run_analysis("kitti_0004")
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0006/",
-    #     "kitti_0006"
+    #     "kitti_0006",
+    #     backend_type = increment_backend_type
     # )
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0005/",
-    #     "kitti_0005"
+    #     "kitti_0005",
+    #     backend_type = motion_world_backend_type
     # )
+    # run_analysis("kitti_0006")
     # run_analysis("kitti_0005")
 
     # prep_kitti_sequence(
@@ -181,27 +199,34 @@ if __name__ == '__main__':
     #     "kitti_0018"
     # )
 
-    # run_kitti_sequence(
-    #     "/root/data/vdo_slam/kitti/kitti/0018/",
-    #     "kitti_0018"
-    # )
-    # run_analysis("kitti_0018")
+    run_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0018/",
+        "kitti_0018",
+        backend_type=object_centric_batch
+    )
+    run_kitti_sequence(
+        "/root/data/vdo_slam/kitti/kitti/0018/",
+        "kitti_0018",
+        backend_type=motion_world_backend_type
+    )
+    run_analysis("kitti_0018")
 
     # prep_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0020/",
     #     "kitti_0020",
     #     "--ending_frame=550"
     # )
-    run_kitti_sequence(
-        "/root/data/vdo_slam/kitti/kitti/0020/",
-        "kitti_0020"
-    )
-    run_analysis("kitti_0020")
+    # run_kitti_sequence(
+    #     "/root/data/vdo_slam/kitti/kitti/0020/",
+    #     "kitti_0020",
+    #     "--ending_frame=500"
+    # )
+    # run_analysis("kitti_0020")
 
     # prep_omd_sequence(
     #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
-    #     "omd_swinging_4_unconstrained",
-    #     "--ending_frame=150")
+    #     "omd_swinging_4_unconstrained_long",
+    #     "--ending_frame=318")
 
     # run_kitti_sequence(
     #     "/root/data/vdo_slam/kitti/kitti/0000/",
@@ -213,8 +238,45 @@ if __name__ == '__main__':
 
     # run_omd_sequence(
     #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
-    #     "omd_swinging_4_unconstrained"
+    #     "omd_swinging_4_unconstrained_long",
+    #     "--updater_suffix=beta_01",
+    #     "--relinearize_threshold=0.1"
     # )
+    # run_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_long",
+    #     "--updater_suffix=beta_1",
+    #     "--relinearize_threshold=1.0"
+    # )
+    # run_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_long",
+    #     backend_type=motion_world_backend_type
+    # )
+    # run_omd_sequence(
+    #     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/",
+    #     "omd_swinging_4_unconstrained_long",
+    #     backend_type=object_centric_batch
+    # )
+    # run_analysis("omd_swinging_4_unconstrained_long")
+
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "cluster_l2",
+    #     "--starting_frame=33",
+    #     "--ending_frame=385",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # run_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "cluster_l2",
+    #     "--init_object_pose_from_gt=true",
+    #     "--num_dynamic_optimize=4",
+    #     backend_type=increment_backend_type
+
+    # )
+    # run_analysis("cluster_l2")
 
     # prep_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L1/",
@@ -236,7 +298,7 @@ if __name__ == '__main__':
     #     "cluster_l1",
     #     "--init_object_pose_from_gt=false",
     #     "--num_dynamic_optimize=4",
-    #     backend_type=motion_world_backend_type
+    #     backend_type=object_centric_batch
 
     # )
     # run_analysis("cluster_l1")

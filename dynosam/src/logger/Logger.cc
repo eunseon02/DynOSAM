@@ -180,8 +180,8 @@ EstimationModuleLogger::~EstimationModuleLogger() {
                                      object_motion_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
-  OfstreamWrapper::WriteOutCsvWriter(*frame_id_timestamp_csv_,
-                                     frame_id_to_timestamp_file_name_);
+  // OfstreamWrapper::WriteOutCsvWriter(*frame_id_timestamp_csv_,
+  //                                    frame_id_to_timestamp_file_name_);
 }
 
 std::optional<size_t> EstimationModuleLogger::logObjectMotion(

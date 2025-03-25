@@ -150,9 +150,7 @@ class ParallelObjectISAM {
 
   // TODO: is motion in map (not just observed but we have a motion )
 
-  std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id) {
-    return decoupled_formulation_->forceNewKeyFrame(frame_id, object_id_);
-  }
+  std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id);
 
   const gtsam::ISAM2& getSmoother() const { return *smoother_; }
 

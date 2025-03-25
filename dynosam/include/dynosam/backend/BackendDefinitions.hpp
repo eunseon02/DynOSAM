@@ -124,6 +124,8 @@ class ApplyFunctionalSymbol {
 
   bool operator()(gtsam::Key key) const;
 
+  void reset();
+
   ApplyFunctionalSymbol& cameraPose(const CameraPoseFunc&);
   ApplyFunctionalSymbol& objectMotion(const ObjectMotionFunc&);
   ApplyFunctionalSymbol& objectPose(const ObjectPoseFunc&);
@@ -181,7 +183,7 @@ struct SharedFormulationData {
 struct BackendMetaData {
   // TODO: should streamline this to only include what we actually need from the
   // params
-  const BackendParams* backend_params;
+  const BackendParams* backend_params = nullptr;
   //! Suffix that is used when logging data from a formulation
   //! This is additional to the suffix specified in formulation params in case
   //! further nameing specificity is needed; this is mostly helpful during

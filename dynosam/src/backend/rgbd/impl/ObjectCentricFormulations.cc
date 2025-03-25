@@ -182,5 +182,110 @@ void StructurlessFormulation::dynamicPointUpdateCallback(
   result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 }
 
+void SmartStructurlessFormulation::dynamicPointUpdateCallback(
+    const PointUpdateContextType& context, UpdateObservationResult& result,
+    gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
+  const auto lmk_node = context.lmk_node;
+  const auto frame_node_k_1 = context.frame_node_k_1;
+  const auto frame_node_k = context.frame_node_k;
+
+  auto theta_accessor = this->accessorFromTheta();
+  auto dynamic_point_noise = noise_models_.dynamic_point_noise;
+
+  gtsam::Key point_key = this->makeDynamicKey(context.getTrackletId());
+
+  const gtsam::Key object_motion_key_k =
+      frame_node_k->makeObjectMotionKey(context.getObjectId());
+  const gtsam::Key object_motion_key_k_1 =
+      frame_node_k_1->makeObjectMotionKey(context.getObjectId());
+
+  gtsam::Pose3 L_0;
+  FrameId s0;
+  std::tie(s0, L_0) =
+      getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
+  auto landmark_motion_noise = noise_models_.landmark_motion_noise;
+
+  if (!isDynamicTrackletInMap(lmk_node)) {
+    bool keyframe_updated;
+    gtsam::Pose3 s0_H_k_world = computeInitialH(
+        context.getObjectId(), frame_node_k_1->getId(), &keyframe_updated);
+
+    // TODO: we should never actually let this happen during an update
+    //  it should only happen before measurements are added
+    // want to avoid somehow a situation where some (landmark)variables are at
+    // an old keyframe I dont think this will happen with the current
+    // implementation...
+    if (keyframe_updated) {
+      // TODO: gross I have to re-get them again!!
+      std::tie(s0, L_0) =
+          getOrConstructL0(context.getObjectId(), frame_node_k_1->getId());
+    }
+
+    // mark as now in map and include associated frame!!s
+    is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), s0);
+    CHECK(isDynamicTrackletInMap(lmk_node));
+
+    // gtsam::Pose3 L_k = s0_H_k_world * L_0;
+    // // H from k to s0 in frame k (^wL_k)
+    // //  gtsam::Pose3 k_H_s0_k = L_0 * s0_H_k_world.inverse() * L_0.inverse();
+    // gtsam::Pose3 k_H_s0_k = (L_0.inverse() * s0_H_k_world * L_0).inverse();
+    // gtsam::Pose3 k_H_s0_W = L_k * k_H_s0_k * L_k.inverse();
+    // const gtsam::Point3 m_camera =
+    //     lmk_node->getMeasurement(frame_node_k_1).landmark;
+    // Landmark lmk_L0_init =
+    //     L_0.inverse() * k_H_s0_W * context.X_k_1_measured * m_camera;
+    Landmark lmk_L0_init =
+        projectToObject(context.X_k_1_measured, s0_H_k_world, L_0,
+                        lmk_node->getMeasurement(frame_node_k_1).landmark);
+
+    // TODO: this should not every be true as this is a new value!!!
+    Landmark lmk_L0;
+    getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
+                 lmk_L0_init);
+
+    ObjectCentricSmartFactor::shared_ptr smart_factor =
+        boost::make_shared<ObjectCentricSmartFactor>(L_0, dynamic_point_noise,
+                                                     lmk_L0_init);
+
+    new_factors.push_back(smart_factor);
+    tracklet_id_to_smart_factor_.insert2(context.getTrackletId(), smart_factor);
+
+    result.updateAffectedObject(frame_node_k_1->frame_id,
+                                context.getObjectId());
+    if (result.debug_info)
+      result.debug_info->getObjectInfo(context.getObjectId())
+          .num_new_dynamic_points++;
+  }
+
+  ObjectCentricSmartFactor::shared_ptr smart_factor =
+      tracklet_id_to_smart_factor_.at(context.getTrackletId());
+  CHECK_NOTNULL(smart_factor);
+
+  if (context.is_starting_motion_frame) {
+    // add factor at k-1
+    // ------ good motion factor/////
+    smart_factor->add(lmk_node->getMeasurement(frame_node_k_1).landmark,
+                      object_motion_key_k_1, frame_node_k_1->makePoseKey());
+    if (result.debug_info)
+      result.debug_info->getObjectInfo(context.getObjectId())
+          .num_dynamic_factors++;
+  }
+
+  smart_factor->add(lmk_node->getMeasurement(frame_node_k).landmark,
+                    object_motion_key_k, frame_node_k->makePoseKey());
+  // add factor at k
+  // ------ good motion factor/////
+  // new_factors.emplace_shared<ObjectCentricMotionFactor>(
+  //     frame_node_k->makePoseKey(),  // pose key at previous frames,
+  //     object_motion_key_k, point_key,
+  //     lmk_node->getMeasurement(frame_node_k).landmark, L_0,
+  //     dynamic_point_noise);
+
+  result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
+  if (result.debug_info)
+    result.debug_info->getObjectInfo(context.getObjectId())
+        .num_dynamic_factors++;
+}
+
 }  // namespace keyframe_object_centric
 }  // namespace dyno

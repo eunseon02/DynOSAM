@@ -324,6 +324,18 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::forceNewKeyFrame(
       key_frame_data_.startNewActiveRange(object_id, frame_id, center)
           ->dataPair();
 
+  // clear meta-data to start new tracklets
+  // TODO: somehow adding this back in causes a segfault when ISAM2::update step
+  // happens... in combinating with clearing the internal graph
+  // (this->clearGraph) and resetting the smoother in ParlallelObjectSAM. I
+  // think we should do this!!
+  //  is_dynamic_tracklet_in_map_.clear();
+  // clear factors but keep current theta as this is the current linearisation
+  // point
+  // TODO: what about values that exist between across keyframes - there will be
+  // bugs in the Formulation as it currently cannot handle this!!
+  //  this->clearGraph();
+
   // sanity check
   CHECK_EQ(result.first, frame_id);
   return result;
@@ -448,6 +460,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
 
     // mark as now in map and include associated frame!!s
     is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), s0);
+    all_dynamic_landmarks_.insert2(context.getTrackletId(), s0);
     CHECK(isDynamicTrackletInMap(lmk_node));
 
     // gtsam::Pose3 L_k = s0_H_k_world * L_0;

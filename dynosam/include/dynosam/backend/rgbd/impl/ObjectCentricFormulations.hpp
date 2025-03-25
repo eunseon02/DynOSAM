@@ -98,5 +98,32 @@ class StructurlessFormulation : public ObjectCentricFormulation {
   }
 };
 
+class SmartStructurlessFormulation : public ObjectCentricFormulation {
+ public:
+  DYNO_POINTER_TYPEDEFS(SmartStructurlessFormulation)
+
+  using Base = ObjectCentricFormulation;
+  SmartStructurlessFormulation(const FormulationParams& params,
+                               typename Map::Ptr map,
+                               const NoiseModels& noise_models,
+                               const FormulationHooks& hooks)
+      : Base(params, map, noise_models, hooks) {}
+
+  void dynamicPointUpdateCallback(
+      const PointUpdateContextType& context, UpdateObservationResult& result,
+      gtsam::Values& new_values,
+      gtsam::NonlinearFactorGraph& new_factors) override;
+
+  std::string loggerPrefix() const override {
+    return "object_centric_smart_structureless";
+  }
+
+ private:
+  gtsam::FastMap<TrackletId, ObjectCentricSmartFactor::shared_ptr>
+      tracklet_id_to_smart_factor_;
+  gtsam::FastMap<TrackletId, gtsam::FactorIndex>
+      tracklet_id_to_smart_factor_index_;
+};
+
 }  // namespace keyframe_object_centric
 }  // namespace dyno

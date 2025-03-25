@@ -71,6 +71,7 @@ DEFINE_double(corrupt_L_for_init_sigma, 0.2,
 DEFINE_bool(init_LL_with_identity, false, "For experiments");
 DEFINE_bool(init_H_with_identity, true, "For experiments");
 
+// declared in BackendModule.hpp so it can be used accross multiple backends
 DEFINE_string(updater_suffix, "",
               "Suffix for updater to denote specific experiments");
 
@@ -386,7 +387,7 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame,
   update_params.do_backtrack = false;
   update_params.enable_debug_info = true;
 
-  UpdateObservationResult results;
+  UpdateObservationResult results(update_params);
 
   CHECK_GE(from_frame, map_->firstFrameId());
   CHECK_LE(to_frame, map_->lastFrameId());
@@ -505,6 +506,11 @@ RGBDBackendModule::makeUpdater() {
   } else if (updater_type_ == UpdaterType::OC_S) {
     LOG(INFO) << "Using ObjectCentric Structurless";
     return std::make_unique<keyframe_object_centric::StructurlessFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
+  } else if (updater_type_ == UpdaterType::OC_SMF) {
+    LOG(INFO) << "Using ObjectCentric Smart Motion Factor";
+    return std::make_unique<
+        keyframe_object_centric::SmartStructurlessFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
   } else {
     CHECK(false) << "Not implemented";

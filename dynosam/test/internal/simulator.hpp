@@ -249,7 +249,9 @@ class ConstantMotionBodyVisitor : public ScenarioBodyVisitor {
 class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
  public:
   RandomOverlapObjectPointsVisitor(size_t num_points, size_t overlap)
-      : num_points_(num_points), overlap_(overlap) {}
+      : num_points_(num_points),
+        overlap_(overlap),
+        overlap_dist_(2, std::max(2, (int)overlap)) {}
 
   TrackedPoints getPointsWorld(
       const ScenarioBodyVisitor::UniquePtr& body_visitor,
@@ -307,14 +309,11 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
   };
 
   Point generatePoint(FrameId frame) const {
-    std::uniform_int_distribution<> distrib(std::max(1, (int)overlap_ - 2),
-                                            (int)overlap_ + 2);
-    auto O = distrib(gen);
+    auto O = overlap_dist_(gen);
     auto ending_frame = frame + O;
 
-    std::uniform_int_distribution<int> seed_dist(0, 100);
     auto tracked_point = PointsGenerator::generateNewPoint(
-        gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
+        gtsam::Point3(0, 0, 0), 0.1, seed_dist_(gen));
     Point p(frame, ending_frame, tracked_point);
     all_points_.push_back(p);
     return p;
@@ -345,8 +344,126 @@ class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
   static std::random_device rd;
   static std::mt19937 gen;
 
+  mutable std::uniform_int_distribution<> overlap_dist_;
+  mutable std::uniform_int_distribution<int> seed_dist_{0, 100};
+
   mutable std::vector<Point> all_points_;
 };
+
+// class BetterRandomOverlapObjectPointsVisitor : public
+// ObjectPointGeneratorVisitor {
+//   public:
+//    RandomOverlapObjectPointsVisitor(size_t num_points, int max_frame, size_t
+//    overlap)
+//        : num_points_(num_points), max_frames_(max_frame) overlap_(overlap) {}
+
+//    TrackedPoints getPointsWorld(
+//        const ScenarioBodyVisitor::UniquePtr& body_visitor,
+//        FrameId frame_id) const override {
+//      // minimum n_points per frame
+//      // get points for frame + 1
+//      // if size points < num points -> generate N = (num points -
+//      len(points))
+//      // points are generated with 2 <-> O(verlap) as number of points to
+//      exist std::vector<Point> points_next = getPoints(frame_id + 1);
+//      // LOG(INFO) << "Points next=" <<points_next.size();
+//      std::vector<Point> points_current = getPoints(frame_id);
+//      // LOG(INFO) << "Points current=" <<points_current.size();
+//      if (points_next.size() < num_points_) {
+//        auto required_points = num_points_ - points_next.size();
+//        // LOG(INFO) << "Required points=" << required_points;
+//        std::vector<Point> points_new = generatePoints(frame_id,
+//        required_points); points_current.insert(points_current.end(),
+//        points_new.begin(),
+//                              points_new.end());
+//      }
+//      // LOG(INFO) << "New Points current=" <<points_current.size();
+//      // CHECK_EQ(points_current.size(), num_points_);
+
+//      TrackedPoints tracked_points(points_current.size());
+//      std::transform(points_current.begin(), points_current.end(),
+//                     tracked_points.begin(),
+//                     [&body_visitor, &frame_id](const Point& p_body) {
+//                       // LOG(INFO) <<
+//                       CHECK_NOTNULL(body_visitor);
+//                       CHECK(p_body.contains(frame_id));
+//                       const gtsam::Point3 P_world =
+//                           body_visitor->pose(frame_id) *
+//                           p_body.P_body_.second;
+//                       return std::make_pair(p_body.P_body_.first, P_world);
+//                     });
+
+//      return tracked_points;
+//    }
+
+//   private:
+//    struct Point {
+//      FrameId starting_frame_;
+//      FrameId ending_frame_;
+//      TrackedPoint P_body_;  //! Point in the object body frame
+
+//      Point(FrameId starting_frame, FrameId ending_frame,
+//            const TrackedPoint& P_body)
+//          : starting_frame_(starting_frame),
+//            ending_frame_(ending_frame),
+//            P_body_(P_body) {
+//        CHECK_GT(ending_frame_, starting_frame_);
+//      }
+
+//      bool contains(FrameId frame_id) const {
+//        return frame_id >= starting_frame_ && frame_id <= ending_frame_;
+//      }
+//    };
+
+//    void generateAllInitialPoints() {
+//     for(size_t i = 0; i < num_points_; i++) {
+//       auto tracked_point = PointsGenerator::generateNewPoint(
+//           gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
+//     }
+//    }
+
+//    Point generatePoint(FrameId frame) const {
+//      std::uniform_int_distribution<> distrib(std::max(1, (int)overlap_ - 2),
+//                                              (int)overlap_ + 2);
+//      auto O = distrib(gen);
+//      auto ending_frame = frame + O;
+
+//      std::uniform_int_distribution<int> seed_dist(0, 100);
+//      auto tracked_point = PointsGenerator::generateNewPoint(
+//          gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
+//      Point p(frame, ending_frame, tracked_point);
+//      all_points_.push_back(p);
+//      return p;
+//    }
+
+//    std::vector<Point> getPoints(FrameId frame) const {
+//      std::vector<Point> points;
+//      for (const Point& point : all_points_) {
+//        if (point.contains(frame)) {
+//          points.push_back(point);
+//        }
+//      }
+//      return points;
+//    }
+
+//    std::vector<Point> generatePoints(FrameId frame, size_t N) const {
+//      std::vector<Point> points;
+//      for (size_t i = 0; i < N; i++) {
+//        points.push_back(generatePoint(frame));
+//      }
+
+//      return points;
+//    }
+
+//    const size_t num_points_;
+//    const size_t overlap_;
+//    const int max_frames_;
+
+//    static std::random_device rd;
+//    static std::mt19937 gen;
+
+//    mutable std::vector<Point> all_points_;
+//  };
 
 // Points generator visitor
 class ConstantObjectPointsVisitor : public ObjectPointGeneratorVisitor {

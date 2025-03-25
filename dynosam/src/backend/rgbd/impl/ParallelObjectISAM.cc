@@ -103,6 +103,18 @@ StatusLandmarkVector ParallelObjectISAM::getDynamicLandmarks(
   return accessor_->getDynamicLandmarkEstimates(frame_id, object_id_);
 }
 
+std::pair<FrameId, gtsam::Pose3> ParallelObjectISAM::insertNewKeyFrame(
+    FrameId frame_id) {
+  // this will clear internal factors and meta-data
+  // TODO: what about values that exist between across keyframes - there will be
+  // bugs in the Formulation as it currently cannot handle this!!
+  const auto new_key_frame =
+      decoupled_formulation_->forceNewKeyFrame(frame_id, object_id_);
+  // clear isam2 estimator
+  //  smoother_.reset(new gtsam::ISAM2(params_.isam));
+  return new_key_frame;
+}
+
 void ParallelObjectISAM::updateFormulation(
     FrameId frame_k, const Pose3Measurement& X_W_k,
     gtsam::NonlinearFactorGraph& new_factors, gtsam::Values& new_values) {
@@ -148,6 +160,7 @@ void ParallelObjectISAM::updateFormulation(
            << " j= " << object_id_;
   decoupled_formulation_->updateDynamicObservations(frame_k, new_values,
                                                     new_factors, update_params);
+  // LOG(INFO) << "Done updateDynamicObservations";
   // TODO: use update result - if the object is not updated, should we remove
   // the frame node at k-1...?
 }
@@ -166,6 +179,8 @@ bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
                               decoupled_formulation_->getFullyQualifiedName() +
                               " [ms]");
   auto tic = utils::Timer::tic();
+  VLOG(5) << "ParallelObjectISAM: starting update k=" << frame_k
+          << " j= " << object_id_;
   bool is_smoother_ok = optimize(&result_.isam_result, new_factors, new_values);
 
   if (is_smoother_ok) {
@@ -203,56 +218,83 @@ bool ParallelObjectISAM::optimize(
   CHECK_NOTNULL(result);
   CHECK(smoother_);
 
+  // This is not doing a full deep copy: it is keeping same shared_ptrs for
+  // factors but copying the isam result.
+  ISAM2 smoother_backup(*smoother_);
+
+  // gtsam::FastList<gtsam::Key>
+  // norelin_keys{CameraPoseSymbol(result_.frame_id)};
+  gtsam::FastMap<gtsam::Key, int> constrain;
+  // constrain.insert2(CameraPoseSymbol(result_.frame_id), 1);
+  constrain.insert2(ObjectMotionSymbol(object_id_, result_.frame_id), 1);
+
+  for (const auto& k : new_factors.keys()) {
+    constrain[k] = 1;
+  }
+
+  for (auto factor : new_factors) {
+    CHECK_NOTNULL(factor);
+  }
+
+  ISAM2UpdateParams up = update_params;
+  // up.constrainedKeys = constrain;
+  // up.noRelinKeys = norelin_keys;
   try {
-    // gtsam::FastMap<gtsam::Key, int> constrain;
-    // gtsam::KeyList additionalMarkedKeys;
-    // gtsam::Key motion_key_km1 = ObjectMotionSymbol(object_id_,
-    // result_.frame_id - 1u); gtsam::KeyVector marginalizableKeys;
-    // if(smoother_->valueExists(motion_key_km1)) {
-    //   marginalizableKeys.push_back(motion_key_km1);
-
-    //   gtsam::Key camera_pose_key = CameraPoseSymbol(result_.frame_id - 1u);
-    //   marginalizableKeys.push_back(camera_pose_key);
-
-    //   for(const auto& key : new_values.keys()) {
-    //     constrain[key] = 1;
-    //   }
-
-    //   for(const auto& key : smoother_->getLinearizationPoint().keys()) {
-    //     constrain[key] = 1;
-    //   }
-
-    //   constrain[motion_key_km1] = 0;
-    //   constrain[camera_pose_key] = 0;
-
-    //   std::unordered_set<gtsam::Key> additionalKeys =
-    //     BayesTreeMarginalizationHelper<ISAM2>::gatherAdditionalKeysToReEliminate(
-    //         *smoother_, marginalizableKeys);
-    //   additionalMarkedKeys = gtsam::KeyList(additionalKeys.begin(),
-    //   additionalKeys.end());
-    // }
-
-    ISAM2UpdateParams up = update_params;
-    // up.constrainedKeys = constrain;
-    // up.extraReelimKeys = additionalMarkedKeys;
-    // up.forceFullSolve = true;
     *result = smoother_->update(new_factors, new_values, up);
-    // decoupled_formulation_->updateTheta(new_values);
-
-    // if (marginalizableKeys.size() > 0) {
-    //   gtsam::FastList<gtsam::Key> leafKeys(marginalizableKeys.begin(),
-    //       marginalizableKeys.end());
-    //       smoother_->marginalizeLeaves(leafKeys);
-    // }
 
   } catch (gtsam::IndeterminantLinearSystemException& e) {
-    LOG(FATAL) << "gtsam::IndeterminantLinearSystemException with variable "
-               << DynoLikeKeyFormatter(e.nearbyVariable())
-               << " j=" << object_id_;
+    const gtsam::Key& var = e.nearbyVariable();
+    LOG(ERROR) << "gtsam::IndeterminantLinearSystemException with variable "
+               << DynoLikeKeyFormatter(var) << " j=" << object_id_;
+
+    // // Add priors on all variables to fix indeterminant linear system
+    const gtsam::Values values = smoother_->calculateEstimate();
+    gtsam::NonlinearFactorGraph nfg;
+
+    ApplyFunctionalSymbol afs;
+    afs.cameraPose([&nfg, &values](FrameId, const gtsam::Symbol& sym) {
+         const gtsam::Key& key = sym;
+         gtsam::Pose3 pose = values.at<gtsam::Pose3>(key);
+         gtsam::Vector6 sigmas;
+         sigmas.head<3>().setConstant(0.001);  // rotation
+         sigmas.tail<3>().setConstant(0.01);   // translation
+         gtsam::SharedNoiseModel noise =
+             gtsam::noiseModel::Diagonal::Sigmas(sigmas);
+         nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose, noise);
+       })
+        .
+        operator()(var);
+
+    // afs callback did not occur
+    if (nfg.size() == 0) {
+      LOG(WARNING) << DynoLikeKeyFormatter(var) << " at j=" << object_id_
+                   << " not recognised in indeterminant exception handling";
+      return false;
+    }
+
+    gtsam::NonlinearFactorGraph new_factors_mutable;
+    new_factors_mutable.push_back(new_factors.begin(), new_factors.end());
+    new_factors_mutable.push_back(nfg.begin(), nfg.end());
+
+    // Update with graph and GN optimized values
+    try {
+      // Update smoother
+      LOG(ERROR) << "Attempting to update smoother with added prior factors";
+      *smoother_ = smoother_backup;  // reset isam to backup
+      *result = smoother_->update(new_factors_mutable, new_values, up);
+    } catch (...) {
+      // Catch the rest of exceptions.
+      LOG(WARNING) << "Smoother recovery failed. Most likely, the additional "
+                      "prior factors were insufficient to keep the system from "
+                      "becoming indeterminant.";
+      return false;
+    }
+
   } catch (gtsam::ValuesKeyDoesNotExist& e) {
     LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist with variable "
                << DynoLikeKeyFormatter(e.key()) << " j=" << object_id_;
   }
+  LOG(INFO) << "here";
   return true;
 }
 

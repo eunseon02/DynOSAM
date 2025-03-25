@@ -47,7 +47,8 @@ enum RGBDUpdaterType {
   OC_SD = 3,
   OC_D = 4,
   OC_S = 5,
-  Incremental = 6  // for now incremental means LooselyDistributed for ECMR
+  Incremental = 6,  // for now incremental means LooselyDistributed for ECMR
+  OC_SMF = 7        // Object Centric Smart Motion Factor
 };
 
 }  // namespace dyno

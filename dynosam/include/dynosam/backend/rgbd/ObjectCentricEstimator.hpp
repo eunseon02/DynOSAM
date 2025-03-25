@@ -81,7 +81,8 @@ struct SmartMotionFactorParams {
 };
 
 // should be object centric smart factor... :)
-template <size_t DIM, typename MOTION, typename POSE>
+template <size_t DIM = 3u, typename MOTION = gtsam::Pose3,
+          typename POSE = gtsam::Pose3>
 class SmartMotionFactor : public gtsam::NonlinearFactor,
                           MotionFactorTraits<DIM, MOTION, POSE> {
  public:
@@ -368,15 +369,15 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     return augmentedHessian;
   }
 
-  boost::shared_ptr<gtsam::RegularHessianFactor<HessianDim>>
-  createHessianFactor(const Motions& motions, const Poses& poses,
-                      const double lambda = 0.0,
-                      bool diagonalDamping = false) const {
+  boost::shared_ptr<gtsam::RegularHessianFactor<HDim>> createHessianFactor(
+      const Motions& motions, const Poses& poses, const double lambda = 0.0,
+      bool diagonalDamping = false) const {
     const size_t m = this->numMeasurements();
     constexpr static auto HessianDim = MotionTraits::HessianDim;
 
     // if (params_.degeneracyMode == ZERO_ON_DEGENERACY && !result_) {
     if (!result_) {
+      LOG(FATAL) << "Shoudl not get here";
       // gtsam::Matrix b = gtsam::Matrix::Zero(ZDim * num_measurements, 1);
       // gtsam::Matrix g = gtsam::Matrix::Zero(HessianDim * num_measurements,
       // 1); gtsam::Matrix G = gtsam::Matrix::Zero(HessianDim *
@@ -388,7 +389,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
           gtsam::Matrix::Zero(HessianDim * m + 1, HessianDim * m + 1);
       // augmented_information << G, g, g.transpose(), b.squaredNorm();
 
-      return boost::make_shared<gtsam::RegularHessianFactor<HessianDim>>(
+      return boost::make_shared<gtsam::RegularHessianFactor<HDim>>(
           this->keys_, constructSymmetricBlockMatrix(m, augmented_information));
 
     }
@@ -396,7 +397,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     else {
       gtsam::SymmetricBlockMatrix augmented_hessian =
           createReducedMatrix(motions, poses, lambda, diagonalDamping);
-      return boost::make_shared<gtsam::RegularHessianFactor<HessianDim>>(
+      return boost::make_shared<gtsam::RegularHessianFactor<HDim>>(
           this->keys_, augmented_hessian);
     }
   }
@@ -649,50 +650,110 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     return gtsam::SymmetricBlockMatrix(dims, gtsam::Matrix::Zero(M1, M1));
   }
 
+  // static gtsam::SymmetricBlockMatrix SchurComplement(
+  //     const GFBlocks& GFs, const gtsam::Matrix& E,
+  //     const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
+  //   // a single point is observed in m cameras
+  //   size_t m = GFs.size();
+  //   gtsam::SymmetricBlockMatrix augmentedHessian =
+  //       constructSymmetricBlockMatrix(m);
+
+  //   // Blockwise Schur complement
+  //   for (size_t i = 0; i < m; i++) {  // for each camera
+
+  //     const MatrixGFD& GFi = GFs[i];
+  //     const auto GFiT = GFi.transpose();
+  //     const MatrixED Ei_P =  //
+  //         E.block(ZDim * i, 0, ZDim, N) * P;
+
+  //     // D = (Dx2) * ZDim
+  //     augmentedHessian.setOffDiagonalBlock(
+  //         i, m,
+  //         GFiT * b.segment<ZDim>(ZDim * i)  // F' * b
+  //             -
+  //             GFiT *
+  //                 (Ei_P *
+  //                  (E.transpose() *
+  //                   b)));  // D = (DxZDim) * (ZDimx3) * (N*ZDimm) * (ZDimm x
+  //                   1)
+
+  //     // (DxD) = (DxZDim) * ( (ZDimxD) - (ZDimx3) * (3xZDim) * (ZDimxD) )
+  //     augmentedHessian.setDiagonalBlock(
+  //         i, GFiT * (GFi -
+  //                    Ei_P * E.block(ZDim * i, 0, ZDim, N).transpose() *
+  //                    GFi));
+
+  //     // upper triangular part of the hessian
+  //     for (size_t j = i + 1; j < m; j++) {  // for each camera
+  //       const MatrixGFD& GFj = GFs[j];
+
+  //       // (DxD) = (Dx2) * ( (2x2) * (2xD) )
+  //       augmentedHessian.setOffDiagonalBlock(
+  //           i, j,
+  //           -GFiT * (Ei_P * E.block(ZDim * j, 0, ZDim, N).transpose() *
+  //           GFj));
+  //     }
+  //   }  // end of for over cameras
+
+  //   augmentedHessian.diagonalBlock(m)(0, 0) += b.squaredNorm();
+  //   LOG(INFO) << "augmentedHessian blocks " << augmentedHessian.nBlocks() <<
+  //   " with m=" << m;
+
+  //   // structurally augmented Hessian is now wrong as we built it out of GF
+  //   and E blocks (to simulate the F and E blocks of the standard form)
+  //   // Need to break the blocks back into G and F blocks since we have keys
+  //   assocaited with both return augmentedHessian;
+  // }
+
   static gtsam::SymmetricBlockMatrix SchurComplement(
       const GFBlocks& GFs, const gtsam::Matrix& E,
       const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
     // a single point is observed in m cameras
     size_t m = GFs.size();
-    gtsam::SymmetricBlockMatrix augmentedHessian =
-        constructSymmetricBlockMatrix(m);
+    gtsam::Matrix Et = E.transpose();
 
-    // Blockwise Schur complement
-    for (size_t i = 0; i < m; i++) {  // for each camera
+    gtsam::Matrix F_block_matrix(m * 3, m * HessianDim);
+    F_block_matrix.setZero();
+    // LOG(INFO) << "F=" << F_block_matrix;
+    // gtsam::SymmetricBlockMatrix F_block_matrix(f_block_dims);
+    // size_t block_idx = 0;
+    for (size_t i = 0; i < m; i++) {
+      const Eigen::Matrix<double, 3, HessianDim>& GFblock = GFs.at(i);
+      // LOG(INFO) << GFblock;
 
-      const MatrixGFD& GFi = GFs[i];
-      const auto GFiT = GFi.transpose();
-      const MatrixED Ei_P =  //
-          E.block(ZDim * i, 0, ZDim, N) * P;
+      // Eigen::Matrix<double, 3, HDim> gblock = GFblock.leftCols(HDim);
+      // Eigen::Matrix<double, 3, HDim> fblock = GFblock.rightCols(XDim);
 
-      // D = (Dx2) * ZDim
-      augmentedHessian.setOffDiagonalBlock(
-          i, m,
-          GFiT * b.segment<ZDim>(ZDim * i)  // F' * b
-              -
-              GFiT *
-                  (Ei_P *
-                   (E.transpose() *
-                    b)));  // D = (DxZDim) * (ZDimx3) * (N*ZDimm) * (ZDimm x 1)
+      // Eigen::Matrix<double, 3, HessianDim> GF
+      // set along diagonals i, j, p,q
+      // LOG(INFO) <<  3*i << " " << HessianDim*i;
+      // F_block_matrix.block( 3*i, HessianDim*i, 3, HessianDim) = GFblock;
+      F_block_matrix.block<3, HessianDim>(3 * i, HessianDim * i) = GFblock;
 
-      // (DxD) = (DxZDim) * ( (ZDimxD) - (ZDimx3) * (3xZDim) * (ZDimxD) )
-      augmentedHessian.setDiagonalBlock(
-          i, GFiT * (GFi -
-                     Ei_P * E.block(ZDim * i, 0, ZDim, N).transpose() * GFi));
+      // F_block_matrix.setDiagonalBlock(2*i, gblock);
+      // F_block_matrix.setDiagonalBlock(2*i+1, fblock);
+    }
 
-      // upper triangular part of the hessian
-      for (size_t j = i + 1; j < m; j++) {  // for each camera
-        const MatrixGFD& GFj = GFs[j];
+    gtsam::Matrix F = F_block_matrix;
+    gtsam::Matrix Ft = F.transpose();
+    // LOG(INFO) << "F=" << F;
 
-        // (DxD) = (Dx2) * ( (2x2) * (2xD) )
-        augmentedHessian.setOffDiagonalBlock(
-            i, j,
-            -GFiT * (Ei_P * E.block(ZDim * j, 0, ZDim, N).transpose() * GFj));
-      }
-    }  // end of for over cameras
+    gtsam::Matrix g = Ft * (b - E * P * Et * b);
+    gtsam::Matrix G = Ft * F - Ft * E * P * Et * F;
 
-    augmentedHessian.diagonalBlock(m)(0, 0) += b.squaredNorm();
-    return augmentedHessian;
+    // size of schur = num measurements * Hessian size + 1
+    size_t aug_hessian_size = m * HessianDim + 1;
+    gtsam::Matrix schur(aug_hessian_size, aug_hessian_size);
+
+    schur << G, g, g.transpose(), b.squaredNorm();
+
+    std::vector<Eigen::DenseIndex> dims(2 * m + 1);  // includes b term
+    std::fill(dims.begin(), dims.end() - 1,
+              HDim);  // assuming HDim and Xdim are the same size
+    dims.back() = 1;
+
+    gtsam::SymmetricBlockMatrix augmented_hessian(dims, schur);
+    return augmented_hessian;
   }
 
  protected:
@@ -717,6 +778,9 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
   mutable Motions
       object_motions_triangulation_;  //! current triangulation object motions
 };
+
+using ObjectCentricSmartFactor =
+    SmartMotionFactor<3, gtsam::Pose3, gtsam::Pose3>;
 
 struct ObjectCentricProperties {
   inline gtsam::Symbol makeDynamicKey(TrackletId tracklet_id) const {
@@ -838,8 +902,7 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
     return std::make_shared<ObjectCentricAccessor>(
-        shared_data, this->map(), &key_frame_data_,
-        &is_dynamic_tracklet_in_map_);
+        shared_data, this->map(), &key_frame_data_, &all_dynamic_landmarks_);
   }
 
   virtual std::string loggerPrefix() const override { return "object_centric"; }
@@ -870,10 +933,18 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
   // tracklet Id associated with reference frame (to track which KeyFrame the
   // point is in!!!)
   gtsam::FastMap<TrackletId, FrameId>
-      is_dynamic_tracklet_in_map_;  //! thr set of dynamic points that have been
+      is_dynamic_tracklet_in_map_;  //! the set of dynamic points that have been
                                     //! added by this updater. We use a separate
                                     //! map containing the tracklets as the keys
-                                    //! are non-unique
+                                    //! are non-unique. This indicates values
+                                    //! that are currently in the estimator so
+                                    //! if values are removed from the
+                                    //! esstimator they need to be updated here
+                                    //! too!
+  //! All tracks on the object and their keyframe and is shared with the
+  //! accessor. This does not get cleared when the a new keyframe is added so
+  //! that accessor still has access to the meta-data for each tracked point.
+  gtsam::FastMap<TrackletId, FrameId> all_dynamic_landmarks_;
 
  private:
   KeyFrameData key_frame_data_;

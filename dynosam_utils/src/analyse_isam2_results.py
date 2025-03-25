@@ -4,12 +4,14 @@ import matplotlib.pyplot as plt
 import sys
 
 plt.rcdefaults()
-# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained/parallel_isam2_results.bson")[0]['data']
-results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0018/parallel_isam2_results.bson")[0]['data']
+results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
+# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+# results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
-# results = load_bson("/root/results/DynoSAM/incremental_omd_test_25_feature_track/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
+
+# results = load_bson("/root/results/DynoSAM/incremental_kitti_00_test/parallel_isam2_results.bson")[0]['data']
 # results = load_bson("/root/results/DynoSAM/incremental_test/parallel_isam2_results.bson")[0]['data']
 
 # per object at frame how many variables were involved
@@ -60,7 +62,8 @@ for object_id, per_frame_results in results.items():
 
 # Function to plot data
 def plot_variable(variable_name, ylabel, title, **kwargs):
-    plt.figure()
+    fig = plt.figure()
+    ax = fig.gca()
     for object_id, data in object_map.items():
         frames = data["frames"]
         values = data[variable_name]
@@ -72,18 +75,21 @@ def plot_variable(variable_name, ylabel, title, **kwargs):
         frames = [frames[i] for i in sorted_indices]
         values = [values[i] for i in sorted_indices]
 
-        plt.plot(frames, values, linestyle='-', label=f'Object {object_id}', **kwargs)
+        ax.plot(frames, values, linestyle='-', label=f'Object {object_id}')
 
-    plt.xlabel("Frame ID")
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.legend()
-    plt.grid()
+    scale = kwargs.get("scale", "linear")
+    ax.set_yscale(scale)
+
+    ax.set_xlabel("Frame ID")
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    ax.legend()
+    ax.grid()
 
 # Plot each variable
 plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
 plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
-plot_variable("timing", "Timing [ms]", "Timing Per Frame Per Object")
+plot_variable("timing", "Timing [ms]", "Timing Per Frame Per Object", scale="log")
 plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size Per Frame Per Object")
 plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
 plot_variable("num_variables", "Num Vars", "Num vars Per Frame Per Object")

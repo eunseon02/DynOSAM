@@ -437,7 +437,7 @@ class MotionErrorEvaluator(Evaluator):
         # plot object poses
         plot_mode = evo_plot.PlotMode.xyz
         ax = fig_all_object_traj.add_subplot(111, projection="3d")
-        core.plotting.plot_object_trajectories(
+        ax = core.plotting.plot_object_trajectories(
             fig_all_object_traj,
             object_trajectories,
             object_trajectories_ref,
@@ -447,6 +447,7 @@ class MotionErrorEvaluator(Evaluator):
             plot_axis_ref=True,
             # axis_marker_scale=1.0,
             downscale=0.1)
+        ax.get_legend().remove()
 
 
         fig_all_object_traj.suptitle(r"Estimated \& Ground Truth Object Trajectories")
@@ -459,19 +460,19 @@ class MotionErrorEvaluator(Evaluator):
         # evo_plot.draw_coordinate_axes(ax, object_trajectories_ref[f"Ground Truth Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
 
         # plot reconsructed (calibrated) object poses
-        fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
-        core.plotting.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
-        fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
-        ax = fig_all_object_traj_calibrated.gca()
+        # fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
+        # core.plotting.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
+        # ax = fig_all_object_traj_calibrated.gca()
         trajectory_helper.set_ax_limits(ax, evo_plot.PlotMode.xyz)
 
         plot_collection.add_figure(
             "Obj Trajectories", fig_all_object_traj
         )
 
-        plot_collection.add_figure(
-            "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
-        )
+        # plot_collection.add_figure(
+        #     "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
+        # )
 
 
 
@@ -561,7 +562,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(timestamps) < 4:
+            if len(timestamps) < 7:
                 continue
 
             # #hack for now to handle trajectories that jump

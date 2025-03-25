@@ -42,12 +42,13 @@ def calc_linear_average(values):
     return np.sum(np.array(values))/float(len(values))
 
 def calc_angular_average(values):
-    # angles measured in radians
-    x_sum = np.sum([math.sin(x) for x in values])
-    y_sum = np.sum([math.cos(x) for x in values])
-    # x_mean = x_sum / float(len(values))
-    # y_mean = y_sum / float(len(values))
-    return math.atan2(x_sum, y_sum)
+    return np.sum(np.array(values))/float(len(values))
+    # # angles measured in radians
+    # x_sum = np.sum([math.sin(x) for x in values])
+    # y_sum = np.sum([math.cos(x) for x in values])
+    # # x_mean = x_sum / float(len(values))
+    # # y_mean = y_sum / float(len(values))
+    # return math.atan2(x_sum, y_sum)
 
 
 def set_clean_background(ax:Axes):
