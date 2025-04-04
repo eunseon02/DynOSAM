@@ -1,11 +1,17 @@
 from dynosam_utils.evaluation.tools import load_bson
+from dynosam_utils.evaluation.core.plotting import startup_plotting
 import matplotlib.pyplot as plt
 
 import sys
 
-plt.rcdefaults()
-results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
-# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+# plt.rcdefaults()
+# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
+
+file_name = "kitti_0003"
+out_data_path = "/root/results/Dynosam_ecmr2024/"
+# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results.bson")[0]['data']
+results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0020/parallel_isam2_results.bson")[0]['data']
+
 # results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
 
@@ -17,6 +23,9 @@ results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained
 # per object at frame how many variables were involved
 
 object_map = {}
+
+plt.rcdefaults()
+startup_plotting(20)
 
 
 
@@ -61,14 +70,21 @@ for object_id, per_frame_results in results.items():
 
 
 # Function to plot data
+import os
+import numpy as np
 def plot_variable(variable_name, ylabel, title, **kwargs):
+
+    plot_file_name = file_name + "_" + variable_name + ".pdf"
+    output_file_name = os.path.join(out_data_path, plot_file_name)
+
     fig = plt.figure()
     ax = fig.gca()
     for object_id, data in object_map.items():
         frames = data["frames"]
         values = data[variable_name]
 
-        # print(values)
+        values_np = np.array(values)
+        print(f"Mean value {np.mean(values_np)} for var={variable_name}")
 
         # Sort frames and associated values
         sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
@@ -80,20 +96,47 @@ def plot_variable(variable_name, ylabel, title, **kwargs):
     scale = kwargs.get("scale", "linear")
     ax.set_yscale(scale)
 
-    ax.set_xlabel("Frame ID")
+    ax.set_xlabel("Frame")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
+    ax.grid(True)
     ax.legend()
-    ax.grid()
+    fig.tight_layout()
+    # fig.savefig(output_file_name)
+
+# per frame average
+def compute_average(variable_name):
+    values_per_frame = {}
+    for object_id, data in object_map.items():
+        values = data[variable_name]
+        frames = data["frames"]
+
+        sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
+        frames = [frames[i] for i in sorted_indices]
+        values = [values[i] for i in sorted_indices]
+
+        for frame, value in zip(frames, values):
+            if frame not in values_per_frame:
+                values_per_frame[frame] = []
+            values_per_frame[frame].append(value)
+
+    # print(values_per_frame)
+    means = []
+    for _, values in values_per_frame.items():
+        means.append(np.mean(np.array(values)))
+
+    print(f"Mean value {np.mean(np.array(means))}, std= {np.std(np.array(means))} for var={variable_name}")
+
 
 # Plot each variable
-plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
-plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
-plot_variable("timing", "Timing [ms]", "Timing Per Frame Per Object", scale="log")
-plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size Per Frame Per Object")
-plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
-plot_variable("num_variables", "Num Vars", "Num vars Per Frame Per Object")
-plot_variable("num_landmarks_marked", "Num landmarks", "Num landmarks involved in opt")
-plot_variable("num_motions_marked", "Num motions", "Num motions involved in opt")
+# plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
+# plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
+# plot_variable("timing", "Timing [ms]", "Accumulated Update Time", scale="log")
+# plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size Per Frame Per Object")
+# plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
+# plot_variable("num_variables", "Number Landmark Variables", r"Total Number Landmark Variables In $\theta$")
+# plot_variable("num_landmarks_marked", "Number Landmark Variables", r"Landmarks Involved In Update")
+# plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 
-plt.show()
+# plt.show()
+compute_average("timing")

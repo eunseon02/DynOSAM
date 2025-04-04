@@ -52,6 +52,7 @@ namespace dyno {
 // to make it truly incremental!!!
 // TODO: right now copy of DecoupledObjectSAM which is used in the front-end
 // (when first developed)
+
 class ParallelObjectISAM {
  public:
   DYNO_POINTER_TYPEDEFS(ParallelObjectISAM)
@@ -60,6 +61,8 @@ class ParallelObjectISAM {
     //! Number additional iSAM updates to run
     int num_optimzie = 2;
     gtsam::ISAM2Params isam{};
+
+    // bool save_per_frame_dynamic_cloud = FLAGS_save_per_frame_dynamic_cloud;
   };
 
   struct Result {
@@ -81,6 +84,9 @@ class ParallelObjectISAM {
     // Information about marked variables
     size_t num_landmarks_marked = 0;
     size_t num_motions_marked = 0;
+
+    using PointCloud = Eigen::Matrix<double, -1, 3>;
+    std::optional<PointCloud> dynamic_map{};
 
     using VariableStatus = gtsam::ISAM2Result::DetailedResults::VariableStatus;
     gtsam::FastMap<FrameId, VariableStatus> motion_variable_status{};
@@ -203,7 +209,7 @@ class ParallelObjectISAM {
   const ObjectId object_id_;
   Map::Ptr map_;
   ObjectCentricFormulation::Ptr decoupled_formulation_;
-  Accessor<Map>::Ptr accessor_;
+  ObjectCentricAccessor::Ptr accessor_;
   std::shared_ptr<gtsam::ISAM2> smoother_;
   Result result_;
   //! style of motion expected to be used as input. Set on the first run and all

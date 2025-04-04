@@ -788,43 +788,14 @@ struct ObjectCentricProperties {
   }
 };
 
-// struct KeyFrameRange {
-//   using Ptr = std::shared_ptr<KeyFrameRange>;
-//   using ConstPtr = std::shared_ptr<const KeyFrameRange>;
-//   FrameId start;
-//   FrameId end;
-//   gtsam::Pose3 L;
-//   //! indicates that this is the current keyframe range for the latest frame
-//   id
-//   //! and therefore the end value is not valid
-//   bool is_active = false;
-
-//   bool contains(FrameId frame_id) const;
-
-//   std::pair<FrameId, gtsam::Pose3> dataPair() const { return {start, L}; }
-// };
-
-// struct KeyFrameData {
-//   using KeyFrameRangeVector = std::vector<KeyFrameRange::Ptr>;
-//   gtsam::FastMap<ObjectId, KeyFrameRangeVector> data;
-//   gtsam::FastMap<ObjectId, KeyFrameRange::Ptr> active_ranges;
-
-//   const KeyFrameRange::ConstPtr find(ObjectId object_id,
-//                                      FrameId frame_id) const;
-//   const KeyFrameRange::ConstPtr startNewActiveRange(ObjectId object_id,
-//                                                     FrameId frame_id,
-//                                                     const gtsam::Pose3&
-//                                                     pose);
-
-//   KeyFrameRange::Ptr getActiveRange(ObjectId object_id) const;
-// };
-
 using KeyFrameData = MultiFrameRangeData<ObjectId, gtsam::Pose3>;
 using KeyFrameRange = KeyFrameData::FrameRangeT;
 
 class ObjectCentricAccessor : public Accessor<Map3d2d>,
                               public ObjectCentricProperties {
  public:
+  DYNO_POINTER_TYPEDEFS(ObjectCentricAccessor)
+
   ObjectCentricAccessor(
       const SharedFormulationData& shared_data, Map3d2d::Ptr map,
       const KeyFrameData* key_frame_data,
@@ -848,7 +819,34 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
   StatusLandmarkVector getDynamicLandmarkEstimates(
       FrameId frame_id, ObjectId object_id) const override;
 
+  /**
+   * @brief Get all dynamic object estimates in the local object frame
+   *
+   * @param object_id
+   * @return StatusLandmarkVector
+   */
+  StatusLandmarkVector getLocalDynamicLandmarkEstimates(
+      ObjectId object_id) const;
+
  private:
+  struct DynamicLandmarkQuery {
+    StateQuery<gtsam::Point3>* query_m_W = nullptr;
+    StateQuery<gtsam::Point3>* query_m_L = nullptr;
+    StateQuery<gtsam::Pose3>* query_H_W_e_k = nullptr;
+    KeyFrameRange::ConstPtr* frame_range_ptr = nullptr;
+  };
+
+  // should treturn true if and only if all valid queries (ie, non-null queries)
+  // were set with valid dataa!!
+  bool getDynamicLandmarkImpl(FrameId frame_id, TrackletId tracklet_id,
+                              DynamicLandmarkQuery& query) const;
+
+  bool getDynamicLandmarkImpl(FrameId frame_id, TrackletId tracklet_id,
+                              StateQuery<gtsam::Point3>* query_m_W,
+                              StateQuery<gtsam::Point3>* query_m_L,
+                              StateQuery<gtsam::Pose3>* query_H_W_e_k,
+                              KeyFrameRange::ConstPtr* frame_range_ptr) const;
+
   const KeyFrameData* key_frame_data_;
   //! Tracklet Id to the Keyframe the point is represented in (ie. which frame)
   const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe_;
@@ -887,11 +885,13 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
     return is_dynamic_tracklet_in_map_.exists(tracklet_id);
   }
 
+  // TODO: functions should be shared with accessor
   bool hasObjectKeyFrame(ObjectId object_id, FrameId frame_id) const;
   std::pair<FrameId, gtsam::Pose3> getObjectKeyFrame(ObjectId object_id,
                                                      FrameId frame_id) const;
   // get the estimated motion in the representation used directly by the
   // estimation (ie. not frame-2-frame)
+  // TODO: should be in accessor!!!!
   StateQuery<Motion3ReferenceFrame> getEstimatedMotion(ObjectId object_id,
                                                        FrameId frame_id) const;
 

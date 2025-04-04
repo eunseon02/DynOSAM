@@ -108,6 +108,7 @@ CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
           "Cannot display object point in the object reference frame");
     }
 
+    // TODO: use convert in header!!
     pcl::PointXYZRGB pt;
     if (status_estimate.isStatic()) {
       // publish static lmk's as white

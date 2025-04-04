@@ -227,47 +227,38 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   bool incremental = false;
   if (incremental) {
     LOG(INFO) << "Updating incremental";
-    // const auto old_keys = smoother_->getLinearizationPoint().keys();
-    gtsam::FastList<gtsam::Key> noRelinKeys;
-    // gtsam::IncrementalFixedLagSmoother::KeyTimestampMap timestamp_map;
-    // for (const auto& factor : new_factors) {
-    //   for (const auto key : factor->keys()) {
-    //     gtsam::Symbol sym(key);
-    //     if (sym.chr() == dyno::kPoseSymbolChar) {
-    //       timestamp_map[key] = frame_k;
-    //     }
-
-    //     if (sym.chr() == dyno::kObjectMotionSymbolChar) {
-    //       // timestamp_map[key] = frame_k;
-    //     }
-    //   }
-    // }
-
-    // for (const auto key : old_keys) {
-    //   dyno::ObjectId object_id;
-    //   dyno::FrameId k;
-    //   if (dyno::reconstructMotionInfo(key, object_id, k)) {
-    //     if (k < frame_k) {
-    //       noRelinKeys.push_back(key);
-    //     }
-    //   }
-    // }
-
+    auto tic = utils::Timer::tic();
     auto result = smoother_->update(new_factors, new_values);
-    // fixed_lag_smoother_->update(new_factors, new_values, timestamp_map);
+    smoother_->update();
 
-    // auto result = fixed_lag_smoother_->getISAM2Result();
-    smoother_->update();
-    smoother_->update();
+    auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
+    int64_t milliseconds =
+        std::chrono::duration_cast<std::chrono::milliseconds>(toc).count();
+
+    // smoother_->update();
     LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
               << " error after " << result.getErrorAfter();
     gtsam::Values optimised_values = smoother_->calculateEstimate();
-    // for (const auto& key_value : optimised_values) {
-    //   gtsam::Symbol sym(key_value.key);
-    //   if(sym.chr() == dyno::kObjectMotionSymbolChar) {
-    //     LOG(INFO) << optimised_values.at<gtsam::Pose3>(key_value.key);
-    //   }
-    // }
+
+    // TODO: currently for ECMR we write at every frame becuase eventually will
+    // run out of memory and if we dont log
+    //  at each frame we wont get any results!!!
+    std::string file_name =
+        new_updater_->getFullyQualifiedName() + "_isam2_timing";
+    const std::string suffix = FLAGS_updater_suffix;
+    if (!suffix.empty()) {
+      file_name += ("_" + suffix);
+    }
+    file_name += ".csv";
+    const std::string file_path = getOutputFilePath(file_name);
+    std::fstream file(file_path, std::ios::in | std::ios::out | std::ios::app);
+    file.precision(15);
+    file << milliseconds << "," << frame_k << "," << optimised_values.size()
+         << "," << smoother_->getFactorsUnsafe().size() << "\n";
+    file.close();
+
+    // static CsvWriter
+    // timing_writer(CsvHeader("frame_id","isam2_update_time"));
 
     new_updater_->updateTheta(optimised_values);
     // new_updater_->updateTheta(dynamic_fixed_lag_smoother_->calculateEstimate());

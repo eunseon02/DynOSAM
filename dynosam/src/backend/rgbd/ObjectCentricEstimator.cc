@@ -232,49 +232,61 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
 }
 StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
     FrameId frame_id, TrackletId tracklet_id) const {
-  // we estimate a motion ^w_{s0}H_k, so we can compute a point ^wm_k =
-  // ^w_{s0}H_k * ^wL_{s0} * ^{L_{s0}}m
-  const auto frame_node_k = map()->getFrame(frame_id);
-  const auto lmk_node = map()->getLandmark(tracklet_id);
-  CHECK(frame_node_k);
-  CHECK_NOTNULL(lmk_node);
-  const auto object_id = lmk_node->object_id;
-  // point in L_{s0}
-  gtsam::Key point_key = this->makeDynamicKey(tracklet_id);
+  StateQuery<gtsam::Point3> query_m_W;
+  DynamicLandmarkQuery query;
+  query.query_m_W = &query_m_W;
 
-  // the (key)frame the point is stored in
-  // this also indicates its existance in the optimisation problem
-  if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
-    return StateQuery<gtsam::Point3>::NotInMap(point_key);
-  }
-  FrameId m_s0 = tracklet_id_to_keyframe_->at(tracklet_id);
-  const auto range = key_frame_data_->find(object_id, frame_id);
-  // On a frame where the object has no motion (possibly between keyframes)
-  // there will be no valid range!!
-  if (!range) {
-    return StateQuery<gtsam::Point3>::NotInMap(point_key);
-  }
-  // if the active keyframe is not the same as the reference frame the point is
-  // represented in we (currentlly) have no way of propogating the point to the
-  // query frame
-  if (range->start != m_s0) {
-    return StateQuery<gtsam::Point3>::NotInMap(point_key);
-  }
+  getDynamicLandmarkImpl(frame_id, tracklet_id, query);
 
-  StateQuery<gtsam::Point3> point_local = this->query<gtsam::Point3>(point_key);
-  // get motion from S0 to k
-  gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
-  StateQuery<gtsam::Pose3> motion_s0_k = this->query<gtsam::Pose3>(motion_key);
+  return query_m_W;
 
-  if (point_local && motion_s0_k) {
-    const auto [s0, L0] = range->dataPair();
-    // since the motion has a range (and therefore may not be valid!!!)
-    //  point in world at k
-    const gtsam::Point3 m_k = motion_s0_k.get() * L0 * point_local.get();
-    return StateQuery<gtsam::Point3>(point_key, m_k);
-  } else {
-    return StateQuery<gtsam::Point3>::NotInMap(point_key);
-  }
+  // // we estimate a motion ^w_{s0}H_k, so we can compute a point ^wm_k =
+  // // ^w_{s0}H_k * ^wL_{s0} * ^{L_{s0}}m
+  // const auto frame_node_k = map()->getFrame(frame_id);
+  // const auto lmk_node = map()->getLandmark(tracklet_id);
+  // CHECK(frame_node_k);
+  // CHECK_NOTNULL(lmk_node);
+  // const auto object_id = lmk_node->object_id;
+  // // point in L_{s0}
+  // gtsam::Key point_key = this->makeDynamicKey(tracklet_id);
+
+  // // the (key)frame the point is stored in
+  // // this also indicates its existance in the optimisation problem
+  // if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
+  //   return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  // }
+  // FrameId m_s0 = tracklet_id_to_keyframe_->at(tracklet_id);
+  // const auto range = key_frame_data_->find(object_id, frame_id);
+  // // On a frame where the object has no motion (possibly between keyframes)
+  // // there will be no valid range!!
+  // if (!range) {
+  //   return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  // }
+  // // if the active keyframe is not the same as the reference frame the point
+  // is
+  // // represented in we (currentlly) have no way of propogating the point to
+  // the
+  // // query frame
+  // if (range->start != m_s0) {
+  //   return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  // }
+
+  // StateQuery<gtsam::Point3> point_local =
+  // this->query<gtsam::Point3>(point_key);
+  // // get motion from S0 to k
+  // gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
+  // StateQuery<gtsam::Pose3> motion_s0_k =
+  // this->query<gtsam::Pose3>(motion_key);
+
+  // if (point_local && motion_s0_k) {
+  //   const auto [s0, L0] = range->dataPair();
+  //   // since the motion has a range (and therefore may not be valid!!!)
+  //   //  point in world at k
+  //   const gtsam::Point3 m_k = motion_s0_k.get() * L0 * point_local.get();
+  //   return StateQuery<gtsam::Point3>(point_key, m_k);
+  // } else {
+  //   return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  // }
 }
 
 StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
@@ -313,6 +325,160 @@ StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
     }
   }
   return estimates;
+}
+
+StatusLandmarkVector ObjectCentricAccessor::getLocalDynamicLandmarkEstimates(
+    ObjectId object_id) const {
+  const auto object_node = map()->getObject(object_id);
+  if (!object_node) {
+    return StatusLandmarkVector{};
+  }
+
+  // what if we have multiple ranges?
+  // pick the ones that have the most number of landmarks...?
+  // this is a bad heuristic!!
+
+  // iterate over tracklets and their keyframe to find the frame with the most
+  // ids
+  gtsam::FastMap<FrameId, int> keyframe_count;
+  for (const auto& [_, e] : *tracklet_id_to_keyframe_) {
+    if (!keyframe_count.exists(e)) keyframe_count[e] = 0;
+
+    keyframe_count.at(e)++;
+  }
+
+  // get max
+  int max_count = 0;
+  FrameId kf_with_max_tracks;
+  for (const auto [kf, count] : keyframe_count) {
+    if (count > max_count) {
+      max_count = count;
+      kf_with_max_tracks = kf;
+    }
+  }
+
+  StatusLandmarkVector estimates;
+  if (max_count == 0) {
+    return estimates;
+  }
+
+  const auto& dynamic_landmarks = object_node->dynamic_landmarks;
+  for (auto lmk_node : dynamic_landmarks) {
+    const auto tracklet_id = lmk_node->tracklet_id;
+    // keyframe id that this landmark is reprsented in
+    //  FrameId lmk_keyframe = tracklet_id_to_keyframe_->at(tracklet_id);
+
+    DynamicLandmarkQuery lmk_query;
+    StateQuery<gtsam::Point3> query_m_L;
+    lmk_query.query_m_L = &query_m_L;
+
+    if (getDynamicLandmarkImpl(kf_with_max_tracks, tracklet_id, lmk_query)) {
+      CHECK(query_m_L);
+      estimates.push_back(LandmarkStatus::DynamicInLocal(
+          Point3Measurement(query_m_L.get()), LandmarkStatus::MeaninglessFrame,
+          tracklet_id, object_id));
+    }
+  }
+
+  return estimates;
+}
+
+bool ObjectCentricAccessor::getDynamicLandmarkImpl(
+    FrameId frame_id, TrackletId tracklet_id,
+    DynamicLandmarkQuery& query) const {
+  if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
+    return false;
+  }
+
+  const auto lmk_node = map()->getLandmark(tracklet_id);
+  const auto frame_node_k = map()->getFrame(frame_id);
+  CHECK(frame_node_k);
+  CHECK_NOTNULL(lmk_node);
+
+  const auto object_id = lmk_node->object_id;
+
+  // point in L_{e}
+  gtsam::Key point_key = this->makeDynamicKey(tracklet_id);
+
+  if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
+    return false;
+  }
+
+  // new syntax is m in e
+  FrameId m_s0 = tracklet_id_to_keyframe_->at(tracklet_id);
+  const auto range = key_frame_data_->find(object_id, frame_id);
+
+  bool result = true;
+
+  // update intermediate queries
+  if (query.frame_range_ptr) {
+    *query.frame_range_ptr = range;
+    result &= (bool)range;
+  }
+
+  // On a frame where the object has no motion (possibly between keyframes)
+  // there will be no valid range!!
+  if (!range) {
+    return false;
+  }
+  // if the active keyframe is not the same as the reference frame the point is
+  // represented in we (currentlly) have no way of propogating the point to the
+  // query frame
+  if (range->start != m_s0) {
+    return false;
+  }
+
+  // point in local frame
+  StateQuery<gtsam::Point3> m_Le = this->query<gtsam::Point3>(point_key);
+  // get motion from S0 to k
+  StateQuery<gtsam::Pose3> H_W_s0_k =
+      this->query<gtsam::Pose3>(frame_node_k->makeObjectMotionKey(object_id));
+
+  // update intermediate queries
+  if (query.query_m_L) {
+    *query.query_m_L = m_Le;
+    result &= (bool)m_Le;
+  }
+  if (query.query_H_W_e_k) {
+    *query.query_H_W_e_k = H_W_s0_k;
+    result &= (bool)H_W_s0_k;
+  }
+
+  if (m_Le && H_W_s0_k) {
+    const auto [s0, L0] = range->dataPair();
+    // since the motion has a range (and therefore may not be valid!!!)
+    //  point in world at k
+    const gtsam::Point3 m_W_k = H_W_s0_k.get() * L0 * m_Le.get();
+    StateQuery<gtsam::Point3> point_world(point_key, m_W_k);
+
+    if (query.query_m_W) {
+      *query.query_m_W = point_world;
+      result &= (bool)point_world;
+    }
+
+    // TODO: result not actually used!!
+    return true;
+
+  } else {
+    if (query.query_m_W) {
+      *query.query_m_W = StateQuery<gtsam::Point3>::NotInMap(point_key);
+    }
+    return false;
+  }
+}
+
+bool ObjectCentricAccessor::getDynamicLandmarkImpl(
+    FrameId frame_id, TrackletId tracklet_id,
+    StateQuery<gtsam::Point3>* query_m_W, StateQuery<gtsam::Point3>* query_m_L,
+    StateQuery<gtsam::Pose3>* query_H_W_e_k,
+    KeyFrameRange::ConstPtr* frame_range_ptr) const {
+  DynamicLandmarkQuery query;
+  query.query_m_W = query_m_W;
+  query.query_m_L = query_m_L;
+  query.query_H_W_e_k = query_H_W_e_k;
+  query.frame_range_ptr = frame_range_ptr;
+
+  return getDynamicLandmarkImpl(frame_id, tracklet_id, query);
 }
 
 std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::forceNewKeyFrame(

@@ -171,9 +171,10 @@ class JsonConverter {
   // T must be json seralizable
   template <typename T>
   static void WriteOutJson(const T& value, const std::string& filepath,
-                           const Format& fmt = Format::BSON) {
+                           const Format& fmt = Format::BSON,
+                           bool append = false) {
     if (fmt == Format::BSON) {
-      WriteBson<T>(value, filepath);
+      WriteBson<T>(value, filepath, append);
     } else {
       CHECK(false) << "normal json not implemented";
     }
@@ -191,15 +192,22 @@ class JsonConverter {
 
  private:
   template <typename T>
-  static void WriteBson(const T& value, const std::string& filepath) {
+  static void WriteBson(const T& value, const std::string& filepath,
+                        bool append) {
     VLOG(5) << "Writing bson data to filepath: " << filepath;
 
     json j;
     j["data"] = value;
     auto v_bson = json::to_bson(j);
 
-    std::ofstream bsonfile(filepath.c_str(),
-                           std::ios_base::out | std::ios::binary);
+    std::ofstream bsonfile;
+    if (!append) {
+      bsonfile.open(filepath.c_str(), std::ios_base::out | std::ios::binary);
+    } else {
+      bsonfile.open(filepath.c_str(),
+                    std::ios_base::app | std::ios_base::out | std::ios::binary);
+    }
+
     bsonfile.write((char*)&v_bson[0], v_bson.size() * sizeof(v_bson[0]));
     bsonfile.close();
   }

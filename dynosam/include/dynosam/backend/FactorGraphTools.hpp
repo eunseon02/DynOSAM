@@ -33,6 +33,7 @@
 #include <glog/logging.h>
 #include <gtsam/base/treeTraversal-inst.h>
 #include <gtsam/linear/GaussianFactorGraph.h>
+#include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 
 #include <deque>
@@ -414,6 +415,57 @@ void saveBayesTree(
   of << "}";
   std::flush(of);
 }
+
+template <class CLIQUE>
+std::pair<SparsityStats, cv::Mat> computeRFactor(
+    const gtsam::BayesTree<CLIQUE>& bayes_tree) {
+  size_t dim = 0;
+  for (const auto& clique : bayes_tree) {
+    dim += clique->conditional()->rows();
+  }
+
+  gtsam::Matrix full_R = gtsam::Matrix::Zero(dim, dim);
+
+  // Step 2: Extract R blocks from the Bayes Tree and assemble them
+  size_t rowStart = 0;
+  for (const auto& clique : bayes_tree) {
+    auto conditional = clique->conditional();
+    if (conditional) {
+      gtsam::Matrix R_block = conditional->R();  // Extract R block
+      size_t blockSize = R_block.rows();
+
+      // Insert R_block into the full R matrix
+      full_R.block(rowStart, rowStart, blockSize, blockSize) = R_block;
+
+      rowStart += blockSize;  // Move row index
+    }
+  }
+
+  size_t nnz = 0u;
+  cv::Mat R_img(cv::Size(full_R.cols(), full_R.rows()), CV_8UC3,
+                cv::viz::Color::white());
+  for (int i = 0; i < full_R.rows(); ++i) {
+    for (int j = 0; j < full_R.cols(); ++j) {
+      // only draw if non zero
+      if (std::fabs(full_R(i, j)) > 1e-15) {
+        R_img.at<cv::Vec3b>(i, j) = (cv::Vec3b)cv::viz::Color::black();
+        nnz++;
+      }
+    }
+  }
+  return std::make_pair(SparsityStats{}, R_img);
+}
+
+class ISAM2Visualiser : public gtsam::ISAM2 {
+ public:
+  using Base = gtsam::ISAM2;
+  explicit ISAM2Visualiser(const gtsam::ISAM2Params& params) : Base(params) {}
+
+  virtual gtsam::ISAM2Result update(
+      const gtsam::NonlinearFactorGraph& newFactors,
+      const gtsam::Values& newTheta,
+      const gtsam::ISAM2UpdateParams& updateParams) override;
+};
 
 std::pair<SparsityStats, cv::Mat> computeRFactor(
     gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,

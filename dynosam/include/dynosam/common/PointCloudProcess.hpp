@@ -51,6 +51,44 @@ using PointLabelRGB = pcl::PointXYZRGBL;
 /// @brief Alias to a PCL Point Cloud of type PointLabelRGB
 using PointCloudLabelRGB = pcl::PointCloud<PointLabelRGB>;
 
+template <>
+inline bool convert(const LandmarkStatus& status, pcl::PointXYZRGB& point) {
+  const gtsam::Point3 lmk = status.value();
+  const ObjectId object_id = status.objectId();
+  if (status.isStatic()) {
+    point =
+        pcl::PointXYZRGB(static_cast<float>(lmk(0)), static_cast<float>(lmk(1)),
+                         static_cast<float>(lmk(2)), 0, 0, 0);
+  } else {
+    // has to recalculate this every time!!
+    const Color colour = Color::uniqueId(object_id);
+    point = pcl::PointXYZRGB(
+        static_cast<float>(lmk(0)), static_cast<float>(lmk(1)),
+        static_cast<float>(lmk(2)), static_cast<std::uint8_t>(colour.r),
+        static_cast<std::uint8_t>(colour.g),
+        static_cast<std::uint8_t>(colour.b));
+  }
+  return true;
+}
+
+template <typename Value, typename Point>
+void convert_pcl(const GenericTrackedStatusVector<Value>& status_vector,
+                 pcl::PointCloud<Point>& cloud) {
+  for (const auto& value : status_vector) {
+    Point point;
+    // call the status type to the point type explicitly
+    // allows any type w
+    convert(value, point);
+    cloud.push_back(point);
+  }
+}
+
+template <typename Point>
+void convert(const StatusLandmarkVector& status_vector,
+             pcl::PointCloud<Point>& cloud) {
+  convert_pcl(status_vector, cloud);
+}
+
 /**
  * @brief Constructs a gtsam::Point3 from the x,y,z components of the PointT.
  *

@@ -166,6 +166,11 @@ NoiseModels NoiseModels::fromBackendParams(
   gtsam::Vector6 odom_sigmas;
   odom_sigmas.head<3>().setConstant(backend_params.odometry_rotation_sigma_);
   odom_sigmas.tail<3>().setConstant(backend_params.odometry_translation_sigma_);
+  LOG(INFO) << "backend_params.odometry_rotation_sigma_ "
+            << backend_params.odometry_rotation_sigma_;
+  LOG(INFO) << "backend_params.odometry_translation_sigma_"
+            << backend_params.odometry_translation_sigma_;
+  LOG(INFO) << "Odom sigma: " << odom_sigmas;
   noise_models.odometry_noise =
       gtsam::noiseModel::Diagonal::Sigmas(odom_sigmas);
   CHECK(noise_models.odometry_noise);
@@ -190,6 +195,8 @@ NoiseModels NoiseModels::fromBackendParams(
   noise_models.object_smoothing_noise =
       gtsam::noiseModel::Diagonal::Sigmas(object_constant_vel_sigmas);
   CHECK(noise_models.object_smoothing_noise);
+
+  // TODO: CHECKS that values are not zero!!!
 
   noise_models.static_point_noise = gtsam::noiseModel::Isotropic::Sigma(
       3u, backend_params.static_point_noise_sigma_);

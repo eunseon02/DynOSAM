@@ -40,6 +40,7 @@ import math
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
     """
+    # plt.rcdefaults()
     if tex_backend:
         try:
             plt.rcParams.update({

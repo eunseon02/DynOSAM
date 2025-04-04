@@ -115,33 +115,112 @@ std::pair<SparsityStats, cv::Mat> computeRFactor(
   // TODO: why do we need to specify the ordering twice?
   // I think we should probaly construct the graph with native ordeing but then
   // elimate with provided ordering?
-  gtsam::JacobianFactor jacobian_factor(*gaussian_fg);
+  // gtsam::JacobianFactor jacobian_factor(*gaussian_fg);
 
-  gtsam::GaussianConditional::shared_ptr conditional;
-  gtsam::JacobianFactor::shared_ptr joint_factor;
+  // gtsam::GaussianConditional::shared_ptr conditional;
+  // gtsam::JacobianFactor::shared_ptr joint_factor;
 
-  /// Not entirely sure the difference between the joint factor we get out and
-  /// the inital jacobian factor we get in I believe the difference is in the
-  /// ordering which we do NOT apply when constructing the jacobian_factor. I'm
-  /// not sure this is correct.
-  std::tie(conditional, joint_factor) = jacobian_factor.eliminate(ordering);
-  CHECK(conditional);
+  // /// Not entirely sure the difference between the joint factor we get out
+  // and
+  // /// the inital jacobian factor we get in I believe the difference is in the
+  // /// ordering which we do NOT apply when constructing the jacobian_factor.
+  // I'm
+  // /// not sure this is correct.
+  // std::tie(conditional, joint_factor) = jacobian_factor.eliminate(ordering);
+  // CHECK(conditional);
+
+  // const gtsam::VerticalBlockMatrix::constBlock R = conditional->R();
+
+  // // drawn image
+  // size_t nnz = 0;
+  // cv::Mat R_img(cv::Size(R.cols(), R.rows()), CV_8UC3,
+  // cv::viz::Color::white()); for (int i = 0; i < R.rows(); ++i) {
+  //   for (int j = 0; j < R.cols(); ++j) {
+  //     // only draw if non zero
+  //     if (std::fabs(R(i, j)) > 1e-15) {
+  //       R_img.at<cv::Vec3b>(i, j) = (cv::Vec3b)cv::viz::Color::black();
+  //       nnz++;
+  //     }
+  //   }
+  // }
+
+  // LOG(INFO) << "Number non-zero: " << nnz;
+  // //only values above the diagonal so area of triangle
+  // LOG(INFO) << "% non zeros " << ((double)nnz / (double)(R.cols() *
+  // R.rows())/2.0) * 100.0;
+
+  // // cv::imshow("R", R_img);
+  // // cv::waitKey(0);
+  // return std::make_pair(SparsityStats{}, R_img);
+
+  // calc num non zero for j
+  size_t nnz_J = 0;
+  const gtsam::Matrix J = gaussian_fg->jacobian().first;
+  for (int i = 0; i < J.rows(); ++i) {
+    for (int j = 0; j < J.cols(); ++j) {
+      // only draw if non zero
+      if (std::fabs(J(i, j)) > 1e-15) {
+        nnz_J++;
+      }
+    }
+  }
+
+  // auto [conditional, joint_factor] = gtsam::EliminateQR(*gaussian_fg,
+  // gtsam::Ordering::Colamd(*gaussian_fg));
+  auto [conditional, joint_factor] =
+      gtsam::EliminateCholesky(*gaussian_fg, ordering);
+
+  // gtsam::HessianFactor hessian_factor(*gaussian_fg);
+
+  // // gtsam::GaussianConditional::shared_ptr conditional =
+  // hessian_factor.eliminateCholesky(gtsam::Ordering(gaussian_fg->keys()));
+  // gtsam::GaussianConditional::shared_ptr conditional =
+  // hessian_factor.eliminateCholesky(ordering);
+  // gtsam::JacobianFactor::shared_ptr joint_factor;
+
+  // /// Not entirely sure the difference between the joint factor we get out
+  // and
+  // /// the inital jacobian factor we get in I believe the difference is in the
+  // /// ordering which we do NOT apply when constructing the jacobian_factor.
+  // I'm
+  // /// not sure this is correct.
+  // std::tie(conditional, joint_factor) = jacobian_factor.eliminate(ordering);
+  // CHECK(conditional);
 
   const gtsam::VerticalBlockMatrix::constBlock R = conditional->R();
 
   // drawn image
+  size_t nnz = 0;
   cv::Mat R_img(cv::Size(R.cols(), R.rows()), CV_8UC3, cv::viz::Color::white());
   for (int i = 0; i < R.rows(); ++i) {
     for (int j = 0; j < R.cols(); ++j) {
       // only draw if non zero
       if (std::fabs(R(i, j)) > 1e-15) {
         R_img.at<cv::Vec3b>(i, j) = (cv::Vec3b)cv::viz::Color::black();
+        nnz++;
       }
     }
   }
 
-  cv::imshow("R", R_img);
-  cv::waitKey(0);
+  LOG(INFO) << "Number non-zero R: " << nnz;
+  LOG(INFO) << "Number non-zero J: " << nnz_J;
+  // lower better
+  LOG(INFO) << "Fill in ratio: " << (double)nnz / (double)nnz_J;
+  // only values above the diagonal so area of triangle
+  LOG(INFO) << "% non zeros "
+            << ((double)nnz / (double)(R.cols() * R.rows()) / 2.0) * 100.0;
+
+  // cv::imshow("R", R_img);
+  // cv::waitKey(0);
+  return std::make_pair(SparsityStats{}, R_img);
+}
+
+gtsam::ISAM2Result ISAM2Visualiser::update(
+    const gtsam::NonlinearFactorGraph& newFactors,
+    const gtsam::Values& newTheta,
+    const gtsam::ISAM2UpdateParams& updateParams) {
+  const gtsam::ISAM2Result result =
+      Base::update(newFactors, newTheta, updateParams);
 }
 
 cv::Mat drawBlockJacobians(gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,

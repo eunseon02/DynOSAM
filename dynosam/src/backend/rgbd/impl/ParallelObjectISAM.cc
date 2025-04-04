@@ -30,8 +30,14 @@
 
 #include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
 
+#include <pcl/io/pcd_io.h>  //for dynamic map IO
+
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/utils/TimingStats.hpp"
+
+DEFINE_bool(save_per_frame_dynamic_cloud, false,
+            "To save the local map of each object after every update! WARNING: "
+            "may become memory intensive!!");
 
 namespace dyno {
 
@@ -52,7 +58,9 @@ ParallelObjectISAM::ParallelObjectISAM(
 
   decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
       formulation_params, map_, noise_models, formulation_hooks);
-  accessor_ = decoupled_formulation_->accessorFromTheta();
+  accessor_ = std::dynamic_pointer_cast<ObjectCentricAccessor>(
+      decoupled_formulation_->accessorFromTheta());
+  CHECK_NOTNULL(accessor_);
 }
 
 StateQuery<Motion3ReferenceFrame> ParallelObjectISAM::getFrame2FrameMotion(
@@ -380,6 +388,24 @@ void ParallelObjectISAM::updateStates() {
 
     result_.num_landmarks_marked = num_points_involved;
     result_.num_motions_marked = num_motions_involved;
+
+    // TODO: only flag - no paramter struct!
+    if (FLAGS_save_per_frame_dynamic_cloud) {
+      VLOG(10) << "Saving per frame dynamic cloud "
+               << info_string(result_.frame_id, object_id_);
+      StatusLandmarkVector object_map =
+          accessor_->getLocalDynamicLandmarkEstimates(object_id_);
+
+      pcl::PointCloud<pcl::PointXYZRGB> object_map_cloud;
+      convert(object_map, object_map_cloud);
+
+      std::string path = dyno::getOutputFilePath(
+          "object_map_k" + std::to_string(result_.frame_id) + "_j" +
+          std::to_string(object_id_) + ".pcd");
+      VLOG(10) << "Writing object map of size " << object_map_cloud.size()
+               << " - " << path;
+      pcl::io::savePCDFileASCII(path, object_map_cloud);
+    }
   }
   // else {
   //   LOG(WARNING) << "Could not update detailed motion results for frame "
@@ -409,6 +435,7 @@ void to_json(json& j, const ParallelObjectISAM::Result& result) {
   j["num_variables"] = result.num_variables;
   j["num_landmarks_marked"] = result.num_landmarks_marked;
   j["num_motions_marked"] = result.num_motions_marked;
+  j["dynamic_map"] = result.dynamic_map;
 }
 
 }  // namespace dyno

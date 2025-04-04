@@ -88,6 +88,7 @@ class BackendModule
   }
 
   const BackendParams& getParams() const { return base_params_; }
+  const NoiseModels& getNoiseModels() const { return noise_models_; }
 
  protected:
   // called in ModuleBase immediately before the spin function is called
