@@ -303,13 +303,13 @@ if __name__ == '__main__':
     # )
     # run_analysis("omd_swinging_4_unconstrained_long")
 
-    # prep_cluster_sequence(
-    #     "/root/data/cluster_slam/CARLA-L2/",
-    #     "cluster_l2",
-    #     "--starting_frame=33",
-    #     "--ending_frame=385",
-    #     "--init_object_pose_from_gt=true"
-    # )
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-L2/",
+        "cluster_l2",
+        "--starting_frame=33",
+        "--ending_frame=385",
+        "--init_object_pose_from_gt=true"
+    )
 
     # run_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L2/",

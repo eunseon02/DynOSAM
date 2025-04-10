@@ -36,6 +36,7 @@
 #include <fstream>
 #include <iostream>
 #include <opencv4/opencv2/opencv.hpp>
+// #include <opencv4/opencv2/core/parallel/backend/
 
 #include "dynosam/common/Types.hpp"  //for template to_string
 #include "dynosam/utils/GtsamUtils.hpp"
@@ -67,8 +68,10 @@ bool cvSizeEqual(const cv::Mat& a, const cv::Mat& b) {
 }
 
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point,
-                       const cv::Scalar& colour, const double msize) {
-  cv::circle(img, point, msize, colour, 2);
+                       const cv::Scalar& colour, const int radius,
+                       const int thickness) {
+  if (!matContains(img, point)) return;
+  cv::circle(img, point, radius, colour, thickness);
 }
 
 std::string cvTypeToString(int type) {
@@ -199,27 +202,52 @@ void flowToRgb(const cv::Mat& flow, cv::Mat& rgb) {
   cv::cvtColor(hsv8, rgb, cv::COLOR_HSV2BGR);
 }
 
-cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label,
-                       const cv::Mat& rgb) {
+void labelMaskToRGB(const cv::Mat& mask, const cv::Mat& rgb_input,
+                    cv::Mat& output, float alpha, int background_label) {
   CHECK(mask.channels() == 1) << "Expecting mask input to have channels 1";
-  CHECK(rgb.channels() == 3) << "Expecting rgb input to have channels 3";
-  cv::Mat mask_viz;
-  rgb.copyTo(mask_viz);
+  CHECK(rgb_input.channels() == 3) << "Expecting rgb input to have channels 3";
+  CHECK(cvSizeEqual(mask, rgb_input));
 
-  for (int i = 0; i < mask.rows; i++) {
-    for (int j = 0; j < mask.cols; j++) {
-      // background is zero
-      if (mask.at<int>(i, j) != background_label) {
-        cv::Scalar color = Color::uniqueId(mask.at<int>(i, j));
-        // rgb or bgr?
-        mask_viz.at<cv::Vec3b>(i, j)[0] = color[0];
-        mask_viz.at<cv::Vec3b>(i, j)[1] = color[1];
-        mask_viz.at<cv::Vec3b>(i, j)[2] = color[2];
+  rgb_input.copyTo(output);
+
+  FunctionalParallelOpenCVMat process(output, [&](cv::Mat& viz, int i, int j) {
+    const ObjectId* mask_ptr = mask.ptr<ObjectId>(i);
+    const ObjectId object_label = mask_ptr[j];
+    if (object_label != background_label) {
+      cv::Scalar color = Color::uniqueId(object_label).bgra();
+
+      cv::Vec3b* viz_row = viz.ptr<cv::Vec3b>(i);
+
+      // blend colour with existing values in viz_row size we have already
+      // copied the rgb input values into the output (referenced as viz)
+      for (int c = 0; c < 3; ++c) {
+        viz_row[j][c] = static_cast<uchar>(alpha * color[c] +
+                                           (1.0 - alpha) * viz_row[j][c]);
       }
     }
-  }
+  });
+  process.run();
+}
 
-  return mask_viz;
+cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label,
+                       const cv::Mat& rgb) {
+  cv::Mat output;
+  labelMaskToRGB(mask, rgb, output, 0.7, background_label);
+
+  // for (int i = 0; i < mask.rows; i++) {
+  //   for (int j = 0; j < mask.cols; j++) {
+  //     // background is zero
+  //     if (mask.at<int>(i, j) != background_label) {
+  //       cv::Scalar color = Color::uniqueId(mask.at<int>(i, j));
+  //       // rgb or bgr?
+  //       mask_viz.at<cv::Vec3b>(i, j)[0] = color[0];
+  //       mask_viz.at<cv::Vec3b>(i, j)[1] = color[1];
+  //       mask_viz.at<cv::Vec3b>(i, j)[2] = color[2];
+  //     }
+  //   }
+  // }
+
+  return output;
 }
 
 cv::Mat labelMaskToRGB(const cv::Mat& mask, int background_label) {
@@ -249,9 +277,11 @@ void getDisparityVis(cv::InputArray src, cv::OutputArray dst,
 
 void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
                             const cv::Scalar& colour,
-                            const cv::Rect& bounding_box) {
+                            const cv::Rect& bounding_box,
+                            const int& bb_thickness) {
   constexpr static double kFontScale = 0.6;
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
+  // text thickness
   constexpr static int kThickness = 1;
 
   // Top left corner.
@@ -276,8 +306,8 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
   // the image and we add a pixel buffer along y to make it look better
   cv::putText(image, label, cv::Point(tlc.x, tlc.y - 2), kFontFace, kFontScale,
               cv::Scalar(255, 255, 255), kThickness);
-  // draw bounding box with line thickness kThickness
-  cv::rectangle(image, bounding_box, colour, 2);
+  // draw bounding box with line thickness
+  cv::rectangle(image, bounding_box, colour, bb_thickness);
 }
 
 void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,

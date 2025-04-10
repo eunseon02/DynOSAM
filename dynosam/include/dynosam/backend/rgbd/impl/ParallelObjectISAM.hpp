@@ -158,7 +158,8 @@ class ParallelObjectISAM {
 
   std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id);
 
-  const gtsam::ISAM2& getSmoother() const { return *smoother_; }
+  inline const gtsam::ISAM2& getSmoother() const { return *smoother_; }
+  inline ObjectCentricAccessor::Ptr accessor() const { return accessor_; }
 
  private:
   template <typename DERIVEDSTATUS>

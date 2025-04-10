@@ -302,7 +302,6 @@ bool ParallelObjectISAM::optimize(
     LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist with variable "
                << DynoLikeKeyFormatter(e.key()) << " j=" << object_id_;
   }
-  LOG(INFO) << "here";
   return true;
 }
 

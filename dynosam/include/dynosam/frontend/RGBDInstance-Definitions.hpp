@@ -102,12 +102,12 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
       pcl::PointCloud<pcl::PointXYZRGB>::Ptr obj_cloud_ptr =
           pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>(
               this_object_cloud);
-      // ObjectBBX this_object_bbx = findOBBFromCloud(obj_cloud_ptr);
 
       // TODO: currently axis-aligned bounding box (not orientated bbx)
       ObjectBBX this_object_bbx =
           findAABBFromCloud<pcl::PointXYZRGB>(obj_cloud_ptr);
       object_bbxes_.insert2(object_id, this_object_bbx);
+      object_ids_.push_back(object_id);
     }
   }
 
@@ -129,6 +129,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   inline bool hasObject(ObjectId object_id) const {
     return object_clouds_.exists(object_id);
   }
+
+  inline const ObjectIds& getObjectIds() const { return object_ids_; }
 
   const pcl::PointCloud<pcl::PointXYZRGB>& getDynamicObjectPointCloud(
       ObjectId object_id) const {
@@ -157,6 +159,7 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   }
 
  private:
+  ObjectIds object_ids_;
   CloudPerObject object_clouds_;  //! Point clouds per object extracted from
                                   //! dynamic_landmarks_ in the world frame
   BbxPerObject object_bbxes_;  //! Bounding boxes per object extracted from the

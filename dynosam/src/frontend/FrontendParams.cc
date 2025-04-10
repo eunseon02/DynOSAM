@@ -63,6 +63,8 @@ void declare_config(FrontendParams& config) {
   field(config.ego_motion_solver_params, "camera_motion_solver");
   field(config.tracker_params, "tracker_params");
 
+  field(config.image_tracks_vis_params, "image_tracks_vis_params");
+
   // update with flags
   config.object_motion_solver_params.refine_motion_with_joint_of =
       FLAGS_refine_with_optical_flow;

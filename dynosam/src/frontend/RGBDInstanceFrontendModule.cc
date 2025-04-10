@@ -364,7 +364,8 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
 cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
     const Frame::Ptr& frame_k, const Frame::Ptr& frame_k_1,
     const ObjectPoseMap& object_poses) const {
-  cv::Mat tracking_image = tracker_->computeImageTracks(*frame_k_1, *frame_k);
+  cv::Mat tracking_image = tracker_->computeImageTracks(
+      *frame_k_1, *frame_k, base_params_.image_tracks_vis_params);
 
   const auto& camera_params = camera_->getParams();
   const auto& K = camera_params.getCameraMatrix();
@@ -384,7 +385,8 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
                    return X_k.inverse() * pair.second;
                  });
 
-  utils::drawObjectPoseAxes(tracking_image, K, D, poses_k_vec);
+  // TODO: bring back when visualisation is unified with incremental solver!!
+  //  utils::drawObjectPoseAxes(tracking_image, K, D, poses_k_vec);
   return tracking_image;
 }
 

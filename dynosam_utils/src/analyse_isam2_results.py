@@ -7,10 +7,10 @@ import sys
 # plt.rcdefaults()
 # results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
 
-file_name = "kitti_0003"
+file_name = "omd_swinging_4_unconstrained_long"
 out_data_path = "/root/results/Dynosam_ecmr2024/"
 # results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results.bson")[0]['data']
-results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0020/parallel_isam2_results.bson")[0]['data']
+results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
@@ -131,12 +131,12 @@ def compute_average(variable_name):
 # Plot each variable
 # plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
 # plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
-# plot_variable("timing", "Timing [ms]", "Accumulated Update Time", scale="log")
-# plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size Per Frame Per Object")
+plot_variable("timing", "Timing [ms]", "Accumulated Update Time", scale="log")
+plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size")
 # plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
-# plot_variable("num_variables", "Number Landmark Variables", r"Total Number Landmark Variables In $\theta$")
-# plot_variable("num_landmarks_marked", "Number Landmark Variables", r"Landmarks Involved In Update")
+plot_variable("num_variables", "Number Landmark Variables", r"Total Number Landmark Variables In $\theta$")
+plot_variable("num_landmarks_marked", "Number Landmark Variables", r"Landmarks Involved In Update")
 # plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 
-# plt.show()
-compute_average("timing")
+plt.show()
+# compute_average("timing")

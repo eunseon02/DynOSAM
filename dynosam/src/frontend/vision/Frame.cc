@@ -179,48 +179,88 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
   // Reserve memory for the cloud (approximate max size)
   // cloud->points.reserve(rows * cols);
   cloud->points.resize(rows * cols);
-  std::mutex mutex;
 
-  // Iterate using row pointers for fast access
-  tbb::parallel_for(0, rows, [&](int i) {  // Use TBB for parallelism
-    for (int j = 0; j < cols; j++) {
-      // Pointer-based access (faster than `at<>`)
-      const unsigned char* detection_ptr =
-          detection_mask ? detection_mask->ptr<unsigned char>(i) : nullptr;
-      const ObjectId* motion_mask_ptr = motion_mask.ptr<ObjectId>(i);
-      const Depth* depth_ptr = depth_image.ptr<Depth>(i);
+  // api needs image ref
+  // in this function we will not actually change the depth image
+  cv::Mat& depth_image_ref = const_cast<cv::Mat&>(depth_image);
+  FunctionalParallelOpenCVMat process(
+      depth_image_ref, [&](cv::Mat& depth_image, int i, int j) {
+        const unsigned char* detection_ptr =
+            detection_mask ? detection_mask->ptr<unsigned char>(i) : nullptr;
+        const ObjectId* motion_mask_ptr = motion_mask.ptr<ObjectId>(i);
+        const Depth* depth_ptr = depth_image.ptr<Depth>(i);
 
-      if (detection_mask && detection_ptr[j] == 0) continue;
+        if (detection_mask && detection_ptr[j] == 0) return;
 
-      const ObjectId object_id = motion_mask_ptr[j];
-      const Depth depth = depth_ptr[j];
+        const ObjectId object_id = motion_mask_ptr[j];
+        const Depth depth = depth_ptr[j];
 
-      double depth_thresh;
-      Color colour;
-      if (object_id == background_label) {
-        depth_thresh = max_background_threshold_;
-        colour = Color::black();
-      } else {
-        depth_thresh = max_object_threshold_;
-        colour = Color::uniqueId(object_id);
-      }
+        double depth_thresh;
+        Color colour;
+        if (object_id == background_label) {
+          depth_thresh = max_background_threshold_;
+          colour = Color::black();
+        } else {
+          depth_thresh = max_object_threshold_;
+          colour = Color::uniqueId(object_id);
+        }
 
-      if (depth > depth_thresh || depth <= 0 || !std::isfinite(depth)) continue;
+        if (depth > depth_thresh || depth <= 0 || !std::isfinite(depth)) return;
 
-      // Back-projection
-      const Keypoint kp(j, i);
-      Landmark point;
-      // this call is probably very slow
-      camera_->backProject(kp, depth, &point);
+        // Back-projection
+        const Keypoint kp(j, i);
+        Landmark point;
+        // this call is probably very slow
+        camera_->backProject(kp, depth, &point);
 
-      cloud->points[i * cols + j] = PointLabelRGB(
-          static_cast<float>(point(0)), static_cast<float>(point(1)),
-          static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
-          static_cast<std::uint8_t>(colour.g),
-          static_cast<std::uint8_t>(colour.b),
-          static_cast<std::uint32_t>(object_id));
-    }
-  });
+        cloud->points[i * cols + j] = PointLabelRGB(
+            static_cast<float>(point(0)), static_cast<float>(point(1)),
+            static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
+            static_cast<std::uint8_t>(colour.g),
+            static_cast<std::uint8_t>(colour.b),
+            static_cast<std::uint32_t>(object_id));
+      });
+  process.run();
+  // tbb::parallel_for(0, rows, [&](int i) {  // Use TBB for parallelism
+  //   for (int j = 0; j < cols; j++) {
+  //     // Pointer-based access (faster than `at<>`)
+  //     const unsigned char* detection_ptr =
+  //         detection_mask ? detection_mask->ptr<unsigned char>(i) : nullptr;
+  //     const ObjectId* motion_mask_ptr = motion_mask.ptr<ObjectId>(i);
+  //     const Depth* depth_ptr = depth_image.ptr<Depth>(i);
+
+  //     if (detection_mask && detection_ptr[j] == 0) continue;
+
+  //     const ObjectId object_id = motion_mask_ptr[j];
+  //     const Depth depth = depth_ptr[j];
+
+  //     double depth_thresh;
+  //     Color colour;
+  //     if (object_id == background_label) {
+  //       depth_thresh = max_background_threshold_;
+  //       colour = Color::black();
+  //     } else {
+  //       depth_thresh = max_object_threshold_;
+  //       colour = Color::uniqueId(object_id);
+  //     }
+
+  //     if (depth > depth_thresh || depth <= 0 || !std::isfinite(depth))
+  //     continue;
+
+  //     // Back-projection
+  //     const Keypoint kp(j, i);
+  //     Landmark point;
+  //     // this call is probably very slow
+  //     camera_->backProject(kp, depth, &point);
+
+  //     cloud->points[i * cols + j] = PointLabelRGB(
+  //         static_cast<float>(point(0)), static_cast<float>(point(1)),
+  //         static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
+  //         static_cast<std::uint8_t>(colour.g),
+  //         static_cast<std::uint8_t>(colour.b),
+  //         static_cast<std::uint32_t>(object_id));
+  //   }
+  // });
 
   cloud->width = cloud->points.size();
   cloud->height = 1;

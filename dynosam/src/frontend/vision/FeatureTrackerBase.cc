@@ -47,6 +47,28 @@ FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params,
       camera_(camera),
       display_queue_(display_queue) {}
 
+bool ImageTracksParams::showFrameInfo() const {
+  return isDebug() && show_frame_info;
+}
+
+bool ImageTracksParams::showIntermediateTracking() const {
+  return isDebug() && show_intermediate_tracking;
+}
+
+bool ImageTracksParams::drawObjectBoundingBox() const {
+  return isDebug() && draw_object_bounding_box;
+}
+bool ImageTracksParams::drawObjectMask() const {
+  return isDebug() && draw_object_mask;
+}
+
+int ImageTracksParams::bboxThickness() const {
+  return isDebug() ? bbox_thickness_debug : bbox_thickness;
+}
+int ImageTracksParams::featureThickness() const {
+  return isDebug() ? feature_thickness_debug : feature_thickness;
+}
+
 // doesnt make any sense for this function to be here?
 // Debug could be part of a global config singleton?
 cv::Mat FeatureTrackerBase::computeImageTracks(
@@ -55,22 +77,18 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   cv::Mat img_rgb;
 
   const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& object_mask =
+      current_frame.image_container_.get<ImageType::MotionMask>();
   rgb.copyTo(img_rgb);
 
-  const bool debug = config.is_debug;
-  const bool show_frame_info = debug && config.show_frame_info;
-  const bool show_intermediate_tracking =
-      debug && config.show_intermediate_tracking;
+  const bool& debug = config.isDebug();
+  const bool& show_intermediate_tracking = config.showIntermediateTracking();
+
+  const int static_point_thickness = config.featureThickness();
 
   static const cv::Scalar red(Color::red().bgra());
   static const cv::Scalar green(Color::green().bgra());
   static const cv::Scalar blue(Color::blue().bgra());
-
-  constexpr static int kFeatureThicknessDebug = 5;
-  constexpr static int kFeatureThickness = 4;
-  // constexpr static int kFeatureThickness = 7;
-  int static_point_thickness =
-      debug ? kFeatureThicknessDebug : kFeatureThickness;
 
   int num_static_tracks = 0;
   // Add all keypoints in cur_frame with the tracks.
@@ -124,6 +142,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     }
   }
 
+  const int bbox_thickness = config.bboxThickness();
+
   std::vector<ObjectId> objects_to_print;
   for (const auto& object_observation_pair :
        current_frame.object_observations_) {
@@ -136,10 +156,17 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     }
 
     objects_to_print.push_back(object_id);
-    const cv::Scalar colour = Color::uniqueId(object_id).bgra();
 
-    const std::string label = "object " + std::to_string(object_id);
-    utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
+    if (config.drawObjectBoundingBox()) {
+      const cv::Scalar colour = Color::uniqueId(object_id).bgra();
+      const std::string label = "object " + std::to_string(object_id);
+      utils::drawLabeledBoundingBox(img_rgb, label, colour, bb, bbox_thickness);
+    }
+  }
+
+  if (config.drawObjectMask()) {
+    constexpr static float kAlpha = 0.7;
+    utils::labelMaskToRGB(object_mask, img_rgb, img_rgb, kAlpha);
   }
 
   // draw text info
@@ -165,7 +192,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 1;
 
-  if (debug && show_frame_info) {
+  if (config.showFrameInfo()) {
     // taken from ORB-SLAM2 ;)
     int base_line;
     cv::Size text_size = cv::getTextSize(ss.str(), kFontFace, kFontScale,
@@ -197,6 +224,26 @@ bool FeatureTrackerBase::isWithinShrunkenImage(const Keypoint& kp) const {
           predicted_row < (image_rows - shrunken_row) &&
           predicted_col > shrunken_col &&
           predicted_col < (image_cols - shrunken_col));
+}
+
+void declare_config(ImageTracksParams& config) {
+  using namespace config;
+
+  name("ImageTracksParams");
+
+  field(config.feature_thickness_debug, "feature_thickness_debug");
+  field(config.feature_thickness, "feature_thickness");
+
+  field(config.bbox_thickness_debug, "bbox_thickness_debug");
+  field(config.bbox_thickness, "bbox_thickness");
+
+  field(config.show_frame_info, "show_frame_info");
+  field(config.show_intermediate_tracking, "show_intermediate_tracking");
+
+  field(config.draw_object_bounding_box, "draw_object_bounding_box");
+  field(config.draw_object_mask, "draw_object_mask");
+
+  field(config.is_debug, "is_debug");
 }
 
 }  // namespace dyno

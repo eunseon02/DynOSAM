@@ -45,24 +45,90 @@ namespace dyno {
 
 class CameraParams;
 
-// /// @brief adaptor struct to allow types to act like a cv::KeyPoint
 // template<typename T>
-// struct cv_keypoint_adaptor;
+// void processCVMatParallel(ParallelOpenCVMat<T>& processor) {
+//   cv::parallel_for_(cv::Range(0, processor.dataSize()), processor);
+// }
 
-// template<>
-// struct cv_keypoint_adaptor<cv::KeyPoint> {
-//   static float x(const cv::KeyPoint& f) { return f.pt.x; }
-//   static float y(const cv::KeyPoint& f) { return f.pt.y; }
-//   static float response(const cv::KeyPoint& f) { return f.response; }
-// };
+template <typename T>
+class ParallelOpenCVMat : public cv::ParallelLoopBody {
+ public:
+  using This = ParallelOpenCVMat<T>;
+
+  ParallelOpenCVMat(cv::Mat& img_ref) : img_(img_ref) {}
+
+  int dataSize() const { return img_.rows * img_.cols; }
+
+  void operator()(const cv::Range& range) const CV_OVERRIDE {
+    const T* derived = static_cast<const T*>(this);
+    CHECK_NOTNULL(derived);
+    for (int r = range.start; r < range.end; r++) {
+      int i = r / img_.cols;
+      int j = r % img_.cols;
+      derived->call(img_, i, j);
+    }
+  }
+
+  This& run() {
+    cv::parallel_for_(cv::Range(0, dataSize()), *this);
+    return *this;
+  }
+
+  ParallelOpenCVMat& operator=(const ParallelOpenCVMat&) { return *this; };
+
+ protected:
+  virtual void call(cv::Mat& img_ref, int i, int j) const = 0;
+
+ private:
+  cv::Mat& img_;
+};
+
+class FunctionalParallelOpenCVMat
+    : public ParallelOpenCVMat<FunctionalParallelOpenCVMat> {
+ public:
+  using Call = std::function<void(cv::Mat&, int, int)>;
+  using Base = ParallelOpenCVMat<FunctionalParallelOpenCVMat>;
+
+  FunctionalParallelOpenCVMat(cv::Mat& img_ref, const Call& call)
+      : Base(img_ref), call_(call) {}
+
+ private:
+  // allow the base class to access the derived call
+  friend Base;
+
+  void call(cv::Mat& img_ref, int i, int j) const override {
+    call_(img_ref, i, j);
+  }
+
+ private:
+  mutable Call call_;
+};
 
 namespace utils {
 
 bool cvSizeEqual(const cv::Size& a, const cv::Size& b);
 bool cvSizeEqual(const cv::Mat& a, const cv::Mat& b);
 
+/**
+ * @brief Returns true of the point is inside bounds of the cv::Mat.
+ *
+ * @tparam T Point template to work with any cv::Point type
+ * @param mat const cv::Mat&
+ * @param point const cv::Point_<T>&
+ * @return true
+ * @return false
+ */
+template <typename T>
+inline bool matContains(const cv::Mat& mat, const cv::Point_<T>& point) {
+  const auto x = static_cast<int>(point.x);
+  const auto y = static_cast<int>(point.y);
+  return x >= 0 && y >= 0 && x < mat.cols && y < mat.rows;
+}
+
+// checks if point is within image
 void drawCircleInPlace(cv::Mat& img, const cv::Point2d& point,
-                       const cv::Scalar& colour, const double msize = 0.4);
+                       const cv::Scalar& colour, const int radius = 1,
+                       const int thickness = 2);
 
 std::string cvTypeToString(int type);
 std::string cvTypeToString(const cv::Mat& mat);
@@ -78,6 +144,29 @@ cv::Mat concatenateImagesVertically(const cv::Mat& top_img,
                                     const cv::Mat& bottom_img);
 
 void flowToRgb(const cv::Mat& flow, cv::Mat& rgb);
+
+/**
+ * @brief Given an image that operates like a mask (ie. is a single channel
+ * image where each pixel value correspondes to a label of some type) draws the
+ * mask over an input image.
+ *
+ * The value at each pixel (labels) are treated like object labels which are
+ * used to generate a unique colour for the mask. The background label is used
+ * to indicate which pixel value should be ignored - this could be the
+ * background or simply unknown pixel values.
+ *
+ *
+ * Alpha is used to blend with mask ontop of the rgb image.
+ *
+ * @param mask const cv::Mat&
+ * @param rgb_input const cv::Mat&
+ * @param output cv::Mat&
+ * @param alpha float default value is 0.7
+ * @param background_label int default value is 0
+ */
+void labelMaskToRGB(const cv::Mat& mask, const cv::Mat& rgb_input,
+                    cv::Mat& output, float alpha = 0.7,
+                    int background_label = 0);
 
 /**
  * @brief Given an image that operates like a mask (ie. is a single channel
@@ -130,10 +219,12 @@ void getDisparityVis(cv::InputArray src, cv::OutputArray dst,
  * bounding box
  * @param colour const cv::Scalar& colour to draw the bounding box with
  * @param bounding_box const cv::Rect& bounding box to draw.
+ * @param bb_thickness const int& Line thickness for the boundong box
  */
 void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
                             const cv::Scalar& colour,
-                            const cv::Rect& bounding_box);
+                            const cv::Rect& bounding_box,
+                            const int& bb_thickness = 2);
 
 /**
  * @brief Projects SE(3) poses onto the image as an RGB axes.

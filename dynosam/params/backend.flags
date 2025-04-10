@@ -5,7 +5,7 @@
 # --constant_object_motion_translation_sigma=0.7
 
 # good for carla
---constant_object_motion_rotation_sigma=0.02
+--constant_object_motion_rotation_sigma=0.2
 --constant_object_motion_translation_sigma=0.1
 
 
@@ -35,7 +35,7 @@
 
 # for ISAM2 params using ParallelObjectSAM
 --use_relinearize_threshold_as_double=true
---relinearize_threshold=0.3
+--relinearize_threshold=0.1
 --X_trans_relinearize_threshold=20.0
 --X_rot_relinearize_threshold=20.0
 
@@ -44,7 +44,7 @@
 
 --m_relinearize_threshold=20.0
 
---num_dynamic_optimize=1
+--num_dynamic_optimize=3
 
 --save_per_frame_dynamic_cloud=false
 

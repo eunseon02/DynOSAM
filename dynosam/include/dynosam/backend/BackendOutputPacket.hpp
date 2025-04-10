@@ -50,6 +50,8 @@ struct BackendOutputPacket {
   ObjectMotionMap optimized_object_motions;
   ObjectPoseMap optimized_object_poses;
   gtsam::Pose3Vector optimized_camera_poses;
+  // streamline imagery with incremental visualisation tools!
+  cv::Mat debug_image;
 
   inline FrameId getFrameId() const { return frame_id; }
   inline Timestamp getTimestamp() const { return timestamp; }

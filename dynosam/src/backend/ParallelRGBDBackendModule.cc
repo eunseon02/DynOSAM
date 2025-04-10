@@ -205,9 +205,21 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   auto backend_output = constructOutputPacket(frame_k, timestamp);
   backend_output->involved_timestamp = input->involved_timestamps_;
 
+  auto static_accessor = static_formulation_->accessorFromTheta();
+  // draw trajectory on each object
+  constexpr static int kWindow = 30;
+  const int current_frame = static_cast<int>(frame_k);
+  int start_frame = std::max(current_frame - kWindow, 1);
+
+  if (input->debug_imagery_ && !input->debug_imagery_->rgb_viz.empty()) {
+    const cv::Mat& rgb = input->debug_imagery_->rgb_viz;
+    rgb.copyTo(backend_output->debug_image);
+  }
+
   for (const PerObjectUpdate& update : dynamic_updates) {
     const auto object_id = update.object_id;
     ParallelObjectISAM::Ptr estimator = getEstimator(object_id);
+    ObjectCentricAccessor::Ptr accessor = estimator->accessor();
     const auto result = estimator->getResult();
 
     if (!result.was_smoother_ok) {
@@ -218,7 +230,75 @@ ParallelRGBDBackendModule::nominalSpinImpl(
 
     CHECK_EQ(result.frame_id, frame_k);
     result_map_.insert22(object_id, result.frame_id, result);
+
+    // object poses in camera frame over some receeding time-horizon
+    // for visualisation
+    // very slow becuase we're query the accessor when we already have the
+    // information in the backend output
+    // TODO: fix!
+    std::vector<gtsam::Point2> L_X_projected_vec;
+    for (int i = start_frame; i <= current_frame; i++) {
+      FrameId k = static_cast<FrameId>(i);
+      StateQuery<gtsam::Pose3> X_W_k = static_accessor->getSensorPose(k);
+      StateQuery<gtsam::Pose3> L_W_k = accessor->getObjectPose(k, object_id);
+      if (X_W_k && L_W_k) {
+        gtsam::Pose3 L_X_k = X_W_k->inverse() * L_W_k.get();
+        // pose projected into the camera frame
+        gtsam::Point2 L_X_k_projected;
+        camera_->project(L_X_k.translation(), &L_X_k_projected);
+        L_X_projected_vec.push_back(L_X_k_projected);
+      }
+    }
+
+    if (!backend_output->debug_image.empty()) {
+      const cv::Scalar colour = Color::uniqueId(object_id).bgra();
+
+      for (size_t i = 0u; i < L_X_projected_vec.size(); i++) {
+        const gtsam::Point2& projected_point = L_X_projected_vec.at(i);
+        // https://github.com/mikel-brostrom/boxmot/blob/master/boxmot/trackers/basetracker.py
+        int trajectory_thickness =
+            static_cast<int>(std::sqrt(static_cast<float>(i + 1)) * 1.2f);
+        LOG(INFO) << trajectory_thickness;
+        const auto pc_cur = utils::gtsamPointToCv(projected_point);
+        // TODO: check point is in image?
+
+        utils::drawCircleInPlace(backend_output->debug_image, pc_cur, colour, 1,
+                                 trajectory_thickness);
+      }
+    }
   }
+
+  if (!backend_output->debug_image.empty() && display_queue_) {
+    display_queue_->push(
+        ImageToDisplay("Object Trajectories", backend_output->debug_image));
+  }
+
+  // if(input->debug_imagery_&& !input->debug_imagery_->rgb_viz.empty()) {
+  //   const cv::Mat& rgb = input->debug_imagery_->rgb_viz;
+
+  //   const auto& object_poses_map = backend_output->optimized_object_poses;
+
+  //   cv::Mat debug_image;
+  //   rgb.copyTo(debug_image);
+
+  //   auto static_accessor = static_formulation_->accessorFromTheta();
+
+  //   //draw trajectory on each object
+  //   constexpr static int kWindow = 30;
+  //   const int current_frame = static_cast<int>(frame_k);
+
+  //   //this is going to be slow as we have to iterate over all objects ....
+  //   for (const auto& [object_id, object_poses : object_poses_map]) {
+  //     int start_frame = std::max(current_frame - kWindow, 0);
+  //     for(int i = start_frame; i <= current_frame; i++) {
+  //       FrameId k = static_cast<FrameId>(i);
+
+  //       gtsam::Pose3 X_W_k = static_accessor->getCameraPose(k).get();
+  //       if(exists)
+  //     }
+  //   }
+
+  // }
 
   new_objects_estimators_.clear();
   return {State::Nominal, backend_output};

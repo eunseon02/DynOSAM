@@ -33,6 +33,7 @@
 #include <cmath>
 #include <string>
 
+#include "dynosam/frontend/vision/FeatureTrackerBase.hpp"  //for ImageTracksParams
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/vision/TrackerParams.hpp"
 
@@ -66,6 +67,7 @@ struct FrontendParams {
   EgoMotionSolver::Params ego_motion_solver_params = EgoMotionSolver::Params();
 
   TrackerParams tracker_params = TrackerParams();
+  ImageTracksParams image_tracks_vis_params = ImageTracksParams();
 };
 
 void declare_config(FrontendParams& config);

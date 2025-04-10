@@ -111,10 +111,11 @@ MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
 
     for (const auto& [frame_id, object_pose] : frame_pose_map) {
       if (!motions.exists(object_id, frame_id)) {
-        LOG(WARNING)
-            << "Cannot construct ObjectOdometry for object " << object_id
-            << ", at frame " << frame_id
-            << " for MultiObjectOdometryPath. Missing entry in ObjectMotionMap";
+        // LOG(WARNING)
+        //     << "Cannot construct ObjectOdometry for object " << object_id
+        //     << ", at frame " << frame_id
+        //     << " for MultiObjectOdometryPath. Missing entry in
+        //     ObjectMotionMap";
         continue;
       }
       const gtsam::Pose3& object_motion = motions.at(object_id, frame_id);

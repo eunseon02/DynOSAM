@@ -139,7 +139,10 @@ namespace dyno {
 StateQuery<gtsam::Pose3> ObjectCentricAccessor::getSensorPose(
     FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
-  CHECK_NOTNULL(frame_node);
+  if (!frame_node) {
+    return StateQuery<gtsam::Pose3>::InvalidMap();
+  }
+  // CHECK_NOTNULL(frame_node);
   return this->query<gtsam::Pose3>(frame_node->makePoseKey());
 }
 
@@ -204,9 +207,12 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
   // we estimate a motion ^w_{s0}H_k, so we can compute a pose ^wL_k =
   // ^w_{s0}H_k * ^wL_{s0}
   const auto frame_node_k = map()->getFrame(frame_id);
+  if (!frame_node_k) {
+    return StateQuery<gtsam::Pose3>::InvalidMap();
+  }
+
   gtsam::Key motion_key = frame_node_k->makeObjectMotionKey(object_id);
   gtsam::Key pose_key = frame_node_k->makeObjectPoseKey(object_id);
-  CHECK(frame_node_k);
   /// hmmm... if we do a query after we do an update but before an optimise then
   /// the motion will
   // be whatever we initalised it with
