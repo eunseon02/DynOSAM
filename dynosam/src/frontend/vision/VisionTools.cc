@@ -551,7 +551,7 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
   // Additionally erode a little but on the inner-side of the mask
   // This helps get rid of pixels directly on the boarder which often have poor
   // depth
-  static constexpr int inner_thickness = 4;
+  static constexpr int inner_thickness = 10;
   // Generate the inner border
   cv::Mat eroded_mask;
   cv::erode(thicc_boarder, eroded_mask,
@@ -568,7 +568,7 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask,
                   const ObjectIds& old_labels, const ObjectIds& new_labels) {
-  if (old_labels.size() != old_labels.size()) {
+  if (old_labels.size() != new_labels.size()) {
     throw std::invalid_argument(
         "Old labels and new labels must have the same size");
   }

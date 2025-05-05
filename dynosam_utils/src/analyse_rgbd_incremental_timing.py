@@ -1,7 +1,7 @@
 import csv
 
-file = "/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/object_centric_isam2_timing_inc.csv"
-# file = "/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/rgbd_motion_world_isam2_timing_inc.csv"
+# file = "/root/results/Dynosam_ecmr2024/kitti_0020/object_centric_isam2_timing_inc.csv"
+file = "/root/results/Dynosam_ecmr2024/kitti_0020/rgbd_motion_world_isam2_timing_inc.csv"
 
 with open(file) as csvfile:
     reader = csv.reader(csvfile)

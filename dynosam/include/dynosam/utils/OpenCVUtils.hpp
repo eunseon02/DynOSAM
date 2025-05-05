@@ -45,11 +45,6 @@ namespace dyno {
 
 class CameraParams;
 
-// template<typename T>
-// void processCVMatParallel(ParallelOpenCVMat<T>& processor) {
-//   cv::parallel_for_(cv::Range(0, processor.dataSize()), processor);
-// }
-
 template <typename T>
 class ParallelOpenCVMat : public cv::ParallelLoopBody {
  public:

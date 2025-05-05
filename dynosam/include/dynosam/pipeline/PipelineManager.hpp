@@ -73,6 +73,9 @@ class DynoPipelineManager {
   void shutdownSpinners();
   void shutdownPipelines();
 
+  // PipelineBase::UniquePtr makeFrontendPipeline(Camera::Ptr camera, bool
+  // offline_frontend); BackendPipeline::UniquePtr makeBackendPipeline();
+
   void loadPipelines(const CameraParams& camera_params,
                      FrontendDisplay::Ptr frontend_display,
                      BackendDisplay::Ptr backend_display);

@@ -157,12 +157,13 @@ ParallelRGBDBackendModule::boostrapSpinImpl(
   const Timestamp timestamp = input->getTimestamp();
   // TODO: sovle smoother
   //  non-sequentially?
+  std::vector<PerObjectUpdate> dynamic_updates = collectPerObjectUpdates(input);
   Pose3Measurement optimized_camera_pose =
       bootstrapUpdateStaticEstimator(input);
 
-  // collect measurements into dynamic and static
-  std::vector<PerObjectUpdate> dynamic_updates =
-      collectMeasurements(input, optimized_camera_pose);
+  for (PerObjectUpdate& update : dynamic_updates) {
+    update.X_k_measurement = optimized_camera_pose;
+  }
 
   parallelObjectSolve(dynamic_updates);
 
@@ -192,12 +193,19 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   const FrameId frame_k = input->getFrameId();
   const Timestamp timestamp = input->getTimestamp();
   // TODO: sovle smoother
+  std::vector<PerObjectUpdate> dynamic_updates = collectPerObjectUpdates(input);
+  bool has_objects = dynamic_updates.size() > 0u;
+  bool requires_covariance_calc = has_objects;
   //  non-sequentially?
-  Pose3Measurement optimized_camera_pose = nominalUpdateStaticEstimator(input);
-  // collect measurements into dynamic and static
-  std::vector<PerObjectUpdate> dynamic_updates =
-      collectMeasurements(input, optimized_camera_pose);
-  parallelObjectSolve(dynamic_updates);
+  Pose3Measurement optimized_camera_pose =
+      nominalUpdateStaticEstimator(input, requires_covariance_calc);
+
+  if (has_objects) {
+    for (PerObjectUpdate& update : dynamic_updates) {
+      update.X_k_measurement = optimized_camera_pose;
+    }
+    parallelObjectSolve(dynamic_updates);
+  }
   // get estimator
   // should add previous measurements
   // updaet map
@@ -258,7 +266,7 @@ ParallelRGBDBackendModule::nominalSpinImpl(
         // https://github.com/mikel-brostrom/boxmot/blob/master/boxmot/trackers/basetracker.py
         int trajectory_thickness =
             static_cast<int>(std::sqrt(static_cast<float>(i + 1)) * 1.2f);
-        LOG(INFO) << trajectory_thickness;
+        // LOG(INFO) << trajectory_thickness;
         const auto pc_cur = utils::gtsamPointToCv(projected_point);
         // TODO: check point is in image?
 
@@ -272,33 +280,6 @@ ParallelRGBDBackendModule::nominalSpinImpl(
     display_queue_->push(
         ImageToDisplay("Object Trajectories", backend_output->debug_image));
   }
-
-  // if(input->debug_imagery_&& !input->debug_imagery_->rgb_viz.empty()) {
-  //   const cv::Mat& rgb = input->debug_imagery_->rgb_viz;
-
-  //   const auto& object_poses_map = backend_output->optimized_object_poses;
-
-  //   cv::Mat debug_image;
-  //   rgb.copyTo(debug_image);
-
-  //   auto static_accessor = static_formulation_->accessorFromTheta();
-
-  //   //draw trajectory on each object
-  //   constexpr static int kWindow = 30;
-  //   const int current_frame = static_cast<int>(frame_k);
-
-  //   //this is going to be slow as we have to iterate over all objects ....
-  //   for (const auto& [object_id, object_poses : object_poses_map]) {
-  //     int start_frame = std::max(current_frame - kWindow, 0);
-  //     for(int i = start_frame; i <= current_frame; i++) {
-  //       FrameId k = static_cast<FrameId>(i);
-
-  //       gtsam::Pose3 X_W_k = static_accessor->getCameraPose(k).get();
-  //       if(exists)
-  //     }
-  //   }
-
-  // }
 
   new_objects_estimators_.clear();
   return {State::Nominal, backend_output};
@@ -342,7 +323,8 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
 }
 
 Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
-    RGBDInstanceOutputPacket::ConstPtr input) {
+    RGBDInstanceOutputPacket::ConstPtr input,
+    bool should_calculate_covariance) {
   utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
 
   const FrameId frame_k = input->getFrameId();
@@ -385,23 +367,24 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
 
   CHECK(T_w_k_opt_query);
 
-  gtsam::Matrix66 T_w_k_cov;
-  {
+  if (should_calculate_covariance) {
+    gtsam::Matrix66 T_w_k_cov;
     utils::TimingStatsCollector timer(
         "parallel_object_sam.camera_pose_cov_calc");
     gtsam::Marginals marginals(static_estimator_.getFactorsUnsafe(),
                                optimised_values,
                                gtsam::Marginals::Factorization::CHOLESKY);
     T_w_k_cov = marginals.marginalCovariance(T_w_k_opt_query.key());
-  }
+    return Pose3Measurement(T_w_k_opt_query.get(), T_w_k_cov);
 
-  return Pose3Measurement(T_w_k_opt_query.get(), T_w_k_cov);
+  } else {
+    return Pose3Measurement(T_w_k_opt_query.get());
+  }
 }
 
 std::vector<ParallelRGBDBackendModule::PerObjectUpdate>
-ParallelRGBDBackendModule::collectMeasurements(
-    RGBDInstanceOutputPacket::ConstPtr input,
-    const Pose3Measurement& X_k_measurement) const {
+ParallelRGBDBackendModule::collectPerObjectUpdates(
+    RGBDInstanceOutputPacket::ConstPtr input) const {
   GenericTrackedStatusVector<LandmarkKeypointStatus> all_dynamic_measurements =
       input->collectDynamicLandmarkKeypointMeasurements();
 
@@ -429,7 +412,7 @@ ParallelRGBDBackendModule::collectMeasurements(
     object_update.frame_id = frame_id_k;
     object_update.object_id = object_id;
     object_update.measurements = collected_measurements;
-    object_update.X_k_measurement = X_k_measurement;
+    // object_update.X_k_measurement = X_k_measurement;
 
     CHECK(estimated_motions.exists(object_id));
     object_update.H_k_measurement = estimated_motions.at(object_id);

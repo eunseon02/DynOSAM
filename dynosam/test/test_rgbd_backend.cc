@@ -734,9 +734,9 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
       noise_params);
 
   // add one obect
-  const size_t num_points = 20;
+  const size_t num_points = 3;
   const size_t obj1_overlap = 4;
-  const size_t obj2_overlap = 3;
+  const size_t obj2_overlap = 4;
   const size_t obj3_overlap = 4;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
@@ -769,11 +769,11 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
                            gtsam::Point3(0.2, 0.3, 0))),
           std::make_unique<dyno_testing::RandomOverlapObjectPointsVisitor>(
               num_points, obj3_overlap),
-          dyno_testing::ObjectBodyParams(13, 19));
+          dyno_testing::ObjectBodyParams(0, 19));
 
   scenario.addObjectBody(1, object1);
-  //   scenario.addObjectBody(2, object2);
-  //   scenario.addObjectBody(3, object3);
+  scenario.addObjectBody(2, object2);
+  scenario.addObjectBody(3, object3);
 
   dyno::BackendParams backend_params;
   backend_params.use_robust_kernals_ = false;

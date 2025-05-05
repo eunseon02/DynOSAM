@@ -66,7 +66,8 @@ class ParallelRGBDBackendModule
   Pose3Measurement bootstrapUpdateStaticEstimator(
       RGBDInstanceOutputPacket::ConstPtr input);
   Pose3Measurement nominalUpdateStaticEstimator(
-      RGBDInstanceOutputPacket::ConstPtr input);
+      RGBDInstanceOutputPacket::ConstPtr input,
+      bool should_calculate_covariance = true);
 
   struct PerObjectUpdate {
     FrameId frame_id;
@@ -76,9 +77,8 @@ class ParallelRGBDBackendModule
     Motion3ReferenceFrame H_k_measurement;
   };
 
-  std::vector<PerObjectUpdate> collectMeasurements(
-      RGBDInstanceOutputPacket::ConstPtr input,
-      const Pose3Measurement& X_k_measurement) const;
+  std::vector<PerObjectUpdate> collectPerObjectUpdates(
+      RGBDInstanceOutputPacket::ConstPtr input) const;
 
   ParallelObjectISAM::Ptr getEstimator(ObjectId object_id,
                                        bool* is_object_new = nullptr);

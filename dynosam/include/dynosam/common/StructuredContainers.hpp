@@ -295,11 +295,8 @@ class MultiFrameRangeData {
   using This = MultiFrameRangeData<V, T>;
   using FrameRangeT = FrameRange<T>;
   using FrameRangeDataTVector = FrameRangeData<T>;
-  //     gtsam::FastMap<V, typename FrameRangeT::Ptr> active_ranges;
 
   MultiFrameRangeData() {}
-  // MultiFrameRangeData(const FrameRangeT& initial_range) {
-  // updateRanges(std::make_shared<FrameRangeT>(initial_range), nullptr); }
 
   const typename FrameRangeT::ConstPtr find(V query, FrameId frame_id) const {
     if (!ranges.exists(query)) {

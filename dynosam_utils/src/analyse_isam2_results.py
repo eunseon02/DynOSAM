@@ -6,16 +6,18 @@ import sys
 
 # plt.rcdefaults()
 # results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
+# results = load_bson("/root/results/D/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
+
 
 file_name = "omd_swinging_4_unconstrained_long"
 out_data_path = "/root/results/Dynosam_ecmr2024/"
 # results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results.bson")[0]['data']
-results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
 
-# results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
+results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/DynoSAM/incremental_kitti_00_test/parallel_isam2_results.bson")[0]['data']
 # results = load_bson("/root/results/DynoSAM/incremental_test/parallel_isam2_results.bson")[0]['data']
@@ -25,7 +27,7 @@ results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_re
 object_map = {}
 
 plt.rcdefaults()
-startup_plotting(20)
+startup_plotting(25)
 
 
 
@@ -132,10 +134,10 @@ def compute_average(variable_name):
 # plot_variable("variables_reeliminated", "Variables Reeliminated", "Number of Variables Reeliminated Per Frame Per Object")
 # plot_variable("variables_relinearized", "Variables Relinearized", "Number of Variables Relinearized Per Frame Per Object")
 plot_variable("timing", "Timing [ms]", "Accumulated Update Time", scale="log")
-plot_variable("average_clique_size", "Avg. Clique Size", "Avg. Clique Size")
+plot_variable("average_clique_size", "Number of variables", "Avg. Clique Size")
 # plot_variable("max_clique_size", "Max Clique Size", "Max Clique Size Per Frame Per Object")
-plot_variable("num_variables", "Number Landmark Variables", r"Total Number Landmark Variables In $\theta$")
-plot_variable("num_landmarks_marked", "Number Landmark Variables", r"Landmarks Involved In Update")
+plot_variable("num_variables", "Number of variables", r"Dynamic Map Size")
+plot_variable("num_landmarks_marked", "Number landmark variables", r"Landmarks Involved In Update")
 # plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 
 plt.show()
