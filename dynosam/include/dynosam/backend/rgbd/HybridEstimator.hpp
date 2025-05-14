@@ -779,10 +779,9 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
       object_motions_triangulation_;  //! current triangulation object motions
 };
 
-using ObjectCentricSmartFactor =
-    SmartMotionFactor<3, gtsam::Pose3, gtsam::Pose3>;
+using HybridSmartFactor = SmartMotionFactor<3, gtsam::Pose3, gtsam::Pose3>;
 
-struct ObjectCentricProperties {
+struct HybridFormulationProperties {
   inline gtsam::Symbol makeDynamicKey(TrackletId tracklet_id) const {
     return (gtsam::Symbol)DynamicLandmarkSymbol(0u, tracklet_id);
   }
@@ -791,19 +790,19 @@ struct ObjectCentricProperties {
 using KeyFrameData = MultiFrameRangeData<ObjectId, gtsam::Pose3>;
 using KeyFrameRange = KeyFrameData::FrameRangeT;
 
-class ObjectCentricAccessor : public Accessor<Map3d2d>,
-                              public ObjectCentricProperties {
+class HybridAccessor : public Accessor<Map3d2d>,
+                       public HybridFormulationProperties {
  public:
-  DYNO_POINTER_TYPEDEFS(ObjectCentricAccessor)
+  DYNO_POINTER_TYPEDEFS(HybridAccessor)
 
-  ObjectCentricAccessor(
+  HybridAccessor(
       const SharedFormulationData& shared_data, Map3d2d::Ptr map,
       const KeyFrameData* key_frame_data,
       const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe)
       : Accessor<Map3d2d>(shared_data, map),
         key_frame_data_(key_frame_data),
         tracklet_id_to_keyframe_(tracklet_id_to_keyframe) {}
-  virtual ~ObjectCentricAccessor() {}
+  virtual ~HybridAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
   StateQuery<gtsam::Pose3> getObjectMotion(FrameId frame_id,
@@ -852,23 +851,21 @@ class ObjectCentricAccessor : public Accessor<Map3d2d>,
   const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe_;
 };
 
-// TODO: should all be in keyframe_object_centric namespace!!
-class ObjectCentricFormulation : public Formulation<Map3d2d>,
-                                 public ObjectCentricProperties {
+class HybridFormulation : public Formulation<Map3d2d>,
+                          public HybridFormulationProperties {
  public:
   using Base = Formulation<Map3d2d>;
   using Base::AccessorTypePointer;
   using Base::ObjectUpdateContextType;
   using Base::PointUpdateContextType;
 
-  DYNO_POINTER_TYPEDEFS(ObjectCentricFormulation)
+  DYNO_POINTER_TYPEDEFS(HybridFormulation)
 
-  ObjectCentricFormulation(const FormulationParams& params,
-                           typename Map::Ptr map,
-                           const NoiseModels& noise_models,
-                           const FormulationHooks& hooks)
+  HybridFormulation(const FormulationParams& params, typename Map::Ptr map,
+                    const NoiseModels& noise_models,
+                    const FormulationHooks& hooks)
       : Base(params, map, noise_models, hooks) {}
-  virtual ~ObjectCentricFormulation() {}
+  virtual ~HybridFormulation() {}
 
   virtual void dynamicPointUpdateCallback(
       const PointUpdateContextType& context, UpdateObservationResult& result,
@@ -901,7 +898,7 @@ class ObjectCentricFormulation : public Formulation<Map3d2d>,
  protected:
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
-    return std::make_shared<ObjectCentricAccessor>(
+    return std::make_shared<HybridAccessor>(
         shared_data, this->map(), &key_frame_data_, &all_dynamic_landmarks_);
   }
 

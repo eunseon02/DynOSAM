@@ -45,7 +45,7 @@
 #include <opengv/sac_problems/relative_pose/TranslationOnlySacProblem.hpp>
 #include <optional>
 
-#include "dynosam/backend/rgbd/impl/DecoupledObjectSAM.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"  //for formulation hooks
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -407,51 +407,6 @@ class ObjectMotionSovlerF2F : public ObjectMotionSolver,
  protected:
   const ObjectMotionSovlerF2F::Params object_motion_params;
 };
-
-class ObjectMotionSolverSAM : public ObjectMotionSolver {
- public:
-  DYNO_POINTER_TYPEDEFS(ObjectMotionSolverSAM)
-
-  //! Result from solve including the object motions and poses
-  using ObjectMotionSolver::Result;
-
-  ObjectMotionSolverSAM(
-      const ObjectMotionSovlerF2F::Params& geometric_motion_sovler_params,
-      const CameraParams& camera_params,
-      const gtsam::ISAM2Params& isam2_params);
-
-  Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) override;
-
-  void setRepresentationStyle(const MotionRepresentationStyle& style) {
-    // TODO: lock
-    output_style_ = style;
-  }
-
- private:
-  Result mergeObjectMaps() const;
-
-  GenericTrackedStatusVector<LandmarkKeypointStatus> createMeasurementVector(
-      Frame::Ptr frame, ObjectId object_id) const;
-
-  // internal functions used in solve which are thread safe
-  Motion3SolverResult initialPnPSolve(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-                                      ObjectId object_id);
-  DecoupledObjectSAM::Ptr getEstimator(ObjectId object_id);
-
-  // construct object motion map functor based on outputstyle
-  std::function<ObjectMotionMap(DecoupledObjectSAM::Ptr)>
-  getObjectMotionMapFunc() const;
-
- private:
-  const gtsam::ISAM2Params isam2_params_;
-  mutable std::mutex mutex_;
-  gtsam::FastMap<ObjectId, DecoupledObjectSAM::Ptr> sam_estimators_;
-  ObjectMotionSovlerF2F::Ptr geometric_solver_;
-
-  MotionRepresentationStyle output_style_;
-};
-
-class TrackingIsamAgent {};
 
 void declare_config(OpticalFlowAndPoseOptimizer::Params& config);
 void declare_config(MotionOnlyRefinementOptimizer::Params& config);

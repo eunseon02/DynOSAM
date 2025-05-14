@@ -34,8 +34,8 @@
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendModule.hpp"
 #include "dynosam/backend/Formulation.hpp"
+#include "dynosam/backend/ParallelObjectISAM.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
-#include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
 
@@ -97,7 +97,7 @@ class ParallelRGBDBackendModule
   mutable std::mutex mutex_;
 
   gtsam::ISAM2Params static_isam2_params_;
-  ObjectCentricFormulation::UniquePtr static_formulation_;
+  HybridFormulation::UniquePtr static_formulation_;
   gtsam::ISAM2 static_estimator_;
 
   gtsam::ISAM2Params dynamic_isam2_params_;

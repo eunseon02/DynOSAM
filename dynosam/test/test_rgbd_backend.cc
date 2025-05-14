@@ -95,9 +95,9 @@ TEST(RGBDBackendModule, smallKITTIDataset) {
   backend_params.useLogger(false);
   backend_params.min_dynamic_obs_ = 1u;
 
-  dyno::RGBDBackendModule backend(
-      backend_params, dyno_testing::makeDefaultCameraPtr(),
-      dyno::RGBDBackendModule::UpdaterType::ObjectCentric);
+  dyno::RGBDBackendModule backend(backend_params,
+                                  dyno_testing::makeDefaultCameraPtr(),
+                                  dyno::RGBDBackendModule::UpdaterType::HYBRID);
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
@@ -787,7 +787,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   auto object_centric_backend = tester.addTester<IncrementalTester>(
       std::make_shared<dyno::RGBDBackendModule>(
           backend_params, dyno_testing::makeDefaultCameraPtr(),
-          dyno::RGBDBackendModule::UpdaterType::ObjectCentric));
+          dyno::RGBDBackendModule::UpdaterType::HYBRID));
 
   auto oc_noise_models = object_centric_backend->getNoiseModels();
   CHECK(!oc_noise_models.initial_pose_prior->isConstrained());
@@ -801,7 +801,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   auto world_centric_backend = tester.addTester<IncrementalTester>(
       std::make_shared<dyno::RGBDBackendModule>(
           backend_params, dyno_testing::makeDefaultCameraPtr(),
-          dyno::RGBDBackendModule::UpdaterType::MotionInWorld));
+          dyno::RGBDBackendModule::UpdaterType::WCME));
 
   //   tester.addTester<IncrementalTester>(std::make_shared<dyno::RGBDBackendModule>(
   //       backend_params, dyno_testing::makeDefaultCameraPtr(),
@@ -945,9 +945,9 @@ TEST(RGBDBackendModule, testObjectCentric) {
   backend_params.min_dynamic_obs_ = 3u;
   backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
 
-  dyno::RGBDBackendModule backend(backend_params,
-                                  dyno_testing::makeDefaultCameraPtr(),
-                                  dyno::RGBDBackendModule::UpdaterType::OC_SD);
+  dyno::RGBDBackendModule backend(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::TESTING_HYBRID_SD);
 
   gtsam::ISAM2Params isam2_params;
   isam2_params.evaluateNonlinearError = true;

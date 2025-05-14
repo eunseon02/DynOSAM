@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/backend/rgbd/HybridEstimator.hpp"
 
 #include <gtsam/slam/PoseRotationPrior.h>
 
@@ -136,8 +136,7 @@ namespace dyno {
 //   }
 // };
 
-StateQuery<gtsam::Pose3> ObjectCentricAccessor::getSensorPose(
-    FrameId frame_id) const {
+StateQuery<gtsam::Pose3> HybridAccessor::getSensorPose(FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
   if (!frame_node) {
     return StateQuery<gtsam::Pose3>::InvalidMap();
@@ -146,7 +145,7 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getSensorPose(
   return this->query<gtsam::Pose3>(frame_node->makePoseKey());
 }
 
-StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
+StateQuery<gtsam::Pose3> HybridAccessor::getObjectMotion(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node_k = map()->getFrame(frame_id);
   const auto frame_node_k_1 = map()->getFrame(frame_id - 1u);
@@ -202,7 +201,7 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectMotion(
   return StateQuery<gtsam::Pose3>::InvalidMap();
 }
 
-StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
+StateQuery<gtsam::Pose3> HybridAccessor::getObjectPose(
     FrameId frame_id, ObjectId object_id) const {
   // we estimate a motion ^w_{s0}H_k, so we can compute a pose ^wL_k =
   // ^w_{s0}H_k * ^wL_{s0}
@@ -236,7 +235,7 @@ StateQuery<gtsam::Pose3> ObjectCentricAccessor::getObjectPose(
     return StateQuery<gtsam::Pose3>::NotInMap(pose_key);
   }
 }
-StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
+StateQuery<gtsam::Point3> HybridAccessor::getDynamicLandmark(
     FrameId frame_id, TrackletId tracklet_id) const {
   StateQuery<gtsam::Point3> query_m_W;
   DynamicLandmarkQuery query;
@@ -295,7 +294,7 @@ StateQuery<gtsam::Point3> ObjectCentricAccessor::getDynamicLandmark(
   // }
 }
 
-StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
+StatusLandmarkVector HybridAccessor::getDynamicLandmarkEstimates(
     FrameId frame_id, ObjectId object_id) const {
   const auto frame_node = map()->getFrame(frame_id);
 
@@ -333,7 +332,7 @@ StatusLandmarkVector ObjectCentricAccessor::getDynamicLandmarkEstimates(
   return estimates;
 }
 
-StatusLandmarkVector ObjectCentricAccessor::getLocalDynamicLandmarkEstimates(
+StatusLandmarkVector HybridAccessor::getLocalDynamicLandmarkEstimates(
     ObjectId object_id) const {
   const auto object_node = map()->getObject(object_id);
   if (!object_node) {
@@ -389,9 +388,9 @@ StatusLandmarkVector ObjectCentricAccessor::getLocalDynamicLandmarkEstimates(
   return estimates;
 }
 
-bool ObjectCentricAccessor::getDynamicLandmarkImpl(
-    FrameId frame_id, TrackletId tracklet_id,
-    DynamicLandmarkQuery& query) const {
+bool HybridAccessor::getDynamicLandmarkImpl(FrameId frame_id,
+                                            TrackletId tracklet_id,
+                                            DynamicLandmarkQuery& query) const {
   if (!tracklet_id_to_keyframe_->exists(tracklet_id)) {
     return false;
   }
@@ -473,7 +472,7 @@ bool ObjectCentricAccessor::getDynamicLandmarkImpl(
   }
 }
 
-bool ObjectCentricAccessor::getDynamicLandmarkImpl(
+bool HybridAccessor::getDynamicLandmarkImpl(
     FrameId frame_id, TrackletId tracklet_id,
     StateQuery<gtsam::Point3>* query_m_W, StateQuery<gtsam::Point3>* query_m_L,
     StateQuery<gtsam::Pose3>* query_H_W_e_k,
@@ -487,7 +486,7 @@ bool ObjectCentricAccessor::getDynamicLandmarkImpl(
   return getDynamicLandmarkImpl(frame_id, tracklet_id, query);
 }
 
-std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::forceNewKeyFrame(
+std::pair<FrameId, gtsam::Pose3> HybridFormulation::forceNewKeyFrame(
     FrameId frame_id, ObjectId object_id) {
   LOG(INFO) << "Starting new range of object k=" << frame_id
             << " j=" << object_id;
@@ -514,12 +513,12 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::forceNewKeyFrame(
 }
 
 // TODO: no keyframing
-bool ObjectCentricFormulation::hasObjectKeyFrame(ObjectId object_id,
-                                                 FrameId frame_id) const {
+bool HybridFormulation::hasObjectKeyFrame(ObjectId object_id,
+                                          FrameId frame_id) const {
   // return L0_.exists(object_id);
   return static_cast<bool>(key_frame_data_.find(object_id, frame_id));
 }
-std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getObjectKeyFrame(
+std::pair<FrameId, gtsam::Pose3> HybridFormulation::getObjectKeyFrame(
     ObjectId object_id, FrameId frame_id) const {
   const KeyFrameRange::ConstPtr range =
       key_frame_data_.find(object_id, frame_id);
@@ -527,7 +526,7 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getObjectKeyFrame(
   return range->dataPair();
 }
 
-StateQuery<Motion3ReferenceFrame> ObjectCentricFormulation::getEstimatedMotion(
+StateQuery<Motion3ReferenceFrame> HybridFormulation::getEstimatedMotion(
     ObjectId object_id, FrameId frame_id) const {
   // not in form of accessor but in form of estimation
   const auto frame_node_k = map()->getFrame(frame_id);
@@ -553,7 +552,7 @@ StateQuery<Motion3ReferenceFrame> ObjectCentricFormulation::getEstimatedMotion(
   return StateQuery<Motion3ReferenceFrame>(H_W_s0_k.key(), motion);
 }
 
-void ObjectCentricFormulation::dynamicPointUpdateCallback(
+void HybridFormulation::dynamicPointUpdateCallback(
     const PointUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
   // //acrew PointUpdateContextType for each object and trigger the update
@@ -690,7 +689,7 @@ void ObjectCentricFormulation::dynamicPointUpdateCallback(
         .num_dynamic_factors++;
 }
 
-void ObjectCentricFormulation::objectUpdateContext(
+void HybridFormulation::objectUpdateContext(
     const ObjectUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
   auto frame_node_k = context.frame_node_k;
@@ -783,7 +782,7 @@ void ObjectCentricFormulation::objectUpdateContext(
   }
 }
 
-std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
+std::pair<FrameId, gtsam::Pose3> HybridFormulation::getOrConstructL0(
     ObjectId object_id, FrameId frame_id) {
   const KeyFrameRange::ConstPtr range =
       key_frame_data_.find(object_id, frame_id);
@@ -798,9 +797,9 @@ std::pair<FrameId, gtsam::Pose3> ObjectCentricFormulation::getOrConstructL0(
 // should also check if the last object motion from the estimation can be used
 // as the last motion
 //  so only one composition is needed to get the latest motion
-gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
-                                                       FrameId frame_id,
-                                                       bool* keyframe_updated) {
+gtsam::Pose3 HybridFormulation::computeInitialH(ObjectId object_id,
+                                                FrameId frame_id,
+                                                bool* keyframe_updated) {
   // TODO: could this ever update the keyframe?
   auto [s0, L_0] = getOrConstructL0(object_id, frame_id);
 
@@ -955,7 +954,7 @@ gtsam::Pose3 ObjectCentricFormulation::computeInitialH(ObjectId object_id,
   }
 }
 
-gtsam::Pose3 ObjectCentricFormulation::calculateObjectCentroid(
+gtsam::Pose3 HybridFormulation::calculateObjectCentroid(
     ObjectId object_id, FrameId frame_id) const {
   if (FLAGS_init_object_pose_from_gt) {
     const auto gt_packets = hooks().ground_truth_packets_request();

@@ -29,16 +29,16 @@
  */
 #pragma once
 
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/backend/rgbd/HybridEstimator.hpp"
 
 namespace dyno {
-namespace keyframe_object_centric {
+namespace test_hybrid {
 
-class StructurelessDecoupledFormulation : public ObjectCentricFormulation {
+class StructurelessDecoupledFormulation : public HybridFormulation {
  public:
   DYNO_POINTER_TYPEDEFS(StructurelessDecoupledFormulation)
 
-  using Base = ObjectCentricFormulation;
+  using Base = HybridFormulation;
   StructurelessDecoupledFormulation(const FormulationParams& params,
                                     typename Map::Ptr map,
                                     const NoiseModels& noise_models,
@@ -55,11 +55,11 @@ class StructurelessDecoupledFormulation : public ObjectCentricFormulation {
   }
 };
 
-class DecoupledFormulation : public ObjectCentricFormulation {
+class DecoupledFormulation : public HybridFormulation {
  public:
   DYNO_POINTER_TYPEDEFS(DecoupledFormulation)
 
-  using Base = ObjectCentricFormulation;
+  using Base = HybridFormulation;
   using Base::Map;
 
   DecoupledFormulation(const FormulationParams& params, typename Map::Ptr map,
@@ -77,11 +77,11 @@ class DecoupledFormulation : public ObjectCentricFormulation {
   }
 };
 
-class StructurlessFormulation : public ObjectCentricFormulation {
+class StructurlessFormulation : public HybridFormulation {
  public:
   DYNO_POINTER_TYPEDEFS(StructurlessFormulation)
 
-  using Base = ObjectCentricFormulation;
+  using Base = HybridFormulation;
   StructurlessFormulation(const FormulationParams& params,
                           typename Map::Ptr map,
                           const NoiseModels& noise_models,
@@ -98,11 +98,11 @@ class StructurlessFormulation : public ObjectCentricFormulation {
   }
 };
 
-class SmartStructurlessFormulation : public ObjectCentricFormulation {
+class SmartStructurlessFormulation : public HybridFormulation {
  public:
   DYNO_POINTER_TYPEDEFS(SmartStructurlessFormulation)
 
-  using Base = ObjectCentricFormulation;
+  using Base = HybridFormulation;
   SmartStructurlessFormulation(const FormulationParams& params,
                                typename Map::Ptr map,
                                const NoiseModels& noise_models,
@@ -119,11 +119,11 @@ class SmartStructurlessFormulation : public ObjectCentricFormulation {
   }
 
  private:
-  gtsam::FastMap<TrackletId, ObjectCentricSmartFactor::shared_ptr>
+  gtsam::FastMap<TrackletId, HybridSmartFactor::shared_ptr>
       tracklet_id_to_smart_factor_;
   gtsam::FastMap<TrackletId, gtsam::FactorIndex>
       tracklet_id_to_smart_factor_index_;
 };
 
-}  // namespace keyframe_object_centric
+}  // namespace test_hybrid
 }  // namespace dyno

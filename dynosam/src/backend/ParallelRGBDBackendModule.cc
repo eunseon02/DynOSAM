@@ -125,7 +125,7 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
   formulation_params.suffix = "static";
 
-  static_formulation_ = std::make_unique<ObjectCentricFormulation>(
+  static_formulation_ = std::make_unique<HybridFormulation>(
       formulation_params, RGBDMap::create(), noise_models_, hooks);
 }
 
@@ -227,7 +227,7 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   for (const PerObjectUpdate& update : dynamic_updates) {
     const auto object_id = update.object_id;
     ParallelObjectISAM::Ptr estimator = getEstimator(object_id);
-    ObjectCentricAccessor::Ptr accessor = estimator->accessor();
+    HybridAccessor::Ptr accessor = estimator->accessor();
     const auto result = estimator->getResult();
 
     if (!result.was_smoother_ok) {
@@ -563,6 +563,16 @@ BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
 
     backend_output->optimized_object_motions += per_object_motions;
     backend_output->optimized_object_poses += per_object_poses;
+
+    const auto& map = estimator->map();
+    const auto& object_node = map->getObject(object_id);
+    CHECK_NOTNULL(object_node);
+
+    TemporalObjectMetaData temporal_object_info;
+    temporal_object_info.object_id = object_id;
+    temporal_object_info.first_seen = object_node->getFirstSeenFrame();
+    temporal_object_info.last_seen = object_node->getLastSeenFrame();
+    backend_output->temporal_object_data.push_back(temporal_object_info);
 
     // since we only show the current object map, get the landmarks only at the
     // current frame this should return an empty vector if the object does not

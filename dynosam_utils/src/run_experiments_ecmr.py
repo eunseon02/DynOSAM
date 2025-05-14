@@ -2,11 +2,11 @@ from dynosam_utils.evaluation.runner import run
 import os
 import sys
 
-# runs new incremental backend
-increment_backend_type = 6
-# runs object centric backend as batch
+# runs new incremental backend (parallel-hybrid)
+increment_backend_type = 3
+# runs object centric backend as batch (now called hybrid)
 object_centric_batch=2
-# runs world centric backend as batch
+# runs world centric backend as batch (now called wcme)
 motion_world_backend_type = 0
 
 def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):

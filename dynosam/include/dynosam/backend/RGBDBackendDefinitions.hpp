@@ -39,16 +39,19 @@ namespace dyno {
 using RGBDBackendModuleTraits =
     BackendModuleTraits<RGBDInstanceOutputPacket, LandmarkKeypoint>;
 
-// TODO: cleanup types and where and how they are used!!!!
-enum RGBDUpdaterType {
-  MotionInWorld = 0,
-  LLWorld = 1,
-  ObjectCentric = 2,
-  OC_SD = 3,
-  OC_D = 4,
-  OC_S = 5,
-  Incremental = 6,  // for now incremental means LooselyDistributed for ECMR
-  OC_SMF = 7        // Object Centric Smart Motion Factor
+enum RGBDFormulationType : int {
+
+  WCME = 0,             // world-centric motion estimator
+  WCPE = 1,             // world-centric pose estimator
+  HYBRID = 2,           // full-hybrid
+  PARALLEL_HYBRID = 3,  // associated to its own special class
+  // the following are test formulations that were not specifcially part of a
+  // paper but were used for (internal) development/research. they may not work
+  // as intended and are included for posterity
+  TESTING_HYBRID_SD = 4,  // (SD) structureless-decoupled
+  TESTING_HYBRID_D = 5,   // (D) decoupled
+  TESTING_HYBRID_S = 6,   // (S) structureless
+  TESTING_HYBRID_SMF = 6  // (SFM) smart motion factor
 };
 
 }  // namespace dyno

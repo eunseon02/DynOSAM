@@ -90,7 +90,7 @@ class BackendExperimentsNode : public DynoNode {
 
     BackendModuleType<RGBDBackendModuleTraits>::Ptr backend = nullptr;
 
-    if (updater_type == RGBDUpdaterType::Incremental) {
+    if (updater_type == RGBDFormulationType::PARALLEL_HYBRID) {
       backend = std::make_shared<ParallelRGBDBackendModule>(
           params.backend_params_, camera);
     } else {

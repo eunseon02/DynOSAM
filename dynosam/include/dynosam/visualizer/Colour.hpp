@@ -234,17 +234,33 @@ struct Color : RGBA<uint8_t> {
    */
   static Color rainbowId(size_t id, size_t ids_per_revolution = 16);
 
+  static constexpr float unique_id_default_value = 0.95f;
+  static constexpr float unique_id_default_saturation = 0.5f;
+
   /**
    * @brief Generates a sequence of never repeating colors using the golden
-   * ration to seperate the colours along the HSV ring spectrum.
+   * ratio to seperate the colours along the HSV ring spectrum.
    *
    * @param id The id of the color in the sequence.
    * @param saturation Saturation value
    * @param value Value value ;)
    * @return Color
    */
-  static Color uniqueId(size_t id, float saturation = 0.5f,
-                        float value = 0.95f);
+  static Color uniqueId(size_t id,
+                        float saturation = unique_id_default_saturation,
+                        float value = unique_id_default_value);
+
+  /**
+   * @brief Overload of uniqueId that uses types specific for ObjectId.
+   * To allow a simpler function signature, this function only takes one
+   * argument where the saturation=0.5f and value=0.95f.
+   *
+   * @param id ObjectId
+   * @return Color
+   */
+  static Color uniqueObjectId(ObjectId id) {
+    return uniqueId(static_cast<size_t>(id));
+  }
 
  private:
   static const std::vector<Color> ironbow_colors_;

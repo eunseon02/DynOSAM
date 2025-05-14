@@ -124,7 +124,8 @@ def visualize_spinning_growth(pcd_files, spin_steps=10, total_spin_deg=15, delay
     vis.destroy_window()
 
 if __name__ == "__main__":
-    directory = "/root/results/DynoSAM/incremental_omd_test/"
-    object_id = "j4"
+    # directory = "/root/results/DynoSAM/incremental_omd_test/"
+    directory = "/root/results/Dynosam_ecmr2024/cluster_l1/"
+    object_id = "j8"
     pcd_files = load_sorted_object_pcds(directory, object_id)
     visualize_spinning_growth(pcd_files)

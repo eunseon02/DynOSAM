@@ -38,8 +38,8 @@
 #include "dynosam/backend/Accessor.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
-#include "dynosam/backend/rgbd/impl/ObjectCentricFormulations.hpp"
+#include "dynosam/backend/rgbd/HybridEstimator.hpp"
+#include "dynosam/backend/rgbd/impl/test_HybridFormulations.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/factors/LandmarkMotionPoseFactor.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
@@ -472,36 +472,38 @@ RGBDBackendModule::makeUpdater() {
 
   FormulationHooks hooks = createFormulationHooks();
 
-  if (updater_type_ == UpdaterType::MotionInWorld) {
-    LOG(INFO) << "Using MotionInWorld";
+  if (updater_type_ == RGBDFormulationType::WCME) {
+    LOG(INFO) << "Using WCME";
     return std::make_unique<WorldMotionFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
 
-  } else if (updater_type_ == UpdaterType::LLWorld) {
-    LOG(INFO) << "Using LLWorld";
+  } else if (updater_type_ == RGBDFormulationType::WCPE) {
+    LOG(INFO) << "Using WCPE";
     return std::make_unique<WorldPoseFormulation>(formulation_params, getMap(),
                                                   noise_models_, hooks);
-  } else if (updater_type_ == UpdaterType::ObjectCentric) {
-    LOG(INFO) << "Using ObjectCentric";
-    return std::make_unique<ObjectCentricFormulation>(
+  } else if (updater_type_ == RGBDFormulationType::HYBRID) {
+    LOG(INFO) << "Using HYBRID";
+    return std::make_unique<HybridFormulation>(formulation_params, getMap(),
+                                               noise_models_, hooks);
+  } else if (updater_type_ == RGBDFormulationType::TESTING_HYBRID_SD) {
+    LOG(INFO) << "Using Hybrid Structureless Decoupled. Warning this is a "
+                 "testing only formulation!";
+    return std::make_unique<test_hybrid::StructurelessDecoupledFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
-  } else if (updater_type_ == UpdaterType::OC_SD) {
-    LOG(INFO) << "Using ObjectCentric Structureless Decoupled";
-    return std::make_unique<
-        keyframe_object_centric::StructurelessDecoupledFormulation>(
+  } else if (updater_type_ == RGBDFormulationType::TESTING_HYBRID_D) {
+    LOG(INFO) << "Using Hybrid Decoupled. Warning this is a testing only "
+                 "formulation!";
+    return std::make_unique<test_hybrid::DecoupledFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
-  } else if (updater_type_ == UpdaterType::OC_D) {
-    LOG(INFO) << "Using ObjectCentric Decoupled";
-    return std::make_unique<keyframe_object_centric::DecoupledFormulation>(
+  } else if (updater_type_ == RGBDFormulationType::TESTING_HYBRID_S) {
+    LOG(INFO) << "Using Hybrid Structurless. Warning this is a testing only "
+                 "formulation!";
+    return std::make_unique<test_hybrid::StructurlessFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
-  } else if (updater_type_ == UpdaterType::OC_S) {
-    LOG(INFO) << "Using ObjectCentric Structurless";
-    return std::make_unique<keyframe_object_centric::StructurlessFormulation>(
-        formulation_params, getMap(), noise_models_, hooks);
-  } else if (updater_type_ == UpdaterType::OC_SMF) {
-    LOG(INFO) << "Using ObjectCentric Smart Motion Factor";
-    return std::make_unique<
-        keyframe_object_centric::SmartStructurlessFormulation>(
+  } else if (updater_type_ == RGBDFormulationType::TESTING_HYBRID_SMF) {
+    LOG(INFO) << "Using Hybrid Smart Motion Factor. Warning this is a testing "
+                 "only formulation!";
+    return std::make_unique<test_hybrid::SmartStructurlessFormulation>(
         formulation_params, getMap(), noise_models_, hooks);
   } else {
     CHECK(false) << "Not implemented";
@@ -553,6 +555,20 @@ BackendOutputPacket::Ptr RGBDBackendModule::constructOutputPacket(
   for (FrameId frame_id : map->getFrameIds()) {
     backend_output->optimized_camera_poses.push_back(
         accessor->getSensorPose(frame_id).get());
+  }
+
+  // fill temporal map information
+  for (ObjectId object_id : map->getObjectIds()) {
+    const auto& object_node = map->getObject(object_id);
+    CHECK_NOTNULL(object_node);
+
+    // TODO: based on measurements not on estimation so check that we have
+    // landmarks for this object first?
+    TemporalObjectMetaData temporal_object_info;
+    temporal_object_info.object_id = object_id;
+    temporal_object_info.first_seen = object_node->getFirstSeenFrame();
+    temporal_object_info.last_seen = object_node->getLastSeenFrame();
+    backend_output->temporal_object_data.push_back(temporal_object_info);
   }
 
   backend_output->optimized_object_motions = accessor->getObjectMotions();

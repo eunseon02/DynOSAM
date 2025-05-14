@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/rgbd/impl/ParallelObjectISAM.hpp"
+#include "dynosam/backend/ParallelObjectISAM.hpp"
 
 #include <pcl/io/pcd_io.h>  //for dynamic map IO
 
@@ -56,9 +56,9 @@ ParallelObjectISAM::ParallelObjectISAM(
   formulation_params.min_dynamic_observations = 2u;
   formulation_params.use_smoothing_factor = FLAGS_use_smoothing_factor;
 
-  decoupled_formulation_ = std::make_shared<ObjectCentricFormulation>(
+  decoupled_formulation_ = std::make_shared<HybridFormulation>(
       formulation_params, map_, noise_models, formulation_hooks);
-  accessor_ = std::dynamic_pointer_cast<ObjectCentricAccessor>(
+  accessor_ = std::dynamic_pointer_cast<HybridAccessor>(
       decoupled_formulation_->accessorFromTheta());
   CHECK_NOTNULL(accessor_);
 }

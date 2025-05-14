@@ -35,6 +35,8 @@
 
 namespace dyno {
 
+// TODO: fix naming here!!
+
 gtsam::Point3 projectToObject(const gtsam::Pose3& X_k,
                               const gtsam::Pose3& s0_H_k_world,
                               const gtsam::Pose3& L_s0,

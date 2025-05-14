@@ -47,6 +47,16 @@ class BackendDSDRos : public BackendDisplay, DSDRos {
   ~BackendDSDRos() = default;
 
   void spinOnce(const BackendOutputPacket::ConstPtr& backend_output) override;
+
+ private:
+  void publishTemporalDynamicMaps(
+      const BackendOutputPacket::ConstPtr& latest_backend_output);
+
+ private:
+  rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr
+      temporal_dynamic_points_pub_;
+  gtsam::FastMap<ObjectId, std::deque<pcl::PointCloud<pcl::PointXYZRGB>>>
+      temporal_clouds_;
 };
 
 }  // namespace dyno

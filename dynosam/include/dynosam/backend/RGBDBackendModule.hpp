@@ -54,7 +54,7 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
   using RGBDMap = Base::MapType;
 
   // for backwards compatability!
-  using UpdaterType = RGBDUpdaterType;
+  using UpdaterType = RGBDFormulationType;
 
   RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
                     const UpdaterType& updater_type,

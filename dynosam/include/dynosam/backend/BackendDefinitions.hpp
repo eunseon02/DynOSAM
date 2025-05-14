@@ -93,6 +93,17 @@ bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label,
 bool reconstructPoseInfo(gtsam::Key key, ObjectId& object_label,
                          FrameId& frame_id);
 
+// TODO: this information is sort of duplicated when the ROS odometry messages
+// are constructed.
+//  streamline!!
+struct TemporalObjectMetaData {
+  //! ID of the object
+  ObjectId object_id;
+
+  FrameId first_seen;
+  FrameId last_seen;
+};
+
 /**
  * @brief Helper class that allows functional callbacks to be triggered based on
  * the type of gtsam::Key provided, where the key should refer to a valid type

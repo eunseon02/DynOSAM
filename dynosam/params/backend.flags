@@ -5,8 +5,8 @@
 # --constant_object_motion_translation_sigma=0.7
 
 # good for carla
---constant_object_motion_rotation_sigma=0.4
---constant_object_motion_translation_sigma=0.5
+--constant_object_motion_rotation_sigma=0.1
+--constant_object_motion_translation_sigma=0.1
 
 
 
@@ -51,8 +51,8 @@
 
 # currently only for rgbd, indicates which updater the rgbd backend should use
 # i.e which formulation is used for solving
-# MotionInWorld = 0, LLWorld=1, Incremental=6
---backend_updater_enum=6
+# MotionInWorld = 0, LLWorld=1, Parallel-Hybrid=3
+--backend_updater_enum=3
 
 --init_H_with_identity=true
 --updater_suffix=

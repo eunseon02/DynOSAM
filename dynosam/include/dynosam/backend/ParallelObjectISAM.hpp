@@ -35,35 +35,61 @@
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/Values.h>
 
+#include <nlohmann/json.hpp>
+
 #include "dynosam/backend/BackendDefinitions.hpp"
-#include "dynosam/backend/rgbd/ObjectCentricEstimator.hpp"
+#include "dynosam/backend/rgbd/HybridEstimator.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/Types.hpp"  //only needed for factors
 
 namespace dyno {
 
-// using namespace keyframe_object_centric;
-
-// TODO: should rename to SAMAgent!! (and tracking not decoupled!!)
-// Incremental tracking SAMAgent (with camera pose stuff!!)
-// to make it truly incremental!!!
-class DecoupledObjectSAM {
+class ParallelObjectISAM {
  public:
-  DYNO_POINTER_TYPEDEFS(DecoupledObjectSAM)
+  DYNO_POINTER_TYPEDEFS(ParallelObjectISAM)
 
   struct Params {
     //! Number additional iSAM updates to run
     int num_optimzie = 2;
     gtsam::ISAM2Params isam{};
+
+    // bool save_per_frame_dynamic_cloud = FLAGS_save_per_frame_dynamic_cloud;
   };
 
-  using Map = ObjectCentricFormulation::Map;
+  struct Result {
+    //! If smoother is not okay, then all results other than frame id will be
+    //! invalid!
+    bool was_smoother_ok{false};
+    FrameId frame_id{0};
+    gtsam::ISAM2Result isam_result;
+    FrameIds motions_with_large_change;
+    double large_motion_change_delta;
+    //! Timing (in ms) for optimisation
+    int64_t timing;
+
+    double average_clique_size;
+    double max_clique_size;
+    size_t num_factors;
+    size_t num_variables;
+
+    // Information about marked variables
+    size_t num_landmarks_marked = 0;
+    size_t num_motions_marked = 0;
+
+    using PointCloud = Eigen::Matrix<double, -1, 3>;
+    std::optional<PointCloud> dynamic_map{};
+
+    using VariableStatus = gtsam::ISAM2Result::DetailedResults::VariableStatus;
+    gtsam::FastMap<FrameId, VariableStatus> motion_variable_status{};
+  };
+
+  using Map = HybridFormulation::Map;
 
   template <typename DERIVEDSTATUS>
   using MeasurementStatusVector = Map::MeasurementStatusVector<DERIVEDSTATUS>;
 
-  DecoupledObjectSAM(const Params& params, ObjectId object_id,
+  ParallelObjectISAM(const Params& params, ObjectId object_id,
                      const NoiseModels& noise_models,
                      const FormulationHooks& formulation_hooks);
 
@@ -72,12 +98,22 @@ class DecoupledObjectSAM {
   template <typename DERIVEDSTATUS>
   void update(FrameId frame_k,
               const MeasurementStatusVector<DERIVEDSTATUS>& measurements,
-              const gtsam::Pose3& X_world_k,
-              const Motion3ReferenceFrame& motion_frame) {
-    VLOG(5) << "DecoupledObjectSAM::update running for k= " << frame_k
+              const Pose3Measurement& X_world_k,
+              const Motion3ReferenceFrame& motion_frame,
+              bool update_smoother = true) {
+    VLOG(5) << "ParallelObjectISAM::update running for k= " << frame_k
             << ", j= " << object_id_;
+    // frame id must get updated each time regardless as things outside this
+    // class depend on it maybe need finer-grained variables in result struct
+    // (e.g last map update / last smoother update)
+    result_.frame_id = frame_k;
+    result_.was_smoother_ok = false;
 
     this->updateMap(frame_k, measurements, X_world_k, motion_frame);
+
+    if (!update_smoother) {
+      return;
+    }
 
     // updating the smoothing will update the formulation and run
     // update on the optimizer. the internal results_ object is updated
@@ -91,11 +127,14 @@ class DecoupledObjectSAM {
   const gtsam::Values& getEstimate() const {
     return decoupled_formulation_->getTheta();
   }
-  const gtsam::ISAM2Result& getISAM2Result() const { return result_; }
+  const Result& getResult() const { return result_; }
 
   inline Map::Ptr map() const { return map_; }
 
-  Motion3ReferenceFrame getFrame2FrameMotion(FrameId frame_id) const;
+  StateQuery<Motion3ReferenceFrame> getFrame2FrameMotion(
+      FrameId frame_id) const;
+  // this assumes the motion exists for this frame... which it may not, I
+  // guess....
   Motion3ReferenceFrame getKeyFramedMotion(FrameId frame_id) const;
 
   // all frames
@@ -104,21 +143,29 @@ class DecoupledObjectSAM {
   ObjectMotionMap getFrame2FrameMotions() const;
   ObjectMotionMap getKeyFramedMotions() const;
 
+  // due to the nature of this formulation, this will be the accumulated cloud!!
+  StatusLandmarkVector getDynamicLandmarks(FrameId frame_id) const;
+
+  // TODO: is motion in map (not just observed but we have a motion )
+
+  std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id);
+
+  inline const gtsam::ISAM2& getSmoother() const { return *smoother_; }
+  inline HybridAccessor::Ptr accessor() const { return accessor_; }
+
  private:
   template <typename DERIVEDSTATUS>
   void updateMap(FrameId frame_k,
                  const MeasurementStatusVector<DERIVEDSTATUS>& measurements,
-                 const gtsam::Pose3& X_world_k,
+                 const Pose3Measurement& X_world_k,
                  const Motion3ReferenceFrame& motion_frame) {
     map_->updateObservations(measurements);
-
-    // no sensor noise model!!
-    map_->updateSensorPoseMeasurement(frame_k, Pose3Measurement(X_world_k));
+    map_->updateSensorPoseMeasurement(frame_k, X_world_k);
 
     const FrameId to = motion_frame.to();
     if (to != frame_k) {
       throw DynosamException(
-          "DecoupledObjectSAM::updateMap failed as the 'to' frame of the "
+          "ParallelObjectISAM::updateMap failed as the 'to' frame of the "
           "initial motion was not the same as expected frame id");
     }
 
@@ -129,17 +176,15 @@ class DecoupledObjectSAM {
       CHECK_EQ(expected_style_.value(), motion_frame.style());
     }
 
-    // TODO: now we have camera pose ;)
-
     // do we want global?
     MotionEstimateMap motion_estimate;
     motion_estimate.insert({object_id_, motion_frame});
     map_->updateObjectMotionMeasurements(frame_k, motion_estimate);
   }
 
-  bool updateSmoother(FrameId frame_k, const gtsam::Pose3& X_world_k);
+  bool updateSmoother(FrameId frame_k, const Pose3Measurement& X_world_k);
 
-  void updateFormulation(FrameId frame_k, const gtsam::Pose3& X_world_k,
+  void updateFormulation(FrameId frame_k, const Pose3Measurement& X_world_k,
                          gtsam::NonlinearFactorGraph& new_factors,
                          gtsam::Values& new_values);
 
@@ -156,13 +201,17 @@ class DecoupledObjectSAM {
   const Params params_;
   const ObjectId object_id_;
   Map::Ptr map_;
-  ObjectCentricFormulation::Ptr decoupled_formulation_;
-  Accessor<Map>::Ptr accessor_;
+  HybridFormulation::Ptr decoupled_formulation_;
+  HybridAccessor::Ptr accessor_;
   std::shared_ptr<gtsam::ISAM2> smoother_;
-  gtsam::ISAM2Result result_;
+  Result result_;
   //! style of motion expected to be used as input. Set on the first run and all
   //! motions are expected to then follow the same style
   std::optional<MotionRepresentationStyle> expected_style_;
 };
+
+using json = nlohmann::json;
+
+void to_json(json& j, const ParallelObjectISAM::Result& result);
 
 }  // namespace dyno

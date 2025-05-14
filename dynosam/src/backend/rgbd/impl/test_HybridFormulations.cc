@@ -28,12 +28,12 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/rgbd/impl/ObjectCentricFormulations.hpp"
+#include "dynosam/backend/rgbd/impl/test_HybridFormulations.hpp"
 
 #include "dynosam/factors/ObjectCentricFactors.hpp"
 
 namespace dyno {
-namespace keyframe_object_centric {
+namespace test_hybrid {
 
 void StructurelessDecoupledFormulation::dynamicPointUpdateCallback(
     const PointUpdateContextType& context, UpdateObservationResult& result,
@@ -243,9 +243,9 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
     getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
                  lmk_L0_init);
 
-    ObjectCentricSmartFactor::shared_ptr smart_factor =
-        boost::make_shared<ObjectCentricSmartFactor>(L_0, dynamic_point_noise,
-                                                     lmk_L0_init);
+    HybridSmartFactor::shared_ptr smart_factor =
+        boost::make_shared<HybridSmartFactor>(L_0, dynamic_point_noise,
+                                              lmk_L0_init);
 
     new_factors.push_back(smart_factor);
     tracklet_id_to_smart_factor_.insert2(context.getTrackletId(), smart_factor);
@@ -257,7 +257,7 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
           .num_new_dynamic_points++;
   }
 
-  ObjectCentricSmartFactor::shared_ptr smart_factor =
+  HybridSmartFactor::shared_ptr smart_factor =
       tracklet_id_to_smart_factor_.at(context.getTrackletId());
   CHECK_NOTNULL(smart_factor);
 
@@ -287,5 +287,5 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
         .num_dynamic_factors++;
 }
 
-}  // namespace keyframe_object_centric
+}  // namespace test_hybrid
 }  // namespace dyno

@@ -125,10 +125,9 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/RGBDBackendModule.cc
   src/backend/rgbd/WorldMotionEstimator.cc
   src/backend/rgbd/WorldPoseEstimator.cc
-  src/backend/rgbd/ObjectCentricEstimator.cc
-  src/backend/rgbd/impl/ObjectCentricFormulations.cc
-  src/backend/rgbd/impl/DecoupledObjectSAM.cc
-  src/backend/rgbd/impl/ParallelObjectISAM.cc
+  src/backend/rgbd/HybridEstimator.cc
+  src/backend/rgbd/impl/test_HybridFormulations.cc
+  src/backend/ParallelObjectISAM.cc
   src/backend/ParallelRGBDBackendModule.cc
   src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc

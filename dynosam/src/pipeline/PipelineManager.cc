@@ -298,9 +298,9 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         // right now they affect which backend is used AND the formulation in
         // that backend
         auto updater_type =
-            static_cast<RGBDUpdaterType>(FLAGS_backend_updater_enum);
+            static_cast<RGBDFormulationType>(FLAGS_backend_updater_enum);
 
-        if (updater_type == RGBDUpdaterType::Incremental) {
+        if (updater_type == RGBDFormulationType::PARALLEL_HYBRID) {
           backend = std::make_shared<ParallelRGBDBackendModule>(
               params_.backend_params_, camera, &display_queue_);
         } else {

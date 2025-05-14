@@ -140,10 +140,45 @@ using BbxPerObject = gtsam::FastMap<ObjectId, ObjectBBX>;
  * @param landmarks const StatusLandmarkVector&
  * @param T_world_camera const gtsam::Pose3& Transform from camera to world
  * frame
+ * @param colour_generator std::function<Color(ObjectId)> functional colour
+ * generator based on the object id. Defaults to Color::uniqueId.
+ * @param point_cb std::function<void(const pcl::PointXYZRGB&, ObjectId)>
+ * callback for each created PCL point. Default is nullptr
  * @return CloudPerObject XYZRGB point cloud per obect in the world frame
  */
-CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
-                                const gtsam::Pose3& T_world_camera);
+CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<Color(ObjectId)> colour_generator = Color::uniqueObjectId,
+    std::function<void(const pcl::PointXYZRGB&, ObjectId)> point_cb = nullptr);
+
+/**
+ * @brief Overload of groupObjectCloud.
+ *
+ * @param landmarks const StatusLandmarkVector&
+ * @param T_world_camera const gtsam::Pose3&
+ * @param point_cb std::function<void(const pcl::PointXYZRGB&, ObjectId)>
+ * @return CloudPerObject
+ */
+inline CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<void(const pcl::PointXYZRGB&, ObjectId)> point_cb) {
+  return groupObjectCloud(landmarks, T_world_camera, Color::uniqueObjectId,
+                          point_cb);
+}
+
+/**
+ * @brief Overload of groupObjectCloud.
+ *
+ * @param landmarks const StatusLandmarkVector&
+ * @param T_world_camera const gtsam::Pose3&
+ * @param colour_generator std::function<Color(ObjectId)>
+ * @return CloudPerObject
+ */
+inline CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<Color(ObjectId)> colour_generator) {
+  return groupObjectCloud(landmarks, T_world_camera, colour_generator, nullptr);
+}
 
 /**
  * @brief Compute a MomentOfInertiaEstimation using an input point cloud.

@@ -40,7 +40,7 @@ tracker_params:
   shrink_col: 0
   max_nr_keypoints_before_anms: 2000
   max_features_per_frame: 800
-  max_dynamic_features_per_frame: 130
+  max_dynamic_features_per_frame: 250
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 
@@ -48,5 +48,5 @@ image_tracks_vis_params:
   is_debug: true
   show_frame_info: false
   show_intermediate_tracking: false
-  draw_object_bounding_box: false
+  draw_object_bounding_box: true
   draw_object_mask: true
