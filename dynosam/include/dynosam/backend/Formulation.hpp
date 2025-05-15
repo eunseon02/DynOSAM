@@ -547,7 +547,7 @@ class Formulation {
   const NoiseModels noise_models_;
   FormulationHooks hooks_;
   //! the set of (static related) values managed by this updater. Allows
-  //! checking if values have already been added over successifve function calls
+  //! checking if values have already been added over successive function calls
   gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map;
 
  private:

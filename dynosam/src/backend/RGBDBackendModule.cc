@@ -524,7 +524,7 @@ FormulationHooks RGBDBackendModule::createFormulationHooks() const {
 
   hooks.ground_truth_packets_request =
       [&]() -> std::optional<GroundTruthPacketMap> {
-    return this->getGroundTruthPackets();
+    return shared_module_info.getGroundTruthPackets();
   };
 
   return hooks;

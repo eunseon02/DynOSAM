@@ -116,7 +116,7 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   FormulationHooks hooks;
   hooks.ground_truth_packets_request =
       [&]() -> std::optional<GroundTruthPacketMap> {
-    return this->getGroundTruthPackets();
+    return shared_module_info.getGroundTruthPackets();
   };
 
   FormulationParams formulation_params;
@@ -439,7 +439,7 @@ ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
     FormulationHooks hooks;
     hooks.ground_truth_packets_request =
         [&]() -> std::optional<GroundTruthPacketMap> {
-      return this->getGroundTruthPackets();
+      return shared_module_info.getGroundTruthPackets();
     };
 
     ParallelObjectISAM::Params params;
@@ -508,20 +508,6 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
     needs_new_key_frame = true;
   }
 
-  // only update acts like the boostrap mode of the BackendModule
-  // we dont want to update the smoother or add dynamic measurements yet
-  // since we need at least two valid frames
-  //  if (only_update) {
-  //    map->updateObservations(measurements);
-  //    map->updateSensorPoseMeasurement(frame_id_k, X_k_measurement);
-
-  //   MotionEstimateMap motion_estimate;
-  //   motion_estimate.insert({object_id, H_k});
-  //   map->updateObjectMotionMeasurements(frame_id_k, motion_estimate);
-  // } else {
-  //   estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
-  // }
-
   estimator->update(frame_id_k, measurements, X_k_measurement, H_k,
                     should_update_smoother);
 
@@ -532,12 +518,6 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
     // should_update_smoother must be false
     estimator->insertNewKeyFrame(frame_id_k);
   }
-
-  // if (only_update) {
-
-  // } else {
-  //   estimator->update(frame_id_k, measurements, X_k_measurement, H_k);
-  // }
 }
 
 BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
@@ -613,7 +593,7 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
   BackendOutputPacket::Ptr output =
       constructOutputPacket(frame_id_k, timestamp_k);
 
-  const auto& gt_packets = this->getGroundTruthPackets();
+  const auto& gt_packets = shared_module_info.getGroundTruthPackets();
 
   logger->logObjectMotion(output->optimized_object_motions, gt_packets);
   logger->logObjectPose(output->optimized_object_poses, gt_packets);

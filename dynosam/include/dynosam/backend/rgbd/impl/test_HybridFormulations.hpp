@@ -171,7 +171,7 @@ class StructurelessDecoupledFormulation : public HybridFormulation {
       gtsam::NonlinearFactorGraph& new_factors) override;
 
   std::string loggerPrefix() const override {
-    return "object_centric_structureless_decoupled";
+    return "hybrid_structureless_decoupled";
   }
 };
 
@@ -193,7 +193,7 @@ class DecoupledFormulation : public HybridFormulation {
       gtsam::NonlinearFactorGraph& new_factors) override;
 
   std::string loggerPrefix() const override {
-    return "object_centric_decoupled";
+    return "hybrid_centric_decoupled";
   }
 };
 
@@ -213,9 +213,7 @@ class StructurlessFormulation : public HybridFormulation {
       gtsam::Values& new_values,
       gtsam::NonlinearFactorGraph& new_factors) override;
 
-  std::string loggerPrefix() const override {
-    return "object_centric_structureless";
-  }
+  std::string loggerPrefix() const override { return "hybrid_structureless"; }
 };
 
 class SmartStructurlessFormulation : public HybridFormulation {
@@ -235,7 +233,7 @@ class SmartStructurlessFormulation : public HybridFormulation {
       gtsam::NonlinearFactorGraph& new_factors) override;
 
   std::string loggerPrefix() const override {
-    return "object_centric_smart_structureless";
+    return "hybrid_smart_structureless";
   }
 
  private:

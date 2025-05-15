@@ -129,7 +129,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/rgbd/impl/test_HybridFormulations.cc
   src/backend/ParallelObjectISAM.cc
   src/backend/ParallelRGBDBackendModule.cc
-  src/backend/ISAM2Agent.cc
+  # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc

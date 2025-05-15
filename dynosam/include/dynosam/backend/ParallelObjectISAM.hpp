@@ -53,8 +53,6 @@ class ParallelObjectISAM {
     //! Number additional iSAM updates to run
     int num_optimzie = 2;
     gtsam::ISAM2Params isam{};
-
-    // bool save_per_frame_dynamic_cloud = FLAGS_save_per_frame_dynamic_cloud;
   };
 
   struct Result {

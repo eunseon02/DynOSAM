@@ -50,7 +50,10 @@ BackendModule::BackendModule(const BackendParams& params,
   // TODO: this logic is exactly the same as in FrontendModule - functionalise!!
   registerInputCallback([=](BackendInputPacket::ConstPtr input) {
     if (input->gt_packet_)
-      gt_packet_map_.insert2(input->getFrameId(), *input->gt_packet_);
+      shared_module_info.updateGroundTruthPacket(input->getFrameId(),
+                                                 *input->gt_packet_);
+    shared_module_info.updateTimestampMapping(input->getFrameId(),
+                                              input->getTimestamp());
 
     const BackendSpinState previous_spin_state = spin_state_;
 

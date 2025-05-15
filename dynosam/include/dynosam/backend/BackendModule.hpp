@@ -37,10 +37,11 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/SharedModuleInfo.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"  //for RGBDInstanceOutputPacket
 #include "dynosam/utils/SafeCast.hpp"
-#include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional,
 
 DECLARE_string(updater_suffix);
 
@@ -67,7 +68,8 @@ struct BackendModuleTraits {
  *
  */
 class BackendModule
-    : public ModuleBase<BackendInputPacket, BackendOutputPacket> {
+    : public ModuleBase<BackendInputPacket, BackendOutputPacket>,
+      public SharedModuleInterface {
  public:
   DYNO_POINTER_TYPEDEFS(BackendModule)
 
@@ -76,16 +78,6 @@ class BackendModule
 
   BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue);
   virtual ~BackendModule() = default;
-
-  // if empty, return none
-  // TODo: also use this in the frontend!
-  // TODO: used shared module info!!
-  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
-    if (gt_packet_map_.empty()) {
-      return {};
-    }
-    return gt_packet_map_;
-  }
 
   const BackendParams& getParams() const { return base_params_; }
   const NoiseModels& getNoiseModels() const { return noise_models_; }
