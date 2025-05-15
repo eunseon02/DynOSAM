@@ -51,7 +51,7 @@ enum RGBDFormulationType : int {
   TESTING_HYBRID_SD = 4,  // (SD) structureless-decoupled
   TESTING_HYBRID_D = 5,   // (D) decoupled
   TESTING_HYBRID_S = 6,   // (S) structureless
-  TESTING_HYBRID_SMF = 6  // (SFM) smart motion factor
+  TESTING_HYBRID_SMF = 7  // (SFM) smart motion factor
 };
 
 }  // namespace dyno

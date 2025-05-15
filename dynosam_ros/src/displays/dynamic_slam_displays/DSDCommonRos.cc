@@ -27,13 +27,13 @@ std::string DSDTransport::constructObjectFrameLink(ObjectId object_id) {
 }
 
 ObjectOdometry DSDTransport::constructObjectOdometry(
-    const gtsam::Pose3& motion_k, const gtsam::Pose3& pose_k,
+    const gtsam::Pose3& e_H_k_world, const gtsam::Pose3& pose_k,
     ObjectId object_id, FrameId frame_id_k, Timestamp timestamp_k,
     const std::string& frame_id_link, const std::string& child_frame_id_link) {
   ObjectOdometry object_odom;
 
   // technically this shoudl be k-1
-  gtsam::Point3 body_velocity = calculateBodyMotion(motion_k, pose_k);
+  gtsam::Point3 body_velocity = calculateBodyMotion(e_H_k_world, pose_k);
 
   nav_msgs::msg::Odometry odom_msg;
   utils::convertWithHeader(pose_k, odom_msg, timestamp_k, frame_id_link,
@@ -42,7 +42,7 @@ ObjectOdometry DSDTransport::constructObjectOdometry(
   object_odom.odom = odom_msg;
   // TODO: can check if correct representation?
 
-  dyno::convert(motion_k, object_odom.h_w_km1_k.pose);
+  dyno::convert(e_H_k_world, object_odom.h_w_km1_k.pose);
   // NO velocity!!
   object_odom.object_id = object_id;
   object_odom.sequence = frame_id_k;
@@ -64,7 +64,7 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
       // object does not exist at this frame.
       continue;
     }
-    const gtsam::Pose3& motion_k = per_frame_motions.at(frame_id_k);
+    const gtsam::Pose3& e_H_k_world = per_frame_motions.at(frame_id_k);
 
     if (!poses.exists(object_id, frame_id_k)) {
       VLOG(30) << "Cannot construct ObjectOdometry for object " << object_id
@@ -79,7 +79,7 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
 
     object_odom_map.insert2(
         child_frame_id_link,
-        constructObjectOdometry(motion_k, pose_k, object_id, frame_id_k,
+        constructObjectOdometry(e_H_k_world, pose_k, object_id, frame_id_k,
                                 timestamp_k, frame_id_link,
                                 child_frame_id_link));
   }

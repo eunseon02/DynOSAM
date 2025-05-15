@@ -77,10 +77,10 @@ class ScenarioBodyVisitor : public ScenarioBodyBase {
   ///< motion local frame from t-1 to t, in ^{t-1}X_{t-1}
   virtual gtsam::Pose3 motionBody(FrameId frame_id) const override {
     // from t-1 to t
-    const gtsam::Pose3 motion_k = motionWorld(frame_id);
+    const gtsam::Pose3 e_H_k_world = motionWorld(frame_id);
     const gtsam::Pose3 pose_k = pose(frame_id);
     // TODO: check
-    return pose_k.inverse() * motion_k * pose_k.inverse();
+    return pose_k.inverse() * e_H_k_world * pose_k.inverse();
   }
   virtual gtsam::Pose3 motionWorldFromInitial(
       FrameId frame_id) const = 0;  ///< motion in world frame from 0 to t

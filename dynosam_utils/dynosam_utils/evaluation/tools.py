@@ -318,15 +318,15 @@ class ObjectMotionTrajectory(object):
 
     def calculate_velocity(self) -> np.ndarray:
         velocities = []
-        for (pose_k_1, motion_k) in self.get_motion_with_pose_previous_iterator():
-            if pose_k_1 is None or motion_k is None:
+        for (pose_k_1, e_H_k_world) in self.get_motion_with_pose_previous_iterator():
+            if pose_k_1 is None or e_H_k_world is None:
                 continue
             I =  evo.core.transformations.identity_matrix()
             R_motion =  evo.core.transformations.identity_matrix()
             # ensure homogenous
-            R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+            R_motion[0:3, 0:3] = e_H_k_world[0:3, 0:3]
 
-            t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+            t_motion = evo.core.transformations.translation_from_matrix(e_H_k_world)
             t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
 
             # make homogenous

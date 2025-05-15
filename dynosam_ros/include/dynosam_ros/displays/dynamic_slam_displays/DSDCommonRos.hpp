@@ -83,7 +83,7 @@ class DSDTransport {
   // this is technically wrong as we should have a motion at k and a pose at k-1
   // to get velocity...
   static ObjectOdometry constructObjectOdometry(
-      const gtsam::Pose3& motion_k, const gtsam::Pose3& pose_k,
+      const gtsam::Pose3& e_H_k_world, const gtsam::Pose3& pose_k,
       ObjectId object_id, FrameId frame_id_k, Timestamp timestamp_k,
       const std::string& frame_id_link, const std::string& child_frame_id_link);
 

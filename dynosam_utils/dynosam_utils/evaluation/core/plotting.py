@@ -485,15 +485,15 @@ def plot_velocities(
         # arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=8, lw=1)
         ax.add_artist(arrow)
 
-    for (pose_k_1, motion_k) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
-        if pose_k_1 is None or motion_k is None:
+    for (pose_k_1, e_H_k_world) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
+        if pose_k_1 is None or e_H_k_world is None:
             continue
         I =  evo.core.transformations.identity_matrix()
         R_motion =  evo.core.transformations.identity_matrix()
         # ensure homogenous
-        R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+        R_motion[0:3, 0:3] = e_H_k_world[0:3, 0:3]
 
-        t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+        t_motion = evo.core.transformations.translation_from_matrix(e_H_k_world)
         t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
 
         # make homogenous

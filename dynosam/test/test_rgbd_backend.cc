@@ -734,7 +734,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
       noise_params);
 
   // add one obect
-  const size_t num_points = 3;
+  const size_t num_points = 10;
   const size_t obj1_overlap = 4;
   const size_t obj2_overlap = 4;
   const size_t obj3_overlap = 4;
@@ -776,7 +776,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   scenario.addObjectBody(3, object3);
 
   dyno::BackendParams backend_params;
-  backend_params.use_robust_kernals_ = false;
+  backend_params.use_robust_kernals_ = true;
   backend_params.useLogger(false);
   backend_params.min_dynamic_obs_ = 3u;
   backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
@@ -811,14 +811,14 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   //       backend_params, dyno_testing::makeDefaultCameraPtr(),
   //       dyno::RGBDBackendModule::UpdaterType::OC_S));
 
-  // tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
-  //     backend_params, dyno_testing::makeDefaultCameraPtr(),
-  //     dyno::RGBDBackendModule::UpdaterType::ObjectCentric));
+  tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
+      backend_params, dyno_testing::makeDefaultCameraPtr(),
+      dyno::RGBDBackendModule::UpdaterType::HYBRID));
 
-  //   auto oc_smf_backend  =
-  //   tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
-  //       backend_params, dyno_testing::makeDefaultCameraPtr(),
-  //       dyno::RGBDBackendModule::UpdaterType::OC_SMF));
+  auto oc_smf_backend =
+      tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
+          backend_params, dyno_testing::makeDefaultCameraPtr(),
+          dyno::RGBDBackendModule::UpdaterType::TESTING_HYBRID_SMF));
 
   for (size_t i = 0; i < 20; i++) {
     dyno::RGBDInstanceOutputPacket::Ptr output_gt, output_noisy;
@@ -828,24 +828,25 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   }
 
   tester.finishAll();
-  dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
-  dyno::writeStatisticsModuleSummariesToFile();
+  return;
+  //   dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
+  //   dyno::writeStatisticsModuleSummariesToFile();
 
   {
     auto values = world_centric_backend->new_updater_->getTheta();
     auto graph = world_centric_backend->new_updater_->getGraph();
 
-    dyno::NonlinearFactorGraphManager nlfgm(graph, values);
-    auto options = dyno::factor_graph_tools::DrawBlockJacobiansOptions::
-        makeDynoSamOptions();
-    options.desired_size = cv::Size(1200, 700);
+    // dyno::NonlinearFactorGraphManager nlfgm(graph, values);
+    // auto options = dyno::factor_graph_tools::DrawBlockJacobiansOptions::
+    //     makeDynoSamOptions();
+    // options.desired_size = cv::Size(1200, 700);
     //   cv::Mat block_jacobians =
     //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
     //       options);
 
-    cv::imshow("WC Jacobians", dyno::factor_graph_tools::computeRFactor(
-                                   nlfgm.linearize(), graph.orderingCOLAMD())
-                                   .second);
+    // cv::imshow("WC Jacobians", dyno::factor_graph_tools::computeRFactor(
+    //                                nlfgm.linearize(), graph.orderingCOLAMD())
+    //                                .second);
   }
 
   {
@@ -885,7 +886,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   //     }
 
   //   cv::imshow("Block Jacobians", block_jacobians);
-  cv::waitKey(0);
+  //   cv::waitKey(0);
 }
 
 TEST(RGBDBackendModule, testObjectCentric) {

@@ -137,7 +137,7 @@ add_library(${PROJECT_NAME} SHARED
   src/factors/ObjectKinematicFactor.cc
   src/factors/LandmarkMotionPoseFactor.cc
   src/factors/LandmarkPoseSmoothingFactor.cc
-  src/factors/ObjectCentricFactors.cc
+  src/factors/HybridFormulationFactors.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineParams.cc
@@ -304,7 +304,7 @@ if(BUILD_TESTING)
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/internal/simulator.cc
-    test/test_object_centric.cc
+    test/test_hybrid_motion.cc
     # test/test_landmark_quadric_factor.cc
     test/test_tools.cc
     test/test_map.cc

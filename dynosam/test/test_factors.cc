@@ -200,7 +200,7 @@ TEST(SmartMotionFactor, testZeroErrorWithIdenties) {
 
   gtsam::Pose3 pose = gtsam::Pose3::Identity();
   gtsam::Pose3 motion = gtsam::Pose3::Identity();
-  gtsam::Pose3 L_s = gtsam::Pose3::Identity();
+  gtsam::Pose3 L_e = gtsam::Pose3::Identity();
   gtsam::Point3 point(1.0, 2.0, 3.0);
   gtsam::Point3 noise(0.0, 0.0, 0.0);
   gtsam::Point3 measured = point + noise;
@@ -211,7 +211,7 @@ TEST(SmartMotionFactor, testZeroErrorWithIdenties) {
   values.insert(pose_key, pose);
   values.insert(motion_key, motion);
 
-  SmartFactor factor(L_s, gtsam::noiseModel::Isotropic::Sigma(3, 0.05), point);
+  SmartFactor factor(L_e, gtsam::noiseModel::Isotropic::Sigma(3, 0.05), point);
   factor.add(measured, motion_key, pose_key);
 
   gtsam::Vector expectedError = gtsam::Vector3(0.0, 0.0, 0);
@@ -226,11 +226,11 @@ TEST(SmartMotionFactor, testZeroErrorWithL0AndCamera) {
   gtsam::Pose3 pose(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
                     gtsam::Point3(0.05, -0.10, 0.20));
   gtsam::Pose3 motion = gtsam::Pose3::Identity();
-  gtsam::Pose3 L_s = gtsam::Pose3(gtsam::Rot3::Ypr(-M_PI / 10, 0., -M_PI / 10),
+  gtsam::Pose3 L_e = gtsam::Pose3(gtsam::Rot3::Ypr(-M_PI / 10, 0., -M_PI / 10),
                                   gtsam::Point3(0.5, 0.1, 0.3));
   gtsam::Point3 point_l(1.0, 2.0, 3.0);
   gtsam::Point3 noise(0.0, 0.0, 0.0);
-  gtsam::Point3 measured_c = pose.inverse() * L_s * (point_l + noise);
+  gtsam::Point3 measured_c = pose.inverse() * L_e * (point_l + noise);
 
   gtsam::Key pose_key(1);
   gtsam::Key motion_key(2);
@@ -238,7 +238,7 @@ TEST(SmartMotionFactor, testZeroErrorWithL0AndCamera) {
   values.insert(pose_key, pose);
   values.insert(motion_key, motion);
 
-  SmartFactor factor(L_s, gtsam::noiseModel::Isotropic::Sigma(3, 0.05),
+  SmartFactor factor(L_e, gtsam::noiseModel::Isotropic::Sigma(3, 0.05),
                      point_l);
   factor.add(measured_c, motion_key, pose_key);
 
@@ -253,10 +253,10 @@ TEST(SmartMotionFactor, testNoiseWithIdentity) {
 
   gtsam::Pose3 pose = gtsam::Pose3::Identity();
   gtsam::Pose3 motion = gtsam::Pose3::Identity();
-  gtsam::Pose3 L_s = gtsam::Pose3::Identity();
+  gtsam::Pose3 L_e = gtsam::Pose3::Identity();
   gtsam::Point3 point_l(1.0, 2.0, 3.0);
   gtsam::Point3 noise(0.4, 1.0, 2.0);
-  gtsam::Point3 measured_c = pose.inverse() * L_s * (point_l + noise);
+  gtsam::Point3 measured_c = pose.inverse() * L_e * (point_l + noise);
 
   gtsam::Key pose_key(1);
   gtsam::Key motion_key(2);
@@ -264,7 +264,7 @@ TEST(SmartMotionFactor, testNoiseWithIdentity) {
   values.insert(pose_key, pose);
   values.insert(motion_key, motion);
 
-  SmartFactor factor(L_s, gtsam::noiseModel::Isotropic::Sigma(3, 0.05),
+  SmartFactor factor(L_e, gtsam::noiseModel::Isotropic::Sigma(3, 0.05),
                      point_l);
   factor.add(measured_c, motion_key, pose_key);
 
@@ -282,7 +282,7 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
                      gtsam::Point3(0.05, -0.10, 0.20));
   // gtsam::Pose3 pose(gtsam::Rot3::Identity(), gtsam::Point3(1.4, 0, 0));
   gtsam::Pose3 motion = gtsam::Pose3::Identity();
-  gtsam::Pose3 L_s = gtsam::Pose3::Identity();
+  gtsam::Pose3 L_e = gtsam::Pose3::Identity();
   gtsam::Point3 point(1.0, 0, 0);
   gtsam::Point3 noise(10.0, 0.0, 7.0);
   gtsam::Point3 measured = point + noise;
@@ -307,7 +307,7 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
   // values.insert(pose_key2, pose2);
   // values.insert(motion_key2, motion);
 
-  SmartFactor factor(L_s, gtsam::noiseModel::Isotropic::Sigma(3, 0.05), point);
+  SmartFactor factor(L_e, gtsam::noiseModel::Isotropic::Sigma(3, 0.05), point);
   factor.add(measured, motion_key, pose_key);
   factor.add(measured + 2 * noise, motion_key1, pose_key1);
   // factor.add(measured + 3 * noise, motion_key2, pose_key2);
@@ -449,12 +449,12 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
 }
 
 gtsam::Point3 perturbCameraAndMotion(const gtsam::Point3& point_l,
-                                     const gtsam::Pose3& L_s,
+                                     const gtsam::Pose3& L_e,
                                      gtsam::Pose3& motion, gtsam::Pose3& pose,
                                      double sigma = 0.2) {
   motion = utils::perturbWithNoise(motion, sigma);
   pose = utils::perturbWithNoise(motion, sigma);
-  return pose.inverse() * motion * L_s * (point_l);
+  return pose.inverse() * motion * L_e * (point_l);
 }
 
 TEST(SmartMotionFactor, testSimpleOptimise) {
@@ -463,7 +463,7 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   gtsam::Pose3 pose1 = gtsam::Pose3::Identity();
   gtsam::Pose3 pose2(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
                      gtsam::Point3(0.05, -0.10, 0.20));
-  gtsam::Pose3 L_s = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
+  gtsam::Pose3 L_e = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
   gtsam::Pose3 motion1 = gtsam::Pose3::Identity();
   gtsam::Pose3 motion2 = utils::createRandomAroundIdentity<gtsam::Pose3>(3.0);
   gtsam::Point3 point(3.0, 0, 1.2);
@@ -474,9 +474,9 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   // however the noisy is not propogated correctly since we do not add sigma
   // noisy to the measurements
   gtsam::Point3 measurement1 =
-      perturbCameraAndMotion(point, L_s, motion1, pose1, sigma);
+      perturbCameraAndMotion(point, L_e, motion1, pose1, sigma);
   gtsam::Point3 measurement2 =
-      perturbCameraAndMotion(point, L_s, motion2, pose2, sigma);
+      perturbCameraAndMotion(point, L_e, motion2, pose2, sigma);
 
   gtsam::Key pose_key1(1);
   gtsam::Key motion_key1(2);
@@ -490,7 +490,7 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   values.insert(motion_key2, motion2);
 
   SmartFactor::shared_ptr factor(new SmartFactor(
-      L_s, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
+      L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
 
   factor->add(measurement1, motion_key1, pose_key1);
   factor->add(measurement2, motion_key2, pose_key2);

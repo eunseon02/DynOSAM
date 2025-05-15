@@ -94,7 +94,7 @@ def collect_regular_results(suffix):
         data.append(np.mean(np.array(timing_data)))
 
     if suffix == "rgbd_motion_world":
-        return {"SOA Comparison":data}
+        return {"SOTA Comparison":data}
     else:
         return {"Hybrid\n(ours)":data}
 

@@ -790,6 +790,17 @@ struct HybridFormulationProperties {
 using KeyFrameData = MultiFrameRangeData<ObjectId, gtsam::Pose3>;
 using KeyFrameRange = KeyFrameData::FrameRangeT;
 
+/**
+ * @brief Information shared from the HybridFormulation to the HybridAccessor.
+ *
+ */
+struct SharedHybridFormulationData {
+  const KeyFrameData* key_frame_data;
+  //! Tracklet Id to the embedded frame (e) the point is represented in (ie.
+  //! which timestep, k)
+  const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe;
+};
+
 class HybridAccessor : public Accessor<Map3d2d>,
                        public HybridFormulationProperties {
  public:
@@ -797,11 +808,9 @@ class HybridAccessor : public Accessor<Map3d2d>,
 
   HybridAccessor(
       const SharedFormulationData& shared_data, Map3d2d::Ptr map,
-      const KeyFrameData* key_frame_data,
-      const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe)
+      const SharedHybridFormulationData& shared_hybrid_formulation_data)
       : Accessor<Map3d2d>(shared_data, map),
-        key_frame_data_(key_frame_data),
-        tracklet_id_to_keyframe_(tracklet_id_to_keyframe) {}
+        shared_hybrid_formulation_data_(shared_hybrid_formulation_data) {}
   virtual ~HybridAccessor() {}
 
   StateQuery<gtsam::Pose3> getSensorPose(FrameId frame_id) const override;
@@ -846,9 +855,8 @@ class HybridAccessor : public Accessor<Map3d2d>,
                               StateQuery<gtsam::Pose3>* query_H_W_e_k,
                               KeyFrameRange::ConstPtr* frame_range_ptr) const;
 
-  const KeyFrameData* key_frame_data_;
-  //! Tracklet Id to the Keyframe the point is represented in (ie. which frame)
-  const gtsam::FastMap<TrackletId, FrameId>* tracklet_id_to_keyframe_;
+ private:
+  const SharedHybridFormulationData shared_hybrid_formulation_data_;
 };
 
 class HybridFormulation : public Formulation<Map3d2d>,
@@ -898,8 +906,12 @@ class HybridFormulation : public Formulation<Map3d2d>,
  protected:
   AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
-    return std::make_shared<HybridAccessor>(
-        shared_data, this->map(), &key_frame_data_, &all_dynamic_landmarks_);
+    SharedHybridFormulationData shared_hybrid_data;
+    shared_hybrid_data.key_frame_data = &key_frame_data_;
+    shared_hybrid_data.tracklet_id_to_keyframe = &all_dynamic_landmarks_;
+
+    return std::make_shared<HybridAccessor>(shared_data, this->map(),
+                                            shared_hybrid_data);
   }
 
   virtual std::string loggerPrefix() const override { return "object_centric"; }
