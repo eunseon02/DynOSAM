@@ -37,6 +37,7 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/ImageContainer.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
+#include "dynosam/dataprovider/TartanAirShibuya.hpp"
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -63,11 +64,13 @@ int main(int argc, char* argv[]) {
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
 
-  KittiDataLoader::Params params;
-  // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
-  // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
-  OMDDataLoader loader(
-      "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
+  // KittiDataLoader::Params params;
+  // // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+  // // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
+  // OMDDataLoader loader(
+  //     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
+
+  TartanAirShibuyaLoader loader("/root/data/TartanAir_shibuya/RoadCrossing07/");
 
   auto camera = std::make_shared<Camera>(*loader.getCameraParams());
   auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);

@@ -72,8 +72,7 @@ def read_csv(csv_file_path:str, expected_header: List[str]):
                     )
                 )
         except StopIteration as e:
-            print(f"Failed to read header in csv file {csv_file_path}. File may be empty!?")
-            pass
+            raise Exception(f"Failed to read header in csv file {csv_file_path}. File may be empty!?")
 
         # reset iterator by making new reader
         csvfile = open(csv_file_path, 'r')

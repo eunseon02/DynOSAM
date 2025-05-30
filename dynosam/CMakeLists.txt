@@ -92,6 +92,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/OMDDataProvider.cc
   src/dataprovider/DatasetProvider.cc
   src/dataprovider/ProjectAriaDataProvider.cc
+  src/dataprovider/TartanAirShibuya.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/vision/Feature.cc

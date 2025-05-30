@@ -38,9 +38,9 @@ camera_motion_solver:
 tracker_params:
   shrink_row: 0
   shrink_col: 0
-  max_nr_keypoints_before_anms: 2000
-  max_features_per_frame: 800
-  max_dynamic_features_per_frame: 250
+  max_nr_keypoints_before_anms: 800
+  max_features_per_frame: 400
+  max_dynamic_features_per_frame: 80
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 

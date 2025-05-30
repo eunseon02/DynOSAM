@@ -1141,4 +1141,9 @@ class DatasetEvaluator:
 
 
         logger.debug("Constructor evaluator: {}".format(cls.__name__))
-        return cls(*args)
+
+        try:
+            return cls(*args)
+        except Exception as e:
+            logger.error(f"Failed to load class {cls.__name__}: constructor failed with {str(e)}")
+            return None
