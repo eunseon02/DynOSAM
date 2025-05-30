@@ -204,8 +204,8 @@ void flowToRgb(const cv::Mat& flow, cv::Mat& rgb) {
 
 void labelMaskToRGB(const cv::Mat& mask, const cv::Mat& rgb_input,
                     cv::Mat& output, float alpha, int background_label) {
-  CHECK(mask.channels() == 1) << "Expecting mask input to have channels 1";
-  CHECK(rgb_input.channels() == 3) << "Expecting rgb input to have channels 3";
+  CHECK_EQ(mask.channels(), 1u) << "Expecting mask input to have channels 1";
+  CHECK_EQ(rgb_input.channels(), 3) << "Expecting rgb input to have channels 3";
   CHECK(cvSizeEqual(mask, rgb_input));
 
   rgb_input.copyTo(output);

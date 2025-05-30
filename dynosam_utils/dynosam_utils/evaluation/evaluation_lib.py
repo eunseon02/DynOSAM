@@ -815,6 +815,10 @@ class MapPlotter3D(Evaluator):
 
         tracklet_set = set()
 
+        plot_object_points = self.kwargs.get("plot_object_points", True)
+        plot_static_points = self.kwargs.get("plot_static_points", True)
+        plot_gt_objects = self.kwargs.get("plot_gt_objects", True)
+
         for row in self._map_points_file:
             frame_id = float(row["frame_id"])
             object_id = int(row["object_id"])
@@ -833,14 +837,15 @@ class MapPlotter3D(Evaluator):
             transform =camera_coordinate_to_world()
             t_robot_convention = transform @ t_cam_convention
 
-            if object_id == 0:
+            if object_id == 0 and plot_static_points:
                 x_points.append(t_robot_convention[0])
                 y_points.append(t_robot_convention[1])
                 z_points.append(t_robot_convention[2])
 
                 tracklet_set.add(tracklet_id)
-            else:
+            elif plot_object_points:
                 # just draw last object
+                # cont
 
                 # # this might happen becuase we log ALL the points, even on objects we only see a few number of times
                 if object_id not in object_trajs:
@@ -893,7 +898,7 @@ class MapPlotter3D(Evaluator):
 
 
         ax.view_init(azim=0, elev=90)
-        # ax.patch.set_facecolor('white')
+        ax.patch.set_facecolor('white')
         # ax.axis('off')
 
         # static points
@@ -911,22 +916,23 @@ class MapPlotter3D(Evaluator):
                                        traj_zorder=30,
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
-
-        core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
-                                       plot_mode=evo_plot.PlotMode.xyz,
-                                       colours=colour_list,
-                                       plot_axis_est=True,
-                                       plot_start_end_markers=True,
-                                       axis_marker_scale=0.1,
-                                       traj_zorder=30,
-                                       est_style="--",
-                                       est_name_prefix="Object GT",
-                                       traj_linewidth=3.0)
+        if plot_gt_objects:
+            core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
+                                        plot_mode=evo_plot.PlotMode.xyz,
+                                        colours=colour_list,
+                                        plot_axis_est=True,
+                                        plot_start_end_markers=True,
+                                        axis_marker_scale=0.1,
+                                        traj_zorder=30,
+                                        est_style="--",
+                                        est_name_prefix="Object GT",
+                                        traj_linewidth=3.0)
 
 
         trajectory_helper.set_ax_limits(map_fig.gca())
         map_fig.tight_layout()
         # plt.show()
+        # ax.legend().set_visible(False)
 
         plot_collection.add_figure(self.kwargs.get("title", "Map"), map_fig)
 

@@ -914,7 +914,7 @@ class HybridFormulation : public Formulation<Map3d2d>,
                                             shared_hybrid_data);
   }
 
-  virtual std::string loggerPrefix() const override { return "object_centric"; }
+  virtual std::string loggerPrefix() const override { return "hybrid"; }
 
  protected:
   std::pair<FrameId, gtsam::Pose3> getOrConstructL0(ObjectId object_id,

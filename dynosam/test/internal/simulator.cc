@@ -32,7 +32,7 @@
 
 namespace dyno_testing {
 
-std::random_device RandomOverlapObjectPointsVisitor::rd;
-std::mt19937 RandomOverlapObjectPointsVisitor::gen(rd());
+// std::random_device RandomOverlapObjectPointsVisitor::rd;
+// std::mt19937 RandomOverlapObjectPointsVisitor::gen{rd()};
 
 }  // namespace dyno_testing

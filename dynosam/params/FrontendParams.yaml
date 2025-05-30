@@ -49,4 +49,4 @@ image_tracks_vis_params:
   show_frame_info: false
   show_intermediate_tracking: false
   draw_object_bounding_box: true
-  draw_object_mask: true
+  draw_object_mask: false

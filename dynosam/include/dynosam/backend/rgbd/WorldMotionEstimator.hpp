@@ -91,7 +91,7 @@ class WorldMotionFormulation : public WorldPoseFormulation {
     return std::make_shared<WorldMotionAccessor>(shared_data, this->map());
   }
 
-  std::string loggerPrefix() const override { return "rgbd_motion_world"; }
+  std::string loggerPrefix() const override { return "wcme"; }
 };
 
 }  // namespace dyno

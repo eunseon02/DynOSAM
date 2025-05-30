@@ -50,6 +50,7 @@
 #include "dynosam/common/Map.hpp"
 #include "dynosam/factors/LandmarkMotionTernaryFactor.hpp"
 #include "dynosam/frontend/FrontendPipeline.hpp"
+#include "internal/backend_runners.hpp"
 #include "internal/helpers.hpp"
 #include "internal/simulator.hpp"
 
@@ -137,165 +138,6 @@ TEST(RGBDBackendModule, smallKITTIDataset) {
     output = offline_frontend->process(offline_frontend->getInputPacket());
   }
 }
-
-struct TesterBase {
-  virtual ~TesterBase() = default;
-
-  virtual bool addBackend(dyno::RGBDBackendModule::Ptr backend) = 0;
-  virtual void onFinish() = 0;
-};
-
-struct IncrementalTester : public TesterBase {
-  struct Data {
-    dyno::RGBDBackendModule::Ptr backend;
-    std::shared_ptr<gtsam::ISAM2> isam2;
-    gtsam::Values opt_values;
-  };
-
-  bool addBackend(dyno::RGBDBackendModule::Ptr backend) override {
-    data = std::make_shared<Data>();
-
-    gtsam::ISAM2Params isam2_params;
-    isam2_params.evaluateNonlinearError = true;
-    isam2_params.factorization = gtsam::ISAM2Params::Factorization::CHOLESKY;
-    data->isam2 = std::make_shared<gtsam::ISAM2>(isam2_params);
-
-    backend->callback =
-        [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
-            dyno::FrameId frame_id, const gtsam::Values& new_values,
-            const gtsam::NonlinearFactorGraph& new_factors) -> void {
-      LOG(INFO) << "Running isam2 update " << frame_id << " for formulation "
-                << formulation->getFullyQualifiedName();
-      CHECK_NOTNULL(data);
-      CHECK_NOTNULL(data->isam2);
-      auto isam = data->isam2;
-      gtsam::ISAM2Result result;
-      {
-        dyno::utils::TimingStatsCollector timer(
-            "isam2_oc_test_update." + formulation->getFullyQualifiedName());
-        result = isam->update(new_factors, new_values);
-      }
-
-      LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
-                << " error after " << result.getErrorAfter();
-      data->opt_values = isam->calculateEstimate();
-
-      isam->getFactorsUnsafe().saveGraph(
-          dyno::getOutputFilePath("isam_graph_" + std::to_string(frame_id) +
-                                  "_" + formulation->getFullyQualifiedName() +
-                                  ".dot"),
-          dyno::DynoLikeKeyFormatter);
-
-      if (!isam->empty()) {
-        dyno::factor_graph_tools::saveBayesTree(
-            *isam,
-            dyno::getOutputFilePath(
-                "oc_bayes_tree_" + std::to_string(frame_id) + "_" +
-                formulation->getFullyQualifiedName() + ".dot"),
-            dyno::DynoLikeKeyFormatter);
-      }
-    };
-
-    data->backend = backend;
-    return true;
-  }
-
-  void onFinish() override {
-    auto backend = data->backend;
-    dyno::BackendMetaData backend_info;
-    backend_info.backend_params = &backend->getParams();
-
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
-        backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
-
-    backend_info.logging_suffix = "isam_opt";
-    backend->new_updater_->updateTheta(data->opt_values);
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
-        backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
-  }
-
-  std::shared_ptr<Data> data;
-};
-
-struct BatchTester : public TesterBase {
-  struct Data {
-    dyno::RGBDBackendModule::Ptr backend;
-
-    gtsam::Values values;
-    gtsam::NonlinearFactorGraph factors;
-  };
-
-  bool addBackend(dyno::RGBDBackendModule::Ptr backend) override {
-    data = std::make_shared<Data>();
-    data->backend = backend;
-
-    backend->callback =
-        [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
-            dyno::FrameId frame_id, const gtsam::Values& new_values,
-            const gtsam::NonlinearFactorGraph& new_factors) -> void {
-      data->values = formulation->getTheta();
-      data->factors = formulation->getGraph();
-
-      data->factors.saveGraph(
-          dyno::getOutputFilePath("batch_graph_" + std::to_string(frame_id) +
-                                  "_" + formulation->getFullyQualifiedName() +
-                                  ".dot"),
-          dyno::DynoLikeKeyFormatter);
-    };
-    return true;
-  }
-
-  void onFinish() override {
-    auto backend = data->backend;
-
-    dyno::BackendMetaData backend_info;
-    backend_info.backend_params = &backend->getParams();
-
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
-        backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
-
-    gtsam::LevenbergMarquardtParams opt_params;
-    gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(
-                                   data->factors, data->values, opt_params)
-                                   .optimize();
-
-    backend_info.logging_suffix = "batch_opt";
-    backend->new_updater_->updateTheta(opt_values);
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
-        backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
-  }
-  std::shared_ptr<Data> data;
-};
-
-struct RGBDBackendTester {
-  template <typename TESTER>
-  dyno::RGBDBackendModule::Ptr addTester(dyno::RGBDBackendModule::Ptr backend) {
-    std::shared_ptr<TesterBase> tester = std::make_shared<TESTER>();
-    tester->addBackend(backend);
-    testers.push_back(tester);
-    backends.push_back(backend);
-    return backend;
-  }
-
-  void processAll(dyno::RGBDInstanceOutputPacket::Ptr output_packet) {
-    for (auto b : backends) {
-      b->spinOnce(output_packet);
-    }
-  }
-
-  void finishAll() {
-    for (auto t : testers) {
-      t->onFinish();
-    }
-  }
-
-  std::vector<std::shared_ptr<TesterBase>> testers;
-  std::vector<dyno::RGBDBackendModule::Ptr> backends;
-};
 
 // TEST(RGBDBackendModule, constructSimpleGraph) {
 //   // make camera with a constant motion model starting at zero
@@ -783,11 +625,12 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   backend_params.odometry_rotation_sigma_ = X_R_sigma;
   backend_params.odometry_translation_sigma_ = X_t_sigma;
 
-  RGBDBackendTester tester;
-  auto object_centric_backend = tester.addTester<IncrementalTester>(
-      std::make_shared<dyno::RGBDBackendModule>(
-          backend_params, dyno_testing::makeDefaultCameraPtr(),
-          dyno::RGBDBackendModule::UpdaterType::HYBRID));
+  dyno_testing::RGBDBackendTester tester;
+  auto object_centric_backend =
+      tester.addTester<dyno_testing::IncrementalTester>(
+          std::make_shared<dyno::RGBDBackendModule>(
+              backend_params, dyno_testing::makeDefaultCameraPtr(),
+              dyno::RGBDBackendModule::UpdaterType::HYBRID));
 
   auto oc_noise_models = object_centric_backend->getNoiseModels();
   CHECK(!oc_noise_models.initial_pose_prior->isConstrained());
@@ -798,10 +641,11 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   CHECK(!oc_noise_models.dynamic_point_noise->isConstrained());
   CHECK(!oc_noise_models.static_point_noise->isConstrained());
 
-  auto world_centric_backend = tester.addTester<IncrementalTester>(
-      std::make_shared<dyno::RGBDBackendModule>(
-          backend_params, dyno_testing::makeDefaultCameraPtr(),
-          dyno::RGBDBackendModule::UpdaterType::WCME));
+  auto world_centric_backend =
+      tester.addTester<dyno_testing::IncrementalTester>(
+          std::make_shared<dyno::RGBDBackendModule>(
+              backend_params, dyno_testing::makeDefaultCameraPtr(),
+              dyno::RGBDBackendModule::UpdaterType::WCME));
 
   //   tester.addTester<IncrementalTester>(std::make_shared<dyno::RGBDBackendModule>(
   //       backend_params, dyno_testing::makeDefaultCameraPtr(),
@@ -811,12 +655,13 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   //       backend_params, dyno_testing::makeDefaultCameraPtr(),
   //       dyno::RGBDBackendModule::UpdaterType::OC_S));
 
-  tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
-      backend_params, dyno_testing::makeDefaultCameraPtr(),
-      dyno::RGBDBackendModule::UpdaterType::HYBRID));
+  tester.addTester<dyno_testing::BatchTester>(
+      std::make_shared<dyno::RGBDBackendModule>(
+          backend_params, dyno_testing::makeDefaultCameraPtr(),
+          dyno::RGBDBackendModule::UpdaterType::HYBRID));
 
-  auto oc_smf_backend =
-      tester.addTester<BatchTester>(std::make_shared<dyno::RGBDBackendModule>(
+  auto oc_smf_backend = tester.addTester<dyno_testing::BatchTester>(
+      std::make_shared<dyno::RGBDBackendModule>(
           backend_params, dyno_testing::makeDefaultCameraPtr(),
           dyno::RGBDBackendModule::UpdaterType::TESTING_HYBRID_SMF));
 

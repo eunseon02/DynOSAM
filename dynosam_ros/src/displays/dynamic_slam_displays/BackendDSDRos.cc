@@ -49,6 +49,8 @@ void BackendDSDRos::spinOnce(
   this->publishVisualOdometryPath(backend_output->optimized_camera_poses,
                                   backend_output->getTimestamp());
 
+  LOG(INFO) << "published odom";
+
   // publish static cloud
   this->publishStaticPointCloud(backend_output->static_landmarks,
                                 backend_output->pose());
@@ -57,7 +59,7 @@ void BackendDSDRos::spinOnce(
   this->publishDynamicPointCloud(backend_output->dynamic_landmarks,
                                  backend_output->pose());
 
-  publishTemporalDynamicMaps(backend_output);
+  // publishTemporalDynamicMaps(backend_output);
 
   const auto& object_motions = backend_output->optimized_object_motions;
   const auto& object_poses = backend_output->optimized_object_poses;

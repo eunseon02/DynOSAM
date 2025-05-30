@@ -211,7 +211,10 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   // updaet map
   // update estimator
   auto backend_output = constructOutputPacket(frame_k, timestamp);
-  backend_output->involved_timestamp = input->involved_timestamps_;
+  // TODO: this is gross - we need all the frame ids to timestamps for the
+  // output to be valid assume that we get them from the shared module info
+  // which is updated in the BackendModule registerInputCallback
+  backend_output->involved_timestamp = shared_module_info.getTimestampMap();
 
   auto static_accessor = static_formulation_->accessorFromTheta();
   // draw trajectory on each object
@@ -238,6 +241,7 @@ ParallelRGBDBackendModule::nominalSpinImpl(
 
     CHECK_EQ(result.frame_id, frame_k);
     result_map_.insert22(object_id, result.frame_id, result);
+    continue;
 
     // object poses in camera frame over some receeding time-horizon
     // for visualisation
@@ -576,7 +580,7 @@ BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
 
 void ParallelRGBDBackendModule::logBackendFromEstimators() {
   // TODO: name + suffix
-  std::string name = "parallel_object_centric";
+  std::string name = "parallel_hybrid";
 
   const std::string suffix = FLAGS_updater_suffix;
   if (!suffix.empty()) {

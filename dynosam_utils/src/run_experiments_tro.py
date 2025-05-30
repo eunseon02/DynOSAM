@@ -13,7 +13,7 @@ def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True,
 
     additional_args = [
         "--data_provider_type={}".format(data_loader_num),
-        "--v=0"
+        "--v=20"
     ]
     if run_as_frontend:
         additional_args.extend([
@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
     def run_both_backend(run_sequence_func, path, name, *args):
         run_sequence_func(path, name, world_motion_backend, *args)
-        # run_sequence_func(path, name, ll_backend, *args)
+        run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
@@ -411,16 +411,14 @@ if __name__ == '__main__':
     #     "--updater_suffix=init_frontend")
 
 
-    # run_both_backend(
-    #     run_cluster_sequence,
-    #     "/root/data/cluster_slam/CARLA-L1/",
-    #     "carla_l1_dense",
-    #     "--use_full_batch_opt=false",
-    #     "--opt_window_size=20",
-    #     "--opt_window_overlap=5",
-    #     "--init_H_with_identity=false",
-    #     "--updater_suffix=init_frontend"
-    # )
+    run_both_backend(
+        run_cluster_sequence,
+        "/root/data/cluster_slam/CARLA-L1/",
+        "carla_l1_new",
+        "--use_full_batch_opt=false",
+        "--opt_window_size=20",
+        "--opt_window_overlap=5"
+    )
 
     # run_both_backend(
     #     run_cluster_sequence,
@@ -584,14 +582,13 @@ if __name__ == '__main__':
 
 
     ## cluster
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1_video",
-        "--semantic_mask_step_size=5",
-        "--use_propogate_mask=false",
-        "--use_dynamic_track=false",
-        "--ending_frame=700"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_new",
+    #     "--use_propogate_mask=false",
+    #     "--use_dynamic_track=false",
+    #     "--ending_frame=250"
+    # )
 
     # prep_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L2/",

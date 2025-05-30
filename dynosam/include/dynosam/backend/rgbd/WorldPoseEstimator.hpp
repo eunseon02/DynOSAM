@@ -87,7 +87,7 @@ class WorldPoseFormulation : public Formulation<Map3d2d> {
     return std::make_shared<WorldPoseAccessor>(shared_data, this->map());
   }
 
-  std::string loggerPrefix() const override { return "rgbd_LL_world_identity"; }
+  std::string loggerPrefix() const override { return "wcpe"; }
 
  protected:
   // we need a separate way of tracking if a dynamic tracklet is in the map,
