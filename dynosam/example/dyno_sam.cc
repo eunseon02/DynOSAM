@@ -38,6 +38,7 @@
 #include "dynosam/common/ImageContainer.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/TartanAirShibuya.hpp"
+#include "dynosam/dataprovider/ViodeDataProvider.hpp"
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -70,7 +71,9 @@ int main(int argc, char* argv[]) {
   // OMDDataLoader loader(
   //     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
 
-  TartanAirShibuyaLoader loader("/root/data/TartanAir_shibuya/RoadCrossing07/");
+  // TartanAirShibuyaLoader
+  // loader("/root/data/TartanAir_shibuya/RoadCrossing07/");
+  ViodeLoader loader("/root/data/VIODE/city_day/low");
 
   auto camera = std::make_shared<Camera>(*loader.getCameraParams());
   auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);

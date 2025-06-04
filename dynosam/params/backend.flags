@@ -24,7 +24,7 @@
 --dynamic_point_noise_sigma=0.01
 # --dynamic_point_noise_sigma=0.00006
 
---opt_window_size=10
+--opt_window_size=20
 --opt_window_overlap=4
 
 

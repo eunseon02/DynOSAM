@@ -562,7 +562,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(timestamps) < 7:
+            if len(timestamps) < 3:
                 continue
 
             # #hack for now to handle trajectories that jump

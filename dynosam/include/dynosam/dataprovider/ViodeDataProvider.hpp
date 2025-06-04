@@ -1,5 +1,5 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ *   Copyright (c) 2025 ACFR-RPG, University of Sydney, Jesse Morris
  (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
@@ -28,26 +28,33 @@
  *   SOFTWARE.
  */
 
-#pragma once
-
-#include "dynosam/dataprovider/DataProvider.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/dataprovider/DatasetProvider.hpp"
+#include "dynosam/frontend/FrontendInputPacket.hpp"
+#include "dynosam/utils/GtsamUtils.hpp"
+#include "dynosam/utils/OpenCVUtils.hpp"
 
 namespace dyno {
 
-enum DatasetType {
-  KITTI,
-  VIRTUAL_KITTI,
-  CLUSTER,
-  OMD,  // oxford multi-motion dataset,
-  ARIA,
-  TARTAN_AIR_SHIBUYA,
-  VIODE
-};
+// depth, motion masks, gt
+using ViodeProvider =
+    DynoDatasetProvider<cv::Mat, cv::Mat, GroundTruthInputPacket>;
 
-struct DataProviderFactory {
-  static DataProvider::Ptr Create(const std::string& dataset_folder_path,
-                                  const std::string& params_folder_path,
-                                  DatasetType dataset_type);
+/**
+ * @brief
+ */
+class ViodeLoader : public ViodeProvider {
+ public:
+  ViodeLoader(const fs::path& dataset_path);
+
+  // we can get the camera params from this dataset, so overload the function!
+  // returns camera params from camera1
+  CameraParams::Optional getCameraParams() const override {
+    return left_camera_params_;
+  }
+
+ private:
+  CameraParams left_camera_params_;
 };
 
 }  // namespace dyno

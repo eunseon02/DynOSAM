@@ -371,7 +371,7 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame,
     // differently as some modules expect values to be new and will check that
     // a value does not exist yet (becuase it shouldn't in that iteration, but
     // overall it may!)
-    //  updater->setTheta(*initial_theta);
+    //  updater->updateTheta(*initial_theta);
   }
 
   UpdateObservationParams update_params;

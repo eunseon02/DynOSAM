@@ -2,10 +2,12 @@ from dynosam_utils.evaluation.runner import run
 import os
 import sys
 
+output_path = "/root/results/TRO2025/"
+
 def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
     parsed_args = {
         "dataset_path": path,
-        "output_path": "/root/results/Dynosam_tro2024/",
+        "output_path": output_path,
         "name": name,
         "run_pipeline": True,
         "run_analysis": False,
@@ -94,7 +96,7 @@ def run_omd_sequence(path, name, backend_type, *args):
 
 
 def run_all_eval():
-    results_path = "/root/results/Dynosam_tro2024/"
+    results_path = output_path
     sub_folders = [name for name in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, name))]
     for folder in sub_folders:
         run_analysis(folder)
@@ -103,7 +105,7 @@ def run_all_eval():
 def run_analysis(name):
     parsed_args = {
         "dataset_path": "",
-        "output_path": "/root/results/Dynosam_tro2024/",
+        "output_path": output_path,
         "name": name,
         "run_pipeline": False,
         "run_analysis": True,
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     ll_backend = 1
 
     def run_both_backend(run_sequence_func, path, name, *args):
-        run_sequence_func(path, name, world_motion_backend, *args)
+        # run_sequence_func(path, name, world_motion_backend, *args)
         run_sequence_func(path, name, ll_backend, *args)
         run_analysis(name)
 
@@ -411,10 +413,18 @@ if __name__ == '__main__':
     #     "--updater_suffix=init_frontend")
 
 
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_new",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
     run_both_backend(
         run_cluster_sequence,
         "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1_new",
+        "carla_l1",
         "--use_full_batch_opt=false",
         "--opt_window_size=20",
         "--opt_window_overlap=5"
