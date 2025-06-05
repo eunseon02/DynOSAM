@@ -256,9 +256,12 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
   const double threshold =
       1.0 - std::cos(std::atan(std::sqrt(2.0) * reprojection_error /
                                avg_focal_length));
-  // const double threshold = params_.ransac_threshold_pnp;
 
   AbsolutePoseAdaptor adapter(bearing_vectors, points);
+
+  if (R_curr_ref) {
+    adapter.setR(R_curr_ref->matrix());
+  }
 
   gtsam::Pose3 best_result;
   std::vector<int> ransac_inliers;

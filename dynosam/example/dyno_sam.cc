@@ -80,7 +80,9 @@ int main(int argc, char* argv[]) {
 
   loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
                          cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth,
-                         cv::Mat motion, GroundTruthInputPacket) -> bool {
+                         cv::Mat motion, GroundTruthInputPacket,
+                         std::optional<ImuMeasurements> imu_measurements)
+                         -> bool {
     // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
     // cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion,
     // gtsam::Pose3, GroundTruthInputPacket) -> bool {
@@ -134,6 +136,21 @@ int main(int argc, char* argv[]) {
     cv::Mat tracking;
     if (previous_frame) {
       tracking = tracker->computeImageTracks(*previous_frame, *frame, false);
+
+      if (imu_measurements) {
+        const auto previous_timestamp = previous_frame->getTimestamp();
+
+        CHECK_GE(imu_measurements->timestamps_[0], previous_timestamp);
+        CHECK_LT(imu_measurements
+                     ->timestamps_[imu_measurements->timestamps_.cols() - 1],
+                 timestamp);
+
+        LOG(INFO) << "Gotten imu messages!";
+
+        CHECK(imu_measurements->synchronised_frame_id);
+        CHECK_EQ(imu_measurements->synchronised_frame_id.value(),
+                 frame->getFrameId());
+      }
     }
     if (!tracking.empty()) cv::imshow("Tracking", tracking);
 

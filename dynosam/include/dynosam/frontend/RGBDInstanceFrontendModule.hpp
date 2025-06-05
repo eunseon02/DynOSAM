@@ -30,9 +30,12 @@
 
 #pragma once
 
+#include <gtsam/navigation/NavState.h>
+
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/imu/ImuFrontend.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/vision/ObjectTracker.hpp"
@@ -81,7 +84,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    * @return true
    * @return false
    */
-  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
+  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                         std::optional<gtsam::Rot3> R_curr_ref = {});
 
   //   bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
   //                          ObjectId object_id,
@@ -104,6 +108,10 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag
   std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
+
+  ImuFrontend imu_frontend_;
+  gtsam::NavState nav_state_;
+  gtsam::NavState previous_nav_state_;
 };
 
 }  // namespace dyno

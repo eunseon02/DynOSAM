@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include <gtsam/base/Vector.h>
 #include <gtsam/geometry/Pose3.h>
 
 #include <boost/algorithm/string.hpp>
@@ -59,6 +60,47 @@ void loadSemanticMask(const std::string& image_path, const cv::Size& size,
 
 // CV_32SC1
 void loadMask(const std::string& image_path, cv::Mat& mask);
+
+/**
+ * @brief Considers the conversion from the left-handed coordiante system (e.g.
+ * unreal, VIODE, carla...) to the right-handed coordinate system (robotic).
+ *
+ * Taken from:
+ * https://github.com/carla-simulator/ros-bridge/blob/master/carla_common/src/carla_common/transforms.py#L41
+ *
+ * @param right_handed_linear_velocity gtsam::Vector3&
+ * @param right_handed_angular_velocity gtsam::Vector3&
+ * @param left_handed_linear_velocity const gtsam::Vector3&
+ * @param left_handed_angular_velocity const gtsam::Vector3&
+ * @param left_handed_rotation std::optional<gtsam::Rot3>
+ */
+void toRightHandedTwist(gtsam::Vector3& right_handed_linear_velocity,
+                        gtsam::Vector3& right_handed_angular_velocity,
+                        const gtsam::Vector3& left_handed_linear_velocity,
+                        const gtsam::Vector3& left_handed_angular_velocity,
+                        std::optional<gtsam::Rot3> left_handed_rotation = {});
+
+/**
+ * @brief Considers the conversion from left-handed system (e.g. unreal, VIODE,
+ * carla...) to right-handed system.
+ *
+ * @param left_handed_rotation const gtsam::Rot3&
+ * @return gtsam::Rot3
+ */
+gtsam::Rot3 toRightHandedRotation(const gtsam::Rot3& left_handed_rotation);
+
+/**
+ * @brief Considers the conversion from a left-handed system (e.g. unreal,
+ * VIODE, carla...) vector to right-handed system with optional rotation
+ * provided in the left-handed system.
+ *
+ * @param left_handed_vector const gtsam::Vector3&
+ * @param left_handed_rotation std::optional<gtsam::Rot3>
+ * @return gtsam::Vector3
+ */
+gtsam::Vector3 toRightHandedVector(
+    const gtsam::Vector3& left_handed_vector,
+    std::optional<gtsam::Rot3> left_handed_rotation);
 
 /**
  * @brief Returns a ORDERED vector of all files in the given directory.

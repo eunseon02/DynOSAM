@@ -82,6 +82,10 @@ DynoPipelineManager::DynoPipelineManager(
       std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket,
                 data_interface_.get(), std::placeholders::_1));
 
+  data_loader_->registerImuMultiCallback(
+      std::bind(&dyno::DataInterfacePipeline::addImuMeasurements,
+                data_interface_.get(), std::placeholders::_1));
+
   // preprocessing
   data_interface_->registerImageContainerPreprocessor(
       std::bind(&dyno::DataProvider::imageContainerPreprocessor,

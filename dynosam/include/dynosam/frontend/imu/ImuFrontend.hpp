@@ -28,35 +28,30 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/dataprovider/DatasetProvider.hpp"
-#include "dynosam/frontend/FrontendInputPacket.hpp"
-#include "dynosam/frontend/imu/ImuMeasurements.hpp"
-#include "dynosam/utils/GtsamUtils.hpp"
-#include "dynosam/utils/OpenCVUtils.hpp"
+#pragma once
 
+#include <gtsam/navigation/ImuBias.h>
+#include <gtsam/navigation/ImuFactor.h>
+
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/imu/ImuMeasurements.hpp"
+
+// TODO: eventually replace with Kimera or otherwise
 namespace dyno {
 
-// depth, motion masks, gt
-using ViodeProvider =
-    DynoDatasetProvider<cv::Mat, cv::Mat, GroundTruthInputPacket,
-                        std::optional<ImuMeasurements>>;
-
-/**
- * @brief
- */
-class ViodeLoader : public ViodeProvider {
+class ImuFrontend {
  public:
-  ViodeLoader(const fs::path& dataset_path);
+  using PimPtr = std::shared_ptr<gtsam::PreintegrationType>;
+  using PimUniquePtr = std::unique_ptr<gtsam::PreintegrationType>;
 
-  // we can get the camera params from this dataset, so overload the function!
-  // returns camera params from camera1
-  CameraParams::Optional getCameraParams() const override {
-    return left_camera_params_;
-  }
+  DYNO_POINTER_TYPEDEFS(ImuFrontend)
+
+  ImuFrontend();
+
+  PimPtr preintegrateImuMeasurements(const ImuMeasurements& imu_measurements);
 
  private:
-  CameraParams left_camera_params_;
+  PimUniquePtr pim_ = nullptr;
 };
 
 }  // namespace dyno

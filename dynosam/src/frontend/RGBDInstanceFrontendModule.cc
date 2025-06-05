@@ -138,8 +138,25 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     utils::TimingStatsCollector update_depths_timer("depth_updater");
     frame->updateDepths();
   }
+
+  std::optional<gtsam::Rot3> R_curr_ref;
+  if (input->imu_measurements) {
+    LOG(INFO) << "Frontend gotten imu measurements " << input->getFrameId();
+    auto pim = imu_frontend_.preintegrateImuMeasurements(
+        input->imu_measurements.value());
+
+    nav_state_ =
+        pim->predict(gtsam::NavState{}, gtsam::imuBias::ConstantBias{});
+
+    R_curr_ref =
+        previous_nav_state_.attitude().inverse() * nav_state_.attitude();
+
+    previous_nav_state_ = nav_state_;
+  }
+
   // updates frame->T_world_camera_
-  if (!solveCameraMotion(frame, previous_frame)) {
+  if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
+    frame->T_world_camera_ = nav_state_.pose();
     LOG(ERROR) << "Could not solve for camera";
   }
 
@@ -223,10 +240,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 }
 
 bool RGBDInstanceFrontendModule::solveCameraMotion(
-    Frame::Ptr frame_k, const Frame::Ptr& frame_k_1) {
+    Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+    std::optional<gtsam::Rot3> R_curr_ref) {
   Pose3SolverResult result;
   if (base_params_.use_ego_motion_pnp) {
-    result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k);
+    result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k,
+                                                          R_curr_ref);
   } else {
     // TODO: untested
     LOG(FATAL) << "Not tested";

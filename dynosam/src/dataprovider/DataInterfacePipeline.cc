@@ -79,7 +79,16 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
     ground_truth = ground_truth_packets_.at(packet->getFrameId());
   }
 
-  return std::make_shared<FrontendInputPacketBase>(packet, ground_truth);
+  ImuMeasurements::Optional imu_measurements;
+  if (imu_measurements_.exists(packet->getFrameId())) {
+    VLOG(5) << "Gotten imu measurements for frame id " << packet->getFrameId();
+    imu_measurements = imu_measurements_.at(packet->getFrameId());
+  }
+
+  auto frontend_input =
+      std::make_shared<FrontendInputPacketBase>(packet, ground_truth);
+  frontend_input->imu_measurements = imu_measurements;
+  return frontend_input;
 }
 
 bool DataInterfacePipeline::hasWork() const {

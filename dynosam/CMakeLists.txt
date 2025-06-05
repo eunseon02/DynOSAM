@@ -96,6 +96,8 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/ViodeDataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
+  src/frontend/imu/ImuFrontend.cc
+
   src/frontend/vision/Feature.cc
   src/frontend/vision/UndistortRectifier.cc
   src/frontend/vision/Frame.cc

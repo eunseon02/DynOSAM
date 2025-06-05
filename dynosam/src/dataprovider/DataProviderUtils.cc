@@ -107,6 +107,49 @@ void loadMask(const std::string& image_path, cv::Mat& mask) {
   mask.convertTo(mask, CV_32SC1);
 }
 
+void toRightHandedTwist(gtsam::Vector3& right_handed_linear_velocity,
+                        gtsam::Vector3& right_handed_angular_velocity,
+                        const gtsam::Vector3& left_handed_linear_velocity,
+                        const gtsam::Vector3& left_handed_angular_velocity,
+                        std::optional<gtsam::Rot3> left_handed_rotation) {
+  right_handed_linear_velocity =
+      toRightHandedVector(left_handed_linear_velocity, left_handed_rotation);
+
+  right_handed_angular_velocity[0] = left_handed_angular_velocity[0];
+  right_handed_angular_velocity[1] = -left_handed_angular_velocity[1];
+  right_handed_angular_velocity[2] = -left_handed_angular_velocity[2];
+}
+
+gtsam::Rot3 toRightHandedRotation(const gtsam::Rot3& left_handed_rotation) {
+  const gtsam::Vector3 left_rpy = left_handed_rotation.rpy();
+
+  double right_roll = left_rpy[0];
+  double right_pitch = -left_rpy[1];
+  double right_yaw = -left_rpy[2];
+
+  return gtsam::Rot3::Ypr(right_yaw, right_pitch, right_roll);
+}
+
+gtsam::Vector3 toRightHandedVector(
+    const gtsam::Vector3& left_handed_vector,
+    std::optional<gtsam::Rot3> left_handed_rotation) {
+  gtsam::Vector3 tmp_vector = left_handed_vector;
+  if (left_handed_rotation) {
+    const gtsam::Rot3 right_handed_rotation =
+        toRightHandedRotation(*left_handed_rotation);
+    tmp_vector = right_handed_rotation.rotate(left_handed_vector);
+  }
+
+  gtsam::Vector3 right_handed_vector;
+  right_handed_vector[0] = tmp_vector[0];
+  right_handed_vector[1] = -tmp_vector[1];
+  right_handed_vector[2] = tmp_vector[2];
+
+  // apparently just swap axis according to Sephyr...
+
+  return right_handed_vector;
+}
+
 std::vector<std::filesystem::path> getAllFilesInDir(
     const std::string& folder_path) {
   std::vector<std::filesystem::path> files_in_directory;

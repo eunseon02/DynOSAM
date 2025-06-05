@@ -32,6 +32,8 @@
 
 #include "dynosam/common/CameraParams.hpp"
 #include "dynosam/dataprovider/DataProviderUtils.hpp"
+#include "dynosam/frontend/imu/Imu-Definitions.hpp"
+#include "dynosam/frontend/imu/ThreadSafeImuBuffer.hpp"
 #include "dynosam/frontend/vision/StereoMatcher.hpp"
 #include "dynosam/pipeline/ThreadSafeTemporalBuffer.hpp"
 #include "dynosam/utils/CsvParser.hpp"
@@ -95,6 +97,10 @@ class ViodeAllLoader {
         ->denseStereoReconstruction(rgb_left, rgb_right, depth_image);
 
     return depth_image;
+  }
+
+  ImuMeasurements getImuMeasurements(size_t idx) {
+    return imu_measrements_.at(idx);
   }
 
   const GroundTruthInputPacket& getGtPacket(size_t idx) const {
@@ -185,25 +191,72 @@ class ViodeAllLoader {
     }
     LOG(INFO) << "Loaded gt odom";
 
-    gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
-    bool initial_frame_set = false;
+    const auto imu_file_path = file_path + "/imu0_imu.csv";
+    throwExceptionIfPathInvalid(imu_file_path);
+    LOG(INFO) << "IMU File path checked at" << imu_file_path;
 
-    // rotate from robotic convention to opencv convention
-    //  static const gtsam::Rot3 R_cv_robotic( (gtsam::Matrix33() <<
-    //                              0, -1,  0,
-    //                              0,  0, -1,
-    //                              1,  0,  0).finished() );
-    static const gtsam::Rot3 R_cv_robotic(
+    std::ifstream imu_infile(imu_file_path);
+    if (!imu_infile) {
+      throw std::runtime_error("Could not open file " + imu_file_path +
+                               " when trying to load VIODE!");
+    }
+
+    static const gtsam::Rot3 VIODE_left_hand_transform(
         (gtsam::Matrix3() << 0, 0,
          1,        // X_cv (right)   = 0·x +1·y +0·z_NED
          1, 0, 0,  // Y_cv (down)    = 0·x +0·y +1·z_NED
          0, 1, 0)  // Z_cv (forward) = 1·x +0·y +0·z_NED
             .finished());
 
+    static const gtsam::Rot3 R_cv_robotic(
+        (gtsam::Matrix3() << 0, -1, 0, 0, 0, -1, 1, 0, 0).finished());
+
+    ThreadsafeImuBuffer imu_buffer{-1};
+    const CsvReader imu_reader(imu_infile);
+    for (const auto& row : imu_reader) {
+      // time should be in seconds
+      double stamp = row.at<double>(0);
+
+      double ax = row.at<double>(1);
+      double ay = row.at<double>(2);
+      double az = row.at<double>(3);
+
+      double wx = row.at<double>(4);
+      double wy = row.at<double>(5);
+      double wz = row.at<double>(6);
+
+      ImuAccGyr imu_data;
+      imu_data << ax, ay, az, wx, wy, wz;
+      // imu_data << 0, 0, 9.8, 0, 0, 0;
+
+      // VIODE is built with unreal and therefore uses the left-hand coordinate
+      // system convert to robotic convention
+      //  gtsam::Vector3 left_handed_linear_acceleration,
+      //  left_handed_angular_velocity; left_handed_linear_acceleration << ax,
+      //  ay, az; left_handed_angular_velocity << wx, wy, wz;
+
+      // gtsam::Vector3 robotic_linear_acceleration, robotic_angular_velocity;
+      // toRightHandedTwist(
+      //   robotic_linear_acceleration,
+      //   robotic_angular_velocity,
+      //   left_handed_linear_acceleration,
+      //   left_handed_angular_velocity
+      // );
+      // imu_data << robotic_linear_acceleration, robotic_angular_velocity;
+
+      imu_buffer.addMeasurement(stamp, imu_data);
+    }
+    LOG(INFO) << "Loaded IMU data";
+
+    gtsam::Pose3 initial_pose = gtsam::Pose3::Identity();
+    bool initial_frame_set = false;
+
     // first load flow files
     std::vector<std::filesystem::path> flow_files_in_directory =
         getAllFilesInDir(flow_image_path);
     FrameId frame = 0;
+    Timestamp previous_timestamp = 0;
+
     for (size_t i = 0; i < flow_files_in_directory.size(); i++) {
       std::filesystem::path flow_path(flow_files_in_directory.at(i));
       auto image_name = flow_path.stem().string();
@@ -243,7 +296,7 @@ class ViodeAllLoader {
         throwExceptionIfPathInvalid(mask_image_file);
 
         // convert to CV coordiantes
-        const auto world_R_cv = gt_pose.rotation() * R_cv_robotic;
+        const auto world_R_cv = gt_pose.rotation() * VIODE_left_hand_transform;
         const auto& world_t_cv = gt_pose.translation();  // same origin
         gt_pose = gtsam::Pose3(world_R_cv, world_t_cv);
 
@@ -252,6 +305,28 @@ class ViodeAllLoader {
           // frame) to be the first camera pose
           initial_pose = gt_pose;
           initial_frame_set = true;
+
+          // add no measurements at first time
+          imu_measrements_.insert2(frame, ImuMeasurements{});
+        } else {
+          CHECK_GE(previous_timestamp, 0);
+
+          Timestamps imu_timestamps;
+          ImuAccGyrs imu_measurements;
+          auto imu_query_result = imu_buffer.getImuDataBtwTimestamps(
+              previous_timestamp, timestamp_sec, &imu_timestamps,
+              &imu_measurements);
+
+          if (imu_query_result ==
+              ThreadsafeImuBuffer::QueryResult::kDataAvailable) {
+            LOG(INFO) << "Gotten imu data " << imu_timestamps.size()
+                      << " between " << previous_timestamp << " and "
+                      << timestamp_sec;
+
+            ImuMeasurements imu_data(imu_timestamps, imu_measurements);
+            imu_data.synchronised_frame_id = frame;
+            imu_measrements_.insert2(frame, imu_data);
+          }
         }
 
         // offset initial pose so we start at "0, 0, 0"
@@ -272,6 +347,7 @@ class ViodeAllLoader {
         flow_0_paths_.push_back(flow_path);
 
         times_.push_back(timestamp_sec);
+        previous_timestamp = timestamp_sec;
 
       } else {
         LOG(INFO) << "Skipping frame " << timestamp_sec;
@@ -316,6 +392,9 @@ class ViodeAllLoader {
   std::vector<std::string> masks_0_paths_;
 
   std::vector<Timestamp> times_;
+
+  // frame k to imu measurements where the measurements should be from k-1 to k
+  gtsam::FastMap<FrameId, ImuMeasurements> imu_measrements_;
 
   GroundTruthPacketMap ground_truth_packets_;
   // left camera params
@@ -364,18 +443,26 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
       std::make_shared<FunctionalDataFolder<GroundTruthInputPacket>>(
           [loader](size_t idx) { return loader->getGtPacket(idx); });
 
+  auto imu_loader =
+      std::make_shared<FunctionalDataFolder<std::optional<ImuMeasurements>>>(
+          [loader](size_t idx) { return loader->getImuMeasurements(idx); });
+
   this->setLoaders(timestamp_loader, rgb_loader, optical_flow_loader,
-                   depth_loader, instance_mask_loader, gt_loader);
+                   depth_loader, instance_mask_loader, gt_loader, imu_loader);
 
   auto callback = [&](size_t frame_id, Timestamp timestamp, cv::Mat rgb,
                       cv::Mat optical_flow, cv::Mat depth,
                       cv::Mat instance_mask,
-                      GroundTruthInputPacket gt_object_pose_gt) -> bool {
+                      GroundTruthInputPacket gt_object_pose_gt,
+                      std::optional<ImuMeasurements> imu_measurements) -> bool {
     CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
 
     CHECK(ground_truth_packet_callback_);
     if (ground_truth_packet_callback_)
       ground_truth_packet_callback_(gt_object_pose_gt);
+
+    if (imu_multi_input_callback_ && imu_measurements)
+      imu_multi_input_callback_(imu_measurements.value());
 
     ImageContainer::Ptr image_container = nullptr;
     image_container = ImageContainer::Create(
