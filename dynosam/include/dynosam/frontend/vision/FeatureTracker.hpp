@@ -92,6 +92,10 @@ class FeatureTracker : public FeatureTrackerBase {
     return boarder_detection_mask_;
   }
 
+  void rejectMatchesGivenRotation(Frame::Ptr frame_km1, Frame::Ptr frame_k,
+                                  const gtsam::Rot3& R_km1_k,
+                                  double pixel_threshold = 2.0) const;
+
   // void resampleDynamicTracks();
 
  protected:

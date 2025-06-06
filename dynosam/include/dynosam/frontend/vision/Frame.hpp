@@ -113,6 +113,8 @@ class Frame {
    */
   inline size_t numStaticFeatures() const { return static_features_.size(); }
 
+  // NOTE: this is not the number of tracked features, just the ones that are
+  // outliers and therefore include all the newly detected ones!!
   /**
    * @brief Gets the total number of static inlier features
    *

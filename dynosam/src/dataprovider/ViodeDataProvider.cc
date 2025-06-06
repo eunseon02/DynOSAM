@@ -278,9 +278,9 @@ class ViodeAllLoader {
       Timestamp gt_stamp;
       if (gt_odom_buffer.getNearestValueToTime(timestamp_sec, 0.003, &gt_pose,
                                                &gt_stamp)) {
-        LOG(INFO) << "Synchronised image timestamp " << std::fixed
-                  << timestamp_sec << " with gt stamp " << gt_stamp
-                  << ". Diff = " << std::abs(timestamp_sec - gt_stamp);
+        // LOG(INFO) << "Synchronised image timestamp " << std::fixed
+        //           << timestamp_sec << " with gt stamp " << gt_stamp
+        //           << ". Diff = " << std::abs(timestamp_sec - gt_stamp);
 
         // we have a sync!
         // Now try and get the other files that match this one
@@ -319,9 +319,9 @@ class ViodeAllLoader {
 
           if (imu_query_result ==
               ThreadsafeImuBuffer::QueryResult::kDataAvailable) {
-            LOG(INFO) << "Gotten imu data " << imu_timestamps.size()
-                      << " between " << previous_timestamp << " and "
-                      << timestamp_sec;
+            // LOG(INFO) << "Gotten imu data " << imu_timestamps.size()
+            //           << " between " << previous_timestamp << " and "
+            //           << timestamp_sec;
 
             ImuMeasurements imu_data(imu_timestamps, imu_measurements);
             imu_data.synchronised_frame_id = frame;

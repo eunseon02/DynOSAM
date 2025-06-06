@@ -151,14 +151,33 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     R_curr_ref =
         previous_nav_state_.attitude().inverse() * nav_state_.attitude();
 
+    // //TODO: too high - bo outliers... why not...?
+    // tracker_->rejectMatchesGivenRotation(
+    //   previous_frame,
+    //   frame,
+    //   *R_curr_ref,
+    //   4.0
+    // );
+
     previous_nav_state_ = nav_state_;
   }
 
   // updates frame->T_world_camera_
   if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
-    frame->T_world_camera_ = nav_state_.pose();
+    // frame->T_world_camera_ = nav_state_.pose();
     LOG(ERROR) << "Could not solve for camera";
   }
+  frame->T_world_camera_ = nav_state_.pose();
+
+  // LOG(INFO) << frame->numStaticUsableFeatures() << " " <<
+  // frame->numStaticFeatures();
+
+  // HACK for now
+  //  if(frame->numStaticUsableFeatures() < 30) {
+  //    LOG(INFO) << "Number usable static feature < 30. Relying on IMU only";
+  //    frame->T_world_camera_ = nav_state_.pose();
+  //    frame->static_features_.markOutliers(frame->static_features_.collectTracklets());
+  //  }
 
   if (FLAGS_use_dynamic_track) {
     // TODO: bring back byte tracker??
@@ -264,15 +283,43 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
            << "\t- # inliers: " << result.inliers.size() << '\n'
            << "\t- # outliers: " << result.outliers.size() << '\n';
 
-  if (result.status == TrackingStatus::VALID) {
+  // collect all usable tracklets
+  TrackletIds tracklets = frame_k->static_features_.collectTracklets();
+  CHECK_GE(tracklets.size(),
+           result.inliers.size() +
+               result.outliers.size());  // tracklets shoudl be more (or same
+                                         // as) correspondances as there will
+                                         // be new points untracked
+  frame_k->static_features_.markOutliers(result.outliers);
+
+  if (result.status != TrackingStatus::VALID || result.inliers.size() < 60) {
+    // TODO: fix code structure - nav state should be passed in?
+    // use nav state which we assume is updated by IMU
+    LOG(INFO) << "Number usable static feature < 30 or status is invalid. "
+                 "Relying on IMU only";
+    frame_k->T_world_camera_ = nav_state_.pose();
+    // if fails should we mark current inliers as outliers?
+
+    // TODO: should almost definitely do this in future, but right now we use
+    // measurements to construct a framenode in the backend so if there are no
+    // measurements we get a frame_node null.... for now... make hack and set
+    // all ages of inliers to 1!!! since we need n measurements in the backend
+    // this will ensure that they dont get added to the
+    //  optimisation problem but will get added to the map...
+    for (const auto& inlier : result.inliers) {
+      frame_k->static_features_.getByTrackletId(inlier)->age(1u);
+    }
+    // frame_k->static_features_.markOutliers(result.inliers);
+
+    // for some reason using tracklets to mark all features gives error as a
+    // tracklet id
+    // seems to be not actually in static features. Dont know why
+    // maybe remeber that tracklets (fromc collectTracklets) is actually just
+    // the usable tracklets...?
+    // frame_k->static_features_.markOutliers(tracklets);
+    return false;
+  } else {
     frame_k->T_world_camera_ = result.best_result;
-    TrackletIds tracklets = frame_k->static_features_.collectTracklets();
-    CHECK_GE(tracklets.size(),
-             result.inliers.size() +
-                 result.outliers.size());  // tracklets shoudl be more (or same
-                                           // as) correspondances as there will
-                                           // be new points untracked
-    frame_k->static_features_.markOutliers(result.outliers);
 
     if (base_params_.refine_camera_pose_with_joint_of) {
       VLOG(10) << "Refining camera pose with joint of";
@@ -285,12 +332,41 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
       VLOG(15) << "Refined camera pose with optical flow - error before: "
                << flow_opt_result.error_before.value_or(NaN)
                << " error_after: " << flow_opt_result.error_after.value_or(NaN);
+
+      return true;
     }
-    return true;
-  } else {
-    frame_k->T_world_camera_ = gtsam::Pose3::Identity();
-    return false;
   }
+  // if (result.status == TrackingStatus::VALID) {
+  //   frame_k->T_world_camera_ = result.best_result;
+  //   TrackletIds tracklets = frame_k->static_features_.collectTracklets();
+  //   CHECK_GE(tracklets.size(),
+  //            result.inliers.size() +
+  //                result.outliers.size());  // tracklets shoudl be more (or
+  //                same
+  //                                          // as) correspondances as there
+  //                                          will
+  //                                          // be new points untracked
+  //   frame_k->static_features_.markOutliers(result.outliers);
+
+  //   if (base_params_.refine_camera_pose_with_joint_of) {
+  //     VLOG(10) << "Refining camera pose with joint of";
+  //     OpticalFlowAndPoseOptimizer flow_optimizer(
+  //         base_params_.object_motion_solver_params.joint_of_params);
+
+  //     auto flow_opt_result =
+  //     flow_optimizer.optimizeAndUpdate<CalibrationType>(
+  //         frame_k_1, frame_k, result.inliers, result.best_result);
+  //     frame_k->T_world_camera_ = flow_opt_result.best_result.refined_pose;
+  //     VLOG(15) << "Refined camera pose with optical flow - error before: "
+  //              << flow_opt_result.error_before.value_or(NaN)
+  //              << " error_after: " <<
+  //              flow_opt_result.error_after.value_or(NaN);
+  //   }
+  //   return true;
+  // } else {
+  //   frame_k->T_world_camera_ = gtsam::Pose3::Identity();
+  //   return false;
+  // }
 }
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(

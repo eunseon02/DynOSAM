@@ -272,10 +272,10 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
       threshold, params_.ransac_iterations, params_.ransac_probability,
       params_.optimize_3d2d_pose_from_inliers, best_result, ransac_inliers);
 
-  if (success) {
-    constructTrackletInliers(result.inliers, result.outliers, correspondences,
-                             ransac_inliers, tracklets);
+  constructTrackletInliers(result.inliers, result.outliers, correspondences,
+                           ransac_inliers, tracklets);
 
+  if (success) {
     if (result.inliers.size() < 5u) {
       result.status = TrackingStatus::FEW_MATCHES;
     } else {
