@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <gtsam/navigation/NavState.h>
+
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendModule.hpp"
@@ -41,6 +43,7 @@
 
 namespace dyno {
 
+// TODO: should have a special accessor for this class....
 class ParallelRGBDBackendModule
     : public BackendModuleType<RGBDBackendModuleTraits> {
  public:
@@ -108,6 +111,9 @@ class ParallelRGBDBackendModule
 
   //! used to cache the result of each update which will we log to file
   GenericObjectCentricMap<ParallelObjectISAM::Result> result_map_;
+
+  gtsam::NavState nav_state_;
+  gtsam::imuBias::ConstantBias imu_bias_;
 };
 
 }  // namespace dyno

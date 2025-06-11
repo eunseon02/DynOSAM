@@ -56,7 +56,8 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
 }
 
 Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
-                                 const ImageContainer& image_container) {
+                                 const ImageContainer& image_container,
+                                 const std::optional<gtsam::Rot3>& R_km1_k) {
   // take "copy" of tracking_images which is then given to the frame
   // this will mean that the tracking images (input) are not necessarily the
   // same as the ones inside the returned frame
@@ -106,7 +107,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   {
     utils::TimingStatsCollector static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
-        previous_frame_, input_images, info_, boarder_detection_mask);
+        previous_frame_, input_images, info_, boarder_detection_mask, R_km1_k);
   }
 
   FeatureContainer dynamic_features;
@@ -150,63 +151,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 //   }
 
 // }
-
-void FeatureTracker::rejectMatchesGivenRotation(Frame::Ptr frame_km1,
-                                                Frame::Ptr frame_k,
-                                                const gtsam::Rot3& R_km1_k,
-                                                double pixel_threshold) const {
-  // TODO: if rotation small - skip!!!
-  //  // Handle case when rotation is small: just copy prev_kps
-  //  // Removed bcs even small rotations lead to huge optical flow at the
-  //  borders
-  //  // of the image.
-  //  // Keep because then you save a lot of computation.
-  //  static constexpr double kSmallRotationTol = 1e-4;
-  //  if (std::abs(1.0 - std::abs(cam1_R_cam2.toQuaternion().w())) <
-  //      kSmallRotationTol) {
-  //    *next_kps = prev_kps;
-  //    return true;
-  //  }
-
-  FeaturePairs static_correspondences;
-  frame_k->getCorrespondences(static_correspondences, *frame_km1,
-                              KeyPointType::STATIC);
-
-  const gtsam::Matrix K =
-      frame_k->getCamera()->getParams().getCameraMatrixEigen();
-  const gtsam::Matrix K_inv = K.inverse();
-
-  size_t num_outliers_marked = 0;
-
-  const gtsam::Matrix33 H = K * R_km1_k.matrix() * K_inv;
-
-  for (auto [feature_km1, feature_k] : static_correspondences) {
-    CHECK(feature_km1->inlier());
-    CHECK(feature_k->inlier());
-
-    const auto& keypoint_km1 = feature_km1->keypoint();
-    const auto& keypoint_k = feature_k->keypoint();
-
-    const gtsam::Vector3 pt_km1 =
-        gtsam::Vector3(keypoint_km1(0), keypoint_km1(1), 1.0);
-    // rotate bearing vector using rotation and then project back to image (in
-    // homogenous coordaintes)
-    const gtsam::Vector3 pt_k_predicted = H * pt_km1;
-    // convert normalized point coorindate to keypoint
-    const Keypoint keypoint_k_predicted(pt_k_predicted[0] / pt_k_predicted[2],
-                                        pt_k_predicted[1] / pt_k_predicted[2]);
-    // Compare predicted vs actual flow
-    double error = (keypoint_k_predicted - keypoint_k).norm();
-    if (error > pixel_threshold) {
-      feature_km1->markOutlier();
-      feature_k->markOutlier();
-      num_outliers_marked++;
-    }
-  }
-
-  VLOG(5) << "Additional static outliers " << num_outliers_marked << "/"
-          << static_correspondences.size() << " given rotation";
-}
 
 void FeatureTracker::trackDynamic(FrameId frame_id,
                                   const ImageContainer& image_container,

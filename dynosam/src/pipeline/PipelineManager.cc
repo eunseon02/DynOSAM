@@ -235,6 +235,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
   switch (params_.frontend_type_) {
     case FrontendType::kRGBD: {
       LOG(INFO) << "Making RGBDInstance frontend";
+      FrontendModule::Ptr frontend = nullptr;
 
       Camera::Ptr camera = std::make_shared<Camera>(camera_params);
       CHECK_NOTNULL(camera);
@@ -268,9 +269,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         // convert pipeline to base type
         frontend_pipeline_ = std::move(offline_frontend);
       } else {
-        FrontendModule::Ptr frontend =
-            std::make_shared<RGBDInstanceFrontendModule>(
-                params_.frontend_params_, camera, &display_queue_);
+        frontend = std::make_shared<RGBDInstanceFrontendModule>(
+            params_.frontend_params_, camera, &display_queue_);
         LOG(INFO) << "Made RGBDInstanceFrontendModule";
         // need to make the derived pipeline so we can set parallel run etc
         // the manager takes a pointer to the base MIMO so we can have different
@@ -313,6 +313,12 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
           backend = std::make_shared<RGBDBackendModule>(
               params_.backend_params_, camera, updater_type, &display_queue_);
         }
+
+        // if(frontend && backend) {
+        //   backend->registerMapUpdater(std::bind(&FrontendModule::mapUpdate,
+        //   frontend.get(), std::placeholders::_1)); LOG(INFO) << "Bound map
+        //   update between frontend and backend";
+        // }
 
       } else if (use_offline_frontend_) {
         LOG(WARNING)

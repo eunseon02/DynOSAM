@@ -64,7 +64,8 @@ class FeatureTracker : public FeatureTrackerBase {
   //  Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const
   //  TrackingInputImages& tracking_images);
   Frame::Ptr track(FrameId frame_id, Timestamp timestamp,
-                   const ImageContainer& image_container);
+                   const ImageContainer& image_container,
+                   const std::optional<gtsam::Rot3>& R_km1_k = {});
 
   /**
    * @brief Get the previous frame.
@@ -91,10 +92,6 @@ class FeatureTracker : public FeatureTrackerBase {
   inline const cv::Mat& getBoarderDetectionMask() const {
     return boarder_detection_mask_;
   }
-
-  void rejectMatchesGivenRotation(Frame::Ptr frame_km1, Frame::Ptr frame_k,
-                                  const gtsam::Rot3& R_km1_k,
-                                  double pixel_threshold = 2.0) const;
 
   // void resampleDynamicTracks();
 

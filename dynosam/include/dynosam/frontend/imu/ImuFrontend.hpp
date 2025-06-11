@@ -50,6 +50,8 @@ class ImuFrontend {
 
   PimPtr preintegrateImuMeasurements(const ImuMeasurements& imu_measurements);
 
+  inline void resetIntegration() { pim_->resetIntegration(); }
+
  private:
   PimUniquePtr pim_ = nullptr;
 };

@@ -66,14 +66,18 @@ ImuFrontend::ImuFrontend() {
   // CombinedParamPtr pim_params = CombinedParams::MakeSharedD(-9.8);
   CombinedParamPtr pim_params;
   // in opencv convention y is down...
+  // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0, 9.8)));
   pim_params.reset(new CombinedParams(gtsam::Point3(0, 9.8, 0)));
+  // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0.0, 9.8)));
 
-  // static const gtsam::Rot3 VIODE(
-  //   (gtsam::Matrix3() << 0, 0,
-  //    1,        // X_cv (right)   = 0·x +1·y +0·z_NED
-  //    1, 0, 0,  // Y_cv (down)    = 0·x +0·y +1·z_NED
-  //    0, 1, 0)  // Z_cv (forward) = 1·x +0·y +0·z_NED
-  //       .finished());
+  static const gtsam::Rot3 R_body_camera(
+      (gtsam::Matrix3() << 0, 0, 1, 1, 0, 0, 0, 1, 0).finished());
+
+  // static const gtsam::Rot3 R_body_camera_1(
+  //   (gtsam::Matrix3() << 0, 1, 0,
+  //                        0, 0, 1,
+  //                        1, 0, 0).finished());
+
   // static const gtsam::Rot3 R_cv_robotic(
   //   (gtsam::Matrix3() << 0, -1, 0,
   //                       0, 0, -1,
@@ -88,10 +92,17 @@ ImuFrontend::ImuFrontend() {
   static const gtsam::Rot3 R_opencv_from_robot(
       (gtsam::Matrix3() << 0, -1, 0, 0, 0, -1, 1, 0, 0).finished());
 
+  // reading right to left:
+  // 1. put imu into camera frame (ie rotation)
+  // 2. put camera frame into robotic convention (still camera frame)
+  // 3. put camera frame (now in robotic convention) into ope
   gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot * R_robot_from_ned;
+  // gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot;
 
   pim_params->body_P_sensor =
-      gtsam::Pose3(R_opencv_from_ned, gtsam::Point3(0, 0, 0));
+      gtsam::Pose3(R_body_camera.inverse(), gtsam::Point3(0, 0, 0));
+  // pim_params->body_P_sensor =
+  //     gtsam::Pose3(R_opencv_from_ned, gtsam::Point3(0, 0, 0));
 
   // for viode!!
   gtsam::Matrix33 gyroscopeCovariance =
@@ -105,6 +116,11 @@ ImuFrontend::ImuFrontend() {
       std::pow(0.02, 2.0) * Eigen::Matrix3d::Identity();
   pim_params->biasOmegaCovariance =
       std::pow(4.0e-5, 2.0) * Eigen::Matrix3d::Identity();
+
+  pim_params->use2ndOrderCoriolis = false;
+
+  pim_params->integrationCovariance =
+      std::pow(1e-3, 2.0) * Eigen::Matrix3d::Identity();
 
   pim_ = std::make_unique<gtsam::PreintegratedCombinedMeasurements>(
       pim_params, gtsam::imuBias::ConstantBias{});

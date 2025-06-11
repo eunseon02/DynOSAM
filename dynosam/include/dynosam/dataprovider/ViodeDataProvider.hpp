@@ -40,7 +40,7 @@ namespace dyno {
 // depth, motion masks, gt
 using ViodeProvider =
     DynoDatasetProvider<cv::Mat, cv::Mat, GroundTruthInputPacket,
-                        std::optional<ImuMeasurements>>;
+                        std::optional<ImuMeasurements>, std::optional<cv::Mat>>;
 
 /**
  * @brief

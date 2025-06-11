@@ -121,11 +121,31 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
 
+  std::optional<gtsam::Rot3> R_curr_ref;
+  ImuFrontend::PimPtr pim;
+  if (input->imu_measurements) {
+    pim = imu_frontend_.preintegrateImuMeasurements(
+        input->imu_measurements.value());
+
+    // nav_state_ =
+    //     pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
+    // previous_imu_state_ =
+    //     pim->predict(gtsam::NavState{}, gtsam::imuBias::ConstantBias{});
+
+    nav_state_ =
+        pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
+
+    // TODO(jesse): should this not be pim->deltaIJ()?
+    R_curr_ref =
+        previous_nav_state_.attitude().inverse() * nav_state_.attitude();
+  }
+
+  // TODO: if no IMU should we use constant velocity model...?
   Frame::Ptr frame = nullptr;
   {
     utils::TimingStatsCollector tracking_timer("tracking_timer");
     frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
-                            *image_container);
+                            *image_container, R_curr_ref);
   }
   CHECK(frame);
 
@@ -139,35 +159,125 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     frame->updateDepths();
   }
 
-  std::optional<gtsam::Rot3> R_curr_ref;
-  if (input->imu_measurements) {
-    LOG(INFO) << "Frontend gotten imu measurements " << input->getFrameId();
-    auto pim = imu_frontend_.preintegrateImuMeasurements(
-        input->imu_measurements.value());
+  // Stereo!!!
+  LOG(INFO) << to_string(image_container->right_stereo_rgb.size());
 
-    nav_state_ =
-        pim->predict(gtsam::NavState{}, gtsam::imuBias::ConstantBias{});
+  auto stereo_match = [&]() {
+    TrackletIds tracklets_ids;
+    // collect left feature points to cv::point2f
+    std::vector<cv::Point2f> left_feature_points =
+        frame->static_features_.toOpenCV(&tracklets_ids, true);
+    std::vector<cv::Point2f> right_feature_points;
+    std::vector<uchar> klt_status;
+    std::vector<float> err;
 
-    R_curr_ref =
-        previous_nav_state_.attitude().inverse() * nav_state_.attitude();
+    const cv::Mat& left_rgb =
+        image_container->getImageWrapper<ImageType::RGBMono>().toRGB();
+    cv::Mat left_mono = ImageType::RGBMono::toMono(left_rgb);
+    CHECK(!left_mono.empty());
+    cv::Mat right_mono =
+        ImageType::RGBMono::toMono(image_container->right_stereo_rgb);
+    CHECK(!right_mono.empty());
 
-    // //TODO: too high - bo outliers... why not...?
-    // tracker_->rejectMatchesGivenRotation(
-    //   previous_frame,
-    //   frame,
-    //   *R_curr_ref,
-    //   4.0
-    // );
+    right_feature_points = left_feature_points;
 
-    previous_nav_state_ = nav_state_;
-  }
+    cv::calcOpticalFlowPyrLK(left_mono, right_mono, left_feature_points,
+                             right_feature_points, klt_status, err,
+                             cv::Size(21, 21), 5);
+    CHECK_EQ(klt_status.size(), tracklets_ids.size());
+    TrackletIds good_stereo_tracklets;
+
+    std::vector<cv::Point2f> pts_left_tracked, pts_right_tracked;
+    for (size_t i = 0; i < klt_status.size(); ++i) {
+      auto tracklet_id = tracklets_ids.at(i);
+      // LOG(INFO) << tracklet_id;
+      if (klt_status[i]) {
+        pts_left_tracked.push_back(left_feature_points[i]);
+        pts_right_tracked.push_back(right_feature_points[i]);
+        good_stereo_tracklets.push_back(tracklet_id);
+      }
+    }
+    LOG(INFO) << "Stereo KLT tracked: " << left_feature_points.size()
+              << " points";
+
+    std::vector<uchar> epipolar_inliers;
+    cv::Mat F =
+        cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
+                               cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
+    CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
+
+    TrackletIds inlier_stereo_tracklets;
+    std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
+    for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
+      auto tracklet_id = good_stereo_tracklets.at(i);
+      if (epipolar_inliers[i]) {
+        pts_left_inlier.push_back(pts_left_tracked[i]);
+        pts_right_inlier.push_back(pts_right_tracked[i]);
+        CHECK(frame->static_features_.getByTrackletId(tracklet_id))
+            << "Somehow tracklet id " << tracklet_id << " is missing!";
+        inlier_stereo_tracklets.push_back(tracklet_id);
+      }
+    }
+
+    LOG(INFO) << "After epipolar filtering: " << inlier_stereo_tracklets.size()
+              << " inliers";
+    static constexpr double baseline = 0.05;
+    const auto fx = frame->getCamera()->getParams().fx();
+
+    for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
+      auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
+      Feature::Ptr feature =
+          frame->static_features_.getByTrackletId(inlier_stereo_track);
+      CHECK(feature);
+      CHECK(feature->usable());
+
+      double uL = static_cast<double>(pts_left_inlier[i].x);
+      double vL = static_cast<double>(pts_left_inlier[i].y);
+      double uR = static_cast<double>(pts_right_inlier[i].x);
+
+      double disparity = uL - uR;
+      // Reject near-zero disparity
+      // this will also mean far away points.... multi-view triangulation across
+      // frames is needed here... fall back on depth map...
+      if (disparity <= 1.0) {
+        // feature->markOutlier();
+      }
+
+      double depth = fx * baseline / disparity;
+      // TODO: no max depth
+      feature->depth(depth);
+    }
+
+    TrackletIds outlier_stereo_tracklets;
+    determineOutlierIds(inlier_stereo_tracklets, tracklets_ids,
+                        outlier_stereo_tracklets);
+
+    frame->static_features_.markOutliers(outlier_stereo_tracklets);
+  };
+
+  stereo_match();
 
   // updates frame->T_world_camera_
   if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
     // frame->T_world_camera_ = nav_state_.pose();
     LOG(ERROR) << "Could not solve for camera";
   }
-  frame->T_world_camera_ = nav_state_.pose();
+
+  // need to match aagain after optical flow used to update the keypoints
+  // wow this seems to make a pretty big difference!!
+  stereo_match();
+
+  previous_nav_state_ =
+      gtsam::NavState(frame->T_world_camera_, nav_state_.velocity());
+
+  if (R_curr_ref) {
+    imu_frontend_.resetIntegration();
+  }
+  // frame->T_world_camera_ = nav_state_.pose();
+
+  LOG(INFO) << frame->T_world_camera_;
+  LOG(INFO) << nav_state_.pose();
+  // frame->T_world_camera_ = nav_state_.pose();
 
   // LOG(INFO) << frame->numStaticUsableFeatures() << " " <<
   // frame->numStaticFeatures();
@@ -195,10 +305,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   MotionEstimateMap motion_estimates =
       object_motions.toEstimateMap(frame->getFrameId());
 
-  const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
-  PointCloudLabelRGB::Ptr dense_labelled_cloud =
-      frame->projectToDenseCloud(&board_detection_mask);
-  // PointCloudLabelRGB::Ptr  dense_labelled_cloud = nullptr;
+  // const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
+  // PointCloudLabelRGB::Ptr dense_labelled_cloud =
+  //     frame->projectToDenseCloud(&board_detection_mask);
+  PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr;
 
   if (logger_) {
     auto ground_truths = this->shared_module_info.getGroundTruthPackets();
@@ -237,6 +347,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, object_motions, object_poses, frame->T_world_camera_,
       input->optional_gt_, debug_imagery, dense_labelled_cloud);
+
+  output->pim_ = pim;
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});
@@ -332,9 +444,8 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
       VLOG(15) << "Refined camera pose with optical flow - error before: "
                << flow_opt_result.error_before.value_or(NaN)
                << " error_after: " << flow_opt_result.error_after.value_or(NaN);
-
-      return true;
     }
+    return true;
   }
   // if (result.status == TrackingStatus::VALID) {
   //   frame_k->T_world_camera_ = result.best_result;
@@ -384,7 +495,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     CHECK(Feature::IsUsable(f));
 
     // dont include features that have only been seen once as we havent had a
-    // chance to validate it yet
+    // // chance to validate it yet
     if (f->age() < 1) {
       continue;
     }

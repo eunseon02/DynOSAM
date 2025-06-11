@@ -69,6 +69,14 @@ class ViodeAllLoader {
     return rgb;
   }
 
+  cv::Mat getRightRGB(size_t idx) const {
+    CHECK_LT(idx, image_right_paths_.size());
+    cv::Mat rgb;
+    loadRGB(image_right_paths_.at(idx), rgb);
+    CHECK(!rgb.empty());
+    return rgb;
+  }
+
   cv::Mat getInstanceMask(size_t idx) const {
     CHECK_LT(idx, masks_0_paths_.size());
     CHECK_LT(idx, dataset_size_);
@@ -82,12 +90,7 @@ class ViodeAllLoader {
 
   cv::Mat getDepthImage(size_t idx) const {
     cv::Mat rgb_left = getRGB(idx);
-
-    cv::Mat rgb_right;
-    CHECK_LT(idx, image_right_paths_.size());
-
-    loadRGB(image_right_paths_.at(idx), rgb_right);
-    CHECK(!rgb_right.empty());
+    cv::Mat rgb_right = getRightRGB(idx);
 
     // this set of images are loaded as 8UC4
     CHECK_EQ(rgb_right.type(), CV_8UC3)
@@ -313,7 +316,7 @@ class ViodeAllLoader {
 
           Timestamps imu_timestamps;
           ImuAccGyrs imu_measurements;
-          auto imu_query_result = imu_buffer.getImuDataBtwTimestamps(
+          auto imu_query_result = imu_buffer.getImuDataInterpolatedBorders(
               previous_timestamp, timestamp_sec, &imu_timestamps,
               &imu_measurements);
 
@@ -358,7 +361,7 @@ class ViodeAllLoader {
   }
 
   void setCameraParams() {
-    CameraParams::IntrinsicsCoeffs K({367.0, 376.0, 376.0, 240.0});
+    CameraParams::IntrinsicsCoeffs K({376.0, 376.0, 376.0, 240.0});
     CameraParams::DistortionCoeffs D({0, 0, 0, 0});
 
     gtsam::Matrix33 rot;
@@ -379,7 +382,43 @@ class ViodeAllLoader {
 
     stereo_camera_ =
         std::make_shared<StereoCamera>(camera_params_, right_camera_params);
-    stereo_matcher_ = std::make_shared<StereoMatcher>(stereo_camera_);
+
+    DenseStereoParams dense_stereo_params;
+    dense_stereo_params.use_sgbm_ = true;
+    dense_stereo_params.post_filter_disparity_ = false;
+    dense_stereo_params.median_blur_disparity_ = false;
+
+    dense_stereo_params.pre_filter_cap_ = 31;
+
+    dense_stereo_params.sad_window_size_ = 5;
+
+    dense_stereo_params.min_disparity_ = 0;
+    dense_stereo_params.num_disparities_ = 16 * 8;  // 128 disparities
+
+    dense_stereo_params.uniqueness_ratio_ = 15;
+
+    dense_stereo_params.speckle_range_ = 2;
+    dense_stereo_params.speckle_window_size_ = 50;
+
+    // BM parameters (ignored if using SGBM)
+    dense_stereo_params.texture_threshold_ = 0;
+    dense_stereo_params.pre_filter_type_ = cv::StereoBM::PREFILTER_XSOBEL;
+    dense_stereo_params.pre_filter_size_ = 9;
+
+    // SGBM parameters (compute from sad_window_size_)
+    dense_stereo_params.p1_ = 8 * 1 * dense_stereo_params.sad_window_size_ *
+                              dense_stereo_params.sad_window_size_;
+    dense_stereo_params.p2_ = 32 * 1 * dense_stereo_params.sad_window_size_ *
+                              dense_stereo_params.sad_window_size_;
+
+    dense_stereo_params.disp_12_max_diff_ = 1;
+
+    // Recommended: use MODE_SGBM_3WAY, so set this to false to avoid MODE_HH
+    dense_stereo_params.use_mode_HH_ = true;
+    // matching_params.sad_window_size_ = 4;
+    // matching_params.num_disparities_ = 16 * 2;
+    stereo_matcher_ = std::make_shared<StereoMatcher>(
+        stereo_camera_, StereoMatchingParams{}, dense_stereo_params);
   }
 
  public:
@@ -447,14 +486,20 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
       std::make_shared<FunctionalDataFolder<std::optional<ImuMeasurements>>>(
           [loader](size_t idx) { return loader->getImuMeasurements(idx); });
 
+  auto rgb_right_loader =
+      std::make_shared<FunctionalDataFolder<std::optional<cv::Mat>>>(
+          [loader](size_t idx) { return loader->getRightRGB(idx); });
+
   this->setLoaders(timestamp_loader, rgb_loader, optical_flow_loader,
-                   depth_loader, instance_mask_loader, gt_loader, imu_loader);
+                   depth_loader, instance_mask_loader, gt_loader, imu_loader,
+                   rgb_right_loader);
 
   auto callback = [&](size_t frame_id, Timestamp timestamp, cv::Mat rgb,
                       cv::Mat optical_flow, cv::Mat depth,
                       cv::Mat instance_mask,
                       GroundTruthInputPacket gt_object_pose_gt,
-                      std::optional<ImuMeasurements> imu_measurements) -> bool {
+                      std::optional<ImuMeasurements> imu_measurements,
+                      std::optional<cv::Mat> right_rgb) -> bool {
     CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
 
     CHECK(ground_truth_packet_callback_);
@@ -470,6 +515,11 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
         ImageWrapper<ImageType::Depth>(depth),
         ImageWrapper<ImageType::OpticalFlow>(optical_flow),
         ImageWrapper<ImageType::MotionMask>(instance_mask));
+
+    if (right_rgb) {
+      image_container->right_stereo_rgb = right_rgb.value();
+    }
+
     CHECK(image_container);
     CHECK(image_container_callback_);
     if (image_container_callback_) image_container_callback_(image_container);

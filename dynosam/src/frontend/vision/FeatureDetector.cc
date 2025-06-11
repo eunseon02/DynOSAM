@@ -78,7 +78,8 @@ FunctionalDetector::Ptr FunctionalDetector::Create<ORBextractor>(
                                  const cv::Mat&) -> void {
     CHECK_NOTNULL(orb_detector_);
     // mask and descriptors are empty
-    orb_detector_->operator()(img, cv::Mat(), keypoints, cv::Mat());
+    cv::Mat descriptors;
+    orb_detector_->operator()(img, cv::Mat(), keypoints, descriptors);
   };
 
   return std::make_shared<FunctionalDetector>(functional_detector);

@@ -616,9 +616,11 @@ class FeatureContainer {
    * associated with their tracklet id.
    *
    * @param tracklet_ids TrackletIds*. Defaults to nullptr
+   * @param only_inliers bool. Defaults to false
    * @return std::vector<cv::Point2f>
    */
-  std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr) const;
+  std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr,
+                                    bool only_inliers = false) const;
 
  private:
   TrackletToFeatureMap feature_map_;

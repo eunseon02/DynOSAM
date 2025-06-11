@@ -112,6 +112,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   ImuFrontend imu_frontend_;
   gtsam::NavState nav_state_;
   gtsam::NavState previous_nav_state_;
+  //   gtsam::NavState previous_imu_state_;
 };
 
 }  // namespace dyno

@@ -83,7 +83,6 @@ class PipelineModuleProcessor : public SIMOPipelineModule<INPUT, OUTPUT> {
 
   virtual inline OutputConstSharedPtr process(
       const InputConstSharedPtr& input) override {
-    LOG(INFO) << "In pipeline " << this->module_name_;
     return module_->spinOnce(CHECK_NOTNULL(input));
   }
 

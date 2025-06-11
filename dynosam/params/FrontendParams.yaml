@@ -1,7 +1,7 @@
 
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
-max_background_depth: 40.0
+max_background_depth: 500.0
 max_object_depth: 20.0
 
 # max_object_depth: 8.0 #indoors
@@ -14,7 +14,7 @@ refine_camera_pose_with_joint_of: True
 
 object_motion_solver:
   ransac_threshold_pnp: 2.0
-  refine_motion_with_joint_of: True
+  refine_motion_with_joint_of: False
   refine_motion_with_3d: False
 
   ransac_iterations: 500
@@ -30,7 +30,7 @@ object_motion_solver:
 
 
 camera_motion_solver:
-  ransac_threshold_pnp: 2.0
+  ransac_threshold_pnp: 1.0
   ransac_iterations: 500
   ransac_probability:  0.995
 
@@ -38,15 +38,15 @@ camera_motion_solver:
 tracker_params:
   shrink_row: 0
   shrink_col: 0
-  max_nr_keypoints_before_anms: 800
-  max_features_per_frame: 400
-  max_dynamic_features_per_frame: 220
+  max_nr_keypoints_before_anms: 1500
+  max_features_per_frame: 300
+  max_dynamic_features_per_frame: 50
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 
 image_tracks_vis_params:
   is_debug: true
   show_frame_info: true
-  show_intermediate_tracking: false
+  show_intermediate_tracking: true
   draw_object_bounding_box: true
   draw_object_mask: false

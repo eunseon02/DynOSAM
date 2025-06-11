@@ -4,7 +4,7 @@ from dynosam_utils.evaluation.runner import run
 def run_analysis(name):
     parsed_args = {
         "dataset_path": "",
-        "output_path": "/root/results/DynoSAM/",
+        "output_path": "/root/results/TRO2025/",
         "name": name,
         "run_pipeline": False,
         "run_analysis": True,
@@ -35,7 +35,7 @@ def run_analysis(name):
 #     run(parsed_args, additional_args)
 
 if __name__ == '__main__':
-    run_analysis("test")
+    run_analysis("viode_city_night_high")
 #     run_sequnce(
 #         "/root/data/omm/swinging_4_unconstrained",
 #         "swinging_4_unconstrained",

@@ -140,6 +140,10 @@ class FeatureTrackerBase {
                              const Frame& current_frame,
                              const ImageTracksParams& config = false) const;
 
+  bool predictKeypointsGivenRotation(std::vector<cv::Point2f>& predicted_pts_k,
+                                     const std::vector<cv::Point2f>& pts_km1,
+                                     const gtsam::Rot3& R_km1_k) const;
+
   // bool predictSparseFlow(std::vector<cv::Point2f>& predicted_pts_k, const
   // std::vector<cv::Point2f>& pts_km1, const gtsam::Rot3& R_km1_k )
 
@@ -150,11 +154,13 @@ class FeatureTrackerBase {
    * checks that the keypoint is within the image size, as given by the camera
    * parameters.
    *
-   * @param kp
+   * @param kp const Keypoint&
    * @return true
    * @return false
    */
   bool isWithinShrunkenImage(const Keypoint& kp) const;
+
+  bool isWithinShrunkenImage(const cv::Point2f& kp) const;
 
  protected:
   const TrackerParams params_;

@@ -82,6 +82,11 @@ class BackendModule
   const BackendParams& getParams() const { return base_params_; }
   const NoiseModels& getNoiseModels() const { return noise_models_; }
 
+  // void registerMapUpdater(std::function<void(const Accessor&)>
+  // frontend_updater) {
+  //   frontend_updater_ = frontend_updater;
+  // }
+
  protected:
   // called in ModuleBase immediately before the spin function is called
   virtual void validateInput(
@@ -106,6 +111,8 @@ class BackendModule
       spin_state_;  //! Spin state of the backend. Updated in the backend module
                     //! base via InputCallback (see BackendModule constructor).
   NoiseModels noise_models_;
+
+  // std::function<void(const Accessor&)> frontend_updater_;
 
  private:
 };

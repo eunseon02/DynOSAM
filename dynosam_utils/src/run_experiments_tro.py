@@ -4,7 +4,7 @@ import sys
 
 output_path = "/root/results/TRO2025/"
 
-def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
+def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, run_as_experiment=True, *args):
     parsed_args = {
         "dataset_path": path,
         "output_path": output_path,
@@ -17,18 +17,21 @@ def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True,
         "--data_provider_type={}".format(data_loader_num),
         "--v=20"
     ]
+
+    parsed_args["launch_file"] = "dyno_sam_launch.py"
+
     if run_as_frontend:
         additional_args.extend([
             "--use_backend=0",
             "--save_frontend_json=true"
         ])
-        parsed_args["launch_file"] = "dyno_sam_launch.py"
     else:
         additional_args.extend([
             "--backend_updater_enum={}".format(backend_type),
             "--use_backend=1"
         ])
-        parsed_args["launch_file"] = "dyno_sam_experiments_launch.py"
+        if run_as_experiment:
+            parsed_args["launch_file"] = "dyno_sam_experiments_launch.py"
 
     if len(args) > 0:
         additional_args.extend(list(args))
@@ -143,15 +146,26 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
     # run_analysis(name_PO)
     # run_analysis(name_POM)
 
+def run_viodes():
+    run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
+
 if __name__ == '__main__':
     # make input dictionary
     world_motion_backend = 0
     ll_backend = 1
 
-    def run_both_backend(run_sequence_func, path, name, *args):
-        # run_sequence_func(path, name, world_motion_backend, *args)
-        run_sequence_func(path, name, ll_backend, *args)
-        run_analysis(name)
+    run_viodes()
+    sys.exit(0)
+
+    # def run_both_backend(run_sequence_func, path, name, *args):
+    #     # run_sequence_func(path, name, world_motion_backend, *args)
+    #     run_sequence_func(path, name, ll_backend, *args)
+    #     run_analysis(name)
 
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001")
@@ -421,14 +435,14 @@ if __name__ == '__main__':
     #     "--opt_window_size=20",
     #     "--opt_window_overlap=5"
     # )
-    run_both_backend(
-        run_cluster_sequence,
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1",
-        "--use_full_batch_opt=false",
-        "--opt_window_size=20",
-        "--opt_window_overlap=5"
-    )
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1",
+    #     "--use_full_batch_opt=false",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5"
+    # )
 
     # run_both_backend(
     #     run_cluster_sequence,
