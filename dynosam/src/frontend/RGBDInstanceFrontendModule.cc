@@ -167,6 +167,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // collect left feature points to cv::point2f
     std::vector<cv::Point2f> left_feature_points =
         frame->static_features_.toOpenCV(&tracklets_ids, true);
+
+    if (left_feature_points.size() < 8) {
+      LOG(WARNING) << "Not enough left feature points for stereo matching...";
+      return;
+    }
+
     std::vector<cv::Point2f> right_feature_points;
     std::vector<uchar> klt_status;
     std::vector<float> err;
@@ -197,55 +203,60 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         good_stereo_tracklets.push_back(tracklet_id);
       }
     }
-    LOG(INFO) << "Stereo KLT tracked: " << left_feature_points.size()
-              << " points";
+    LOG(INFO) << "Stereo KLT tracked: " << pts_left_tracked.size() << " points";
 
-    std::vector<uchar> epipolar_inliers;
-    cv::Mat F =
-        cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
-                               cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
-    CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
-
+    // need more than 8 points for fundamental matrix calc with ransac
     TrackletIds inlier_stereo_tracklets;
-    std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
-    for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
-      auto tracklet_id = good_stereo_tracklets.at(i);
-      if (epipolar_inliers[i]) {
-        pts_left_inlier.push_back(pts_left_tracked[i]);
-        pts_right_inlier.push_back(pts_right_tracked[i]);
-        CHECK(frame->static_features_.getByTrackletId(tracklet_id))
-            << "Somehow tracklet id " << tracklet_id << " is missing!";
-        inlier_stereo_tracklets.push_back(tracklet_id);
-      }
-    }
+    if (pts_left_tracked.size() < 8) {
+      LOG(WARNING)
+          << "Not enough stereo matches to perform fundamental matrix calc";
+    } else {
+      std::vector<uchar> epipolar_inliers;
+      cv::Mat F =
+          cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
+                                 cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
+      CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
 
-    LOG(INFO) << "After epipolar filtering: " << inlier_stereo_tracklets.size()
-              << " inliers";
-    static constexpr double baseline = 0.05;
-    const auto fx = frame->getCamera()->getParams().fx();
-
-    for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
-      auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
-      Feature::Ptr feature =
-          frame->static_features_.getByTrackletId(inlier_stereo_track);
-      CHECK(feature);
-      CHECK(feature->usable());
-
-      double uL = static_cast<double>(pts_left_inlier[i].x);
-      double vL = static_cast<double>(pts_left_inlier[i].y);
-      double uR = static_cast<double>(pts_right_inlier[i].x);
-
-      double disparity = uL - uR;
-      // Reject near-zero disparity
-      // this will also mean far away points.... multi-view triangulation across
-      // frames is needed here... fall back on depth map...
-      if (disparity <= 1.0) {
-        // feature->markOutlier();
+      std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
+      for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
+        auto tracklet_id = good_stereo_tracklets.at(i);
+        if (epipolar_inliers[i]) {
+          pts_left_inlier.push_back(pts_left_tracked[i]);
+          pts_right_inlier.push_back(pts_right_tracked[i]);
+          CHECK(frame->static_features_.getByTrackletId(tracklet_id))
+              << "Somehow tracklet id " << tracklet_id << " is missing!";
+          inlier_stereo_tracklets.push_back(tracklet_id);
+        }
       }
 
-      double depth = fx * baseline / disparity;
-      // TODO: no max depth
-      feature->depth(depth);
+      LOG(INFO) << "After epipolar filtering: "
+                << inlier_stereo_tracklets.size() << " inliers";
+      static constexpr double baseline = 0.05;
+      const auto fx = frame->getCamera()->getParams().fx();
+
+      for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
+        auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
+        Feature::Ptr feature =
+            frame->static_features_.getByTrackletId(inlier_stereo_track);
+        CHECK(feature);
+        CHECK(feature->usable());
+
+        double uL = static_cast<double>(pts_left_inlier[i].x);
+        double vL = static_cast<double>(pts_left_inlier[i].y);
+        double uR = static_cast<double>(pts_right_inlier[i].x);
+
+        double disparity = uL - uR;
+        // Reject near-zero disparity
+        // this will also mean far away points.... multi-view triangulation
+        // across frames is needed here... fall back on depth map...
+        if (disparity <= 1.0) {
+          // feature->markOutlier();
+        }
+
+        double depth = fx * baseline / disparity;
+        // TODO: no max depth
+        feature->depth(depth);
+      }
     }
 
     TrackletIds outlier_stereo_tracklets;

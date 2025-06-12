@@ -35,7 +35,7 @@ def run_analysis(name):
 #     run(parsed_args, additional_args)
 
 if __name__ == '__main__':
-    run_analysis("viode_city_night_high")
+    run_analysis("viode_city_day_mid")
 #     run_sequnce(
 #         "/root/data/omm/swinging_4_unconstrained",
 #         "swinging_4_unconstrained",

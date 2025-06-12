@@ -4,13 +4,13 @@ import sys
 
 output_path = "/root/results/TRO2025/"
 
-def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, run_as_experiment=True, *args):
+def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, run_as_experiment=True, run_analysis=False, *args,):
     parsed_args = {
         "dataset_path": path,
         "output_path": output_path,
         "name": name,
         "run_pipeline": True,
-        "run_analysis": False,
+        "run_analysis": run_analysis,
     }
 
     additional_args = [
@@ -147,12 +147,12 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
     # run_analysis(name_POM)
 
 def run_viodes():
-    run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
-    run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
-    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
-    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
-    run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False)
-    run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False)
+    # run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
 if __name__ == '__main__':
     # make input dictionary
