@@ -305,9 +305,29 @@ if __name__ == '__main__':
 
     prep_cluster_sequence(
         "/root/data/cluster_slam/CARLA-L2/",
-        "cluster_l2",
+        "cluster_l2_new",
         "--starting_frame=33",
         "--ending_frame=385",
+        "--init_object_pose_from_gt=true"
+    )
+
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-L1/",
+        "cluster_l1_new",
+        "--starting_frame=33",
+        "--ending_frame=600",
+        "--init_object_pose_from_gt=true"
+    )
+
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-S1/",
+        "cluster_s1_new",
+        "--init_object_pose_from_gt=true"
+    )
+
+    prep_cluster_sequence(
+        "/root/data/cluster_slam/CARLA-S2/",
+        "cluster_s2_new",
         "--init_object_pose_from_gt=true"
     )
 

@@ -56,7 +56,6 @@ def get_stats(results_path, stats_keys):
     stats_dict = {stats_key : {"mean": [], "stddev": []} for stats_key in stats_keys.keys()}
 
     keys = list(stats_keys.keys())
-    # print(f"Statis dict {stats_dict}")
 
     for folder in sub_folders:
         if eval_files.check_if_results_folder(folder):
@@ -116,7 +115,7 @@ def main(results_path:str, ax: plt.Axes, details: dict, title: Optional[str] = N
     # Convert the dictionary into a DataFrame with varying lengths (introducing NaNs)
     df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in means.items()]))
     for series_name, series in df.items():
-        print(f"{series_name}: max {series.mean()} min {series.min()} max {series.max()}")
+        print(f"{series_name}: mean {series.mean()} min {series.min()} max {series.max()}")
 
 
 
@@ -183,6 +182,8 @@ def get_all_stats(results_folder, stats_dict, stats_key):
     sub_files = [os.path.join(results_folder, name) for name in os.listdir(results_folder)]
     # from all the logging files in the results folder, get those prefixed by stats
     stats_files = list(filter(lambda file: Path(file).name.startswith("stats_") and  Path(file).name.endswith("csv"), sub_files))
+    read_keys = set()
+
 
     for stats_file in stats_files:
 
@@ -191,9 +192,15 @@ def get_all_stats(results_folder, stats_dict, stats_key):
 
         # find key in rows - bit gross ;)
         for row in reader:
-            if stats_key in row["label"]:
+            csv_key = row["label"]
+            if stats_key in csv_key:
                 stats_dict["mean"].append(float(row["mean"]))
                 stats_dict["stddev"].append(float(row["stddev"]))
+
+                # if csv_key not in read_keys:
+                #     print(f"Using CSV key {csv_key} with requested key {stats_key}")
+                #     read_keys.add(csv_key)
+
 
 
 
@@ -220,6 +227,11 @@ REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
                                "object_nlo_refinement [ms]": {"label": "Motion Refinement"}}
                       }
 
+SLIDING_WINDOW_STATS = {"name": "Sliding",
+                         "log_scale":False,
+                       "keys":{"sliding_window_optimise ": {"label":"SW"}}
+                      }
+
 # hardcoded key to search for
 # TRACKING_STATS_KEYS = ["frontend.feature_tracker", "static_feature", "dynamic_feature"]
 # REFINEMENT_STATS_KEYS = ["otion_solver.solve_3d2d","joint_of_pose [ms]", "object_nlo_refinement [ms]"]
@@ -227,16 +239,16 @@ REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
 # OPT_STATS_KEYS=["batch_opt_num_vars", "sliding_window_optimise_num_vars"]
 
 
-INCREMENTAL_STATS = {"name": "Parallel Object Estimation",
-                         "log_scale":False,
-                       "keys":{"parallel_object_sam.optimize": {"label":"P-Opt"}}
-                      }
+# INCREMENTAL_STATS = {"name": "Parallel Object Estimation",
+#                          "log_scale":False,
+#                        "keys":{"parallel_object_sam.optimize": {"label":"P-Opt"}}
+#                       }
 
 if __name__ == "__main__":
     parser = parser()
     argcomplete.autocomplete(parser)
     args = parser.parse_args()
-    if plot(args.dynosam_results_path, [INCREMENTAL_STATS]):
+    if plot(args.dynosam_results_path, [SLIDING_WINDOW_STATS]):
         sys.exit(os.EX_OK)
     else:
         sys.exit(os.EX_IOERR)

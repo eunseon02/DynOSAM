@@ -23,13 +23,26 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
     camera_pose_eval = dataset_eval.create_camera_pose_evaluator(data_files)
     motion_eval = dataset_eval.create_motion_error_evaluator(data_files)
 
-    plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval, title=prefix, plot_object_points=False)
+    plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval, title=prefix,
+                                plot_object_points=False,
+                                plot_gt_objects=False,
+                                plot_gt_camera=False,
+                                downsample_static_cloud=0.05)
 
     if plot_collection is None:
         plot_collection = evo_plot.PlotCollection("Map")
-    results = {}
 
-    plotter.process(plot_collection, results)
+    ax, fig = plotter.plot_3d_map_points(plot_collection)
+
+    ax.view_init(azim=-113, elev=38, roll=1)
+    ax.grid(False)
+    fig.tight_layout()
+    ax.get_legend().remove()
+
+    ax.set_rasterization_zorder(10)
+
+
+
     return plot_collection
 
     # MapPlotter3D,
@@ -54,7 +67,7 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
 # make_plot("/root/results/misc/", "object_centric_LM_opt_backend")
 
 plot_collection = evo_plot.PlotCollection("Map")
-# make_plot("/root/results/TRO2025/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend", plot_collection)
+make_plot("/root/results/TRO2025/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend", plot_collection)
 
 
 # make_plot("/root/results/misc/", "rgbd_motion_world_LM_opt_backend", plot_collection)
@@ -85,8 +98,8 @@ plot_collection = evo_plot.PlotCollection("Map")
 
 # make_plot("/root/results/TRO2025/test_kitti_main", "frontend", plot_collection)
 # make_plot("/root/results/TRO2025/test_kitti_main", "rgbd_motion_world_backend", plot_collection)
-make_plot("/root/results/Dynosam_ecmr2024/kitti_0000", "object_centric_inc_backend", plot_collection)
-make_plot("/root/results/Dynosam_ecmr2024/kitti_0000", "frontend", plot_collection)
+# make_plot("/root/results/Dynosam_ecmr2024/kitti_0000", "object_centric_inc_backend", plot_collection)
+# make_plot("/root/results/Dynosam_ecmr2024/kitti_0000", "frontend", plot_collection)
 
 
 

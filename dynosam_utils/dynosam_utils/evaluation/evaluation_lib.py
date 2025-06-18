@@ -3,6 +3,8 @@ import os
 import logging
 from typing import Optional, List, Tuple, Dict, TypeAlias
 from pathlib import Path
+import matplotlib.axes
+import matplotlib.figure
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
@@ -562,7 +564,7 @@ class MotionErrorEvaluator(Evaluator):
             timestamps_ref = np.array(ref["timestamps"][:-1])
             # This will need the poses to be in order
             # assume est and ref are the same size
-            if len(timestamps) < 7:
+            if len(timestamps) < 3:
                 continue
 
             # #hack for now to handle trajectories that jump
@@ -748,7 +750,7 @@ class MapPlotter3D(Evaluator):
         print("Logging 3d points")
         self.plot_3d_map_points(plot_collection)
 
-    def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection):
+    def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection) -> Tuple[matplotlib.axes.Axes,matplotlib.figure.Figure]:
         map_fig = plt.figure(figsize=(8,14))
         # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
         ax = map_fig.add_subplot(111, projection="3d")
@@ -756,6 +758,13 @@ class MapPlotter3D(Evaluator):
         ax.set_xlabel(r"X(m)")
         ax.set_zlabel(r"Z(m)")
         # ax = map_fig.add_subplot(111, projection="3d")
+
+        plot_object_points = self.kwargs.get("plot_object_points", True)
+        plot_static_points = self.kwargs.get("plot_static_points", True)
+        plot_gt_objects = self.kwargs.get("plot_gt_objects", True)
+        plot_gt_camera = self.kwargs.get("plot_gt_camera", True)
+        downsample_static_cloud = self.kwargs.get("downsample_static_cloud", None)
+
 
 
         camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
@@ -793,10 +802,13 @@ class MapPlotter3D(Evaluator):
             if object_trajectory and plot_velocities:
                 core.plotting.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
+        camera_ref_dict = None
+        if plot_gt_camera:
+            camera_ref_dict = {"Camera Ref": camera_traj_ref}
 
         core.plotting.plot_object_trajectories(map_fig,
                                        {"Camera":camera_traj},
-                                       {"Camera Ref": camera_traj_ref},
+                                       camera_ref_dict,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,
@@ -807,17 +819,11 @@ class MapPlotter3D(Evaluator):
                                        traj_linewidth=3.0)
 
 
-        x_points = []
-        y_points = []
-        z_points = []
+        static_points = []
 
         object_points = {}
 
         tracklet_set = set()
-
-        plot_object_points = self.kwargs.get("plot_object_points", True)
-        plot_static_points = self.kwargs.get("plot_static_points", True)
-        plot_gt_objects = self.kwargs.get("plot_gt_objects", True)
 
         for row in self._map_points_file:
             frame_id = float(row["frame_id"])
@@ -838,9 +844,7 @@ class MapPlotter3D(Evaluator):
             t_robot_convention = transform @ t_cam_convention
 
             if object_id == 0 and plot_static_points:
-                x_points.append(t_robot_convention[0])
-                y_points.append(t_robot_convention[1])
-                z_points.append(t_robot_convention[2])
+                static_points.append([t_robot_convention[0], t_robot_convention[1], t_robot_convention[2]])
 
                 tracklet_set.add(tracklet_id)
             elif plot_object_points:
@@ -899,11 +903,25 @@ class MapPlotter3D(Evaluator):
 
         ax.view_init(azim=0, elev=90)
         ax.patch.set_facecolor('white')
-        # ax.axis('off')
+        ax.axis('off')
+
+        static_points = np.array(static_points)
+
+        if downsample_static_cloud is not None:
+            assert type(downsample_static_cloud) == float
+
+            import open3d as o3d
+            static_pc = o3d.geometry.PointCloud()
+            static_pc.points = o3d.utility.Vector3dVector(static_points)
+
+            logger.info(f"Downsampling static cloud with voxel size {downsample_static_cloud}")
+            static_pc_down = static_pc.voxel_down_sample(voxel_size=downsample_static_cloud)
+
+            static_points = np.asarray(static_pc_down.points)
 
         # static points
         # some of these params are after handtuning on particular datasets for pretty figures ;)
-        ax.scatter(x_points, y_points, z_points, s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
+        ax.scatter(static_points[:,0], static_points[:,1], static_points[:,2], s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
         for (_, data), object_colour in zip(object_points.items(), colour_list):
             ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
@@ -917,7 +935,7 @@ class MapPlotter3D(Evaluator):
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
         if plot_gt_objects:
-            core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
+            core.plotting.plot_object_trajectories(map_fig, all_gt_trxyzaj,
                                         plot_mode=evo_plot.PlotMode.xyz,
                                         colours=colour_list,
                                         plot_axis_est=True,
@@ -935,6 +953,7 @@ class MapPlotter3D(Evaluator):
         # ax.legend().set_visible(False)
 
         plot_collection.add_figure(self.kwargs.get("title", "Map"), map_fig)
+        return ax, map_fig
 
 
 

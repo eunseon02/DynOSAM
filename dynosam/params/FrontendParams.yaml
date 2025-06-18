@@ -30,7 +30,7 @@ object_motion_solver:
 
 
 camera_motion_solver:
-  ransac_threshold_pnp: 2.0
+  ransac_threshold_pnp: 1.0
   ransac_iterations: 500
   ransac_probability:  0.995
 
@@ -38,9 +38,9 @@ camera_motion_solver:
 tracker_params:
   shrink_row: 0
   shrink_col: 0
-  max_nr_keypoints_before_anms: 2000
+  max_nr_keypoints_before_anms: 1000
   max_features_per_frame: 800
-  max_dynamic_features_per_frame: 250
+  max_dynamic_features_per_frame: 150
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 
