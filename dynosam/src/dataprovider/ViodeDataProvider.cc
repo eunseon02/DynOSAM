@@ -231,22 +231,7 @@ class ViodeAllLoader {
       ImuAccGyr imu_data;
       imu_data << ax, ay, az, wx, wy, wz;
       // imu_data << 0, 0, 9.8, 0, 0, 0;
-
-      // VIODE is built with unreal and therefore uses the left-hand coordinate
-      // system convert to robotic convention
-      //  gtsam::Vector3 left_handed_linear_acceleration,
-      //  left_handed_angular_velocity; left_handed_linear_acceleration << ax,
-      //  ay, az; left_handed_angular_velocity << wx, wy, wz;
-
-      // gtsam::Vector3 robotic_linear_acceleration, robotic_angular_velocity;
-      // toRightHandedTwist(
-      //   robotic_linear_acceleration,
-      //   robotic_angular_velocity,
-      //   left_handed_linear_acceleration,
-      //   left_handed_angular_velocity
-      // );
-      // imu_data << robotic_linear_acceleration, robotic_angular_velocity;
-
+      cached_imu_measurements_.push_back(ImuMeasurement(stamp, imu_data));
       imu_buffer.addMeasurement(stamp, imu_data);
     }
     LOG(INFO) << "Loaded IMU data";
@@ -435,6 +420,9 @@ class ViodeAllLoader {
   // frame k to imu measurements where the measurements should be from k-1 to k
   gtsam::FastMap<FrameId, ImuMeasurements> imu_measrements_;
 
+  std::vector<ImuMeasurement> cached_imu_measurements_;
+  bool imu_measurements_sent{false};
+
   GroundTruthPacketMap ground_truth_packets_;
   // left camera params
   CameraParams camera_params_;
@@ -494,6 +482,10 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
                    depth_loader, instance_mask_loader, gt_loader, imu_loader,
                    rgb_right_loader);
 
+  std::vector<ImuMeasurement>& cached_imu_measurements =
+      loader->cached_imu_measurements_;
+  auto& imu_measurements_sent = loader->imu_measurements_sent;
+
   auto callback = [&](size_t frame_id, Timestamp timestamp, cv::Mat rgb,
                       cv::Mat optical_flow, cv::Mat depth,
                       cv::Mat instance_mask,
@@ -506,8 +498,21 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
     if (ground_truth_packet_callback_)
       ground_truth_packet_callback_(gt_object_pose_gt);
 
-    if (imu_multi_input_callback_ && imu_measurements)
-      imu_multi_input_callback_(imu_measurements.value());
+    if (cached_imu_measurements.size() > 0 && !imu_measurements_sent) {
+      if (!imu_single_input_callback_) {
+        LOG(WARNING) << "imu_single_input_callback_ has not been registered!! "
+                        "Skipping IMU data...";
+
+      } else {
+        for (const auto& imu_measurement : cached_imu_measurements) {
+          imu_single_input_callback_(imu_measurement);
+        }
+      }
+      imu_measurements_sent = true;
+    }
+
+    // if (imu_multi_input_callback_ && imu_measurements)
+    //   imu_multi_input_callback_(imu_measurements.value());
 
     ImageContainer::Ptr image_container = nullptr;
     image_container = ImageContainer::Create(

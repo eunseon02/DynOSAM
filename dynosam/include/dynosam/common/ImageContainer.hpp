@@ -443,6 +443,123 @@ class ImageContainer
   const FrameId frame_id_;
 };
 
+class MismatchedImageWrapperTypes : public DynosamException {
+ public:
+  MismatchedImageWrapperTypes(const std::string& requested_type,
+                              const std::string& stored_type)
+      : DynosamException("Attempting to retrieve value with requested type \"" +
+                         requested_type + "\", but stored type is " +
+                         stored_type),
+        requested_type_name(requested_type),
+        stored_type_name(stored_type) {}
+
+  const std::string requested_type_name;
+  const std::string stored_type_name;
+};
+
+class ImageKeyAlreadyExists : public DynosamException {
+ public:
+  ImageKeyAlreadyExists(const std::string& image_key)
+      : DynosamException("Image key \"" + image_key +
+                         "\" already exists in the container"),
+        key(image_key) {}
+
+  const std::string key;
+};
+
+class ImageKeyDoesNotExist : public DynosamException {
+ public:
+  ImageKeyDoesNotExist(const std::string& image_key)
+      : DynosamException("Image key \"" + image_key +
+                         "\" does not exist in the container"),
+        key(image_key) {}
+
+  const std::string key;
+};
+
+class ImageContainerBase {
+ private:
+  /**
+   * @brief Internal data-structure to manage a key-image mapping pair
+   *
+   * The image is stored as a type erased ImageWrapper which is defined upon
+   * construction and recoverable by dynamic pointer casting.
+   *
+   * Note: Move constructors and assignments are made explicit.
+   * According to chat-gpt (seems to check out with the documentation):
+   * "you declare any constructor, especially a templated constructor,
+   *  the compiler does not generate copy/move constructors or assignments
+   * unless you explicitly say".
+   *
+   * We can make them default to let the compiler figure out how to define them
+   * since all types are well defined.
+   *
+   */
+  struct KeyImagePair {
+    const std::string key;
+    const std::string stored_type;
+    std::unique_ptr<ImageBase> ptr;
+
+    template <typename IMAGETYPE>
+    KeyImagePair(const std::string& name,
+                 std::unique_ptr<ImageWrapper<IMAGETYPE>> image_wrapper)
+        : key(name),
+          stored_type(type_name<IMAGETYPE>()),
+          ptr(std::move(image_wrapper)) {}
+
+    // Move constructor
+    KeyImagePair(KeyImagePair&&) noexcept = default;
+    // Move assignment
+    KeyImagePair& operator=(KeyImagePair&&) noexcept = default;
+
+    template <typename IMAGETYPE>
+    static KeyImagePair Create(const std::string& key, const cv::Mat& image) {
+      return KeyImagePair(key,
+                          std::make_unique<ImageWrapper<IMAGETYPE>>(image));
+    }
+
+    template <typename IMAGETYPE>
+    const ImageWrapper<IMAGETYPE>& cast() const {
+      auto* casted = dynamic_cast<ImageWrapper<IMAGETYPE>*>(ptr.get());
+      if (!casted) {
+        const auto requested_type = type_name<ImageType>();
+        throw MismatchedImageWrapperTypes(requested_type, stored_type);
+      }
+      return *casted;
+    }
+  };
+
+  gtsam::FastMap<std::string, KeyImagePair> images_;
+
+ public:
+  ImageContainerBase() {}
+
+  template <typename IMAGETYPE>
+  void add(const std::string& key, const cv::Mat& image) {
+    if (exists(key)) {
+      throw ImageKeyAlreadyExists(key);
+    }
+
+    KeyImagePair key_image = KeyImagePair::Create<IMAGETYPE>(key, image);
+    images_.emplace(key, std::move(key_image));
+  }
+
+  template <typename IMAGETYPE>
+  const ImageWrapper<IMAGETYPE>& at(const std::string& key) const {
+    if (!exists(key)) {
+      throw ImageKeyDoesNotExist(key);
+    }
+
+    const KeyImagePair& key_image = images_.at(key);
+    return key_image.cast<IMAGETYPE>();
+  }
+
+  inline bool exists(const std::string& key) const {
+    return images_.exists(key);
+  }
+  inline size_t size() const { return images_.size(); }
+};
+
 }  // namespace dyno
 
 #include "dynosam/common/ImageContainer-inl.hpp"

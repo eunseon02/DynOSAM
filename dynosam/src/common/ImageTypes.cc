@@ -36,6 +36,10 @@
 
 namespace dyno {
 
+ImageBase::ImageBase(const cv::Mat& img) : image(img) {}
+
+bool ImageBase::exists() const { return !image.empty(); }
+
 void validateMask(const cv::Mat& input, const std::string& name) {
   // we guanrantee with a static assert that the SemanticMask and MotionMask
   // types are the same

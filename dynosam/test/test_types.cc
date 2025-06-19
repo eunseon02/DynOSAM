@@ -180,6 +180,70 @@ TEST(ImageType, testMotionMaskValidation) {
   // TODO:
 }
 
+TEST(ImageContainerV2, testBasicAdd) {
+  ImageContainerBase container;
+  EXPECT_EQ(container.size(), 0u);
+  EXPECT_TRUE(container.exists("rgb") == false);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  container.add<ImageType::RGBMono>("rgb", input);
+  EXPECT_TRUE(container.exists("rgb"));
+
+  EXPECT_EQ(container.size(), 1u);
+  ImageWrapper<ImageType::RGBMono> wrapped =
+      container.at<ImageType::RGBMono>("rgb");
+  EXPECT_TRUE(wrapped.exists());
+
+  cv::Mat retrieved_image = wrapped;
+  EXPECT_EQ(retrieved_image.data, input.data);
+}
+
+TEST(ImageContainerV2, testBasicAddWrongType) {
+  ImageContainerBase container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  container.add<ImageType::RGBMono>("rgb", input);
+  EXPECT_THROW({ container.at<ImageType::OpticalFlow>("rgb"); },
+               MismatchedImageWrapperTypes);
+}
+
+TEST(ImageContainerV2, testInvalidImageInput) {
+  ImageContainerBase container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+  // request RGBMono but give optical flow type!!
+  EXPECT_THROW({ container.add<ImageType::RGBMono>("rgb", optical_flow); },
+               InvalidImageTypeException);
+}
+
+TEST(ImageContainerV2, testMultiAdd) {
+  ImageContainerBase container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+  container.add<ImageType::RGBMono>("rgb", input);
+  container.add<ImageType::OpticalFlow>("flow", optical_flow);
+  EXPECT_TRUE(container.exists("rgb"));
+  EXPECT_TRUE(container.exists("flow"));
+
+  EXPECT_EQ(container.size(), 2u);
+  {
+    ImageWrapper<ImageType::RGBMono> wrapped =
+        container.at<ImageType::RGBMono>("rgb");
+    EXPECT_TRUE(wrapped.exists());
+  }
+
+  EXPECT_EQ(container.size(), 2u);
+  {
+    ImageWrapper<ImageType::OpticalFlow> wrapped =
+        container.at<ImageType::OpticalFlow>("flow");
+    EXPECT_TRUE(wrapped.exists());
+  }
+}
+
 TEST(ImageContainerSubset, testBasicSubsetContainer) {
   cv::Mat depth(cv::Size(25, 25), CV_64F);
   uchar* depth_ptr = depth.data;

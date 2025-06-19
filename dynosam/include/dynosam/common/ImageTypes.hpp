@@ -60,6 +60,25 @@ struct image_traits_impl {
   static std::string name() { return IMAGETYPE::name(); }
 };
 
+template <typename T>
+struct ImageWrapper;
+
+struct ImageBase {
+  cv::Mat image;  //! Underlying image
+
+  ImageBase() = default;
+  ImageBase(const cv::Mat& img);
+  virtual ~ImageBase() {}
+
+  operator cv::Mat&() { return image; }
+  operator const cv::Mat&() const { return image; }
+
+  template <typename IMAGETYPE>
+  const ImageWrapper<IMAGETYPE>& cast() const;
+
+  bool exists() const;
+};
+
 /**
  * @brief ImageWrapper for a ImageType that defines a particular type of input
  * image. The ImageType template is used to create different types (actual c++
@@ -75,17 +94,13 @@ struct image_traits_impl {
  * @tparam IMAGETYPE
  */
 template <typename IMAGETYPE>
-struct ImageWrapper {
+struct ImageWrapper : public ImageBase {
   using Type = IMAGETYPE;
   using This = ImageWrapper<Type>;
 
-  cv::Mat image;  //! Underlying image
-
   ImageWrapper() = default;
   ImageWrapper(const cv::Mat& img);
-
-  operator cv::Mat&() { return image; }
-  operator const cv::Mat&() const { return image; }
+  ImageWrapper(const ImageBase& image_base);
 
   /**
    * @brief Returns an ImageWrapper with the underlying image data cloned
@@ -93,10 +108,15 @@ struct ImageWrapper {
    * @return ImageWrapper<Type>
    */
   ImageWrapper<Type> clone() const;
-  bool exists() const;
 
   cv::Mat toRGB() const { return IMAGETYPE::toRGB(*this); }
 };
+
+// define ImageBase::cast here since now ImageWrapper has been declared
+template <typename IMAGETYPE>
+const ImageWrapper<IMAGETYPE>& ImageBase::cast() const {
+  return dynamic_cast<const ImageWrapper<IMAGETYPE>&>(*this);
+}
 
 struct ImageType {
   /**
