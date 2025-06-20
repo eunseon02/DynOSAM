@@ -95,11 +95,17 @@ int main(int argc, char* argv[]) {
     motion_viz = ImageType::MotionMask::toRGB(motion);
     depth_viz = ImageType::Depth::toRGB(depth);
 
-    ImageContainer::Ptr container = ImageContainer::Create(
-        timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-        ImageWrapper<ImageType::Depth>(depth),
-        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-        ImageWrapper<ImageType::MotionMask>(motion));
+    ImageContainer image_container(frame_id, timestamp);
+    image_container.rgb(rgb)
+        .depth(depth)
+        .opticalFlow(optical_flow)
+        .objectMotionMask(motion);
+
+    // ImageContainerDeprecate::Ptr container = ImageContainerDeprecate::Create(
+    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+    //     ImageWrapper<ImageType::Depth>(depth),
+    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+    //     ImageWrapper<ImageType::MotionMask>(motion));
 
     // cv::Mat boarder_mask;
     // vision_tools::computeObjectMaskBoundaryMask(
@@ -127,7 +133,7 @@ int main(int argc, char* argv[]) {
     // cv::waitKey(1);
     cv::imshow("Depth", depth_viz);
 
-    auto frame = tracker->track(frame_id, timestamp, *container);
+    auto frame = tracker->track(frame_id, timestamp, image_container);
     Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
     // // motion_viz =

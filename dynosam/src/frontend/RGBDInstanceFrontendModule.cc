@@ -159,9 +159,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     frame->updateDepths();
   }
 
-  // Stereo!!!
-  LOG(INFO) << to_string(image_container->right_stereo_rgb.size());
-
   auto stereo_match = [&]() {
     TrackletIds tracklets_ids;
     // collect left feature points to cv::point2f
@@ -177,12 +174,11 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     std::vector<uchar> klt_status;
     std::vector<float> err;
 
-    const cv::Mat& left_rgb =
-        image_container->getImageWrapper<ImageType::RGBMono>().toRGB();
+    const cv::Mat& left_rgb = image_container->rgb().toRGB();
     cv::Mat left_mono = ImageType::RGBMono::toMono(left_rgb);
     CHECK(!left_mono.empty());
     cv::Mat right_mono =
-        ImageType::RGBMono::toMono(image_container->right_stereo_rgb);
+        ImageType::RGBMono::toMono(image_container->rightRgb());
     CHECK(!right_mono.empty());
 
     right_feature_points = left_feature_points;
@@ -342,14 +338,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
 
   const ImageContainer& processed_image_container = frame->image_container_;
-  debug_imagery.rgb_viz = ImageType::RGBMono::toRGB(
-      processed_image_container.get<ImageType::RGBMono>());
-  debug_imagery.flow_viz = ImageType::OpticalFlow::toRGB(
-      processed_image_container.get<ImageType::OpticalFlow>());
+  debug_imagery.rgb_viz =
+      ImageType::RGBMono::toRGB(processed_image_container.rgb());
+  debug_imagery.flow_viz =
+      ImageType::OpticalFlow::toRGB(processed_image_container.opticalFlow());
   debug_imagery.mask_viz = ImageType::MotionMask::toRGB(
-      processed_image_container.get<ImageType::MotionMask>());
-  debug_imagery.depth_viz = ImageType::Depth::toRGB(
-      processed_image_container.get<ImageType::Depth>());
+      processed_image_container.objectMotionMask());
+  debug_imagery.depth_viz =
+      ImageType::Depth::toRGB(processed_image_container.depth());
 
   // if (display_queue_)
   //   display_queue_->push(ImageToDisplay("Motion Mask",
@@ -366,9 +362,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   if (FLAGS_log_projected_masks)
     vision_tools::writeOutProjectMaskAndDepthMap(
-        frame->image_container_.get<ImageType::Depth>(),
-        frame->image_container_.get<ImageType::MotionMask>(),
-        *frame->getCamera(), frame->getFrameId());
+        frame->image_container_.depth(),
+        frame->image_container_.objectMotionMask(), *frame->getCamera(),
+        frame->getFrameId());
 
   if (logger_) {
     auto ground_truths = this->shared_module_info.getGroundTruthPackets();

@@ -63,6 +63,7 @@ static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
+constexpr static Timestamp InvalidTimestamp = 0;
 
 /// @brief Discrete object id, j.
 using ObjectId = int;

@@ -50,6 +50,8 @@ class ImageContainerConstructionException : public DynosamException {
       : DynosamException(what) {}
 };
 
+// [[deprecated("This class is deprecated along with
+// ImageContainerDepricated")]]
 template <typename... ImageTypes>
 class ImageContainerSubset {
  public:
@@ -255,13 +257,15 @@ class UndistorterRectifier;  // TODO:!!
 // cv::mats are cloned difficult as we want the behaviour in the base class but
 // the base class does not know the derived type this and also implicit casting
 // to other subset types
-class ImageContainer
+class [[deprecated(
+    "This class is deprecated. Use ImageContainer "
+    "instead.")]] ImageContainerDeprecate
     : public ImageContainerSubset<
           ImageType::RGBMono, ImageType::Depth, ImageType::OpticalFlow,
           ImageType::SemanticMask, ImageType::MotionMask,
           ImageType::ClassSegmentation> {
  public:
-  DYNO_POINTER_TYPEDEFS(ImageContainer)
+  DYNO_POINTER_TYPEDEFS(ImageContainerDeprecate)
 
   using Base =
       ImageContainerSubset<ImageType::RGBMono, ImageType::Depth,
@@ -343,9 +347,9 @@ class ImageContainer
    * @param depth
    * @param optical_flow
    * @param semantic_mask
-   * @return ImageContainer::Ptr
+   * @return ImageContainerDeprecate::Ptr
    */
-  static ImageContainer::Ptr Create(
+  static ImageContainerDeprecate::Ptr Create(
       const Timestamp timestamp, const FrameId frame_id,
       const ImageWrapper<ImageType::RGBMono>& img,
       const ImageWrapper<ImageType::Depth>& depth,
@@ -362,9 +366,9 @@ class ImageContainer
    * @param optical_flow
    * @param motion_mask
    * @param class_segmentation
-   * @return ImageContainer::Ptr
+   * @return ImageContainerDeprecate::Ptr
    */
-  static ImageContainer::Ptr Create(
+  static ImageContainerDeprecate::Ptr Create(
       const Timestamp timestamp, const FrameId frame_id,
       const ImageWrapper<ImageType::RGBMono>& img,
       const ImageWrapper<ImageType::Depth>& depth,
@@ -381,9 +385,9 @@ class ImageContainer
    * @param depth
    * @param optical_flow
    * @param motion_mask
-   * @return ImageContainer::Ptr
+   * @return ImageContainerDeprecate::Ptr
    */
-  static ImageContainer::Ptr Create(
+  static ImageContainerDeprecate::Ptr Create(
       const Timestamp timestamp, const FrameId frame_id,
       const ImageWrapper<ImageType::RGBMono>& img,
       const ImageWrapper<ImageType::Depth>& depth,
@@ -393,8 +397,9 @@ class ImageContainer
   // TODO: this should really be a free function which is templated but issues
   // making it nice and elegant (easily template deducted + ImageCotnainer has
   // const variables in it) ideally also templated on the base class!!
-  static ImageContainer::Ptr RectifyImages(
-      ImageContainer::Ptr images, const UndistorterRectifier& undistorter);
+  static ImageContainerDeprecate::Ptr RectifyImages(
+      ImageContainerDeprecate::Ptr images,
+      const UndistorterRectifier& undistorter);
 
  protected:
   using Base::clone;  // make private so we can implement this one!
@@ -404,8 +409,8 @@ class ImageContainer
    * validateSetup on the resulting object.
    *
    * Used by each public Create function to construct the underlying
-   * ImageContainer. validateSetup must called after construction as it is a
-   * virtual function.
+   * ImageContainerDeprecate. validateSetup must called after construction as it
+   * is a virtual function.
    *
    * @param timestamp
    * @param frame_id
@@ -415,9 +420,9 @@ class ImageContainer
    * @param semantic_mask
    * @param motion_mask
    * @param class_segmentation
-   * @return ImageContainer::Ptr
+   * @return ImageContainerDeprecate::Ptr
    */
-  static ImageContainer::Ptr Create(
+  static ImageContainerDeprecate::Ptr Create(
       const Timestamp timestamp, const FrameId frame_id,
       const ImageWrapper<ImageType::RGBMono>& img,
       const ImageWrapper<ImageType::Depth>& depth,
@@ -427,7 +432,7 @@ class ImageContainer
       const ImageWrapper<ImageType::ClassSegmentation>& class_segmentation);
 
  private:
-  explicit ImageContainer(
+  explicit ImageContainerDeprecate(
       const Timestamp timestamp, const FrameId frame_id,
       const ImageWrapper<ImageType::RGBMono>& img,
       const ImageWrapper<ImageType::Depth>& depth,
@@ -477,7 +482,9 @@ class ImageKeyDoesNotExist : public DynosamException {
   const std::string key;
 };
 
-class ImageContainerBase {
+// atttempt to mimic the copy/assignment behaviour of the cv::Mat class
+// everything is a shallow copy until specified with clone
+class ImageContainer {
  private:
   /**
    * @brief Internal data-structure to manage a key-image mapping pair
@@ -500,12 +507,41 @@ class ImageContainerBase {
     const std::string stored_type;
     std::unique_ptr<ImageBase> ptr;
 
+    // only for when the type is externally known as the ImageBase contains no
+    // information about the (IMAGETYPE) type
+    KeyImagePair(const std::string& name, const std::string& type,
+                 std::unique_ptr<ImageBase> image_wrapper)
+        : key(name), stored_type(type), ptr(std::move(image_wrapper)) {}
+
     template <typename IMAGETYPE>
     KeyImagePair(const std::string& name,
                  std::unique_ptr<ImageWrapper<IMAGETYPE>> image_wrapper)
         : key(name),
           stored_type(type_name<IMAGETYPE>()),
           ptr(std::move(image_wrapper)) {}
+
+    // Copy constructor
+    KeyImagePair(const KeyImagePair& other)
+        : key(other.key),
+          stored_type(other.stored_type),
+          ptr(other.ptr ? other.ptr->shallowCopy() : nullptr) {}
+
+    // Copy assignment operator
+    KeyImagePair& operator=(const KeyImagePair& other) {
+      if (this != &other) {
+        // key and stored_type are const, so normally non-assignable,
+        // so this only works if you can guarantee they are the same or make
+        // them non-const. Otherwise, you may want to remove const qualifier on
+        // key and stored_type.
+        assert(this->stored_type == other.stored_type);
+        assert(this->key == other.key);
+
+        // For simplicity, assume non-const or only allow assignment when key is
+        // the same
+        ptr = other.ptr ? other.ptr->shallowCopy() : nullptr;
+      }
+      return *this;
+    }
 
     // Move constructor
     KeyImagePair(KeyImagePair&&) noexcept = default;
@@ -518,46 +554,152 @@ class ImageContainerBase {
                           std::make_unique<ImageWrapper<IMAGETYPE>>(image));
     }
 
+    KeyImagePair clone() const {
+      CHECK_NOTNULL(ptr);
+      return KeyImagePair(key, stored_type, ptr ? ptr->deepCopy() : nullptr);
+    }
+
     template <typename IMAGETYPE>
     const ImageWrapper<IMAGETYPE>& cast() const {
-      auto* casted = dynamic_cast<ImageWrapper<IMAGETYPE>*>(ptr.get());
+      return castImpl<IMAGETYPE, true>();
+    }
+
+    template <typename IMAGETYPE>
+    ImageWrapper<IMAGETYPE>& cast() {
+      return castImpl<IMAGETYPE, false>();
+    }
+
+    template <typename IMAGETYPE, bool IsConst>
+    decltype(auto) castImpl() const {
+      using WrapperType = ImageWrapper<IMAGETYPE>;
+      using PointerType =
+          std::conditional_t<IsConst, const WrapperType*, WrapperType*>;
+
+      PointerType casted = dynamic_cast<PointerType>(ptr.get());
+
       if (!casted) {
-        const auto requested_type = type_name<ImageType>();
+        const auto requested_type = type_name<IMAGETYPE>();
         throw MismatchedImageWrapperTypes(requested_type, stored_type);
       }
+
       return *casted;
     }
   };
 
+  FrameId frame_id_;
+  Timestamp timestamp_;
   gtsam::FastMap<std::string, KeyImagePair> images_;
 
  public:
-  ImageContainerBase() {}
+  DYNO_POINTER_TYPEDEFS(ImageContainer)
+
+  static constexpr char kRGB[] = "rgb";
+  static constexpr char kOPticalFlow[] = "opticalflow";
+  static constexpr char kDepth[] = "depth";
+  static constexpr char kObjectMask[] = "objectmask";
+  static constexpr char kRightRgb[] = "rightrgb";
+
+  template <typename Container, typename IMAGETYPE>
+  static decltype(auto) atImpl(Container* image_container,
+                               const std::string& key) {
+    if (!image_container->exists(key)) {
+      throw ImageKeyDoesNotExist(key);
+    }
+
+    decltype(auto) key_image = image_container->images_.at(key);
+    return key_image.template cast<IMAGETYPE>();
+  }
+
+ public:
+  ImageContainer(FrameId frame_id, Timestamp timestamp)
+      : frame_id_(frame_id), timestamp_(timestamp), images_() {}
+  ImageContainer() : frame_id_(0), timestamp_(InvalidTimestamp), images_() {}
+
+  ImageContainer(const ImageContainer& other)
+      : frame_id_(other.frame_id_), timestamp_(other.timestamp_) {
+    for (const auto& [k, v] : other.images_) {
+      images_.emplace(
+          k, v);  // Uses KeyImagePair copy ctor above (ie. shallow image copy)
+    }
+  }
+
+  ImageContainer& operator=(const ImageContainer& other) {
+    if (this != &other) {
+      frame_id_ = other.frame_id_;
+      timestamp_ = other.timestamp_;
+      images_.clear();
+      for (const auto& [k, v] : other.images_) {
+        images_.emplace(k, v);
+      }
+    }
+    return *this;
+  }
+
+  ImageContainer(ImageContainer&&) noexcept = default;
+  ImageContainer& operator=(ImageContainer&&) noexcept = default;
 
   template <typename IMAGETYPE>
-  void add(const std::string& key, const cv::Mat& image) {
+  ImageContainer& add(const std::string& key, const cv::Mat& image) {
     if (exists(key)) {
       throw ImageKeyAlreadyExists(key);
     }
 
     KeyImagePair key_image = KeyImagePair::Create<IMAGETYPE>(key, image);
-    images_.emplace(key, std::move(key_image));
+    images_.insert({key, std::move(key_image)});
+
+    return *this;
   }
 
   template <typename IMAGETYPE>
   const ImageWrapper<IMAGETYPE>& at(const std::string& key) const {
-    if (!exists(key)) {
-      throw ImageKeyDoesNotExist(key);
-    }
-
-    const KeyImagePair& key_image = images_.at(key);
-    return key_image.cast<IMAGETYPE>();
+    return atImpl<const ImageContainer, IMAGETYPE>(this, key);
   }
+
+  template <typename IMAGETYPE>
+  ImageWrapper<IMAGETYPE>& at(const std::string& key) {
+    return atImpl<ImageContainer, IMAGETYPE>(const_cast<ImageContainer*>(this),
+                                             key);
+  }
+
+  ImageContainer clone() const;
 
   inline bool exists(const std::string& key) const {
     return images_.exists(key);
   }
   inline size_t size() const { return images_.size(); }
+
+  // Specific getters for known/expected image types
+  inline bool hasRgb() const { return exists(kRGB); }
+  inline bool hasDepth() const { return exists(kDepth); }
+  inline bool hasOpticalFlow() const { return exists(kOPticalFlow); }
+  inline bool hasObjectMask() const { return exists(kObjectMask); }
+  inline bool hasRightRgb() const { return exists(kRightRgb); }
+
+  const ImageWrapper<ImageType::RGBMono>& rgb() const;
+  const ImageWrapper<ImageType::Depth>& depth() const;
+  const ImageWrapper<ImageType::OpticalFlow>& opticalFlow() const;
+  const ImageWrapper<ImageType::MotionMask>& objectMotionMask() const;
+  const ImageWrapper<ImageType::RGBMono>& rightRgb() const;
+
+  ImageWrapper<ImageType::RGBMono>& rgb();
+  ImageWrapper<ImageType::Depth>& depth();
+  ImageWrapper<ImageType::OpticalFlow>& opticalFlow();
+  ImageWrapper<ImageType::MotionMask>& objectMotionMask();
+  ImageWrapper<ImageType::RGBMono>& rightRgb();
+
+  ImageContainer& rgb(const cv::Mat& image);
+  ImageContainer& depth(const cv::Mat& image);
+  ImageContainer& opticalFlow(const cv::Mat& image);
+  ImageContainer& objectMotionMask(const cv::Mat& image);
+  ImageContainer& rightRgb(const cv::Mat& image);
+
+  Timestamp timestamp() const { return timestamp_; }
+  FrameId frameId() const { return frame_id_; }
+
+  std::string toString() const;
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const ImageContainer& image_container);
 };
 
 }  // namespace dyno

@@ -73,7 +73,7 @@ DynoPipelineManager::DynoPipelineManager(
                  "with an external module";
     data_interface_->registerPreQueueContainerCallback(
         [external_hooks](const ImageContainer::Ptr image_container) -> void {
-          external_hooks->update_time(image_container->getTimestamp());
+          external_hooks->update_time(image_container->timestamp());
         });
   }
 

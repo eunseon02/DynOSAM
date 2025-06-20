@@ -54,7 +54,6 @@ class ImuInterfaceHandler {
                                            ImuMeasurements* imu_meas);
 
  protected:
-  constexpr static Timestamp InvalidTimestamp = 0;
   ThreadsafeImuBuffer imu_buffer_;
 
   Timestamp timestamp_last_frame_{

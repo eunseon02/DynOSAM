@@ -181,7 +181,7 @@ TEST(ImageType, testMotionMaskValidation) {
 }
 
 TEST(ImageContainerV2, testBasicAdd) {
-  ImageContainerBase container;
+  ImageContainer container;
   EXPECT_EQ(container.size(), 0u);
   EXPECT_TRUE(container.exists("rgb") == false);
 
@@ -199,7 +199,7 @@ TEST(ImageContainerV2, testBasicAdd) {
 }
 
 TEST(ImageContainerV2, testBasicAddWrongType) {
-  ImageContainerBase container;
+  ImageContainer container;
   EXPECT_EQ(container.size(), 0u);
 
   cv::Mat input(cv::Size(50, 50), CV_8UC3);
@@ -209,7 +209,7 @@ TEST(ImageContainerV2, testBasicAddWrongType) {
 }
 
 TEST(ImageContainerV2, testInvalidImageInput) {
-  ImageContainerBase container;
+  ImageContainer container;
   EXPECT_EQ(container.size(), 0u);
 
   cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
@@ -219,7 +219,7 @@ TEST(ImageContainerV2, testInvalidImageInput) {
 }
 
 TEST(ImageContainerV2, testMultiAdd) {
-  ImageContainerBase container;
+  ImageContainer container;
   EXPECT_EQ(container.size(), 0u);
 
   cv::Mat input(cv::Size(50, 50), CV_8UC3);
@@ -242,6 +242,76 @@ TEST(ImageContainerV2, testMultiAdd) {
         container.at<ImageType::OpticalFlow>("flow");
     EXPECT_TRUE(wrapped.exists());
   }
+}
+
+TEST(ImageContainerV2, CopySharesCvMatData) {
+  ImageContainer container1;
+  cv::Mat img = cv::Mat::ones(10, 10, CV_8UC1);
+  container1.rgb(img);
+
+  // Copy container
+  ImageContainer container2 = container1;
+
+  // Check they share the same underlying data pointer
+  auto& mat1 = container1.rgb();
+  auto& mat2 = container2.rgb();
+
+  // cv::Mat::data returns the underlying pixel data pointer
+  EXPECT_EQ(mat1.image.data, mat2.image.data);
+  EXPECT_EQ(container1.frameId(), container2.frameId());
+  EXPECT_EQ(container1.timestamp(), container2.timestamp());
+
+  // Modifying one should affect the other (since shared)
+  mat1.image.at<uint8_t>(0, 0) = 42;
+  EXPECT_EQ(mat2.image.at<uint8_t>(0, 0), 42);
+}
+
+TEST(ImageContainerV2, ExplicitDeepCopyCreatesNewData) {
+  ImageContainer container1;
+  cv::Mat img = cv::Mat::ones(10, 10, CV_8UC1);
+  container1.rgb(img);
+
+  // Make a deep copy of the cv::Mat inside container2
+  ImageContainer container2 = container1.clone();
+
+  EXPECT_EQ(container1.frameId(), container2.frameId());
+  EXPECT_EQ(container1.timestamp(), container2.timestamp());
+
+  auto& mat1 = container1.rgb();
+  auto& mat2 = container2.rgb();
+
+  EXPECT_NE(mat1.image.data, mat2.image.data);
+
+  // Changing one does NOT affect the other
+  mat1.image.at<uint8_t>(0, 0) = 42;
+  EXPECT_NE(mat2.image.at<uint8_t>(0, 0), 42);
+}
+
+TEST(ImageContainerV2, MoveConstructorTransfersOwnership) {
+  ImageContainer original;
+  cv::Mat img = cv::Mat::ones(5, 5, CV_8UC1);
+  original.rgb(img);
+  EXPECT_TRUE(original.hasRgb());
+  EXPECT_EQ(original.size(), 1);
+
+  ImageContainer moved_to = std::move(original);
+
+  EXPECT_TRUE(original.hasRgb());
+  EXPECT_EQ(original.size(), 1);
+
+  // Original is in valid, empty state
+  EXPECT_EQ(original.size(), 0);
+
+  cv::Mat& mat1 = moved_to.rgb();
+
+  EXPECT_THROW({ original.rgb(); }, ImageKeyDoesNotExist);
+
+  // Changing the moved image works as expected
+  mat1.at<uint8_t>(0, 0) = 99;
+  EXPECT_EQ(mat1.at<uint8_t>(0, 0), 99);
+
+  // The original container should now be empty
+  EXPECT_EQ(original.size(), 0);
 }
 
 TEST(ImageContainerSubset, testBasicSubsetContainer) {
@@ -345,20 +415,20 @@ TEST(ImageContainerSubset, testSafeClone) {
   EXPECT_EQ(optical_flow.size(), tmp.size());
 }
 
-TEST(ImageContainer, testImageContainerIndexing) {
-  EXPECT_EQ(ImageContainer::Index<ImageType::RGBMono>(), 0u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::Depth>(), 1u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::OpticalFlow>(), 2u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::SemanticMask>(), 3u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::MotionMask>(), 4u);
+TEST(ImageContainerDeprecate, testImageContainerIndexing) {
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::RGBMono>(), 0u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::Depth>(), 1u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::OpticalFlow>(), 2u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::SemanticMask>(), 3u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::MotionMask>(), 4u);
 }
 
-TEST(ImageContainer, CreateRGBDSemantic) {
+TEST(ImageContainerDeprecate, CreateRGBDSemantic) {
   cv::Mat rgb(cv::Size(50, 50), CV_8UC1);
   cv::Mat depth(cv::Size(50, 50), CV_64F);
   cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
   cv::Mat semantic_mask(cv::Size(50, 50), CV_32SC1);
-  ImageContainer::Ptr rgbd_semantic = ImageContainer::Create(
+  ImageContainerDeprecate::Ptr rgbd_semantic = ImageContainerDeprecate::Create(
       0u, 0u, ImageWrapper<ImageType::RGBMono>(rgb),
       ImageWrapper<ImageType::Depth>(depth),
       ImageWrapper<ImageType::OpticalFlow>(optical_flow),
@@ -370,14 +440,14 @@ TEST(ImageContainer, CreateRGBDSemantic) {
   EXPECT_FALSE(rgbd_semantic->isMonocular());
 }
 
-TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
+TEST(ImageContainerDeprecate, CreateRGBDSemanticWithInvalidSizes) {
   cv::Mat rgb(cv::Size(25, 25), CV_8UC1);
   cv::Mat depth(cv::Size(50, 50), CV_64F);
   cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
   cv::Mat semantic_mask(cv::Size(50, 50), CV_32SC1);
   EXPECT_THROW(
       {
-        ImageContainer::Create(
+        ImageContainerDeprecate::Create(
             0u, 0u, ImageWrapper<ImageType::RGBMono>(rgb),
             ImageWrapper<ImageType::Depth>(depth),
             ImageWrapper<ImageType::OpticalFlow>(optical_flow),

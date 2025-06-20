@@ -49,9 +49,4 @@ template <typename IMAGETYPE>
 ImageWrapper<IMAGETYPE>::ImageWrapper(const ImageBase& image_base)
     : ImageBase(image_base) {}
 
-template <typename IMAGETYPE>
-ImageWrapper<IMAGETYPE> ImageWrapper<IMAGETYPE>::clone() const {
-  return ImageWrapper<IMAGETYPE>(image.clone());
-}
-
 }  // namespace dyno

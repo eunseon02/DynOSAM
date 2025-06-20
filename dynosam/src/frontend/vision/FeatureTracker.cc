@@ -69,7 +69,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
   if (initial_computation_) {
     // intitial computation
-    const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
+    const cv::Size& other_size =
+        static_cast<const cv::Mat&>(input_images.rgb()).size();
     CHECK(!previous_frame_);
     CHECK_EQ(img_size_.width, other_size.width);
     CHECK_EQ(img_size_.height, other_size.height);
@@ -99,9 +100,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // detection mask is in the opencv mask form: CV_8UC1 where white pixels (255)
   // are valid and black pixels (0) should not be detected on
   cv::Mat boarder_detection_mask;
-  vision_tools::computeObjectMaskBoundaryMask(
-      input_images.get<ImageType::MotionMask>(), boarder_detection_mask,
-      scaled_boarder_thickness, true);
+  vision_tools::computeObjectMaskBoundaryMask(input_images.objectMotionMask(),
+                                              boarder_detection_mask,
+                                              scaled_boarder_thickness, true);
 
   FeatureContainer static_features;
   {
@@ -157,11 +158,11 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
                                   FeatureContainer& dynamic_features,
                                   const cv::Mat& detection_mask) {
   // first dectect dynamic points
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
   // make sense for a realtime system)
-  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
@@ -184,7 +185,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
   if (previous_frame_) {
     const cv::Mat& previous_motion_mask =
-        previous_frame_->image_container_.get<ImageType::MotionMask>();
+        previous_frame_->image_container_.objectMotionMask();
     utils::TimingStatsCollector tracked_dynamic_features(
         "tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature :
@@ -308,11 +309,11 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
     Keypoint predicted_kp;
   };
 
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
   // make sense for a realtime system)
-  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
@@ -449,15 +450,14 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
 void FeatureTracker::propogateMask(ImageContainer& image_container) {
   if (!previous_frame_) return;
 
-  const cv::Mat& previous_rgb =
-      previous_frame_->image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& previous_rgb = previous_frame_->image_container_.rgb();
   const cv::Mat& previous_mask =
-      previous_frame_->image_container_.get<ImageType::MotionMask>();
+      previous_frame_->image_container_.objectMotionMask();
   const cv::Mat& previous_flow =
-      previous_frame_->image_container_.get<ImageType::OpticalFlow>();
+      previous_frame_->image_container_.opticalFlow();
 
   // note reference
-  cv::Mat& current_mask = image_container.get<ImageType::MotionMask>();
+  cv::Mat& current_mask = image_container.objectMotionMask();
 
   ObjectIds instance_labels;
   for (const Feature::Ptr& dynamic_feature :

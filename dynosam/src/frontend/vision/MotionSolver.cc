@@ -294,10 +294,8 @@ void OpticalFlowAndPoseOptimizer::updateFrameOutliersWithResult(
     const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k) const {
   // //original flow image that goes from k to k+1 (gross, im sorry!)
   // TODO: use flow_is_future param
-  const cv::Mat& flow_image =
-      frame_k->image_container_.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask =
-      frame_k->image_container_.get<ImageType::MotionMask>();
+  const cv::Mat& flow_image = frame_k->image_container_.opticalFlow();
+  const cv::Mat& motion_mask = frame_k->image_container_.objectMotionMask();
 
   auto camera = frame_k->camera_;
   const auto& refined_inliers = result.inliers;

@@ -514,20 +514,29 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
     // if (imu_multi_input_callback_ && imu_measurements)
     //   imu_multi_input_callback_(imu_measurements.value());
 
-    ImageContainer::Ptr image_container = nullptr;
-    image_container = ImageContainer::Create(
-        timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-        ImageWrapper<ImageType::Depth>(depth),
-        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-        ImageWrapper<ImageType::MotionMask>(instance_mask));
+    ImageContainer image_container(frame_id, timestamp);
+    image_container.rgb(rgb)
+        .depth(depth)
+        .opticalFlow(optical_flow)
+        .objectMotionMask(instance_mask);
 
-    if (right_rgb) {
-      image_container->right_stereo_rgb = right_rgb.value();
-    }
+    if (right_rgb) image_container.rightRgb(right_rgb.value());
 
-    CHECK(image_container);
+    // ImageContainer::Ptr image_container = nullptr;
+    // image_container = ImageContainer::Create(
+    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+    //     ImageWrapper<ImageType::Depth>(depth),
+    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+    //     ImageWrapper<ImageType::MotionMask>(instance_mask));
+
+    // if (right_rgb) {
+    //   image_container->right_stereo_rgb = right_rgb.value();
+    // }
+
     CHECK(image_container_callback_);
-    if (image_container_callback_) image_container_callback_(image_container);
+    if (image_container_callback_)
+      image_container_callback_(
+          std::make_shared<ImageContainer>(image_container));
     return true;
   };
 

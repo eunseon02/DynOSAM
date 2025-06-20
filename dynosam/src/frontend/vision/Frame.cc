@@ -166,8 +166,8 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
   }
 
   PointCloudLabelRGB::Ptr cloud = pcl::make_shared<PointCloudLabelRGB>();
-  const cv::Mat& depth_image = image_container_.get<ImageType::Depth>();
-  const cv::Mat& motion_mask = image_container_.get<ImageType::MotionMask>();
+  const cv::Mat& depth_image = image_container_.depth();
+  const cv::Mat& motion_mask = image_container_.objectMotionMask();
 
   if (detection_mask) {
     CHECK(utils::cvSizeEqual(detection_mask->size(), depth_image.size()));
@@ -221,46 +221,6 @@ PointCloudLabelRGB::Ptr Frame::projectToDenseCloud(
             static_cast<std::uint32_t>(object_id));
       });
   process.run();
-  // tbb::parallel_for(0, rows, [&](int i) {  // Use TBB for parallelism
-  //   for (int j = 0; j < cols; j++) {
-  //     // Pointer-based access (faster than `at<>`)
-  //     const unsigned char* detection_ptr =
-  //         detection_mask ? detection_mask->ptr<unsigned char>(i) : nullptr;
-  //     const ObjectId* motion_mask_ptr = motion_mask.ptr<ObjectId>(i);
-  //     const Depth* depth_ptr = depth_image.ptr<Depth>(i);
-
-  //     if (detection_mask && detection_ptr[j] == 0) continue;
-
-  //     const ObjectId object_id = motion_mask_ptr[j];
-  //     const Depth depth = depth_ptr[j];
-
-  //     double depth_thresh;
-  //     Color colour;
-  //     if (object_id == background_label) {
-  //       depth_thresh = max_background_threshold_;
-  //       colour = Color::black();
-  //     } else {
-  //       depth_thresh = max_object_threshold_;
-  //       colour = Color::uniqueId(object_id);
-  //     }
-
-  //     if (depth > depth_thresh || depth <= 0 || !std::isfinite(depth))
-  //     continue;
-
-  //     // Back-projection
-  //     const Keypoint kp(j, i);
-  //     Landmark point;
-  //     // this call is probably very slow
-  //     camera_->backProject(kp, depth, &point);
-
-  //     cloud->points[i * cols + j] = PointLabelRGB(
-  //         static_cast<float>(point(0)), static_cast<float>(point(1)),
-  //         static_cast<float>(point(2)), static_cast<std::uint8_t>(colour.r),
-  //         static_cast<std::uint8_t>(colour.g),
-  //         static_cast<std::uint8_t>(colour.b),
-  //         static_cast<std::uint32_t>(object_id));
-  //   }
-  // });
 
   cloud->width = cloud->points.size();
   cloud->height = 1;
@@ -273,8 +233,7 @@ bool Frame::updateDepths() {
     return false;
   }
 
-  const ImageWrapper<ImageType::Depth>& depth =
-      image_container_.getImageWrapper<ImageType::Depth>();
+  const ImageWrapper<ImageType::Depth>& depth = image_container_.depth();
   updateDepthsFeatureContainer(static_features_, depth,
                                max_background_threshold_);
   updateDepthsFeatureContainer(dynamic_features_, depth, max_object_threshold_);
@@ -294,8 +253,8 @@ Frame& Frame::setMaxObjectDepth(double thresh) {
 }
 
 cv::Mat Frame::drawDetectedObjectBoxes() const {
-  cv::Mat rgb_objects;
-  image_container_.cloneImage<ImageType::RGBMono>(rgb_objects);
+  cv::Mat rgb_objects = image_container_.rgb().clone();
+  // image_container_.cloneImage<ImageType::RGBMono>(rgb_objects);
 
   for (auto& object_observation_pair : object_observations_) {
     const ObjectId object_id = object_observation_pair.first;
@@ -520,8 +479,8 @@ void Frame::updateDepthsFeatureContainer(
 void Frame::constructDynamicObservations() {
   object_observations_.clear();
   // assumes that the mask gets updated with the tracking label
-  const ObjectIds instance_labels = vision_tools::getObjectLabels(
-      image_container_.get<ImageType::MotionMask>());
+  const ObjectIds instance_labels =
+      vision_tools::getObjectLabels(image_container_.objectMotionMask());
 
   auto inlier_iterator = dynamic_features_.beginUsable();
   for (const Feature::Ptr& dynamic_feature : inlier_iterator) {
@@ -552,7 +511,7 @@ void Frame::constructDynamicObservations() {
   // and draw it.
   // We apply some eroding/dilation on it to make the resulting submask smoother
   // so that we can more easily fit an rectangle to it
-  const cv::Mat& mask = image_container_.get<ImageType::MotionMask>();
+  const cv::Mat& mask = image_container_.objectMotionMask();
   for (auto& object_observation_pair : object_observations_) {
     const ObjectId object_id = object_observation_pair.first;
     DynamicObjectObservation& obs = object_observation_pair.second;

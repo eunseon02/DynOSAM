@@ -451,24 +451,30 @@ class KittiDataLoader
       if (ground_truth_packet_callback_)
         ground_truth_packet_callback_(gt_object_pose_gt);
 
-      ImageContainer::Ptr image_container = nullptr;
+      ImageContainer image_container(frame_id, timestamp);
+      image_container.rgb(rgb)
+          .depth(depth)
+          .opticalFlow(optical_flow)
+          .objectMotionMask(instance_mask);
 
-      if (params_.mask_type == MaskType::MOTION) {
-        image_container = ImageContainer::Create(
-            timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-            ImageWrapper<ImageType::Depth>(depth),
-            ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-            ImageWrapper<ImageType::MotionMask>(instance_mask));
-      } else {
-        image_container = ImageContainer::Create(
-            timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-            ImageWrapper<ImageType::Depth>(depth),
-            ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-            ImageWrapper<ImageType::SemanticMask>(instance_mask));
-      }
+      // if (params_.mask_type == MaskType::MOTION) {
+      //   image_container = ImageContainer::Create(
+      //       timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+      //       ImageWrapper<ImageType::Depth>(depth),
+      //       ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+      //       ImageWrapper<ImageType::MotionMask>(instance_mask));
+      // } else {
+      //   image_container = ImageContainer::Create(
+      //       timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+      //       ImageWrapper<ImageType::Depth>(depth),
+      //       ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+      //       ImageWrapper<ImageType::SemanticMask>(instance_mask));
+      // }
 
       CHECK(image_container_callback_);
-      if (image_container_callback_) image_container_callback_(image_container);
+      if (image_container_callback_)
+        image_container_callback_(
+            std::make_shared<ImageContainer>(image_container));
       return true;
     };
 
@@ -489,7 +495,7 @@ class KittiDataLoader
     const auto& base_line = params_.base_line;
     const auto& depth_scale_factor = params_.depth_scale_factor;
 
-    const cv::Mat& const_disparity = image_container->getDepth();
+    const cv::Mat& const_disparity = image_container->depth();
     cv::Mat depth;
     const_disparity.copyTo(depth);
     for (int i = 0; i < const_disparity.rows; i++) {
@@ -504,7 +510,7 @@ class KittiDataLoader
       }
     }
 
-    cv::Mat& disparity = image_container->get<ImageType::Depth>();
+    cv::Mat& disparity = image_container->depth();
     depth.copyTo(disparity);
     depth.convertTo(depth, CV_64F);
 

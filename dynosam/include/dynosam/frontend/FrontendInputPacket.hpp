@@ -67,16 +67,16 @@ struct FrontendInputPacketBase {
     CHECK(image_container_);
 
     if (optional_gt) {
-      CHECK_EQ(optional_gt_->frame_id_, image_container_->getFrameId());
+      CHECK_EQ(optional_gt_->frame_id_, image_container_->frameId());
     }
   }
 
   inline FrameId getFrameId() const {
-    return CHECK_NOTNULL(image_container_)->getFrameId();
+    return CHECK_NOTNULL(image_container_)->frameId();
   }
 
   inline Timestamp getTimestamp() const {
-    return CHECK_NOTNULL(image_container_)->getTimestamp();
+    return CHECK_NOTNULL(image_container_)->timestamp();
   }
 
   virtual ~FrontendInputPacketBase() = default;

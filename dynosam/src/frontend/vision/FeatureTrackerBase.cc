@@ -133,10 +133,9 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     const ImageTracksParams& config) const {
   cv::Mat img_rgb;
 
-  const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = current_frame.image_container_.rgb();
   const cv::Mat& object_mask =
-      current_frame.image_container_.get<ImageType::MotionMask>();
-  rgb.copyTo(img_rgb);
+      current_frame.image_container_.objectMotionMask();
 
   const bool& debug = config.isDebug();
   const bool& show_intermediate_tracking = config.showIntermediateTracking();

@@ -70,13 +70,12 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(
     Frame::Ptr previous_frame, const ImageContainer& image_container,
     FeatureTrackerInfo& tracker_info, const cv::Mat&,
     const std::optional<gtsam::Rot3>&) {
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper =
-      image_container.getImageWrapper<ImageType::RGBMono>();
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
   CHECK(!mono.empty());
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
   CHECK(!motion_mask.empty());
 
   cv::Mat descriptors;
@@ -88,7 +87,7 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(
 
   const size_t& min_tracks =
       static_cast<size_t>(params_.max_features_per_frame);
-  const FrameId frame_k = image_container.getFrameId();
+  const FrameId frame_k = image_container.frameId();
 
   // appy tracking (ie get correspondences)
   // TODO: only track frames that have been tracked for some time?
@@ -179,9 +178,9 @@ Feature::Ptr ExternalFlowFeatureTracker::constructStaticFeature(
   const int x = functional_keypoint::u(kp);
   const int y = functional_keypoint::v(kp);
 
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
-  const cv::Mat& optical_flow = image_container.get<ImageType::OpticalFlow>();
+  const cv::Mat& rgb = image_container.rgb();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
+  const cv::Mat& optical_flow = image_container.opticalFlow();
 
   CHECK(!optical_flow.empty());
   CHECK(!motion_mask.empty());
@@ -293,8 +292,7 @@ FeatureContainer KltFeatureTracker::trackStatic(
 
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
                                       cv::Mat& equialized_greyscale) const {
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper =
-      image_container.getImageWrapper<ImageType::RGBMono>();
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
   CHECK(!mono.empty());
@@ -320,9 +318,9 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
                                        const FeatureContainer& current_features,
                                        FeatureContainer& new_features,
                                        const cv::Mat& detection_mask) {
-  const FrameId frame_k = image_container.getFrameId();
+  const FrameId frame_k = image_container.frameId();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
   // internal detection mask that is appended with new invalid pixels
   // this builds the static detection mask over the existing input mask
   cv::Mat detection_mask_impl;
@@ -404,8 +402,8 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
 
   outlier_previous_features.clear();
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
-  const FrameId frame_k = image_container.getFrameId();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
+  const FrameId frame_k = image_container.frameId();
 
   std::vector<uchar> status;
   std::vector<float> err;

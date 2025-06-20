@@ -76,7 +76,24 @@ struct ImageBase {
   template <typename IMAGETYPE>
   const ImageWrapper<IMAGETYPE>& cast() const;
 
+  template <typename IMAGETYPE>
+  ImageWrapper<IMAGETYPE>& cast();
+
   bool exists() const;
+
+  virtual std::unique_ptr<ImageBase> shallowCopy() const {
+    return std::make_unique<ImageBase>(image);
+  }
+
+  virtual std::unique_ptr<ImageBase> deepCopy() const {
+    return std::make_unique<ImageBase>(image.clone());
+  }
+
+  virtual std::string toString() const {
+    std::stringstream ss;
+    ss << (exists() ? to_string(image.size()) : "Empty");
+    return ss.str();
+  }
 };
 
 /**
@@ -97,25 +114,40 @@ template <typename IMAGETYPE>
 struct ImageWrapper : public ImageBase {
   using Type = IMAGETYPE;
   using This = ImageWrapper<Type>;
+  using Base = ImageBase;
 
   ImageWrapper() = default;
   ImageWrapper(const cv::Mat& img);
   ImageWrapper(const ImageBase& image_base);
 
-  /**
-   * @brief Returns an ImageWrapper with the underlying image data cloned
-   *
-   * @return ImageWrapper<Type>
-   */
-  ImageWrapper<Type> clone() const;
+  virtual std::unique_ptr<ImageBase> shallowCopy() const override {
+    return std::make_unique<ImageWrapper<IMAGETYPE>>(image);
+  }
+
+  virtual std::unique_ptr<ImageBase> deepCopy() const override {
+    return std::make_unique<ImageWrapper<IMAGETYPE>>(image.clone());
+  }
+
+  ImageWrapper<Type> clone() const { return *(this->deepCopy()); }
 
   cv::Mat toRGB() const { return IMAGETYPE::toRGB(*this); }
+
+  virtual std::string toString() const override {
+    std::stringstream ss;
+    ss << type_name<This>() << ": " << Base::toString();
+    return ss.str();
+  }
 };
 
 // define ImageBase::cast here since now ImageWrapper has been declared
 template <typename IMAGETYPE>
 const ImageWrapper<IMAGETYPE>& ImageBase::cast() const {
   return dynamic_cast<const ImageWrapper<IMAGETYPE>&>(*this);
+}
+
+template <typename IMAGETYPE>
+ImageWrapper<IMAGETYPE>& ImageBase::cast() {
+  return dynamic_cast<ImageWrapper<IMAGETYPE>&>(*this);
 }
 
 struct ImageType {

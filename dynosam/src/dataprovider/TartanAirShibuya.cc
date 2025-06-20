@@ -292,15 +292,15 @@ TartanAirShibuyaLoader::TartanAirShibuyaLoader(const fs::path& dataset_path)
     if (ground_truth_packet_callback_)
       ground_truth_packet_callback_(gt_object_pose_gt);
 
-    ImageContainer::Ptr image_container = nullptr;
-    image_container = ImageContainer::Create(
-        timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-        ImageWrapper<ImageType::Depth>(depth),
-        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-        ImageWrapper<ImageType::MotionMask>(instance_mask));
-    CHECK(image_container);
+    ImageContainer image_container(frame_id, timestamp);
+    image_container.rgb(rgb)
+        .depth(depth)
+        .opticalFlow(optical_flow)
+        .objectMotionMask(instance_mask);
     CHECK(image_container_callback_);
-    if (image_container_callback_) image_container_callback_(image_container);
+    if (image_container_callback_)
+      image_container_callback_(
+          std::make_shared<ImageContainer>(image_container));
     return true;
   };
 
