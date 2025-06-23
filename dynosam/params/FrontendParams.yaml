@@ -13,8 +13,8 @@ use_object_motion_pnp: True
 refine_camera_pose_with_joint_of: True
 
 object_motion_solver:
-  ransac_threshold_pnp: 2.0
-  refine_motion_with_joint_of: False
+  ransac_threshold_pnp: 1.0
+  refine_motion_with_joint_of: True
   refine_motion_with_3d: False
 
   ransac_iterations: 500
@@ -48,5 +48,5 @@ image_tracks_vis_params:
   is_debug: true
   show_frame_info: true
   show_intermediate_tracking: true
-  draw_object_bounding_box: true
-  draw_object_mask: false
+  draw_object_bounding_box: false
+  draw_object_mask: true

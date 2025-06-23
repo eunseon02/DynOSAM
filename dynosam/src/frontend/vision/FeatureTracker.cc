@@ -78,6 +78,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
     initial_computation_ = false;
   } else {
     if (params_.use_propogate_mask) {
+      utils::TimingStatsCollector timer("propogate_mask");
       propogateMask(input_images);
     }
     CHECK(previous_frame_);
@@ -144,6 +145,7 @@ bool FeatureTracker::stereoTrack(FeaturePtrs& stereo_features,
                                  const cv::Mat& left_image,
                                  const cv::Mat& right_image,
                                  const double& virtual_baseline) const {
+  utils::TimingStatsCollector timing("stereo_track_timer");
   TrackletIds tracklets_ids;
   // collect left feature points to cv::point2f
   std::vector<cv::Point2f> left_feature_points =

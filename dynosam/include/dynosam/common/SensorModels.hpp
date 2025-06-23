@@ -32,6 +32,7 @@
 
 #include <gtsam/base/Matrix.h>
 #include <gtsam/base/Vector.h>
+#include <gtsam/geometry/StereoPoint2.h>
 #include <gtsam/linear/NoiseModel.h>
 
 #include "dynosam/common/Exceptions.hpp"
@@ -394,6 +395,8 @@ typedef VisualMeasurementWithCovStatus<Landmark> LandmarkStatus;
 typedef VisualMeasurementWithCovStatus<Keypoint> KeypointStatus;
 /// @brief Alias for a depth measurement with scalar covariance.
 typedef VisualMeasurementWithCovStatus<Depth> DepthStatus;
+/// @brief Alias for a stereo measurement with 3x3 covariance.
+typedef VisualMeasurementWithCovStatus<gtsam::StereoPoint2> StereoStatus;
 
 using LandmarkKeypointStatus = TrackedValueStatus<LandmarkKeypoint>;
 

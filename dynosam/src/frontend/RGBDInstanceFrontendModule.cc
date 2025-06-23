@@ -277,6 +277,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 bool RGBDInstanceFrontendModule::solveCameraMotion(
     Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
     std::optional<gtsam::Rot3> R_curr_ref) {
+  utils::TimingStatsCollector timer("frontend.solve_camera_motion");
   Pose3SolverResult result;
   if (base_params_.use_ego_motion_pnp) {
     result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k,
