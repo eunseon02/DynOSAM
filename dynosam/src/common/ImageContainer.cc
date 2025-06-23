@@ -96,7 +96,7 @@ ImageContainer& ImageContainer::opticalFlow(const cv::Mat& image) {
 }
 
 ImageContainer& ImageContainer::objectMotionMask(const cv::Mat& image) {
-  return this->add<ImageType::MotionMask>(kOPticalFlow, image);
+  return this->add<ImageType::MotionMask>(kObjectMask, image);
 }
 
 ImageContainer& ImageContainer::rightRgb(const cv::Mat& image) {

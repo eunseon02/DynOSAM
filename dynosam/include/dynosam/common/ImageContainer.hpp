@@ -586,6 +586,17 @@ class ImageContainer {
     }
   };
 
+  template <typename Container, typename IMAGETYPE>
+  static decltype(auto) atImpl(Container* image_container,
+                               const std::string& key) {
+    if (!image_container->exists(key)) {
+      throw ImageKeyDoesNotExist(key);
+    }
+
+    decltype(auto) key_image = image_container->images_.at(key);
+    return key_image.template cast<IMAGETYPE>();
+  }
+
   FrameId frame_id_;
   Timestamp timestamp_;
   gtsam::FastMap<std::string, KeyImagePair> images_;
@@ -598,17 +609,6 @@ class ImageContainer {
   static constexpr char kDepth[] = "depth";
   static constexpr char kObjectMask[] = "objectmask";
   static constexpr char kRightRgb[] = "rightrgb";
-
-  template <typename Container, typename IMAGETYPE>
-  static decltype(auto) atImpl(Container* image_container,
-                               const std::string& key) {
-    if (!image_container->exists(key)) {
-      throw ImageKeyDoesNotExist(key);
-    }
-
-    decltype(auto) key_image = image_container->images_.at(key);
-    return key_image.template cast<IMAGETYPE>();
-  }
 
  public:
   ImageContainer(FrameId frame_id, Timestamp timestamp)

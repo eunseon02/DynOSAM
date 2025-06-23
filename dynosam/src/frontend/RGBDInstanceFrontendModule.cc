@@ -121,16 +121,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
 
+  const bool has_imu = input->imu_measurements.has_value();
+  const bool has_stereo = image_container->hasRightRgb();
+
   std::optional<gtsam::Rot3> R_curr_ref;
   ImuFrontend::PimPtr pim;
-  if (input->imu_measurements) {
+  if (has_imu) {
     pim = imu_frontend_.preintegrateImuMeasurements(
         input->imu_measurements.value());
-
-    // nav_state_ =
-    //     pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
-    // previous_imu_state_ =
-    //     pim->predict(gtsam::NavState{}, gtsam::imuBias::ConstantBias{});
 
     nav_state_ =
         pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
@@ -140,14 +138,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         previous_nav_state_.attitude().inverse() * nav_state_.attitude();
   }
 
-  // TODO: if no IMU should we use constant velocity model...?
-  Frame::Ptr frame = nullptr;
-  {
-    utils::TimingStatsCollector tracking_timer("tracking_timer");
-    frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
-                            *image_container, R_curr_ref);
-  }
-  CHECK(frame);
+  Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
+                                     *image_container, R_curr_ref);
 
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
@@ -159,120 +151,31 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     frame->updateDepths();
   }
 
-  auto stereo_match = [&]() {
-    TrackletIds tracklets_ids;
-    // collect left feature points to cv::point2f
-    std::vector<cv::Point2f> left_feature_points =
-        frame->static_features_.toOpenCV(&tracklets_ids, true);
+  bool stereo_result = false;
 
-    if (left_feature_points.size() < 8) {
-      LOG(WARNING) << "Not enough left feature points for stereo matching...";
-      return;
-    }
+  if (has_stereo) {
+    const cv::Mat& left_rgb = image_container->rgb();
+    const cv::Mat& right_rgb = image_container->rightRgb();
 
-    std::vector<cv::Point2f> right_feature_points;
-    std::vector<uchar> klt_status;
-    std::vector<float> err;
+    FeaturePtrs stereo_features_1;
+    stereo_result = tracker_->stereoTrack(
+        stereo_features_1, frame->static_features_, left_rgb, right_rgb, 0.05);
+  }
 
-    const cv::Mat& left_rgb = image_container->rgb().toRGB();
-    cv::Mat left_mono = ImageType::RGBMono::toMono(left_rgb);
-    CHECK(!left_mono.empty());
-    cv::Mat right_mono =
-        ImageType::RGBMono::toMono(image_container->rightRgb());
-    CHECK(!right_mono.empty());
-
-    right_feature_points = left_feature_points;
-
-    cv::calcOpticalFlowPyrLK(left_mono, right_mono, left_feature_points,
-                             right_feature_points, klt_status, err,
-                             cv::Size(21, 21), 5);
-    CHECK_EQ(klt_status.size(), tracklets_ids.size());
-    TrackletIds good_stereo_tracklets;
-
-    std::vector<cv::Point2f> pts_left_tracked, pts_right_tracked;
-    for (size_t i = 0; i < klt_status.size(); ++i) {
-      auto tracklet_id = tracklets_ids.at(i);
-      // LOG(INFO) << tracklet_id;
-      if (klt_status[i]) {
-        pts_left_tracked.push_back(left_feature_points[i]);
-        pts_right_tracked.push_back(right_feature_points[i]);
-        good_stereo_tracklets.push_back(tracklet_id);
-      }
-    }
-    LOG(INFO) << "Stereo KLT tracked: " << pts_left_tracked.size() << " points";
-
-    // need more than 8 points for fundamental matrix calc with ransac
-    TrackletIds inlier_stereo_tracklets;
-    if (pts_left_tracked.size() < 8) {
-      LOG(WARNING)
-          << "Not enough stereo matches to perform fundamental matrix calc";
-    } else {
-      std::vector<uchar> epipolar_inliers;
-      cv::Mat F =
-          cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
-                                 cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
-      CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
-
-      std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
-      for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
-        auto tracklet_id = good_stereo_tracklets.at(i);
-        if (epipolar_inliers[i]) {
-          pts_left_inlier.push_back(pts_left_tracked[i]);
-          pts_right_inlier.push_back(pts_right_tracked[i]);
-          CHECK(frame->static_features_.getByTrackletId(tracklet_id))
-              << "Somehow tracklet id " << tracklet_id << " is missing!";
-          inlier_stereo_tracklets.push_back(tracklet_id);
-        }
-      }
-
-      LOG(INFO) << "After epipolar filtering: "
-                << inlier_stereo_tracklets.size() << " inliers";
-      static constexpr double baseline = 0.05;
-      const auto fx = frame->getCamera()->getParams().fx();
-
-      for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
-        auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
-        Feature::Ptr feature =
-            frame->static_features_.getByTrackletId(inlier_stereo_track);
-        CHECK(feature);
-        CHECK(feature->usable());
-
-        double uL = static_cast<double>(pts_left_inlier[i].x);
-        double vL = static_cast<double>(pts_left_inlier[i].y);
-        double uR = static_cast<double>(pts_right_inlier[i].x);
-
-        double disparity = uL - uR;
-        // Reject near-zero disparity
-        // this will also mean far away points.... multi-view triangulation
-        // across frames is needed here... fall back on depth map...
-        if (disparity <= 1.0) {
-          // feature->markOutlier();
-        }
-
-        double depth = fx * baseline / disparity;
-        // TODO: no max depth
-        feature->depth(depth);
-      }
-    }
-
-    TrackletIds outlier_stereo_tracklets;
-    determineOutlierIds(inlier_stereo_tracklets, tracklets_ids,
-                        outlier_stereo_tracklets);
-
-    frame->static_features_.markOutliers(outlier_stereo_tracklets);
-  };
-
-  stereo_match();
-
-  // updates frame->T_world_camera_
+  // this includes the refine correspondances with joint optical flow
   if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
-    // frame->T_world_camera_ = nav_state_.pose();
     LOG(ERROR) << "Could not solve for camera";
   }
 
-  // need to match aagain after optical flow used to update the keypoints
-  // wow this seems to make a pretty big difference!!
-  stereo_match();
+  if (has_stereo && stereo_result) {
+    // need to match aagain after optical flow used to update the keypoints
+    // wow this seems to make a pretty big difference!!
+    const cv::Mat& left_rgb = image_container->rgb();
+    const cv::Mat& right_rgb = image_container->rightRgb();
+    FeaturePtrs stereo_features_2;
+    stereo_result &= tracker_->stereoTrack(
+        stereo_features_2, frame->static_features_, left_rgb, right_rgb, 0.05);
+  }
 
   previous_nav_state_ =
       gtsam::NavState(frame->T_world_camera_, nav_state_.velocity());
@@ -280,21 +183,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   if (R_curr_ref) {
     imu_frontend_.resetIntegration();
   }
-  // frame->T_world_camera_ = nav_state_.pose();
-
-  LOG(INFO) << frame->T_world_camera_;
-  LOG(INFO) << nav_state_.pose();
-  // frame->T_world_camera_ = nav_state_.pose();
-
-  // LOG(INFO) << frame->numStaticUsableFeatures() << " " <<
-  // frame->numStaticFeatures();
-
-  // HACK for now
-  //  if(frame->numStaticUsableFeatures() < 30) {
-  //    LOG(INFO) << "Number usable static feature < 30. Relying on IMU only";
-  //    frame->T_world_camera_ = nav_state_.pose();
-  //    frame->static_features_.markOutliers(frame->static_features_.collectTracklets());
-  //  }
 
   if (FLAGS_use_dynamic_track) {
     // TODO: bring back byte tracker??
@@ -307,6 +195,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   // MotionEstimateMap motion_estimates;
   std::tie(object_motions, object_poses) =
       object_motion_solver_->solve(frame, previous_frame);
+
+  LOG(INFO) << "Done object motion solve";
 
   // motions in this frame (ie. new motions!!)
   MotionEstimateMap motion_estimates =
@@ -328,9 +218,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     logger_->logFrameIdToTimestamp(frame->getFrameId(), frame->getTimestamp());
   }
 
+  LOG(INFO) << "Done logging";
+
   DebugImagery debug_imagery;
   debug_imagery.tracking_image =
       createTrackingImage(frame, previous_frame, object_poses);
+
+  LOG(INFO) << "Done createTrackingImage";
+
   if (display_queue_)
     display_queue_->push(
         ImageToDisplay("tracks", debug_imagery.tracking_image));
@@ -346,6 +241,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       processed_image_container.objectMotionMask());
   debug_imagery.depth_viz =
       ImageType::Depth::toRGB(processed_image_container.depth());
+
+  LOG(INFO) << "Done debug imagery";
 
   // if (display_queue_)
   //   display_queue_->push(ImageToDisplay("Motion Mask",
@@ -454,37 +351,6 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
     }
     return true;
   }
-  // if (result.status == TrackingStatus::VALID) {
-  //   frame_k->T_world_camera_ = result.best_result;
-  //   TrackletIds tracklets = frame_k->static_features_.collectTracklets();
-  //   CHECK_GE(tracklets.size(),
-  //            result.inliers.size() +
-  //                result.outliers.size());  // tracklets shoudl be more (or
-  //                same
-  //                                          // as) correspondances as there
-  //                                          will
-  //                                          // be new points untracked
-  //   frame_k->static_features_.markOutliers(result.outliers);
-
-  //   if (base_params_.refine_camera_pose_with_joint_of) {
-  //     VLOG(10) << "Refining camera pose with joint of";
-  //     OpticalFlowAndPoseOptimizer flow_optimizer(
-  //         base_params_.object_motion_solver_params.joint_of_params);
-
-  //     auto flow_opt_result =
-  //     flow_optimizer.optimizeAndUpdate<CalibrationType>(
-  //         frame_k_1, frame_k, result.inliers, result.best_result);
-  //     frame_k->T_world_camera_ = flow_opt_result.best_result.refined_pose;
-  //     VLOG(15) << "Refined camera pose with optical flow - error before: "
-  //              << flow_opt_result.error_before.value_or(NaN)
-  //              << " error_after: " <<
-  //              flow_opt_result.error_after.value_or(NaN);
-  //   }
-  //   return true;
-  // } else {
-  //   frame_k->T_world_camera_ = gtsam::Pose3::Identity();
-  //   return false;
-  // }
 }
 
 RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(

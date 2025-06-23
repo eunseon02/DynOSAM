@@ -74,7 +74,8 @@ FrontendInputPacketBase::ConstPtr DataInterfacePipeline::getInputPacket() {
   GroundTruthInputPacket::Optional ground_truth;
   if (ground_truth_packets_.find(packet->frameId()) !=
       ground_truth_packets_.end()) {
-    VLOG(5) << "Gotten ground truth packet for frame id " << packet->frameId();
+    VLOG(5) << "Gotten ground truth packet for frame id " << packet->frameId()
+            << ", timestamp=" << packet->timestamp();
     ground_truth = ground_truth_packets_.at(packet->frameId());
   }
 
@@ -108,7 +109,7 @@ ImuInterfaceHandler::ImuInterfaceHandler()
 ImuInterfaceHandler::FrameAction
 ImuInterfaceHandler::getTimeSyncedImuMeasurements(const Timestamp& timestamp,
                                                   ImuMeasurements* imu_meas) {
-  if (imu_buffer_.isShutdown()) {
+  if (imu_buffer_.isShutdown() || imu_buffer_.size() == 0u) {
     return FrameAction::Drop;
   }
 

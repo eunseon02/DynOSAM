@@ -211,6 +211,17 @@ class Feature {
     return data_.depth;
   }
 
+  /**
+   * @brief Gets the right keypoint (uR). The value will be
+   * Feature::invalid_depth if not set.
+   *
+   * @return double
+   */
+  double rightKeypoint() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return data_.uR;
+  }
+
   static Keypoint CalculatePredictedKeypoint(const Keypoint& keypoint,
                                              const OpticalFlow& measured_flow) {
     return keypoint + measured_flow;
@@ -286,6 +297,12 @@ class Feature {
     return *this;
   }
 
+  Feature& rightKeypoint(double uR) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    data_.uR = uR;
+    return *this;
+  }
+
   /**
    * @brief If the feature is valid - a combination of inlier and if the
    * tracklet Id != -1
@@ -328,6 +345,11 @@ class Feature {
     return !std::isnan(data_.depth);
   }
 
+  inline bool hasRightKeypoint() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return !std::isnan(data_.uR);
+  }
+
   inline static bool IsUsable(const Feature::Ptr& f) { return f->usable(); }
 
   inline static bool IsNotNull(const Feature::Ptr& f) { return f != nullptr; }
@@ -350,6 +372,7 @@ class Feature {
                       //! tracked object between frames
     Depth depth{invalid_depth};  //! Depth as provided by a depth image (not Z).
                                  //! Initalised as invalid_depth (NaN)
+    double uR{invalid_depth};    //! Possible stereo keypoint in the right image
 
     bool operator==(const impl& other) const {
       // TODO: lock?
@@ -361,7 +384,7 @@ class Feature {
              tracklet_id == other.tracklet_id && frame_id == other.frame_id &&
              inlier == other.inlier && instance_label == other.instance_label &&
              tracking_label == other.tracking_label &&
-             fpEqual(depth, other.depth);
+             fpEqual(depth, other.depth) && fpEqual(uR, other.uR);
     }
   };
 
