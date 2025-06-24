@@ -93,6 +93,27 @@ void Formulation<MAP>::addSensorPoseValue(const gtsam::Pose3& X_W_k,
 }
 
 template <typename MAP>
+void Formulation<MAP>::addValuesFunctional(
+    std::function<void(gtsam::Values&)> callback, gtsam::Values& new_values) {
+  gtsam::Values internal_new_values;
+  callback(internal_new_values);
+
+  new_values.insert_or_assign(internal_new_values);
+  theta_.insert_or_assign(internal_new_values);
+}
+
+template <typename MAP>
+void Formulation<MAP>::addFactorsFunctional(
+    std::function<void(gtsam::NonlinearFactorGraph&)> callback,
+    gtsam::NonlinearFactorGraph& new_factors) {
+  gtsam::NonlinearFactorGraph internal_new_factors;
+  callback(internal_new_factors);
+
+  new_factors += internal_new_factors;
+  factors_ += internal_new_factors;
+}
+
+template <typename MAP>
 void Formulation<MAP>::addSensorPosePriorFactor(
     const gtsam::Pose3& X_W_k, gtsam::SharedNoiseModel noise_model,
     FrameId frame_id_k, gtsam::NonlinearFactorGraph& new_factors) {

@@ -38,6 +38,7 @@
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/ParallelObjectISAM.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
+#include "dynosam/backend/VisionImuBackendModule.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
 
@@ -45,11 +46,11 @@ namespace dyno {
 
 // TODO: should have a special accessor for this class....
 class ParallelRGBDBackendModule
-    : public BackendModuleType<RGBDBackendModuleTraits> {
+    : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
   DYNO_POINTER_TYPEDEFS(ParallelRGBDBackendModule)
 
-  using Base = BackendModuleType<RGBDBackendModuleTraits>;
+  using Base = VisionImuBackendModule<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
   ParallelRGBDBackendModule(const BackendParams& backend_params,

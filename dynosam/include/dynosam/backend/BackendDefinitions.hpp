@@ -55,10 +55,12 @@ using PoseToPointFactor = gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>;
 
 using SymbolChar = unsigned char;
 static constexpr SymbolChar kPoseSymbolChar = 'X';
+static constexpr SymbolChar kVelocitySymbolChar = 'V';
 static constexpr SymbolChar kObjectMotionSymbolChar = 'H';
 static constexpr SymbolChar kObjectPoseSymbolChar = 'L';
 static constexpr SymbolChar kStaticLandmarkSymbolChar = 'l';
 static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
+static constexpr SymbolChar kImuBiasSymbolChar = 'b';
 
 inline gtsam::Key H(unsigned char label, std::uint64_t j) {
   return gtsam::LabeledSymbol(kObjectMotionSymbolChar, label, j);

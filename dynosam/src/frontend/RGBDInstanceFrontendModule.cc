@@ -72,10 +72,6 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     logger_ = std::make_unique<RGBDFrontendLogger>();
   }
 
-  // gtsam::ISAM2Params isam2_params;
-  // isam2_params.keyFormatter = DynoLikeKeyFormatter;
-  // isam2_params.evaluateNonlinearError = true;
-
   ObjectMotionSovlerF2F::Params object_motion_solver_params =
       frontend_params.object_motion_solver_params;
   // add ground truth hook
@@ -84,8 +80,6 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   };
   object_motion_solver_params.refine_motion_with_3d = false;
 
-  // object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
-  //     object_motion_solver_params, camera->getParams(), isam2_params);
   object_motion_solver_ = std::make_unique<ObjectMotionSovlerF2F>(
       object_motion_solver_params, camera->getParams());
 }
@@ -177,6 +171,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         stereo_features_2, frame->static_features_, left_rgb, right_rgb, 0.05);
   }
 
+  // VERY important calculation
+  const gtsam::Pose3 T_k_1_k =
+      previous_nav_state_.pose().inverse() * frame->T_world_camera_;
+
   previous_nav_state_ =
       gtsam::NavState(frame->T_world_camera_, nav_state_.velocity());
 
@@ -185,7 +183,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
 
   if (FLAGS_use_dynamic_track) {
-    // TODO: bring back byte tracker??
     utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
     vision_tools::trackDynamic(base_params_, *previous_frame, frame);
   }
@@ -244,15 +241,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   LOG(INFO) << "Done debug imagery";
 
-  // if (display_queue_)
-  //   display_queue_->push(ImageToDisplay("Motion Mask",
-  //   debug_imagery.mask_viz));
-
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, object_motions, object_poses, frame->T_world_camera_,
       input->optional_gt_, debug_imagery, dense_labelled_cloud);
 
   output->pim_ = pim;
+  output->T_k_1_k_ = T_k_1_k;
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});

@@ -70,6 +70,10 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
 
   ImuFrontend::PimPtr pim_;
 
+  // relative pose of the camera (ie the increment) from k-1 to k, expressed in
+  // the camera frame (at k-1)
+  gtsam::Pose3 T_k_1_k_;
+
   RGBDInstanceOutputPacket(
       const StatusKeypointVector& static_keypoint_measurements,
       const StatusKeypointVector& dynamic_keypoint_measurements,

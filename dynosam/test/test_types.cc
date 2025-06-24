@@ -314,6 +314,71 @@ TEST(ImageContainerV2, MoveConstructorTransfersOwnership) {
   EXPECT_EQ(original.size(), 0);
 }
 
+enum class TestOptions : std::uint8_t {
+  None = 0,
+  A = 1 << 0,
+  B = 1 << 1,
+  C = 1 << 2
+};
+
+template <>
+struct internal::EnableBitMaskOperators<TestOptions> : std::true_type {};
+
+TEST(BitwiseFlags, testUnderlyingTypeSpecalization) {
+  using TestFlags = Flags<TestOptions>;
+
+  using U = std::underlying_type_t<TestFlags>;
+  static_assert(std::is_same_v<U, uint8_t>);
+}
+
+TEST(BitwiseFlags, testCombinesFlagsCorrectly) {
+  using TestFlags = Flags<TestOptions>;
+  TestOptions ab = TestOptions::A | TestOptions::B;
+  EXPECT_EQ(static_cast<uint8_t>(ab), (1 << 0) | (1 << 1));
+
+  TestOptions masked = ab & TestOptions::A;
+  EXPECT_EQ(static_cast<uint8_t>(masked), 1 << 0);
+
+  TestOptions inverted = ~TestOptions::None;
+  EXPECT_EQ(static_cast<uint8_t>(inverted), 0xFF);  // for uint8_t
+}
+
+TEST(BitwiseFlags, testCanSetAndCheckFlags) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  flags.set(TestOptions::A).set(TestOptions::C);
+
+  EXPECT_TRUE(flags.has(TestOptions::A));
+  EXPECT_TRUE(flags.has(TestOptions::C));
+  EXPECT_FALSE(flags.has(TestOptions::B));
+
+  EXPECT_TRUE(flags.hasAny(TestOptions::A | TestOptions::B));
+  EXPECT_FALSE(flags.hasAll(TestOptions::A | TestOptions::B));
+  EXPECT_TRUE(flags.hasAll(TestOptions::A | TestOptions::C));
+  EXPECT_FALSE(flags.hasAll(TestOptions::A | TestOptions::B | TestOptions::C));
+}
+
+TEST(BitwiseFlags, testEqualsOperators) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  flags.set(TestOptions::A).set(TestOptions::C);
+
+  TestFlags flags1(TestOptions::A | TestOptions::C);
+  EXPECT_TRUE(flags == flags1);
+
+  EXPECT_TRUE(flags == TestOptions::A);
+  EXPECT_TRUE(flags != TestOptions::B);
+  EXPECT_TRUE(flags == TestOptions::C);
+}
+
+TEST(BitwiseFlags, testAssignmentOperator) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  EXPECT_TRUE(flags != (TestOptions::A | TestOptions::B));
+  flags = TestOptions::A | TestOptions::B;
+  EXPECT_TRUE(flags == (TestOptions::A | TestOptions::B));
+}
+
 TEST(ImageContainerSubset, testBasicSubsetContainer) {
   cv::Mat depth(cv::Size(25, 25), CV_64F);
   uchar* depth_ptr = depth.data;

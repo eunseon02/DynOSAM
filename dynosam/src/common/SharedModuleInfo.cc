@@ -57,6 +57,19 @@ std::optional<GroundTruthPacketMap> SharedModuleInfo::getGroundTruthPackets()
   return gt_packet_map_;
 }
 
+bool SharedModuleInfo::getTimestamp(FrameId frame_id,
+                                    Timestamp& timestamp) const {
+  const FrameIdTimestampMap& timestamp_map = getTimestampMap();
+
+  const std::lock_guard<std::mutex> lock(mutex_);
+  if (timestamp_map.exists(frame_id)) {
+    timestamp = timestamp_map.at(frame_id);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 SharedModuleInfo& SharedModuleInfo::updateGroundTruthPacket(
     FrameId frame_id, const GroundTruthInputPacket& ground_truth_packet) {
   const std::lock_guard<std::mutex> lock(mutex_);

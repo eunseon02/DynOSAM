@@ -30,42 +30,42 @@
 
 #pragma once
 
-#include <mutex>
+#include <type_traits>
 
-#include "dynosam/common/GroundTruthPacket.hpp"
 #include "dynosam/common/Types.hpp"
 
 namespace dyno {
 
-class SharedModuleInfo {
- public:
-  static SharedModuleInfo& instance();
+namespace internal {
 
-  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const;
-  const FrameIdTimestampMap& getTimestampMap() const;
+template <typename T>
+struct EnableBitMaskOperators : std::false_type {};
 
-  bool getTimestamp(FrameId frame_id, Timestamp& timestamp) const;
+template <typename E>
+constexpr std::enable_if_t<EnableBitMaskOperators<E>::value, E> operator|(
+    E lhs, E rhs) {
+  using U = std::underlying_type_t<E>;
+  return static_cast<E>(static_cast<U>(lhs) | static_cast<U>(rhs));
+}
 
-  SharedModuleInfo& updateGroundTruthPacket(
-      FrameId frame_id, const GroundTruthInputPacket& ground_truth_packet);
-  SharedModuleInfo& updateTimestampMapping(FrameId frame_id,
-                                           Timestamp timestamp);
+template <typename E>
+constexpr std::enable_if_t<EnableBitMaskOperators<E>::value, E> operator&(
+    E lhs, E rhs) {
+  using U = std::underlying_type_t<E>;
+  return static_cast<E>(static_cast<U>(lhs) & static_cast<U>(rhs));
+}
 
- private:
-  static std::unique_ptr<SharedModuleInfo> instance_;
+template <typename E>
+constexpr std::enable_if_t<EnableBitMaskOperators<E>::value, E> operator~(E e) {
+  using U = std::underlying_type_t<E>;
+  return static_cast<E>(~static_cast<U>(e));
+}
 
- private:
-  mutable std::mutex mutex_;
-  GroundTruthPacketMap gt_packet_map_;
-  FrameIdTimestampMap frame_id_to_timestamp_map_;
-};
+}  // namespace internal
 
-struct SharedModuleInterface {
-  SharedModuleInfo& shared_module_info = SharedModuleInfo::instance();
-};
-
-struct ConstSharedModuleInterface {
-  const SharedModuleInfo& shared_module_info = SharedModuleInfo::instance();
-};
+// bring into dyno namespace
+using internal::operator|;
+using internal::operator&;
+using internal::operator~;
 
 }  // namespace dyno
