@@ -403,33 +403,6 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   update_params.enable_debug_info = true;
   update_params.do_backtrack = true;
 
-  // auto accessor = static_formulation_->accessorFromTheta();
-
-  // // for IMU add velocity value and bias
-  // // this will mess with the internal states of the formulation but in
-  // // this mode it shouldnt matter...
-  // CHECK(accessor->exists(gtsam::Symbol('V', frame_k - 1u)));
-  // CHECK(accessor->exists(gtsam::Symbol('b', frame_k - 1u)));
-  // CHECK(accessor->exists(gtsam::Symbol('X', frame_k - 1u)));
-
-  // auto from_id = frame_k - 1u;
-  // auto to_id = frame_k;
-
-  // const gtsam::PreintegratedCombinedMeasurements& pim_combined =
-  //     dynamic_cast<const gtsam::PreintegratedCombinedMeasurements&>(
-  //         *input->pim_);
-  // new_factors.emplace_shared<gtsam::CombinedImuFactor>(
-  //     gtsam::Symbol('X', from_id), gtsam::Symbol('V', from_id),
-  //     gtsam::Symbol('X', to_id), gtsam::Symbol('V', to_id),
-  //     gtsam::Symbol('b', from_id), gtsam::Symbol('b', to_id), pim_combined);
-
-  // static_formulation_->addSensorPoseValue(navstate_k.pose(), frame_k,
-  //                                         new_values);
-  // new_values.insert(gtsam::Symbol('V', frame_k), navstate_k.velocity());
-  // new_values.insert(gtsam::Symbol('b', frame_k), imu_bias_);
-
-  // static_formulation_->addOdometry(frame_k, T_W_k_frontend, new_values,
-  //                                  new_factors);
   static_formulation_->updateStaticObservations(frame_k, new_values,
                                                 new_factors, update_params);
 
@@ -452,17 +425,8 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
 
   auto accessor = static_formulation_->accessorFromTheta();
   StateQuery<gtsam::Pose3> X_w_k_opt_query = accessor->getSensorPose(frame_k);
-
+  CHECK(X_w_k_opt_query);
   // TODO: should check that X_w_k_opt_query and updated_nav_state are close!!
-
-  // CHECK(T_w_k_opt_query);
-
-  // // update state
-  // gtsam::Vector3 velocity =
-  //     optimised_values.at<gtsam::Vector3>(gtsam::Symbol('V', frame_k));
-  // imu_bias_ = optimised_values.at<gtsam::imuBias::ConstantBias>(
-  //     gtsam::Symbol('b', frame_k));
-  // nav_state_ = gtsam::NavState(T_w_k_opt_query.value(), velocity);
 
   LOG(INFO) << "Nav state after estimation " << updated_nav_state;
   LOG(INFO) << "Bias after estimation " << imu_bias_;
