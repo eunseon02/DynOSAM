@@ -32,6 +32,7 @@
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
+#include <gtsam/navigation/CombinedImuFactor.h>
 #include <gtsam/nonlinear/Marginals.h>
 #include <tbb/tbb.h>
 
@@ -110,6 +111,8 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
+  static_isam2_params_.relinearizeThreshold = 0.01;
+  static_isam2_params_.relinearizeSkip = 1;
 
   static_estimator_ = gtsam::ISAM2(static_isam2_params_);
 
@@ -121,6 +124,7 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
 
   FormulationParams formulation_params;
   formulation_params.min_static_observations = base_params_.min_static_obs_;
+  // formulation_params.min_static_observations = 4;
   formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
   formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
   formulation_params.suffix = "static";
@@ -296,20 +300,64 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
   const FrameId frame_k = input->getFrameId();
   auto map = static_formulation_->map();
 
-  map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
+  const auto& X_k_initial = input->T_world_camera_;
 
-  Pose3Measurement T_W_k_frontend(input->T_world_camera_);
-  map->updateSensorPoseMeasurement(frame_k, T_W_k_frontend);
+  map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
+  map->updateSensorPoseMeasurement(frame_k, Pose3Measurement(X_k_initial));
 
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  static_formulation_->addSensorPoseValue(T_W_k_frontend, frame_k, new_values);
+  // update formulation with initial states
+  gtsam::NavState nav_state;
+  if (input->pim_) {
+    LOG(INFO) << "Initialising backend with IMU states!";
+    nav_state = this->addInitialVisualInertialState(
+        frame_k, static_formulation_.get(), new_values, new_factors,
+        static_formulation_->noiseModels(),
+        gtsam::NavState(X_k_initial, gtsam::Vector3(0, 0, 0)),
+        gtsam::imuBias::ConstantBias{});
 
-  auto initial_pose_prior =
-      static_formulation_->noiseModels().initial_pose_prior;
-  static_formulation_->addSensorPosePriorFactor(
-      T_W_k_frontend, initial_pose_prior, frame_k, new_factors);
+  } else {
+    LOG(INFO) << "Initialising backend with VO only states!";
+    nav_state = this->addInitialVisualState(
+        frame_k, static_formulation_.get(), new_values, new_factors,
+        static_formulation_->noiseModels(), X_k_initial);
+  }
+
+  // gtsam::Values new_values;
+  // gtsam::NonlinearFactorGraph new_factors;
+
+  // static_formulation_->addSensorPoseValue(T_W_k_frontend, frame_k,
+  // new_values);
+
+  // auto initial_pose_prior =
+  //     static_formulation_->noiseModels().initial_pose_prior;
+  // static_formulation_->addSensorPosePriorFactor(
+  //     T_W_k_frontend, initial_pose_prior, frame_k, new_factors);
+
+  // // for IMU add velocity value and bias
+  // // this will mess with the internal states of the formulation but in
+  // // this mode it shouldnt matter...
+  // gtsam::SharedNoiseModel noise_init_vel_prior =
+  //     gtsam::noiseModel::Isotropic::Sigma(3, 1e-5);
+  // new_factors.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
+  //     gtsam::Symbol('V', frame_k), gtsam::Vector3(0, 0, 0),
+  //     noise_init_vel_prior);
+
+  // gtsam::Vector6 prior_biasSigmas;
+  // prior_biasSigmas.head<3>().setConstant(0.1);
+  // prior_biasSigmas.tail<3>().setConstant(0.01);
+  // // TODO(Toni): Make this noise model a member constant.
+  // gtsam::SharedNoiseModel imu_bias_prior_noise =
+  //     gtsam::noiseModel::Diagonal::Sigmas(prior_biasSigmas);
+  // new_factors.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
+  //     gtsam::Symbol('b', frame_k), gtsam::imuBias::ConstantBias{},
+  //     imu_bias_prior_noise);
+
+  // new_values.insert(gtsam::Symbol('V', frame_k), gtsam::Vector3{});
+  // new_values.insert(gtsam::Symbol('b', frame_k),
+  //                   gtsam::imuBias::ConstantBias{});
 
   {
     utils::TimingStatsCollector timer(
@@ -317,13 +365,15 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
     static_estimator_.update(new_factors, new_values);
   }
 
+  const auto& initial_pose_prior =
+      static_formulation_->noiseModels().initial_pose_prior;
   gtsam::SharedGaussian gaussian_pose_prior =
       boost::dynamic_pointer_cast<gtsam::noiseModel::Gaussian>(
           initial_pose_prior);
   CHECK(gaussian_pose_prior)
       << "initial pose prior must be a Gaussian noise model!";
 
-  return Pose3Measurement(T_W_k_frontend, gaussian_pose_prior);
+  return Pose3Measurement(nav_state.pose(), gaussian_pose_prior);
 }
 
 Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
@@ -331,24 +381,28 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
     bool should_calculate_covariance) {
   utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
 
+  // CHECK(input->pim_);
+  // const gtsam::NavState& navstate_k =
+  //     input->pim_->predict(nav_state_, imu_bias_);
+
   const FrameId frame_k = input->getFrameId();
   auto map = static_formulation_->map();
-
   map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
-
-  Pose3Measurement T_W_k_frontend(input->T_world_camera_);
-  // we dont have an uncertainty from the frontend
-  map->updateSensorPoseMeasurement(frame_k, T_W_k_frontend);
 
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
+
+  const gtsam::NavState predicted_nav_state = this->addVisualInertialStates(
+      frame_k, static_formulation_.get(), new_values, new_factors,
+      noise_models_, input->T_k_1_k_, input->pim_);
+  // we dont have an uncertainty from the frontend
+  map->updateSensorPoseMeasurement(
+      frame_k, Pose3Measurement(predicted_nav_state.pose()));
 
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
   update_params.do_backtrack = true;
 
-  static_formulation_->addOdometry(frame_k, T_W_k_frontend, new_values,
-                                   new_factors);
   static_formulation_->updateStaticObservations(frame_k, new_values,
                                                 new_factors, update_params);
 
@@ -366,23 +420,29 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   gtsam::Values optimised_values = static_estimator_.calculateBestEstimate();
   static_formulation_->updateTheta(optimised_values);
 
-  auto accessor = static_formulation_->accessorFromTheta();
-  StateQuery<gtsam::Pose3> T_w_k_opt_query = accessor->getSensorPose(frame_k);
+  const gtsam::NavState& updated_nav_state =
+      updateNavStateFromFormulation(frame_k, static_formulation_.get());
 
-  CHECK(T_w_k_opt_query);
+  auto accessor = static_formulation_->accessorFromTheta();
+  StateQuery<gtsam::Pose3> X_w_k_opt_query = accessor->getSensorPose(frame_k);
+  CHECK(X_w_k_opt_query);
+  // TODO: should check that X_w_k_opt_query and updated_nav_state are close!!
+
+  LOG(INFO) << "Nav state after estimation " << updated_nav_state;
+  LOG(INFO) << "Bias after estimation " << imu_bias_;
 
   if (should_calculate_covariance) {
-    gtsam::Matrix66 T_w_k_cov;
+    gtsam::Matrix66 X_w_k_cov;
     utils::TimingStatsCollector timer(
         "parallel_object_sam.camera_pose_cov_calc");
     gtsam::Marginals marginals(static_estimator_.getFactorsUnsafe(),
                                optimised_values,
                                gtsam::Marginals::Factorization::CHOLESKY);
-    T_w_k_cov = marginals.marginalCovariance(T_w_k_opt_query.key());
-    return Pose3Measurement(T_w_k_opt_query.get(), T_w_k_cov);
+    X_w_k_cov = marginals.marginalCovariance(X_w_k_opt_query.key());
+    return Pose3Measurement(X_w_k_opt_query.get(), X_w_k_cov);
 
   } else {
-    return Pose3Measurement(T_w_k_opt_query.get());
+    return Pose3Measurement(X_w_k_opt_query.get());
   }
 }
 

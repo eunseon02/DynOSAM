@@ -39,6 +39,8 @@
 #include "dynosam/backend/BackendModule.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
+#include "dynosam/backend/VisionImuBackendModule.hpp"
+#include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/WorldMotionEstimator.hpp"
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
 #include "dynosam/common/Flags.hpp"
@@ -46,12 +48,14 @@
 
 namespace dyno {
 
-class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
+class RGBDBackendModule
+    : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
   DYNO_POINTER_TYPEDEFS(RGBDBackendModule)
 
-  using Base = BackendModuleType<RGBDBackendModuleTraits>;
+  using Base = VisionImuBackendModule<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
+  using FormulationType = Base::FormulationType;
 
   // for backwards compatability!
   using UpdaterType = RGBDFormulationType;
@@ -78,8 +82,17 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
       RGBDInstanceOutputPacket::ConstPtr input) override;
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
 
-  void updateMap(gtsam::Pose3& T_world_cam,
-                 RGBDInstanceOutputPacket::ConstPtr input);
+  void addInitialStates(const RGBDInstanceOutputPacket::ConstPtr& input,
+                        FormulationType* formulation, gtsam::Values& new_values,
+                        gtsam::NonlinearFactorGraph& new_factors);
+  void addStates(const RGBDInstanceOutputPacket::ConstPtr& input,
+                 FormulationType* formulation, gtsam::Values& new_values,
+                 gtsam::NonlinearFactorGraph& new_factors);
+
+  // initial pose can come from many sources
+  void updateMapWithMeasurements(
+      FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr& input,
+      const gtsam::Pose3& X_k_w);
 
   // FOR NOW!!
   std::function<void(const Formulation<RGBDMap>::UniquePtr&, FrameId,
@@ -174,6 +187,7 @@ class RGBDBackendModule : public BackendModuleType<RGBDBackendModuleTraits> {
   // Updater::UniquePtr new_updater_;
   Formulation<RGBDMap>::UniquePtr new_updater_;
   SlidingWindow::UniquePtr sliding_window_condition_;
+  SlidingWindowOptimization::UniquePtr sliding_window_opt_;
   FrameId first_frame_id_;  // the first frame id that is received
 
   // new calibration every time

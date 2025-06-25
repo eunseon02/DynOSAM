@@ -397,6 +397,12 @@ class Formulation {
    */
   BackendLogger::UniquePtr makeFullyQualifiedLogger() const;
 
+  void addValuesFunctional(std::function<void(gtsam::Values&)> callback,
+                           gtsam::Values& new_values);
+  void addFactorsFunctional(
+      std::function<void(gtsam::NonlinearFactorGraph&)> callback,
+      gtsam::NonlinearFactorGraph& new_factors);
+
   // Factor Graph build functions.
   void addSensorPoseValue(const gtsam::Pose3& X_W_k, FrameId frame_id_k,
                           gtsam::Values& new_values);

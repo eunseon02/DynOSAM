@@ -36,7 +36,10 @@
 
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/ImageContainer.hpp"
+#include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
+#include "dynosam/dataprovider/TartanAirShibuya.hpp"
+#include "dynosam/dataprovider/ViodeDataProvider.hpp"
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -63,21 +66,27 @@ int main(int argc, char* argv[]) {
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
 
-  KittiDataLoader::Params params;
-  // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+  // KittiDataLoader::Params params;
+  // // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
   // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
-  OMDDataLoader loader(
-      "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
+  // OMDDataLoader loader(
+  //     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
+
+  // TartanAirShibuyaLoader
+  // loader("/root/data/TartanAir_shibuya/RoadCrossing07/");
+  ViodeLoader loader("/root/data/VIODE/city_day/mid");
 
   auto camera = std::make_shared<Camera>(*loader.getCameraParams());
   auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
 
   loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
                          cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth,
-                         cv::Mat motion, GroundTruthInputPacket) -> bool {
+                         cv::Mat motion, GroundTruthInputPacket,
+                         std::optional<ImuMeasurements> imu_measurements,
+                         std::optional<cv::Mat>) -> bool {
     // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
-    // cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion,
-    // gtsam::Pose3, GroundTruthInputPacket) -> bool {
+    //   cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion,
+    //   GroundTruthInputPacket) -> bool {
 
     LOG(INFO) << frame_id << " " << timestamp;
 
@@ -86,11 +95,17 @@ int main(int argc, char* argv[]) {
     motion_viz = ImageType::MotionMask::toRGB(motion);
     depth_viz = ImageType::Depth::toRGB(depth);
 
-    ImageContainer::Ptr container = ImageContainer::Create(
-        timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-        ImageWrapper<ImageType::Depth>(depth),
-        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-        ImageWrapper<ImageType::MotionMask>(motion));
+    ImageContainer image_container(frame_id, timestamp);
+    image_container.rgb(rgb)
+        .depth(depth)
+        .opticalFlow(optical_flow)
+        .objectMotionMask(motion);
+
+    // ImageContainerDeprecate::Ptr container = ImageContainerDeprecate::Create(
+    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
+    //     ImageWrapper<ImageType::Depth>(depth),
+    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
+    //     ImageWrapper<ImageType::MotionMask>(motion));
 
     // cv::Mat boarder_mask;
     // vision_tools::computeObjectMaskBoundaryMask(
@@ -116,9 +131,9 @@ int main(int argc, char* argv[]) {
     // cv::imshow("OF", of_viz);
     cv::imshow("Motion", motion_viz);
     // cv::waitKey(1);
-    // cv::imshow("Depth", depth_viz);
+    cv::imshow("Depth", depth_viz);
 
-    auto frame = tracker->track(frame_id, timestamp, *container);
+    auto frame = tracker->track(frame_id, timestamp, image_container);
     Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
     // // motion_viz =
@@ -128,6 +143,21 @@ int main(int argc, char* argv[]) {
     cv::Mat tracking;
     if (previous_frame) {
       tracking = tracker->computeImageTracks(*previous_frame, *frame, false);
+
+      // if (imu_measurements) {
+      //   const auto previous_timestamp = previous_frame->getTimestamp();
+
+      //   CHECK_GE(imu_measurements->timestamps_[0], previous_timestamp);
+      //   CHECK_LT(imu_measurements
+      //                ->timestamps_[imu_measurements->timestamps_.cols() - 1],
+      //            timestamp);
+
+      //   LOG(INFO) << "Gotten imu messages!";
+
+      //   CHECK(imu_measurements->synchronised_frame_id);
+      //   CHECK_EQ(imu_measurements->synchronised_frame_id.value(),
+      //            frame->getFrameId());
+      // }
     }
     if (!tracking.empty()) cv::imshow("Tracking", tracking);
 

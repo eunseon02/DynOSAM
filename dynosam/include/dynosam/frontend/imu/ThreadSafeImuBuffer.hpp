@@ -2,22 +2,28 @@
  *   Copyright (c) 2023 Jesse Morris (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
@@ -53,17 +59,15 @@
 
 #pragma once
 
+#include <Eigen/Dense>
 #include <algorithm>
 #include <atomic>
 #include <condition_variable>
+#include <functional>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <utility>
-
-#include <functional>
-#include <map>
-
-#include <Eigen/Dense>
 
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/imu/Imu-Definitions.hpp"
@@ -106,6 +110,7 @@ class ThreadsafeImuBuffer {
   inline void shutdown();
   inline size_t size() const;
   inline void clear();
+  inline bool isShutdown() const { return shutdown_; }
 
   /// Add IMU measurement in IMU frame.
   /// (Ordering: accelerations [m/s^2], angular velocities [rad/s])
@@ -160,10 +165,8 @@ class ThreadsafeImuBuffer {
   /// (check function isDataAvailableUpToImpl).
   /// In this case the output matrices will be of size 0.
   QueryResult getImuDataInterpolatedUpperBorder(
-      const Timestamp& timestamp_ns_from,
-      const Timestamp& timestamp_ns_to,
-      Timestamps* imu_timestamps,
-      ImuAccGyrs* imu_measurements);
+      const Timestamp& timestamp_ns_from, const Timestamp& timestamp_ns_to,
+      Timestamps* imu_timestamps, ImuAccGyrs* imu_measurements);
 
   // Interpolates an IMU measurement at timestamp by taking previous and
   // posterior measurements to the given timestamp.
@@ -178,19 +181,14 @@ class ThreadsafeImuBuffer {
   /// reached, the method
   /// will return false and no data will be removed from the buffer.
   QueryResult getImuDataInterpolatedBordersBlocking(
-      const Timestamp& timestamp_ns_from,
-      const Timestamp& timestamp_ns_to,
-      long int wait_timeout_nanoseconds,
-      Timestamps* imu_timestamps,
+      const Timestamp& timestamp_ns_from, const Timestamp& timestamp_ns_to,
+      long int wait_timeout_nanoseconds, Timestamps* imu_timestamps,
       ImuAccGyrs* imu_measurements);
 
   /// Linear interpolation between two imu measurements.
-  static void linearInterpolate(const Timestamp& x0,
-                                const ImuAccGyr& y0,
-                                const Timestamp& x1,
-                                const ImuAccGyr& y1,
-                                const Timestamp& x,
-                                ImuAccGyr* y);
+  static void linearInterpolate(const Timestamp& x0, const ImuAccGyr& y0,
+                                const Timestamp& x1, const ImuAccGyr& y1,
+                                const Timestamp& x, ImuAccGyr* y);
 
  private:
   /// TODO I think this comment is deprecated:

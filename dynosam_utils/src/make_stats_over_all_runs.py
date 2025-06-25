@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 
 from typing import Optional
 
-# https://cduvallet.github.io/posts/2018/03/boxplots-in-python
+# # https://cduvallet.github.io/posts/2018/03/boxplots-in-python
 plt.rcdefaults()
 
 plt.rcParams.update({
@@ -34,11 +34,20 @@ plt.rcParams.update({
                     "font.serif": ["Computer Modern Roman"],
                     })
 
-plt.rcParams['axes.titlesize'] = 25    # Title font size
-plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
-plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
-plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
-plt.rcParams['legend.fontsize']=18
+from dynosam_utils.evaluation.core.plotting import startup_plotting
+startup_plotting(15)
+
+# plt.rcParams.update({
+#                     "text.usetex": True,
+#                     "font.family": "serif",
+#                     "font.serif": ["Computer Modern Roman"],
+#                     })
+
+# plt.rcParams['axes.titlesize'] = 25    # Title font size
+# plt.rcParams['axes.labelsize'] = 17    # X/Y label font size
+# plt.rcParams['xtick.labelsize'] = 17   # X tick label font size
+# plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
+# plt.rcParams['legend.fontsize']=18
 
 def parser():
     basic_desc = "Plot summary of performance results for DynoSAM pipeline."
@@ -72,9 +81,11 @@ def get_stats(results_path, stats_keys):
 
 
 def plot(results_path, details_list):
+    print(f"Exploring results at {results_path}")
 
     num_details = len(details_list)
     fig, axes = plt.subplots(nrows=num_details, ncols=1, constrained_layout=True)
+    fig.set_size_inches(6.5, 5.5)
 
     from string import ascii_lowercase
 
@@ -94,7 +105,7 @@ def plot(results_path, details_list):
         main(results_path, ax, details, title=title)
 
     fig.tight_layout()
-    plt.show()
+    fig.savefig("/root/results/TRO2025/combined_timing.pdf")
 
 def main(results_path:str, ax: plt.Axes, details: dict, title: Optional[str] = None):
     stats_keys = details["keys"]
@@ -164,13 +175,20 @@ def main(results_path:str, ax: plt.Axes, details: dict, title: Optional[str] = N
             line.set_alpha(0.5)
             line.set_linewidth(1)
 
-    ax.set_ylabel(r"Timing [ms]")
+    ax.set_ylabel(r"Timing (ms)")
     ax.grid(True, alpha=0.5)
     ax.yaxis.grid(True)
     ax.xaxis.grid(False) # Show the vertical gridlines
 
     if title is not None:
         ax.set_title(title, loc="left", pad=10)
+
+
+    should_rotate = False
+    if should_rotate:
+        for label in ax.get_xticklabels():
+            label.set_rotation(45)
+            label.set_ha('right')
 
 
 
@@ -205,12 +223,12 @@ def get_all_stats(results_folder, stats_dict, stats_key):
 
 
 
-TRACKING_STATS_KEYS = {"name": "Feature Tracking",
+TRACKING_STATS_KEYS = {"name": "Tracking",
                        "log_scale":False,
                        "keys":{"frontend.feature_tracker": {"label":"Feature Tracker"},
                                "tracking_timer": {"label":"Feature Tracker"},
-                               "static_feature": {"label": "Static Features"},
-                               "dynamic_feature": {"label": "Dynamic Features"}}
+                               "static_feature": {"label": "Static\nFeatures"},
+                               "dynamic_feature": {"label": "Dynamic\nFeatures"}}
                       }
 
 
@@ -223,8 +241,8 @@ BACKEND_STATS_KEYS = {"name": "Back-end",
 REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
                          "log_scale":True,
                        "keys":{"motion_solver.solve_3d2d": {"label":"PnP Solve"},
-                               "joint_of_pose [ms]": {"label": "Optical Flow Refinement"},
-                               "object_nlo_refinement [ms]": {"label": "Motion Refinement"}}
+                               "joint_of_pose [ms]": {"label": "Optical Flow\nRefinement"},
+                               "object_nlo_refinement [ms]": {"label": "Motion\nRefinement"}}
                       }
 
 SLIDING_WINDOW_STATS = {"name": "Sliding",

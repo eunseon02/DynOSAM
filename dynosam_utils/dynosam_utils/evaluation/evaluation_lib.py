@@ -641,6 +641,9 @@ class CameraPoseEvaluator(Evaluator):
 
         traj_est_vo, traj_ref_vo = tools.sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
 
+        alignment_transformation = lie_algebra.sim3(
+            *traj_est_vo.align(traj_ref_vo, False, False, n=-1))
+
         # used to draw trajectories for plot collection
         trajectories = {}
         trajectories["Estimated VO"] = traj_est_vo
@@ -1160,4 +1163,9 @@ class DatasetEvaluator:
 
 
         logger.debug("Constructor evaluator: {}".format(cls.__name__))
-        return cls(*args)
+
+        try:
+            return cls(*args)
+        except Exception as e:
+            logger.error(f"Failed to load class {cls.__name__}: constructor failed with {str(e)}")
+            return None

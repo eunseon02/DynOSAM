@@ -64,7 +64,13 @@ class FeatureTracker : public FeatureTrackerBase {
   //  Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const
   //  TrackingInputImages& tracking_images);
   Frame::Ptr track(FrameId frame_id, Timestamp timestamp,
-                   const ImageContainer& image_container);
+                   const ImageContainer& image_container,
+                   const std::optional<gtsam::Rot3>& R_km1_k = {});
+
+  bool stereoTrack(FeaturePtrs& stereo_features,
+                   FeatureContainer& left_features, const cv::Mat& left_image,
+                   const cv::Mat& right_image,
+                   const double& virtual_baseline) const;
 
   /**
    * @brief Get the previous frame.

@@ -37,6 +37,7 @@
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+
 // #include "dynosam/common"
 
 #include <type_traits>
@@ -68,6 +69,8 @@ class FrontendModule
   FrontendModule(const FrontendParams& params,
                  ImageDisplayQueue* display_queue = nullptr);
   virtual ~FrontendModule();
+
+  // virtual void mapUpdate(const Accessor& accessor) {}
 
  protected:
   /**
@@ -119,6 +122,8 @@ class FrontendModule
   gtsam::Pose3Vector
       camera_poses_;  //! Keeps track of current camera trajectory. Really just
                       //! for (viz) and drawn everytime
+
+  // gtsam::FastMap<TrackletId, Landmark> map_from_backend_;
 
   //  private:
   //   GroundTruthPacketMap

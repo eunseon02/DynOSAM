@@ -63,6 +63,7 @@ static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
+constexpr static Timestamp InvalidTimestamp = 0;
 
 /// @brief Discrete object id, j.
 using ObjectId = int;
@@ -105,6 +106,49 @@ using MotionMap =
 
 /// @brief Map of FrameIds (k) to Timestamps
 using FrameIdTimestampMap = gtsam::FastMap<FrameId, Timestamp>;
+
+// T is expected to have (at least) bitwise | (OR) support
+template <typename T>
+class Flags {
+ public:
+  using Storage = std::underlying_type_t<T>;
+
+  Flags() : bits_(0) {}
+  explicit Flags(T value) : bits_(static_cast<Storage>(value)) {}
+
+  Flags& set(T value) {
+    bits_ |= static_cast<Storage>(value);
+    return *this;
+  }
+
+  bool has(T value) const { return (bits_ & static_cast<Storage>(value)) != 0; }
+
+  bool hasAll(T value) const {
+    return (bits_ & static_cast<Storage>(value)) == static_cast<Storage>(value);
+  }
+
+  bool hasAny(T value) const {
+    return has(value);  // same logic
+  }
+
+  bool operator==(const Flags& other) const { return bits_ == other.bits_; }
+
+  bool operator==(const T& value) const { return has(value); }
+
+  bool operator!=(const Flags& other) const { return !(*this == other); }
+
+  bool operator!=(const T& value) const { return !(*this == value); }
+
+  Flags& operator=(const T& value) {
+    bits_ = static_cast<Storage>(value);
+    return *this;
+  }
+
+  Storage raw() const { return bits_; }
+
+ private:
+  Storage bits_;
+};
 
 /**
  * @brief Get demangled class name
@@ -700,4 +744,12 @@ inline std::string info_string(FrameId frame_id, ObjectId object_id) {
 
 }  // namespace dyno
 
+namespace std {
+template <typename T>
+struct underlying_type<dyno::Flags<T>> {
+  using type = typename dyno::Flags<T>::Storage;
+};
+}  // namespace std
+
 #include "dynosam/common/SensorModels.hpp"
+#include "dynosam/common/Types-inl.hpp"

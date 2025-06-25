@@ -73,7 +73,7 @@ DynoPipelineManager::DynoPipelineManager(
                  "with an external module";
     data_interface_->registerPreQueueContainerCallback(
         [external_hooks](const ImageContainer::Ptr image_container) -> void {
-          external_hooks->update_time(image_container->getTimestamp());
+          external_hooks->update_time(image_container->timestamp());
         });
   }
 
@@ -81,6 +81,17 @@ DynoPipelineManager::DynoPipelineManager(
   data_loader_->registerGroundTruthPacketCallback(
       std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket,
                 data_interface_.get(), std::placeholders::_1));
+
+  // register single and multi IMU callbacks to the data loader
+  data_loader_->registerImuSingleCallback(std::bind(
+      static_cast<void (DataInterfacePipeline::*)(const ImuMeasurement&)>(
+          &dyno::DataInterfacePipeline::fillImuQueue),
+      data_interface_.get(), std::placeholders::_1));
+
+  data_loader_->registerImuMultiCallback(std::bind(
+      static_cast<void (DataInterfacePipeline::*)(const ImuMeasurements&)>(
+          &dyno::DataInterfacePipeline::fillImuQueue),
+      data_interface_.get(), std::placeholders::_1));
 
   // preprocessing
   data_interface_->registerImageContainerPreprocessor(
@@ -100,6 +111,22 @@ DynoPipelineManager::DynoPipelineManager(
     LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
     camera_params = params_.camera_params_;
   }
+  /// NOTE: no need to update the camera params like the imu params as we parse
+  /// the camera params into the loadPipeline functions separately!
+
+  ImuParams imu_params;
+  if (params_.preferDataProviderImuParams() &&
+      data_loader_->getImuParams().has_value()) {
+    LOG(INFO) << "Using imu params from DataProvider, not the config in the "
+                 "ImuParams.yaml!";
+    imu_params = *data_loader_->getImuParams();
+  } else {
+    LOG(INFO) << "Using imu params specified in ImuParams.yaml!";
+    imu_params = params_.imu_params_;
+  }
+
+  // update the imu params that will actually get sent to the frontend
+  params_.frontend_params_.imu_params = imu_params;
 
   loadPipelines(camera_params, frontend_display, backend_display);
   launchSpinners();
@@ -159,7 +186,8 @@ bool DynoPipelineManager::spin() {
   } else {
     // regular spinner....
     spin_func = [=]() -> bool {
-      if (data_loader_->spin() || frontend_pipeline_->isWorking()) {
+      if (data_loader_->spin() || frontend_pipeline_->isWorking() ||
+          (backend_pipeline_ && backend_pipeline_->isWorking())) {
         if (!params_.parallelRun()) {
           frontend_pipeline_->spinOnce();
           if (backend_pipeline_) backend_pipeline_->spinOnce();
@@ -231,6 +259,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
   switch (params_.frontend_type_) {
     case FrontendType::kRGBD: {
       LOG(INFO) << "Making RGBDInstance frontend";
+      FrontendModule::Ptr frontend = nullptr;
 
       Camera::Ptr camera = std::make_shared<Camera>(camera_params);
       CHECK_NOTNULL(camera);
@@ -264,9 +293,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         // convert pipeline to base type
         frontend_pipeline_ = std::move(offline_frontend);
       } else {
-        FrontendModule::Ptr frontend =
-            std::make_shared<RGBDInstanceFrontendModule>(
-                params_.frontend_params_, camera, &display_queue_);
+        frontend = std::make_shared<RGBDInstanceFrontendModule>(
+            params_.frontend_params_, camera, &display_queue_);
         LOG(INFO) << "Made RGBDInstanceFrontendModule";
         // need to make the derived pipeline so we can set parallel run etc
         // the manager takes a pointer to the base MIMO so we can have different
@@ -309,6 +337,12 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
           backend = std::make_shared<RGBDBackendModule>(
               params_.backend_params_, camera, updater_type, &display_queue_);
         }
+
+        // if(frontend && backend) {
+        //   backend->registerMapUpdater(std::bind(&FrontendModule::mapUpdate,
+        //   frontend.get(), std::placeholders::_1)); LOG(INFO) << "Bound map
+        //   update between frontend and backend";
+        // }
 
       } else if (use_offline_frontend_) {
         LOG(WARNING)

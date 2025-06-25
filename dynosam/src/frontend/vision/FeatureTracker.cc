@@ -56,10 +56,12 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
 }
 
 Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
-                                 const ImageContainer& image_container) {
+                                 const ImageContainer& image_container,
+                                 const std::optional<gtsam::Rot3>& R_km1_k) {
   // take "copy" of tracking_images which is then given to the frame
   // this will mean that the tracking images (input) are not necessarily the
   // same as the ones inside the returned frame
+  utils::TimingStatsCollector tracking_timer("tracking_timer");
   ImageContainer input_images = image_container;
 
   info_ = FeatureTrackerInfo();  // clear the info
@@ -68,13 +70,15 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
   if (initial_computation_) {
     // intitial computation
-    const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
+    const cv::Size& other_size =
+        static_cast<const cv::Mat&>(input_images.rgb()).size();
     CHECK(!previous_frame_);
     CHECK_EQ(img_size_.width, other_size.width);
     CHECK_EQ(img_size_.height, other_size.height);
     initial_computation_ = false;
   } else {
     if (params_.use_propogate_mask) {
+      utils::TimingStatsCollector timer("propogate_mask");
       propogateMask(input_images);
     }
     CHECK(previous_frame_);
@@ -98,15 +102,15 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // detection mask is in the opencv mask form: CV_8UC1 where white pixels (255)
   // are valid and black pixels (0) should not be detected on
   cv::Mat boarder_detection_mask;
-  vision_tools::computeObjectMaskBoundaryMask(
-      input_images.get<ImageType::MotionMask>(), boarder_detection_mask,
-      scaled_boarder_thickness, true);
+  vision_tools::computeObjectMaskBoundaryMask(input_images.objectMotionMask(),
+                                              boarder_detection_mask,
+                                              scaled_boarder_thickness, true);
 
   FeatureContainer static_features;
   {
     utils::TimingStatsCollector static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
-        previous_frame_, input_images, info_, boarder_detection_mask);
+        previous_frame_, input_images, info_, boarder_detection_mask, R_km1_k);
   }
 
   FeatureContainer dynamic_features;
@@ -136,31 +140,127 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   return new_frame;
 }
 
-// void FeatureTracker::resampleDynamicTracks() {
-//   if(!previous_frame_) {
-//     return;
-//   }
+bool FeatureTracker::stereoTrack(FeaturePtrs& stereo_features,
+                                 FeatureContainer& left_features,
+                                 const cv::Mat& left_image,
+                                 const cv::Mat& right_image,
+                                 const double& virtual_baseline) const {
+  utils::TimingStatsCollector timing("stereo_track_timer");
+  TrackletIds tracklets_ids;
+  // collect left feature points to cv::point2f
+  std::vector<cv::Point2f> left_feature_points =
+      left_features.toOpenCV(&tracklets_ids, true);
 
-//   //after outlier rejection - recheck how many points are inliers
-//   CHECK(previous_frame_->tracking_info_) << "Cannot resample Dynamic T"
-//   //TODO: slow!!
-//   for (Feature::Ptr previous_dynamic_feature :
-//   previous_frame_->usableDynamicFeaturesBegin()) {
-//     ObjectId object_id =
-//   }
+  if (left_feature_points.size() < 8) {
+    LOG(WARNING) << "Not enough left feature points for stereo matching...";
+    return false;
+  }
 
-// }
+  std::vector<cv::Point2f> right_feature_points;
+  std::vector<uchar> klt_status;
+  std::vector<float> err;
+
+  const cv::Mat& left_rgb = left_image;
+  cv::Mat left_mono = ImageType::RGBMono::toMono(left_rgb);
+  CHECK(!left_mono.empty());
+  cv::Mat right_mono = ImageType::RGBMono::toMono(right_image);
+  CHECK(!right_mono.empty());
+
+  right_feature_points = left_feature_points;
+
+  cv::calcOpticalFlowPyrLK(left_mono, right_mono, left_feature_points,
+                           right_feature_points, klt_status, err,
+                           cv::Size(21, 21), 5);
+  CHECK_EQ(klt_status.size(), tracklets_ids.size());
+  TrackletIds good_stereo_tracklets;
+
+  std::vector<cv::Point2f> pts_left_tracked, pts_right_tracked;
+  for (size_t i = 0; i < klt_status.size(); ++i) {
+    auto tracklet_id = tracklets_ids.at(i);
+    // LOG(INFO) << tracklet_id;
+    if (klt_status[i]) {
+      pts_left_tracked.push_back(left_feature_points[i]);
+      pts_right_tracked.push_back(right_feature_points[i]);
+      good_stereo_tracklets.push_back(tracklet_id);
+    }
+  }
+  LOG(INFO) << "Stereo KLT tracked: " << pts_left_tracked.size() << " points";
+
+  // need more than 8 points for fundamental matrix calc with ransac
+  TrackletIds inlier_stereo_tracklets;
+  if (pts_left_tracked.size() < 8) {
+    LOG(WARNING)
+        << "Not enough stereo matches to perform fundamental matrix calc";
+    return false;
+  } else {
+    std::vector<uchar> epipolar_inliers;
+    cv::Mat F =
+        cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
+                               cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
+    CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
+
+    std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
+    for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
+      auto tracklet_id = good_stereo_tracklets.at(i);
+      if (epipolar_inliers[i]) {
+        pts_left_inlier.push_back(pts_left_tracked[i]);
+        pts_right_inlier.push_back(pts_right_tracked[i]);
+
+        CHECK(left_features.getByTrackletId(tracklet_id))
+            << "Somehow tracklet id " << tracklet_id << " is missing!";
+        inlier_stereo_tracklets.push_back(tracklet_id);
+      }
+    }
+
+    LOG(INFO) << "After epipolar filtering: " << inlier_stereo_tracklets.size()
+              << " inliers";
+    const auto& fx = camera_->getParams().fx();
+
+    for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
+      auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
+      Feature::Ptr feature = left_features.getByTrackletId(inlier_stereo_track);
+      CHECK(feature);
+      CHECK(feature->usable());
+
+      double uL = static_cast<double>(pts_left_inlier[i].x);
+      double vL = static_cast<double>(pts_left_inlier[i].y);
+      double uR = static_cast<double>(pts_right_inlier[i].x);
+
+      double disparity = uL - uR;
+      // Reject near-zero disparity
+      // this will also mean far away points.... multi-view triangulation
+      // across frames is needed here... fall back on depth map...
+      if (disparity <= 1.0) {
+        // feature->markOutlier();
+      }
+
+      double depth = fx * virtual_baseline / disparity;
+      // TODO: no max depth
+      feature->depth(depth);
+      feature->rightKeypoint(uR);
+
+      stereo_features.push_back(feature);
+    }
+
+    TrackletIds outlier_stereo_tracklets;
+    determineOutlierIds(inlier_stereo_tracklets, tracklets_ids,
+                        outlier_stereo_tracklets);
+
+    left_features.markOutliers(outlier_stereo_tracklets);
+    return true;
+  }
+}
 
 void FeatureTracker::trackDynamic(FrameId frame_id,
                                   const ImageContainer& image_container,
                                   FeatureContainer& dynamic_features,
                                   const cv::Mat& detection_mask) {
   // first dectect dynamic points
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
   // make sense for a realtime system)
-  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
@@ -183,7 +283,7 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
   if (previous_frame_) {
     const cv::Mat& previous_motion_mask =
-        previous_frame_->image_container_.get<ImageType::MotionMask>();
+        previous_frame_->image_container_.objectMotionMask();
     utils::TimingStatsCollector tracked_dynamic_features(
         "tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature :
@@ -307,11 +407,11 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
     Keypoint predicted_kp;
   };
 
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
   // make sense for a realtime system)
-  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
@@ -448,15 +548,14 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
 void FeatureTracker::propogateMask(ImageContainer& image_container) {
   if (!previous_frame_) return;
 
-  const cv::Mat& previous_rgb =
-      previous_frame_->image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& previous_rgb = previous_frame_->image_container_.rgb();
   const cv::Mat& previous_mask =
-      previous_frame_->image_container_.get<ImageType::MotionMask>();
+      previous_frame_->image_container_.objectMotionMask();
   const cv::Mat& previous_flow =
-      previous_frame_->image_container_.get<ImageType::OpticalFlow>();
+      previous_frame_->image_container_.opticalFlow();
 
   // note reference
-  cv::Mat& current_mask = image_container.get<ImageType::MotionMask>();
+  cv::Mat& current_mask = image_container.objectMotionMask();
 
   ObjectIds instance_labels;
   for (const Feature::Ptr& dynamic_feature :

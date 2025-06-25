@@ -37,6 +37,7 @@
 #include "dynosam/common/PointCloudProcess.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
+#include "dynosam/frontend/imu/ImuFrontend.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/logger/Logger.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
@@ -66,6 +67,12 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
       dense_labelled_cloud_;  //! Dense point cloud (with label and RGB) in
                               //! camera frame
   const FrameIdTimestampMap involved_timestamps_;
+
+  ImuFrontend::PimPtr pim_;
+
+  // relative pose of the camera (ie the increment) from k-1 to k, expressed in
+  // the camera frame (at k-1)
+  gtsam::Pose3 T_k_1_k_;
 
   RGBDInstanceOutputPacket(
       const StatusKeypointVector& static_keypoint_measurements,

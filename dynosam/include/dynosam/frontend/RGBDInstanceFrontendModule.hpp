@@ -30,9 +30,12 @@
 
 #pragma once
 
+#include <gtsam/navigation/NavState.h>
+
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/imu/ImuFrontend.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/frontend/vision/ObjectTracker.hpp"
@@ -56,9 +59,6 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   ObjectMotionSolver::UniquePtr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
-  //   Object
-
-  //   ObjectMotionSolverSAM::UniquePtr experimental_solver_;
 
  private:
   ImageValidationResult validateImageContainer(
@@ -81,14 +81,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    * @return true
    * @return false
    */
-  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
-
-  //   bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-  //                          ObjectId object_id,
-  //                          MotionEstimateMap& motion_estimates);
-
-  //   void solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-  //                           MotionEstimateMap& motion_estimates);
+  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                         std::optional<gtsam::Rot3> R_curr_ref = {});
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
       const Frame& frame, const ObjectMotionMap& object_motions,
@@ -104,6 +98,11 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag
   std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
+
+  ImuFrontend imu_frontend_;
+  gtsam::NavState nav_state_;
+  gtsam::NavState previous_nav_state_;
+  //   gtsam::NavState previous_imu_state_;
 };
 
 }  // namespace dyno

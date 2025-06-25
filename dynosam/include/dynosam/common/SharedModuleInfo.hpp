@@ -44,6 +44,8 @@ class SharedModuleInfo {
   std::optional<GroundTruthPacketMap> getGroundTruthPackets() const;
   const FrameIdTimestampMap& getTimestampMap() const;
 
+  bool getTimestamp(FrameId frame_id, Timestamp& timestamp) const;
+
   SharedModuleInfo& updateGroundTruthPacket(
       FrameId frame_id, const GroundTruthInputPacket& ground_truth_packet);
   SharedModuleInfo& updateTimestampMapping(FrameId frame_id,

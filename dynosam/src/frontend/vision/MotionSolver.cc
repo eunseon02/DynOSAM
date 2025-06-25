@@ -256,9 +256,12 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
   const double threshold =
       1.0 - std::cos(std::atan(std::sqrt(2.0) * reprojection_error /
                                avg_focal_length));
-  // const double threshold = params_.ransac_threshold_pnp;
 
   AbsolutePoseAdaptor adapter(bearing_vectors, points);
+
+  if (R_curr_ref) {
+    adapter.setR(R_curr_ref->matrix());
+  }
 
   gtsam::Pose3 best_result;
   std::vector<int> ransac_inliers;
@@ -269,10 +272,10 @@ Pose3SolverResult EgoMotionSolver::geometricOutlierRejection3d2d(
       threshold, params_.ransac_iterations, params_.ransac_probability,
       params_.optimize_3d2d_pose_from_inliers, best_result, ransac_inliers);
 
-  if (success) {
-    constructTrackletInliers(result.inliers, result.outliers, correspondences,
-                             ransac_inliers, tracklets);
+  constructTrackletInliers(result.inliers, result.outliers, correspondences,
+                           ransac_inliers, tracklets);
 
+  if (success) {
     if (result.inliers.size() < 5u) {
       result.status = TrackingStatus::FEW_MATCHES;
     } else {
@@ -291,10 +294,8 @@ void OpticalFlowAndPoseOptimizer::updateFrameOutliersWithResult(
     const Result& result, Frame::Ptr frame_k_1, Frame::Ptr frame_k) const {
   // //original flow image that goes from k to k+1 (gross, im sorry!)
   // TODO: use flow_is_future param
-  const cv::Mat& flow_image =
-      frame_k->image_container_.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask =
-      frame_k->image_container_.get<ImageType::MotionMask>();
+  const cv::Mat& flow_image = frame_k->image_container_.opticalFlow();
+  const cv::Mat& motion_mask = frame_k->image_container_.objectMotionMask();
 
   auto camera = frame_k->camera_;
   const auto& refined_inliers = result.inliers;

@@ -93,6 +93,27 @@ void Formulation<MAP>::addSensorPoseValue(const gtsam::Pose3& X_W_k,
 }
 
 template <typename MAP>
+void Formulation<MAP>::addValuesFunctional(
+    std::function<void(gtsam::Values&)> callback, gtsam::Values& new_values) {
+  gtsam::Values internal_new_values;
+  callback(internal_new_values);
+
+  new_values.insert_or_assign(internal_new_values);
+  theta_.insert_or_assign(internal_new_values);
+}
+
+template <typename MAP>
+void Formulation<MAP>::addFactorsFunctional(
+    std::function<void(gtsam::NonlinearFactorGraph&)> callback,
+    gtsam::NonlinearFactorGraph& new_factors) {
+  gtsam::NonlinearFactorGraph internal_new_factors;
+  callback(internal_new_factors);
+
+  new_factors += internal_new_factors;
+  factors_ += internal_new_factors;
+}
+
+template <typename MAP>
 void Formulation<MAP>::addSensorPosePriorFactor(
     const gtsam::Pose3& X_W_k, gtsam::SharedNoiseModel noise_model,
     FrameId frame_id_k, gtsam::NonlinearFactorGraph& new_factors) {
@@ -228,11 +249,26 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
   auto accessor = this->accessorFromTheta();
 
   auto static_point_noise = CHECK_NOTNULL(noise_models_.static_point_noise);
+
+  gtsam::SharedNoiseModel static_keypoint_noise =
+      gtsam::noiseModel::Isotropic::Sigma(2u, 3);
+  static_keypoint_noise = gtsam::noiseModel::Robust::Create(
+      gtsam::noiseModel::mEstimator::Huber::Create(0.01),
+      static_keypoint_noise);
   // keep track of the new factors added in this function
   // these are then appended to the internal factors_ and new_factors
   gtsam::NonlinearFactorGraph internal_new_factors;
 
   UpdateObservationResult result(update_params);
+
+  // VIODE!!
+  double fx = 376.0;
+  double fy = 376.0;
+  double cx = 376.0;
+  double cy = 240.0;
+  double skew = 0.0;  // assuming zero skew
+
+  const auto K = boost::make_shared<gtsam::Cal3_S2>(fx, fy, skew, cx, cy);
 
   const auto frame_node_k = map->getFrame(frame_id_k);
   CHECK_NOTNULL(frame_node_k);
@@ -250,10 +286,19 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
     // in isam)
     if (is_other_values_in_map.exists(point_key)) {
       const Landmark measured = lmk_node->getMeasurement(frame_id_k).landmark;
+      // const auto measured_keypoint =
+      // lmk_node->getMeasurement(frame_id_k).keypoint;
+
       internal_new_factors
           .emplace_shared<gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>>(
               frame_node_k->makePoseKey(),  // pose key for this frame
               point_key, measured, static_point_noise);
+      // internal_new_factors
+      //     .emplace_shared<GenericProjectionFactor>(
+      //         measured_keypoint,
+      //         static_keypoint_noise,
+      //         frame_node_k->makePoseKey(),  // pose key for this frame
+      //         point_key, K);
 
       if (result.debug_info) result.debug_info->num_static_factors++;
       result.updateAffectedObject(frame_id_k, 0);
@@ -283,11 +328,22 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
           continue;
         }
 
+        const auto measured_keypoint =
+            lmk_node->getMeasurement(seen_frame).keypoint;
+
         const Landmark& measured =
             lmk_node->getMeasurement(seen_frame).landmark;
         internal_new_factors.emplace_shared<PoseToPointFactor>(
             seen_frame->makePoseKey(),  // pose key at previous frames
             point_key, measured, static_point_noise);
+
+        // internal_new_factors
+        //   .emplace_shared<GenericProjectionFactor>(
+        //       measured_keypoint,
+        //       static_keypoint_noise,
+        //       seen_frame->makePoseKey(),  // pose key for this frame
+        //       point_key, K);
+
         if (result.debug_info) result.debug_info->num_static_factors++;
         result.updateAffectedObject(seen_frame_id, 0);
       }

@@ -239,7 +239,6 @@ for i, color in enumerate(color_list[:len(labels)]):
 ax.set_xticks(positions)
 ax.set_xticklabels(labels)
 ax.set_ylabel("Timing (ms)")
-# ax.set_title("Per-frame computation using iSAM2")
 ax.set_title("Per-frame update")
 ax.grid(True, alpha=0.5)
 ax.set_yscale("linear")
@@ -254,5 +253,6 @@ formatter.set_powerlimits((-3, 3))  # Force scientific notation outside this ran
 ax.yaxis.set_major_formatter(formatter)
 fig.tight_layout()
 
-out_data_path = "/root/results/Dynosam_ecmr2024/icra_poster_timing.pdf"
-fig.savefig(out_data_path)
+# out_data_path = "/root/results/Dynosam_ecmr2024/icra_poster_timing.pdf"
+# fig.savefig(out_data_path)
+plt.show()

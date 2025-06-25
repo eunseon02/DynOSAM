@@ -149,6 +149,11 @@ void CameraParams::convertDistortionVectorToMatrix(
 
 void CameraParams::convertIntrinsicsVectorToMatrix(
     const IntrinsicsCoeffs& intrinsics, cv::Mat* camera_matrix) {
+  CHECK_GT(intrinsics.at(0), 0.0) << "fx cannot be zero";
+  CHECK_GT(intrinsics.at(1), 0.0) << "fy cannot be zero";
+  CHECK_GT(intrinsics.at(2), 0.0) << "cx cannot be zero";
+  CHECK_GT(intrinsics.at(3), 0.0) << "cy cannot be zero";
+
   *camera_matrix = cv::Mat::eye(3, 3, CV_64F);
   camera_matrix->at<double>(0, 0) = intrinsics[0];
   camera_matrix->at<double>(1, 1) = intrinsics[1];

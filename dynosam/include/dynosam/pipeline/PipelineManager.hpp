@@ -81,7 +81,7 @@ class DynoPipelineManager {
                      BackendDisplay::Ptr backend_display);
 
  private:
-  const DynoParams params_;
+  DynoParams params_;
   const bool use_offline_frontend_;
 
   //! Use the pipeline base version of the frontend pipeline

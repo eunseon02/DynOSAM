@@ -145,15 +145,26 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
     # run_analysis(name_PO)
     # run_analysis(name_POM)
 
+def run_viodes():
+    # run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
 if __name__ == '__main__':
     # make input dictionary
     world_motion_backend = 0
     ll_backend = 1
 
-    def run_both_backend(run_sequence_func, path, name, *args):
-        run_sequence_func(path, name, world_motion_backend, *args)
-        run_sequence_func(path, name, ll_backend, *args)
-        run_analysis(name)
+    run_viodes()
+    sys.exit(0)
+
+    # def run_both_backend(run_sequence_func, path, name, *args):
+    #     # run_sequence_func(path, name, world_motion_backend, *args)
+    #     run_sequence_func(path, name, ll_backend, *args)
+    #     run_analysis(name)
 
     # run_sequnce("/root/data/cluster_slam/CARLA-L1/", "carla_l1_new", cluster_dataset, world_motion_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
     # run_sequnce("/root/data/cluster_slam/CARLA-L1/", "carla_l1_new", cluster_dataset, ll_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)

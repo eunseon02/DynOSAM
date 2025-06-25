@@ -1,94 +1,129 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
-#include "dynosam/utils/Macros.hpp"
-#include "dynosam/frontend/FrontendParams.hpp"
-#include "dynosam/backend/BackendParams.hpp"
-#include "dynosam/common/CameraParams.hpp"
-
-#include "dynosam/frontend/Frontend-Definitions.hpp"
-#include "dynosam/backend/BackendDefinitions.hpp"
+#include <glog/logging.h>
 
 #include <iomanip>
 #include <ostream>
 #include <sstream>
 #include <string>
 
-#include <glog/logging.h>
+#include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/backend/BackendParams.hpp"
+#include "dynosam/common/CameraParams.hpp"
+#include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/Frontend-Definitions.hpp"
+#include "dynosam/frontend/FrontendParams.hpp"
+#include "dynosam/utils/Macros.hpp"
 
 namespace dyno {
 
-class DynoParams {
-
-
-public:
-    DynoParams(const std::string& params_folder_path);
-    /**
-     * @brief For I/O construction
-     *
-     */
-    DynoParams() {}
-
-    void printAllParams(bool print_glog_params = true) const;
-
-    struct PipelineParams {
-        int data_provider_type; //Kitti, VirtualKitti, Online... currently set with flagfile
-        //! If camera params are provided from the dataprovider, use this instead of the
-        //! params here. This allows the specific dataset camera params (which changes per dataset)
-        //! rather than needing the change the CameraParams.yaml everytime
-        bool prefer_data_provider_camera_params{true};
-        //! Pipeline level params
-        bool parallel_run{true};
-    };
-
-    // Quick access functions
-    bool parallelRun() const { return pipeline_params_.parallel_run;  }
-    int dataProviderType() const { return pipeline_params_.data_provider_type; }
-    bool preferDataProviderCameraParams() const { return pipeline_params_.prefer_data_provider_camera_params; }
-
-
-public:
-    PipelineParams pipeline_params_;
-    FrontendParams frontend_params_;
-    BackendParams backend_params_;
-    CameraParams camera_params_;
-
-    FrontendType frontend_type_ = FrontendType::kRGBD;
-
-
-private:
-
+enum class RuntimeSensorOptions : std::uint8_t {
+  //! Use this sensor, if available
+  PreferSensor = 0,
+  //! Do not use this sensor, even if it is available
+  NoSensor = 1 << 0,
+  //! if we prefer the sensor but data is not available the system will use
+  //! other information
+  AcceptNoSensor = 1 << 1,
+  //! if we prefer a sensor but data is not available, fail hard
+  FailOnNoSensor = 1 << 2
 };
 
+template <>
+struct internal::EnableBitMaskOperators<RuntimeSensorOptions> : std::true_type {
+};
+
+using RuntimeSensorFlags = Flags<RuntimeSensorOptions>;
+
+//! Default runtime sensor options are PreferSensor AND AcceptNoSensor
+//! This means that we will try an use the most sensor data available but
+//! continue if not
+constexpr static RuntimeSensorOptions DefaultRuntimeSensorOptions{
+    RuntimeSensorOptions::PreferSensor | RuntimeSensorOptions::AcceptNoSensor};
+
+class DynoParams {
+ public:
+  DynoParams(const std::string& params_folder_path);
+  /**
+   * @brief For I/O construction
+   *
+   */
+  DynoParams() {}
+
+  void printAllParams(bool print_glog_params = true) const;
+
+  struct PipelineParams {
+    int data_provider_type;  // Kitti, VirtualKitti, Online... currently set
+                             // with flagfile
+    //! If camera params are provided from the dataprovider, use this instead of
+    //! the params here. This allows the specific dataset camera params (which
+    //! changes per dataset) rather than needing the change the
+    //! CameraParams.yaml everytime
+    bool prefer_data_provider_camera_params{true};
+    bool prefer_data_provider_imu_params{true};
+    //! Pipeline level params
+    bool parallel_run{true};
+
+    RuntimeSensorFlags imu_runtime_options{DefaultRuntimeSensorOptions};
+    RuntimeSensorFlags stereo_runtime_options{DefaultRuntimeSensorOptions};
+  };
+
+  // Quick access functions
+  bool parallelRun() const { return pipeline_params_.parallel_run; }
+  int dataProviderType() const { return pipeline_params_.data_provider_type; }
+  bool preferDataProviderCameraParams() const {
+    return pipeline_params_.prefer_data_provider_camera_params;
+  }
+  bool preferDataProviderImuParams() const {
+    return pipeline_params_.prefer_data_provider_imu_params;
+  }
+
+ public:
+  PipelineParams pipeline_params_;
+  FrontendParams frontend_params_;
+  BackendParams backend_params_;
+  CameraParams camera_params_;
+  ImuParams imu_params_;
+
+  FrontendType frontend_type_ = FrontendType::kRGBD;
+
+ private:
+};
 
 void declare_config(DynoParams::PipelineParams& config);
 
-
-
-
-// ! Original code from: https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
+// ! Original code from:
+// https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
 // /**
 //  * @brief The PipelineParams base class
 //  * Sets a common base class for parameters of the pipeline
@@ -110,8 +145,9 @@ void declare_config(DynoParams::PipelineParams& config);
 
 //   // Parameters of the pipeline must specify how to be compard, they need
 //   // to implement the equals function below.
-//   friend bool operator==(const PipelineParams& lhs, const PipelineParams& rhs);
-//   friend bool operator!=(const PipelineParams& lhs, const PipelineParams& rhs);
+//   friend bool operator==(const PipelineParams& lhs, const PipelineParams&
+//   rhs); friend bool operator!=(const PipelineParams& lhs, const
+//   PipelineParams& rhs);
 
 //  protected:
 //   // Parameters of the pipeline must specify how to be compared.
@@ -199,12 +235,14 @@ void declare_config(DynoParams::PipelineParams& config);
 //   }
 // };
 
-// inline bool operator==(const PipelineParams& lhs, const PipelineParams& rhs) {
+// inline bool operator==(const PipelineParams& lhs, const PipelineParams& rhs)
+// {
 //   // Allow to compare only instances of the same dynamic type
 //   return typeid(lhs) == typeid(rhs) && lhs.name_ == rhs.name_ &&
 //          lhs.equals(rhs);
 // }
-// inline bool operator!=(const PipelineParams& lhs, const PipelineParams& rhs) {
+// inline bool operator!=(const PipelineParams& lhs, const PipelineParams& rhs)
+// {
 //   return !(lhs == rhs);
 // }
 
@@ -226,6 +264,4 @@ void declare_config(DynoParams::PipelineParams& config);
 //   }
 // }
 
-
-
-}
+}  // namespace dyno

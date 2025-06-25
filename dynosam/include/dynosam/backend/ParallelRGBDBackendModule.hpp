@@ -30,23 +30,27 @@
 
 #pragma once
 
+#include <gtsam/navigation/NavState.h>
+
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendModule.hpp"
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/ParallelObjectISAM.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
+#include "dynosam/backend/VisionImuBackendModule.hpp"
 #include "dynosam/common/Flags.hpp"
 #include "dynosam/common/Map.hpp"
 
 namespace dyno {
 
+// TODO: should have a special accessor for this class....
 class ParallelRGBDBackendModule
-    : public BackendModuleType<RGBDBackendModuleTraits> {
+    : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
   DYNO_POINTER_TYPEDEFS(ParallelRGBDBackendModule)
 
-  using Base = BackendModuleType<RGBDBackendModuleTraits>;
+  using Base = VisionImuBackendModule<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
   ParallelRGBDBackendModule(const BackendParams& backend_params,
@@ -108,6 +112,9 @@ class ParallelRGBDBackendModule
 
   //! used to cache the result of each update which will we log to file
   GenericObjectCentricMap<ParallelObjectISAM::Result> result_map_;
+
+  gtsam::NavState nav_state_;
+  gtsam::imuBias::ConstantBias imu_bias_;
 };
 
 }  // namespace dyno

@@ -38,6 +38,7 @@
 #include "dynosam/backend/Accessor.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
+#include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/HybridEstimator.hpp"
 #include "dynosam/backend/rgbd/impl/test_HybridFormulations.hpp"
 #include "dynosam/common/Flags.hpp"
@@ -136,6 +137,11 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   new_updater_ = std::move(makeUpdater());
   sliding_window_condition_ = std::make_unique<SlidingWindow>(
       FLAGS_opt_window_size, FLAGS_opt_window_overlap);
+
+  SlidingWindowOptimization::Params sw_params;
+  sw_params.window_size = FLAGS_opt_window_size;
+  sw_params.overlap = FLAGS_opt_window_overlap;
+  sliding_window_opt_ = std::make_unique<SlidingWindowOptimization>(sw_params);
 }
 
 RGBDBackendModule::~RGBDBackendModule() {
@@ -158,23 +164,32 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
       frame_k));  // trigger the check to update the first frame call. Bit
                   // gross!
 
-  // Pose estimate from the front-end
-  gtsam::Pose3 T_world_cam_k_frontend;
-  updateMap(T_world_cam_k_frontend, input);
-
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
-  new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k,
-                                    new_factors);
+  addInitialStates(input, new_updater_.get(), new_values, new_factors);
+  // // Pose estimate from the front-end
+  // gtsam::Pose3 T_world_cam_k_frontend;
+  // updateMap(T_world_cam_k_frontend, input);
+
+  // gtsam::Values new_values;
+  // gtsam::NonlinearFactorGraph new_factors;
+
+  // new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
+  // new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k,
+  //                                   new_factors);
 
   if (callback) {
     callback(new_updater_, frame_k, new_values, new_factors);
   }
 
   smoother_->update(new_factors, new_values);
+  sliding_window_opt_->update(new_factors, new_values, frame_k);
   // smoother_->update(new_factors, new_values);
+  // updateNavStateFromFormulation(frame_k, new_updater_.get());
+
+  // TODO: sanity checks that vision states are inline with the other frame idss
+  // etc
 
   return {State::Nominal, nullptr};
 }
@@ -187,14 +202,18 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   CHECK_EQ(spin_state_.frame_id, frame_k);
 
   // Pose estimate from the front-end
-  gtsam::Pose3 T_world_cam_k_frontend;
-  updateMap(T_world_cam_k_frontend, input);
-
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values,
-                            new_factors);
+  addStates(input, new_updater_.get(), new_values, new_factors);
+  // gtsam::Pose3 T_world_cam_k_frontend;
+  // updateMap(T_world_cam_k_frontend, input);
+
+  // gtsam::Values new_values;
+  // gtsam::NonlinearFactorGraph new_factors;
+
+  // new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values,
+  //                           new_factors);
 
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
@@ -297,20 +316,36 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
                 << " error after: " << error_after;
     }
   } else {
-    double error_before, error_after;
-    gtsam::Values optimised_values;
-    LOG(INFO) << "Doing sliding window";
-    if (buildSlidingWindowOptimisation(frame_k, optimised_values, error_before,
-                                       error_after)) {
-      LOG(INFO) << "Updating values with opt!";
-      new_updater_->updateTheta(optimised_values);
-      LOG(INFO) << " Error before sliding window: " << error_before
-                << " error after: " << error_after;
+    const auto sw_result =
+        sliding_window_opt_->update(new_factors, new_values, frame_k);
+    LOG(INFO) << "Sliding window result - " << sw_result.optimized;
+
+    if (sw_result.optimized) {
+      new_updater_->updateTheta(sw_result.result);
     }
+
+    // double error_before, error_after;
+    // gtsam::Values optimised_values;
+    // LOG(INFO) << "Doing sliding window";
+    // if (buildSlidingWindowOptimisation(frame_k, optimised_values,
+    // error_before,
+    //                                    error_after)) {
+    //   LOG(INFO) << "Updating values with opt!";
+    //   new_updater_->updateTheta(optimised_values);
+    //   LOG(INFO) << " Error before sliding window: " << error_before
+    //             << " error after: " << error_after;
+    // }
   }
   LOG(INFO) << "Done any udpates";
 
   auto accessor = new_updater_->accessorFromTheta();
+  // update internal nav state based on the initial/optimised estimated in the
+  // formulation this is also necessary to update the internal timestamp/frameid
+  // variables within the VisionImuBackendModule
+  updateNavStateFromFormulation(frame_k, new_updater_.get());
+
+  // TODO: sanity checks that vision states are inline with the other frame idss
+  // etc
 
   utils::TimingStatsCollector timer(new_updater_->getFullyQualifiedName() +
                                     ".post_update");
@@ -327,29 +362,65 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   return {State::Nominal, backend_output};
 }
 
-void RGBDBackendModule::updateMap(gtsam::Pose3& T_world_cam,
-                                  RGBDInstanceOutputPacket::ConstPtr input) {
-  utils::TimingStatsCollector timer("map.update_observations");
+void RGBDBackendModule::addInitialStates(
+    const RGBDInstanceOutputPacket::ConstPtr& input,
+    FormulationType* formulation, gtsam::Values& new_values,
+    gtsam::NonlinearFactorGraph& new_factors) {
+  CHECK(formulation);
 
-  const gtsam::Pose3 T_world_cam_k_frontend = input->T_world_camera_;
   const FrameId frame_k = input->getFrameId();
+  const Timestamp timestamp = input->getTimestamp();
+  const auto& X_k_initial = input->T_world_camera_;
+
+  // update map
+  updateMapWithMeasurements(frame_k, input, X_k_initial);
+
+  // update formulation with initial states
+  if (input->pim_) {
+    LOG(INFO) << "Initialising backend with IMU states!";
+    this->addInitialVisualInertialState(
+        frame_k, formulation, new_values, new_factors, noise_models_,
+        gtsam::NavState(X_k_initial, gtsam::Vector3(0, 0, 0)),
+        gtsam::imuBias::ConstantBias{});
+
+  } else {
+    LOG(INFO) << "Initialising backend with VO only states!";
+    this->addInitialVisualState(frame_k, formulation, new_values, new_factors,
+                                noise_models_, X_k_initial);
+  }
+}
+void RGBDBackendModule::addStates(
+    const RGBDInstanceOutputPacket::ConstPtr& input,
+    FormulationType* formulation, gtsam::Values& new_values,
+    gtsam::NonlinearFactorGraph& new_factors) {
+  CHECK(formulation);
+
+  const FrameId frame_k = input->getFrameId();
+
+  const gtsam::NavState predicted_nav_state = this->addVisualInertialStates(
+      frame_k, formulation, new_values, new_factors, noise_models_,
+      input->T_k_1_k_, input->pim_);
+
+  updateMapWithMeasurements(frame_k, input, predicted_nav_state.pose());
+}
+
+void RGBDBackendModule::updateMapWithMeasurements(
+    FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr& input,
+    const gtsam::Pose3& X_k_w) {
+  CHECK_EQ(frame_id_k, input->getFrameId());
 
   map_->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
   map_->updateObservations(input->collectDynamicLandmarkKeypointMeasurements());
-  // update other measurements
-  // no sensor noise model!!
-  map_->updateSensorPoseMeasurement(frame_k,
-                                    Pose3Measurement(T_world_cam_k_frontend));
+  map_->updateSensorPoseMeasurement(frame_id_k, Pose3Measurement(X_k_w));
 
   // collected motion estimates for this current frame (ie. new motions!)
   // not handling the case where the update is incremental and other motions
   // have changed but right now the backend is not designed to handle this and
   // we currently dont run the backend with smoothing (tracking) in the
   // frontend.
-  const auto estimated_motions = input->object_motions_.toEstimateMap(frame_k);
-  map_->updateObjectMotionMeasurements(frame_k, estimated_motions);
-
-  T_world_cam = T_world_cam_k_frontend;
+  const auto estimated_motions =
+      input->object_motions_.toEstimateMap(frame_id_k);
+  map_->updateObjectMotionMeasurements(frame_id_k, estimated_motions);
 }
 
 std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph>
@@ -371,7 +442,7 @@ RGBDBackendModule::constructGraph(FrameId from_frame, FrameId to_frame,
     // differently as some modules expect values to be new and will check that
     // a value does not exist yet (becuase it shouldn't in that iteration, but
     // overall it may!)
-    //  updater->setTheta(*initial_theta);
+    //  updater->updateTheta(*initial_theta);
   }
 
   UpdateObservationParams update_params;

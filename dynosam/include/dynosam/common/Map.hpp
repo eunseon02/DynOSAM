@@ -132,7 +132,11 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
   void updateSensorPoseMeasurement(FrameId frame_id,
                                    const Pose3Measurement& X) {
     auto frame_node = this->getFrame(frame_id);
-    CHECK_NOTNULL(frame_node);
+    if (!frame_node) {
+      frame_node = std::make_shared<FrameNodeM>(getptr());
+      frame_node->frame_id = frame_id;
+      frames_.insert2(frame_id, frame_node);
+    }
     // TODO: overwrites if currently set
     frame_node->X_world = X;
   }

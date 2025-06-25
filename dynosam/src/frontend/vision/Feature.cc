@@ -86,12 +86,13 @@ void FeatureContainer::removeByObjectId(ObjectId object_id) {
 
 void FeatureContainer::clear() { feature_map_.clear(); }
 
+// TODO: else if logic needs test!!
 TrackletIds FeatureContainer::collectTracklets(bool only_usable) const {
   TrackletIds tracklets;
   for (const auto& feature : *this) {
     if (only_usable && feature->usable()) {
       tracklets.push_back(feature->trackletId());
-    } else {
+    } else if (!only_usable) {
       tracklets.push_back(feature->trackletId());
     }
   }
@@ -141,8 +142,9 @@ FeatureContainer::FilterIterator FeatureContainer::beginUsable() const {
       t, [](const Feature::Ptr& f) -> bool { return Feature::IsUsable(f); });
 }
 
-std::vector<cv::Point2f> FeatureContainer::toOpenCV(
-    TrackletIds* tracklet_ids) const {
+// TODO: else if logic needs test!!
+std::vector<cv::Point2f> FeatureContainer::toOpenCV(TrackletIds* tracklet_ids,
+                                                    bool only_inliers) const {
   if (tracklet_ids) tracklet_ids->clear();
 
   std::vector<cv::Point2f> keypoints_cv;
@@ -152,9 +154,13 @@ std::vector<cv::Point2f> FeatureContainer::toOpenCV(
     float x = static_cast<float>(kp(0));
     float y = static_cast<float>(kp(1));
 
-    keypoints_cv.push_back(cv::Point2f(x, y));
-
-    if (tracklet_ids) tracklet_ids->push_back(feature->trackletId());
+    if (only_inliers && feature->usable()) {
+      keypoints_cv.push_back(cv::Point2f(x, y));
+      if (tracklet_ids) tracklet_ids->push_back(feature->trackletId());
+    } else if (!only_inliers) {
+      keypoints_cv.push_back(cv::Point2f(x, y));
+      if (tracklet_ids) tracklet_ids->push_back(feature->trackletId());
+    }
   }
   return keypoints_cv;
 }

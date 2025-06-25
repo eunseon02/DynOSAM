@@ -59,10 +59,8 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     : FrontendModule(frontend_params, display_queue),
       camera_(camera),
       motion_solver_(frontend_params.ego_motion_solver_params,
-                     camera->getParams()) {
-  // object_motion_solver_(frontend_params.object_motion_solver_params,
-  //                       camera->getParams()) {
-
+                     camera->getParams()),
+      imu_frontend_(frontend_params.imu_params) {
   CHECK_NOTNULL(camera_);
   tracker_ =
       std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -72,10 +70,6 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     logger_ = std::make_unique<RGBDFrontendLogger>();
   }
 
-  // gtsam::ISAM2Params isam2_params;
-  // isam2_params.keyFormatter = DynoLikeKeyFormatter;
-  // isam2_params.evaluateNonlinearError = true;
-
   ObjectMotionSovlerF2F::Params object_motion_solver_params =
       frontend_params.object_motion_solver_params;
   // add ground truth hook
@@ -84,8 +78,6 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   };
   object_motion_solver_params.refine_motion_with_3d = false;
 
-  // object_motion_solver_ = std::make_unique<ObjectMotionSolverSAM>(
-  //     object_motion_solver_params, camera->getParams(), isam2_params);
   object_motion_solver_ = std::make_unique<ObjectMotionSovlerF2F>(
       object_motion_solver_params, camera->getParams());
 }
@@ -121,13 +113,24 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
 
-  Frame::Ptr frame = nullptr;
-  {
-    utils::TimingStatsCollector tracking_timer("tracking_timer");
-    frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
-                            *image_container);
+  const bool has_imu = input->imu_measurements.has_value();
+  const bool has_stereo = image_container->hasRightRgb();
+
+  std::optional<gtsam::Rot3> R_curr_ref;
+  ImuFrontend::PimPtr pim;
+  if (has_imu) {
+    pim = imu_frontend_.preintegrateImuMeasurements(
+        input->imu_measurements.value());
+
+    nav_state_ =
+        pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
+
+    R_curr_ref =
+        previous_nav_state_.attitude().inverse() * nav_state_.attitude();
   }
-  CHECK(frame);
+
+  Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
+                                     *image_container, R_curr_ref);
 
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
@@ -138,13 +141,45 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     utils::TimingStatsCollector update_depths_timer("depth_updater");
     frame->updateDepths();
   }
-  // updates frame->T_world_camera_
-  if (!solveCameraMotion(frame, previous_frame)) {
+
+  bool stereo_result = false;
+
+  if (has_stereo) {
+    const cv::Mat& left_rgb = image_container->rgb();
+    const cv::Mat& right_rgb = image_container->rightRgb();
+
+    FeaturePtrs stereo_features_1;
+    stereo_result = tracker_->stereoTrack(
+        stereo_features_1, frame->static_features_, left_rgb, right_rgb, 0.05);
+  }
+
+  // this includes the refine correspondances with joint optical flow
+  if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
     LOG(ERROR) << "Could not solve for camera";
   }
 
+  if (has_stereo && stereo_result) {
+    // need to match aagain after optical flow used to update the keypoints
+    // wow this seems to make a pretty big difference!!
+    const cv::Mat& left_rgb = image_container->rgb();
+    const cv::Mat& right_rgb = image_container->rightRgb();
+    FeaturePtrs stereo_features_2;
+    stereo_result &= tracker_->stereoTrack(
+        stereo_features_2, frame->static_features_, left_rgb, right_rgb, 0.05);
+  }
+
+  // VERY important calculation
+  const gtsam::Pose3 T_k_1_k =
+      previous_nav_state_.pose().inverse() * frame->T_world_camera_;
+
+  previous_nav_state_ =
+      gtsam::NavState(frame->T_world_camera_, nav_state_.velocity());
+
+  if (R_curr_ref) {
+    imu_frontend_.resetIntegration();
+  }
+
   if (FLAGS_use_dynamic_track) {
-    // TODO: bring back byte tracker??
     utils::TimingStatsCollector track_dynamic_timer("tracking_dynamic");
     vision_tools::trackDynamic(base_params_, *previous_frame, frame);
   }
@@ -159,10 +194,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   MotionEstimateMap motion_estimates =
       object_motions.toEstimateMap(frame->getFrameId());
 
-  const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
-  PointCloudLabelRGB::Ptr dense_labelled_cloud =
-      frame->projectToDenseCloud(&board_detection_mask);
-  // PointCloudLabelRGB::Ptr  dense_labelled_cloud = nullptr;
+  // const cv::Mat& board_detection_mask = tracker_->getBoarderDetectionMask();
+  // PointCloudLabelRGB::Ptr dense_labelled_cloud =
+  //     frame->projectToDenseCloud(&board_detection_mask);
+  PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr;
 
   if (logger_) {
     auto ground_truths = this->shared_module_info.getGroundTruthPackets();
@@ -178,38 +213,40 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   DebugImagery debug_imagery;
   debug_imagery.tracking_image =
       createTrackingImage(frame, previous_frame, object_poses);
+
   if (display_queue_)
     display_queue_->push(
-        ImageToDisplay("tracks", debug_imagery.tracking_image));
+        ImageToDisplay("Tracks", debug_imagery.tracking_image));
 
   debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
 
   const ImageContainer& processed_image_container = frame->image_container_;
-  debug_imagery.rgb_viz = ImageType::RGBMono::toRGB(
-      processed_image_container.get<ImageType::RGBMono>());
-  debug_imagery.flow_viz = ImageType::OpticalFlow::toRGB(
-      processed_image_container.get<ImageType::OpticalFlow>());
+  debug_imagery.rgb_viz =
+      ImageType::RGBMono::toRGB(processed_image_container.rgb());
+  debug_imagery.flow_viz =
+      ImageType::OpticalFlow::toRGB(processed_image_container.opticalFlow());
   debug_imagery.mask_viz = ImageType::MotionMask::toRGB(
-      processed_image_container.get<ImageType::MotionMask>());
-  debug_imagery.depth_viz = ImageType::Depth::toRGB(
-      processed_image_container.get<ImageType::Depth>());
+      processed_image_container.objectMotionMask());
+  debug_imagery.depth_viz =
+      ImageType::Depth::toRGB(processed_image_container.depth());
 
-  // if (display_queue_)
-  //   display_queue_->push(ImageToDisplay("Motion Mask",
-  //   debug_imagery.mask_viz));
+  LOG(INFO) << "Done debug imagery";
 
   RGBDInstanceOutputPacket::Ptr output = constructOutput(
       *frame, object_motions, object_poses, frame->T_world_camera_,
       input->optional_gt_, debug_imagery, dense_labelled_cloud);
+
+  output->pim_ = pim;
+  output->T_k_1_k_ = T_k_1_k;
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});
 
   if (FLAGS_log_projected_masks)
     vision_tools::writeOutProjectMaskAndDepthMap(
-        frame->image_container_.get<ImageType::Depth>(),
-        frame->image_container_.get<ImageType::MotionMask>(),
-        *frame->getCamera(), frame->getFrameId());
+        frame->image_container_.depth(),
+        frame->image_container_.objectMotionMask(), *frame->getCamera(),
+        frame->getFrameId());
 
   if (logger_) {
     auto ground_truths = this->shared_module_info.getGroundTruthPackets();
@@ -223,10 +260,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 }
 
 bool RGBDInstanceFrontendModule::solveCameraMotion(
-    Frame::Ptr frame_k, const Frame::Ptr& frame_k_1) {
+    Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+    std::optional<gtsam::Rot3> R_curr_ref) {
+  utils::TimingStatsCollector timer("frontend.solve_camera_motion");
   Pose3SolverResult result;
   if (base_params_.use_ego_motion_pnp) {
-    result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k);
+    result = motion_solver_.geometricOutlierRejection3d2d(frame_k_1, frame_k,
+                                                          R_curr_ref);
   } else {
     // TODO: untested
     LOG(FATAL) << "Not tested";
@@ -245,15 +285,43 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
            << "\t- # inliers: " << result.inliers.size() << '\n'
            << "\t- # outliers: " << result.outliers.size() << '\n';
 
-  if (result.status == TrackingStatus::VALID) {
+  // collect all usable tracklets
+  TrackletIds tracklets = frame_k->static_features_.collectTracklets();
+  CHECK_GE(tracklets.size(),
+           result.inliers.size() +
+               result.outliers.size());  // tracklets shoudl be more (or same
+                                         // as) correspondances as there will
+                                         // be new points untracked
+  frame_k->static_features_.markOutliers(result.outliers);
+
+  if (result.status != TrackingStatus::VALID || result.inliers.size() < 60) {
+    // TODO: fix code structure - nav state should be passed in?
+    // use nav state which we assume is updated by IMU
+    LOG(INFO) << "Number usable static feature < 30 or status is invalid. "
+                 "Relying on IMU only";
+    frame_k->T_world_camera_ = nav_state_.pose();
+    // if fails should we mark current inliers as outliers?
+
+    // TODO: should almost definitely do this in future, but right now we use
+    // measurements to construct a framenode in the backend so if there are no
+    // measurements we get a frame_node null.... for now... make hack and set
+    // all ages of inliers to 1!!! since we need n measurements in the backend
+    // this will ensure that they dont get added to the
+    //  optimisation problem but will get added to the map...
+    for (const auto& inlier : result.inliers) {
+      frame_k->static_features_.getByTrackletId(inlier)->age(1u);
+    }
+    // frame_k->static_features_.markOutliers(result.inliers);
+
+    // for some reason using tracklets to mark all features gives error as a
+    // tracklet id
+    // seems to be not actually in static features. Dont know why
+    // maybe remeber that tracklets (fromc collectTracklets) is actually just
+    // the usable tracklets...?
+    // frame_k->static_features_.markOutliers(tracklets);
+    return false;
+  } else {
     frame_k->T_world_camera_ = result.best_result;
-    TrackletIds tracklets = frame_k->static_features_.collectTracklets();
-    CHECK_GE(tracklets.size(),
-             result.inliers.size() +
-                 result.outliers.size());  // tracklets shoudl be more (or same
-                                           // as) correspondances as there will
-                                           // be new points untracked
-    frame_k->static_features_.markOutliers(result.outliers);
 
     if (base_params_.refine_camera_pose_with_joint_of) {
       VLOG(10) << "Refining camera pose with joint of";
@@ -268,9 +336,6 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
                << " error_after: " << flow_opt_result.error_after.value_or(NaN);
     }
     return true;
-  } else {
-    frame_k->T_world_camera_ = gtsam::Pose3::Identity();
-    return false;
   }
 }
 
@@ -289,7 +354,7 @@ RGBDInstanceOutputPacket::Ptr RGBDInstanceFrontendModule::constructOutput(
     CHECK(Feature::IsUsable(f));
 
     // dont include features that have only been seen once as we havent had a
-    // chance to validate it yet
+    // // chance to validate it yet
     if (f->age() < 1) {
       continue;
     }
