@@ -28,34 +28,17 @@
  *   SOFTWARE.
  */
 
-#pragma once
-
-#include <gtsam/navigation/ImuBias.h>
-#include <gtsam/navigation/ImuFactor.h>
-
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/imu/ImuMeasurements.hpp"
 #include "dynosam/frontend/imu/ImuParams.hpp"
 
-// TODO: eventually replace with Kimera or otherwise
+#include <config_utilities/config_utilities.h>
+#include <config_utilities/parsing/yaml.h>
+
 namespace dyno {
 
-class ImuFrontend {
- public:
-  using PimPtr = std::shared_ptr<gtsam::PreintegrationType>;
-  using PimUniquePtr = std::unique_ptr<gtsam::PreintegrationType>;
+void declare_config(ImuParams& config) {
+  using namespace config;
 
-  DYNO_POINTER_TYPEDEFS(ImuFrontend)
-
-  ImuFrontend(const ImuParams& imu_params);
-
-  PimPtr preintegrateImuMeasurements(const ImuMeasurements& imu_measurements);
-
-  inline void resetIntegration() { pim_->resetIntegration(); }
-
- private:
-  ImuParams params_;
-  PimUniquePtr pim_ = nullptr;
-};
+  name("ImuParams");
+}
 
 }  // namespace dyno

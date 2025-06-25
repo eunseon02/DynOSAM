@@ -62,65 +62,57 @@ using CombinedParamSignature =
     FunctionSignature<decltype(CombinedParams::MakeSharedD)>;
 using CombinedParamPtr = CombinedParamSignature::ReturnType;
 
-ImuFrontend::ImuFrontend() {
-  // CombinedParamPtr pim_params = CombinedParams::MakeSharedD(-9.8);
+ImuFrontend::ImuFrontend(const ImuParams& imu_params) : params_(imu_params) {
   CombinedParamPtr pim_params;
-  // in opencv convention y is down...
-  // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0, 9.8)));
-  pim_params.reset(new CombinedParams(gtsam::Point3(0, 9.8, 0)));
-  // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0.0, 9.8)));
+  pim_params.reset(new CombinedParams(params_.n_gravity));
 
-  static const gtsam::Rot3 R_body_camera(
-      (gtsam::Matrix3() << 0, 0, 1, 1, 0, 0, 0, 1, 0).finished());
+  pim_params->body_P_sensor = params_.body_P_sensor;
+  // // in opencv convention y is down...
+  // // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0, 9.8)));
+  // pim_params.reset(new CombinedParams(gtsam::Point3(0, 9.8, 0)));
+  // // pim_params.reset(new CombinedParams(gtsam::Point3(0, 0.0, 9.8)));
 
-  // static const gtsam::Rot3 R_body_camera_1(
-  //   (gtsam::Matrix3() << 0, 1, 0,
-  //                        0, 0, 1,
-  //                        1, 0, 0).finished());
+  // static const gtsam::Rot3 R_body_camera(
+  //     (gtsam::Matrix3() << 0, 0, 1, 1, 0, 0, 0, 1, 0).finished());
 
-  // static const gtsam::Rot3 R_cv_robotic(
-  //   (gtsam::Matrix3() << 0, -1, 0,
-  //                       0, 0, -1,
-  //                       1, 0, 0)
-  //       .finished());
+  // static const gtsam::Rot3 R_robot_from_ned(
+  //     (gtsam::Matrix3() << 1, 0, 0,  // X_cv (right)   = 0·x +1·y +0·z_NED
+  //      0, -1, 0,                     // Y_cv (down)    = 0·x +0·y +1·z_NED
+  //      0, 0, -1)                     // Z_cv (forward) = 1·x +0·y +0·z_NED
+  //         .finished());
+  // static const gtsam::Rot3 R_opencv_from_robot(
+  //     (gtsam::Matrix3() << 0, -1, 0, 0, 0, -1, 1, 0, 0).finished());
 
-  static const gtsam::Rot3 R_robot_from_ned(
-      (gtsam::Matrix3() << 1, 0, 0,  // X_cv (right)   = 0·x +1·y +0·z_NED
-       0, -1, 0,                     // Y_cv (down)    = 0·x +0·y +1·z_NED
-       0, 0, -1)                     // Z_cv (forward) = 1·x +0·y +0·z_NED
-          .finished());
-  static const gtsam::Rot3 R_opencv_from_robot(
-      (gtsam::Matrix3() << 0, -1, 0, 0, 0, -1, 1, 0, 0).finished());
+  // // reading right to left:
+  // // 1. put imu into camera frame (ie rotation)
+  // // 2. put camera frame into robotic convention (still camera frame)
+  // // 3. put camera frame (now in robotic convention) into ope
+  // gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot * R_robot_from_ned;
+  // // gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot;
 
-  // reading right to left:
-  // 1. put imu into camera frame (ie rotation)
-  // 2. put camera frame into robotic convention (still camera frame)
-  // 3. put camera frame (now in robotic convention) into ope
-  gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot * R_robot_from_ned;
-  // gtsam::Rot3 R_opencv_from_ned = R_opencv_from_robot;
-
-  pim_params->body_P_sensor =
-      gtsam::Pose3(R_body_camera.inverse(), gtsam::Point3(0, 0, 0));
   // pim_params->body_P_sensor =
-  //     gtsam::Pose3(R_opencv_from_ned, gtsam::Point3(0, 0, 0));
+  //     gtsam::Pose3(R_body_camera.inverse(), gtsam::Point3(0, 0, 0));
+  // // pim_params->body_P_sensor =
+  // //     gtsam::Pose3(R_opencv_from_ned, gtsam::Point3(0, 0, 0));
 
-  // for viode!!
+  // // for viode!!
   gtsam::Matrix33 gyroscopeCovariance =
-      std::pow(0.05, 2.0) * Eigen::Matrix3d::Identity();
+      std::pow(params_.gyro_noise_density, 2.0) * Eigen::Matrix3d::Identity();
   pim_params->setGyroscopeCovariance(gyroscopeCovariance);
   gtsam::Matrix33 accelerometerCovariance =
-      std::pow(0.2, 2.0) * Eigen::Matrix3d::Identity();
+      std::pow(params_.acc_noise_density, 2.0) * Eigen::Matrix3d::Identity();
   pim_params->setAccelerometerCovariance(accelerometerCovariance);
 
   pim_params->biasAccCovariance =
-      std::pow(0.02, 2.0) * Eigen::Matrix3d::Identity();
+      std::pow(params_.gyro_random_walk, 2.0) * Eigen::Matrix3d::Identity();
   pim_params->biasOmegaCovariance =
-      std::pow(4.0e-5, 2.0) * Eigen::Matrix3d::Identity();
+      std::pow(params_.acc_random_walk, 2.0) * Eigen::Matrix3d::Identity();
 
   pim_params->use2ndOrderCoriolis = false;
 
   pim_params->integrationCovariance =
-      std::pow(1e-3, 2.0) * Eigen::Matrix3d::Identity();
+      std::pow(params_.imu_integration_sigma, 2.0) *
+      Eigen::Matrix3d::Identity();
 
   pim_ = std::make_unique<gtsam::PreintegratedCombinedMeasurements>(
       pim_params, gtsam::imuBias::ConstantBias{});

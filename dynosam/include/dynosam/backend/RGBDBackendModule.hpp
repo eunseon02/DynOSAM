@@ -40,6 +40,7 @@
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
 #include "dynosam/backend/VisionImuBackendModule.hpp"
+#include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/WorldMotionEstimator.hpp"
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
 #include "dynosam/common/Flags.hpp"
@@ -186,6 +187,7 @@ class RGBDBackendModule
   // Updater::UniquePtr new_updater_;
   Formulation<RGBDMap>::UniquePtr new_updater_;
   SlidingWindow::UniquePtr sliding_window_condition_;
+  SlidingWindowOptimization::UniquePtr sliding_window_opt_;
   FrameId first_frame_id_;  // the first frame id that is received
 
   // new calibration every time

@@ -63,6 +63,8 @@ template <>
 struct internal::EnableBitMaskOperators<RuntimeSensorOptions> : std::true_type {
 };
 
+using RuntimeSensorFlags = Flags<RuntimeSensorOptions>;
+
 //! Default runtime sensor options are PreferSensor AND AcceptNoSensor
 //! This means that we will try an use the most sensor data available but
 //! continue if not
@@ -88,13 +90,12 @@ class DynoParams {
     //! changes per dataset) rather than needing the change the
     //! CameraParams.yaml everytime
     bool prefer_data_provider_camera_params{true};
+    bool prefer_data_provider_imu_params{true};
     //! Pipeline level params
     bool parallel_run{true};
 
-    Flags<RuntimeSensorOptions> imu_runtime_options{
-        DefaultRuntimeSensorOptions};
-    Flags<RuntimeSensorOptions> stereo_runtime_options{
-        DefaultRuntimeSensorOptions};
+    RuntimeSensorFlags imu_runtime_options{DefaultRuntimeSensorOptions};
+    RuntimeSensorFlags stereo_runtime_options{DefaultRuntimeSensorOptions};
   };
 
   // Quick access functions
@@ -103,12 +104,16 @@ class DynoParams {
   bool preferDataProviderCameraParams() const {
     return pipeline_params_.prefer_data_provider_camera_params;
   }
+  bool preferDataProviderImuParams() const {
+    return pipeline_params_.prefer_data_provider_imu_params;
+  }
 
  public:
   PipelineParams pipeline_params_;
   FrontendParams frontend_params_;
   BackendParams backend_params_;
   CameraParams camera_params_;
+  ImuParams imu_params_;
 
   FrontendType frontend_type_ = FrontendType::kRGBD;
 

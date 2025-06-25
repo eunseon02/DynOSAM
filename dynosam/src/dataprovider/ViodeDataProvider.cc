@@ -49,7 +49,7 @@ class ViodeAllLoader {
 
   ViodeAllLoader(const std::string& file_path) {
     syncFilePathsWithGroundTruth(file_path);
-    setCameraParams();
+    setSensorParams();
   }
 
   cv::Mat getOpticalFlow(size_t idx) const {
@@ -345,7 +345,7 @@ class ViodeAllLoader {
     dataset_size_ = flow_0_paths_.size();
   }
 
-  void setCameraParams() {
+  void setSensorParams() {
     CameraParams::IntrinsicsCoeffs K({376.0, 376.0, 376.0, 240.0});
     CameraParams::DistortionCoeffs D({0, 0, 0, 0});
 
@@ -404,6 +404,20 @@ class ViodeAllLoader {
     // matching_params.num_disparities_ = 16 * 2;
     stereo_matcher_ = std::make_shared<StereoMatcher>(
         stereo_camera_, StereoMatchingParams{}, dense_stereo_params);
+
+    imu_params_.acc_noise_density = 0.05;
+    imu_params_.acc_noise_density = 0.2;
+
+    imu_params_.gyro_random_walk = 4.0e-5;
+    imu_params_.acc_random_walk = 0.02;
+
+    static const gtsam::Rot3 R_body_camera(
+        (gtsam::Matrix3() << 0, 0, 1, 1, 0, 0, 0, 1, 0).finished());
+    imu_params_.body_P_sensor =
+        gtsam::Pose3(R_body_camera.inverse(), gtsam::Point3(0, 0, 0));
+
+    imu_params_.imu_integration_sigma = 1e-3;
+    imu_params_.n_gravity = gtsam::Point3(0, 9.8, 0);
   }
 
  public:
@@ -426,6 +440,8 @@ class ViodeAllLoader {
   GroundTruthPacketMap ground_truth_packets_;
   // left camera params
   CameraParams camera_params_;
+
+  ImuParams imu_params_;
 
   StereoCamera::Ptr stereo_camera_;
   StereoMatcher::Ptr stereo_matcher_;
@@ -453,6 +469,9 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
 
   left_camera_params_ = loader->getLeftCameraParams();
   CHECK(getCameraParams());
+
+  imu_params_ = loader->imu_params_;
+  CHECK(getImuParams());
 
   auto rgb_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
       [loader](size_t idx) { return loader->getRGB(idx); });

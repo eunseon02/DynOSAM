@@ -111,6 +111,22 @@ DynoPipelineManager::DynoPipelineManager(
     LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
     camera_params = params_.camera_params_;
   }
+  /// NOTE: no need to update the camera params like the imu params as we parse
+  /// the camera params into the loadPipeline functions separately!
+
+  ImuParams imu_params;
+  if (params_.preferDataProviderImuParams() &&
+      data_loader_->getImuParams().has_value()) {
+    LOG(INFO) << "Using imu params from DataProvider, not the config in the "
+                 "ImuParams.yaml!";
+    imu_params = *data_loader_->getImuParams();
+  } else {
+    LOG(INFO) << "Using imu params specified in ImuParams.yaml!";
+    imu_params = params_.imu_params_;
+  }
+
+  // update the imu params that will actually get sent to the frontend
+  params_.frontend_params_.imu_params = imu_params;
 
   loadPipelines(camera_params, frontend_display, backend_display);
   launchSpinners();
@@ -170,7 +186,8 @@ bool DynoPipelineManager::spin() {
   } else {
     // regular spinner....
     spin_func = [=]() -> bool {
-      if (data_loader_->spin() || frontend_pipeline_->isWorking()) {
+      if (data_loader_->spin() || frontend_pipeline_->isWorking() ||
+          (backend_pipeline_ && backend_pipeline_->isWorking())) {
         if (!params_.parallelRun()) {
           frontend_pipeline_->spinOnce();
           if (backend_pipeline_) backend_pipeline_->spinOnce();

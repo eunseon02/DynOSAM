@@ -6,8 +6,11 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Backend1
         - /Backend1/Visual Odometry1/Status1
         - /Backend1/Visual Odometry1/Shape1
+        - /Frontend1
+        - /Frontend1/Static Map1
         - /Frontend1/Visual Odometry1/Shape1
         - /Ground Truth1
         - /Ground Truth1/Visual Odometry1/Shape1
@@ -30,7 +33,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Dynamic Map
 Visualization Manager:
   Class: ""
   Displays:
@@ -287,8 +290,8 @@ Visualization Manager:
           Axis: Z
           Channel Name: intensity
           Class: rviz_default_plugins/PointCloud2
-          Color: 255; 255; 255
-          Color Transformer: RGB8
+          Color: 255; 0; 0
+          Color Transformer: FlatColor
           Decay Time: 0
           Enabled: true
           Invert Rainbow: false
@@ -300,7 +303,7 @@ Visualization Manager:
           Position Transformer: XYZ
           Selectable: true
           Size (Pixels): 3
-          Size (m): 0.029999999329447746
+          Size (m): 0.10000000149011612
           Style: Flat Squares
           Topic:
             Depth: 5
@@ -519,7 +522,7 @@ Visualization Manager:
               Scale: 1
               Value: true
             Value: false
-          Enabled: true
+          Enabled: false
           Keep: 1
           Name: Object Odometry
           Object Label: true
@@ -530,7 +533,7 @@ Visualization Manager:
             History Policy: Keep Last
             Reliability Policy: Reliable
             Value: /dynosam/frontend/ground_truth/object_odometry
-          Value: true
+          Value: false
           Velocity: true
       Enabled: true
       Name: Ground Truth
@@ -628,25 +631,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.6468936204910278
+      Distance: 34.22264862060547
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 11.535029411315918
-        Y: 4.042518138885498
-        Z: 5.452511787414551
+        X: 11.207234382629395
+        Y: -4.059178352355957
+        Z: -15.399389266967773
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.6997978687286377
+      Pitch: 1.129797339439392
       Target Frame: robot
       Value: Orbit (rviz_default_plugins)
-      Yaw: 0.7333788275718689
+      Yaw: 2.4983761310577393
     Saved: ~
 Window Geometry:
   Displays:

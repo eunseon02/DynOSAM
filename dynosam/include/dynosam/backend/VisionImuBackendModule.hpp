@@ -34,7 +34,6 @@
 #include <gtsam/navigation/NavState.h>
 
 #include "dynosam/backend/BackendModule.hpp"
-#include "dynosam/backend/Formulation.hpp"
 #include "dynosam/frontend/imu/ImuFrontend.hpp"
 
 namespace dyno {
@@ -45,7 +44,7 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
   using This = VisionImuBackendModule<MODULE_TRAITS>;
   using Base = BackendModuleType<MODULE_TRAITS>;
   using MapType = typename Base::MapType;
-  using FormulationType = Formulation<MapType>;
+  using FormulationType = typename Base::FormulationType;
 
   VisionImuBackendModule(const BackendParams& params,
                          ImageDisplayQueue* display_queue)

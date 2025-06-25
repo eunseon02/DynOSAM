@@ -59,10 +59,8 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     : FrontendModule(frontend_params, display_queue),
       camera_(camera),
       motion_solver_(frontend_params.ego_motion_solver_params,
-                     camera->getParams()) {
-  // object_motion_solver_(frontend_params.object_motion_solver_params,
-  //                       camera->getParams()) {
-
+                     camera->getParams()),
+      imu_frontend_(frontend_params.imu_params) {
   CHECK_NOTNULL(camera_);
   tracker_ =
       std::make_unique<FeatureTracker>(frontend_params, camera_, display_queue);
@@ -127,7 +125,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     nav_state_ =
         pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
 
-    // TODO(jesse): should this not be pim->deltaIJ()?
     R_curr_ref =
         previous_nav_state_.attitude().inverse() * nav_state_.attitude();
   }
@@ -193,8 +190,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   std::tie(object_motions, object_poses) =
       object_motion_solver_->solve(frame, previous_frame);
 
-  LOG(INFO) << "Done object motion solve";
-
   // motions in this frame (ie. new motions!!)
   MotionEstimateMap motion_estimates =
       object_motions.toEstimateMap(frame->getFrameId());
@@ -215,17 +210,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     logger_->logFrameIdToTimestamp(frame->getFrameId(), frame->getTimestamp());
   }
 
-  LOG(INFO) << "Done logging";
-
   DebugImagery debug_imagery;
   debug_imagery.tracking_image =
       createTrackingImage(frame, previous_frame, object_poses);
 
-  LOG(INFO) << "Done createTrackingImage";
-
   if (display_queue_)
     display_queue_->push(
-        ImageToDisplay("tracks", debug_imagery.tracking_image));
+        ImageToDisplay("Tracks", debug_imagery.tracking_image));
 
   debug_imagery.detected_bounding_boxes = frame->drawDetectedObjectBoxes();
 

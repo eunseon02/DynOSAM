@@ -10,6 +10,7 @@
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/dataprovider/DataInterfacePipeline.hpp"
+#include "dynosam/frontend/imu/ImuParams.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 
 namespace dyno {
@@ -110,6 +111,8 @@ class DataProvider {
    * @return CameraParams::Optional
    */
   virtual CameraParams::Optional getCameraParams() const { return {}; }
+
+  virtual ImuParams::Optional getImuParams() const { return {}; }
 
  protected:
   // This class does not know when the data finishes finishes (indeed this is

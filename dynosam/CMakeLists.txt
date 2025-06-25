@@ -97,6 +97,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/imu/ImuFrontend.cc
+  src/frontend/imu/ImuParams.cc
 
   src/frontend/vision/Feature.cc
   src/frontend/vision/UndistortRectifier.cc
@@ -133,6 +134,7 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/rgbd/impl/test_HybridFormulations.cc
   src/backend/ParallelObjectISAM.cc
   src/backend/ParallelRGBDBackendModule.cc
+  src/backend/optimizers/SlidingWindowOptimization.cc
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
 

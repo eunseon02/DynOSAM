@@ -31,7 +31,7 @@
 
 --use_vo_factor=true
 --use_smoothing_factor=true
---use_full_batch_opt=true
+--use_full_batch_opt=false
 
 
 # for ISAM2 params using ParallelObjectSAM

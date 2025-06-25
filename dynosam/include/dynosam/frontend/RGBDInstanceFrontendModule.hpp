@@ -59,9 +59,6 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   ObjectMotionSolver::UniquePtr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
-  //   Object
-
-  //   ObjectMotionSolverSAM::UniquePtr experimental_solver_;
 
  private:
   ImageValidationResult validateImageContainer(
@@ -86,13 +83,6 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    */
   bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                          std::optional<gtsam::Rot3> R_curr_ref = {});
-
-  //   bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-  //                          ObjectId object_id,
-  //                          MotionEstimateMap& motion_estimates);
-
-  //   void solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-  //                           MotionEstimateMap& motion_estimates);
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
       const Frame& frame, const ObjectMotionMap& object_motions,

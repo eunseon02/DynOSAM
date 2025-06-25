@@ -34,6 +34,7 @@
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
 #include "dynosam/backend/BackendParams.hpp"
+#include "dynosam/backend/Formulation.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/ModuleBase.hpp"
@@ -82,10 +83,8 @@ class BackendModule
   const BackendParams& getParams() const { return base_params_; }
   const NoiseModels& getNoiseModels() const { return noise_models_; }
 
-  // void registerMapUpdater(std::function<void(const Accessor&)>
-  // frontend_updater) {
-  //   frontend_updater_ = frontend_updater;
-  // }
+  // void optimize(FrameId frame_id_k, gtsam::Values& new_values,
+  // gtsam::NonlinearFactorGraph& new_factors) const;
 
  protected:
   // called in ModuleBase immediately before the spin function is called
@@ -93,6 +92,7 @@ class BackendModule
       const BackendInputPacket::ConstPtr& input) const override;
   void setFactorParams(const BackendParams& backend_params);
 
+ protected:
   // Redefine base input since these will be cast up by the BackendModuleType
   // class to a new type which we want to refer to as the input type BaseInput
   // is a ConstPtr to the type defined by BackendInputPacket
@@ -130,6 +130,7 @@ class BackendModuleType : public BackendModule {
   using Base = BackendModule;
 
   using MapType = Map<MeasurementType>;
+  using FormulationType = Formulation<MapType>;
 
   DYNO_POINTER_TYPEDEFS(This)
 
@@ -152,6 +153,10 @@ class BackendModuleType : public BackendModule {
  protected:
   virtual SpinReturn boostrapSpinImpl(InputConstPtr input) = 0;
   virtual SpinReturn nominalSpinImpl(InputConstPtr input) = 0;
+
+  void optimize(FrameId frame_id_k, FormulationType* formulation,
+                gtsam::Values& new_values,
+                gtsam::NonlinearFactorGraph& new_factors);
 
   typename MapType::Ptr map_;
 

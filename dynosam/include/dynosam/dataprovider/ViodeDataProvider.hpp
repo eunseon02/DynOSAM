@@ -55,8 +55,11 @@ class ViodeLoader : public ViodeProvider {
     return left_camera_params_;
   }
 
+  ImuParams::Optional getImuParams() const override { return imu_params_; }
+
  private:
   CameraParams left_camera_params_;
+  ImuParams imu_params_;
 };
 
 }  // namespace dyno

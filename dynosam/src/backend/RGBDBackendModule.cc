@@ -38,6 +38,7 @@
 #include "dynosam/backend/Accessor.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
+#include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/HybridEstimator.hpp"
 #include "dynosam/backend/rgbd/impl/test_HybridFormulations.hpp"
 #include "dynosam/common/Flags.hpp"
@@ -136,6 +137,11 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   new_updater_ = std::move(makeUpdater());
   sliding_window_condition_ = std::make_unique<SlidingWindow>(
       FLAGS_opt_window_size, FLAGS_opt_window_overlap);
+
+  SlidingWindowOptimization::Params sw_params;
+  sw_params.window_size = FLAGS_opt_window_size;
+  sw_params.overlap = FLAGS_opt_window_overlap;
+  sliding_window_opt_ = std::make_unique<SlidingWindowOptimization>(sw_params);
 }
 
 RGBDBackendModule::~RGBDBackendModule() {
@@ -178,6 +184,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
   }
 
   smoother_->update(new_factors, new_values);
+  sliding_window_opt_->update(new_factors, new_values, frame_k);
   // smoother_->update(new_factors, new_values);
   // updateNavStateFromFormulation(frame_k, new_updater_.get());
 
@@ -309,16 +316,25 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
                 << " error after: " << error_after;
     }
   } else {
-    double error_before, error_after;
-    gtsam::Values optimised_values;
-    LOG(INFO) << "Doing sliding window";
-    if (buildSlidingWindowOptimisation(frame_k, optimised_values, error_before,
-                                       error_after)) {
-      LOG(INFO) << "Updating values with opt!";
-      new_updater_->updateTheta(optimised_values);
-      LOG(INFO) << " Error before sliding window: " << error_before
-                << " error after: " << error_after;
+    const auto sw_result =
+        sliding_window_opt_->update(new_factors, new_values, frame_k);
+    LOG(INFO) << "Sliding window result - " << sw_result.optimized;
+
+    if (sw_result.optimized) {
+      new_updater_->updateTheta(sw_result.result);
     }
+
+    // double error_before, error_after;
+    // gtsam::Values optimised_values;
+    // LOG(INFO) << "Doing sliding window";
+    // if (buildSlidingWindowOptimisation(frame_k, optimised_values,
+    // error_before,
+    //                                    error_after)) {
+    //   LOG(INFO) << "Updating values with opt!";
+    //   new_updater_->updateTheta(optimised_values);
+    //   LOG(INFO) << " Error before sliding window: " << error_before
+    //             << " error after: " << error_after;
+    // }
   }
   LOG(INFO) << "Done any udpates";
 

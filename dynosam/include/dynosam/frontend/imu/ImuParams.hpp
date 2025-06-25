@@ -30,32 +30,35 @@
 
 #pragma once
 
-#include <gtsam/navigation/ImuBias.h>
-#include <gtsam/navigation/ImuFactor.h>
+#include <config_utilities/config_utilities.h>
+#include <gtsam/base/Vector.h>
 
-#include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/imu/ImuMeasurements.hpp"
-#include "dynosam/frontend/imu/ImuParams.hpp"
+#include <dynosam/common/Types.hpp>
 
-// TODO: eventually replace with Kimera or otherwise
 namespace dyno {
 
-class ImuFrontend {
- public:
-  using PimPtr = std::shared_ptr<gtsam::PreintegrationType>;
-  using PimUniquePtr = std::unique_ptr<gtsam::PreintegrationType>;
+struct ImuParams {
+  DYNO_POINTER_TYPEDEFS(ImuParams)
 
-  DYNO_POINTER_TYPEDEFS(ImuFrontend)
+  double init_bias_sigma = 0.0;
+  //! sigma for gyro covariance [rad/s/sqrt(Hz)] (gyro "white noise")
+  double gyro_noise_density = 0.0;
+  //! sigma for gyro bias covariance [rad/s^2/sqrt(Hz)] (gyro bias diffusion)
+  double gyro_random_walk = 0.0;
+  //! sigma for accel covariance [m/s^2/sqrt(Hz)] (accel "white noise")
+  double acc_noise_density = 0.0;
+  //! sigma for accel bias covariance [m/s^3/sqrt(Hz)] (accel bias diffusion)
+  double acc_random_walk = 0.0;
 
-  ImuFrontend(const ImuParams& imu_params);
+  double imu_integration_sigma = 0.0;
 
-  PimPtr preintegrateImuMeasurements(const ImuMeasurements& imu_measurements);
+  // In our case this is actually going to be the transform into the camera
+  // frame (which we consider as the body frame!!!)
+  gtsam::Pose3 body_P_sensor;
 
-  inline void resetIntegration() { pim_->resetIntegration(); }
-
- private:
-  ImuParams params_;
-  PimUniquePtr pim_ = nullptr;
+  gtsam::Vector3 n_gravity = gtsam::Vector3::Zero();
 };
+
+void declare_config(ImuParams& config);
 
 }  // namespace dyno
