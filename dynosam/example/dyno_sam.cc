@@ -66,28 +66,31 @@ int main(int argc, char* argv[]) {
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
 
-  // KittiDataLoader::Params params;
-  // // KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
+  KittiDataLoader::Params params;
+  KittiDataLoader loader("/root/data/vdo_slam/kitti/kitti/0000/", params);
   // ClusterSlamDataLoader loader("/root/data/cluster_slam/CARLA-L1");
   // OMDDataLoader loader(
   //     "/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/");
 
   // TartanAirShibuyaLoader
   // loader("/root/data/TartanAir_shibuya/RoadCrossing07/");
-  ViodeLoader loader("/root/data/VIODE/city_day/mid");
+  // ViodeLoader loader("/root/data/VIODE/city_day/mid");
+
+  FrontendParams fp;
+  fp.tracker_params.max_dynamic_features_per_frame = 300;
 
   auto camera = std::make_shared<Camera>(*loader.getCameraParams());
-  auto tracker = std::make_shared<FeatureTracker>(FrontendParams(), camera);
+  auto tracker = std::make_shared<FeatureTracker>(fp, camera);
 
+  // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
+  //                        cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth,
+  //                        cv::Mat motion, GroundTruthInputPacket,
+  //                        std::optional<ImuMeasurements> imu_measurements,
+  //                        std::optional<cv::Mat>) -> bool {
   loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
                          cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth,
-                         cv::Mat motion, GroundTruthInputPacket,
-                         std::optional<ImuMeasurements> imu_measurements,
-                         std::optional<cv::Mat>) -> bool {
-    // loader.setCallback([&](dyno::FrameId frame_id, dyno::Timestamp timestamp,
-    //   cv::Mat rgb, cv::Mat optical_flow, cv::Mat depth, cv::Mat motion,
-    //   GroundTruthInputPacket) -> bool {
-
+                         cv::Mat motion, gtsam::Pose3,
+                         GroundTruthInputPacket) -> bool {
     LOG(INFO) << frame_id << " " << timestamp;
 
     cv::Mat of_viz, motion_viz, depth_viz;

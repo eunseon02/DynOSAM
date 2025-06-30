@@ -50,6 +50,18 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
                          ImageDisplayQueue* display_queue)
       : Base(params, display_queue) {}
 
+  bool isImuInitalized() const { return imu_states_initalise_; };
+  const gtsam::NavState& currentNavState() const { return nav_state_; }
+  FrameId frameId() const { return last_nav_state_frame_id_; }
+  Timestamp timestamp() const { return last_nav_state_time_; }
+  gtsam::imuBias::ConstantBias currentImuBias() const { return imu_bias_; }
+
+  virtual gtsam::KeyVector getInvolvedStates(FrameId frame_id_k) const {
+    return {CameraPoseSymbol(frame_id_k),
+            gtsam::Symbol(kVelocitySymbolChar, frame_id_k),
+            gtsam::Symbol(kImuBiasSymbolChar, frame_id_k)};
+  }
+
   gtsam::NavState addInitialVisualState(
       FrameId frame_id_k, FormulationType* formulation,
       gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors,
@@ -212,8 +224,21 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
 
     gtsam::NavState navstate_k;
 
-    // TODO: using RuntimeSensorOptions...
+    bool predict_imu = false;
+
     if (pim) {
+      if (!isImuInitalized()) {
+        LOG(FATAL) << "Inconsistent VisionImu state - Preintegration recieved "
+                      "at frame "
+                   << frame_id_k << " but module is not IMU initalized!";
+
+      } else {
+        predict_imu = true;
+      }
+    }
+
+    // TODO: using RuntimeSensorOptions...
+    if (predict_imu) {
       // TODO: checks that pim is from last state?
       navstate_k = pim->predict(nav_state_, imu_bias_);
       VLOG(10) << "Forward predicting frame=" << frame_id_k << " using PIM";

@@ -2,7 +2,7 @@
 scene_flow_mag_threshold: 0.12
 scene_flow_dist_threshold: 0.5
 max_background_depth: 500.0
-max_object_depth: 20.0
+max_object_depth: 30.0
 
 # max_object_depth: 8.0 #indoors
 
@@ -39,8 +39,8 @@ tracker_params:
   shrink_row: 0
   shrink_col: 0
   max_nr_keypoints_before_anms: 1500
-  max_features_per_frame: 300
-  max_dynamic_features_per_frame: 50
+  max_features_per_frame: 800
+  max_dynamic_features_per_frame: 300
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 

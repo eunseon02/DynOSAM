@@ -5,8 +5,11 @@
 # --constant_object_motion_translation_sigma=0.7
 
 # good for carla
---constant_object_motion_rotation_sigma=0.1
---constant_object_motion_translation_sigma=0.1
+# --constant_object_motion_rotation_sigma=0.1
+# --constant_object_motion_translation_sigma=0.01
+
+--constant_object_motion_rotation_sigma=0.4
+--constant_object_motion_translation_sigma=0.5
 
 
 
@@ -22,7 +25,7 @@
 
 
 --static_point_noise_sigma=0.01
---dynamic_point_noise_sigma=0.01
+--dynamic_point_noise_sigma=0.1
 # --dynamic_point_noise_sigma=0.00006
 
 --opt_window_size=40
@@ -31,7 +34,9 @@
 
 --use_vo_factor=true
 --use_smoothing_factor=true
---use_full_batch_opt=false
+
+# 0: Full-batch, 1: sliding-window, 2: incremental
+--optimization_mode=0
 
 
 # for ISAM2 params using ParallelObjectSAM

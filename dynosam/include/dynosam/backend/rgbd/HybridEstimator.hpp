@@ -955,6 +955,11 @@ class HybridFormulation : public Formulation<Map3d2d>,
   //! that accessor still has access to the meta-data for each tracked point.
   gtsam::FastMap<TrackletId, FrameId> all_dynamic_landmarks_;
 
+  //! set to track if a smoothing factor has been added to the graph so as to
+  //! not add it multiple times We use the greatest (ie last) key of the ternary
+  //! smoothing factor as the key!
+  gtsam::KeySet smoothing_factors_added_;
+
  private:
   KeyFrameData key_frame_data_;
 };

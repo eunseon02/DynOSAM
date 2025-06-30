@@ -125,6 +125,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     nav_state_ =
         pim->predict(previous_nav_state_, gtsam::imuBias::ConstantBias{});
 
+    last_imu_nav_state_update_ = input->getFrameId();
+
     R_curr_ref =
         previous_nav_state_.attitude().inverse() * nav_state_.attitude();
   }
@@ -154,6 +156,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
 
   // this includes the refine correspondances with joint optical flow
+  // TODO: lots of internal logic around how the actual pose gets predicted.
+  // should streamline this and tell backend how pose was selected!!
   if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
     LOG(ERROR) << "Could not solve for camera";
   }
@@ -172,6 +176,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const gtsam::Pose3 T_k_1_k =
       previous_nav_state_.pose().inverse() * frame->T_world_camera_;
 
+  // we currently use the frame pose as the nav state - this value can come from
+  // either the VO OR the IMU, depending on the result from the
+  // solveCameraMotion this is only relevant since we dont solve incremental so
+  // the backend is not immediately updating the frontend at which point we can
+  // just use the best estimate in the case of the VO, the nav_state velocity
+  // will be wrong (currently!!)
   previous_nav_state_ =
       gtsam::NavState(frame->T_world_camera_, nav_state_.velocity());
 
@@ -238,6 +248,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   output->pim_ = pim;
   output->T_k_1_k_ = T_k_1_k;
+  vo_velocity_ = T_k_1_k;
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});
@@ -294,12 +305,34 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
                                          // be new points untracked
   frame_k->static_features_.markOutliers(result.outliers);
 
-  if (result.status != TrackingStatus::VALID || result.inliers.size() < 60) {
+  // was 60!
+  if (result.status != TrackingStatus::VALID || result.inliers.size() < 30) {
     // TODO: fix code structure - nav state should be passed in?
     // use nav state which we assume is updated by IMU
-    LOG(INFO) << "Number usable static feature < 30 or status is invalid. "
-                 "Relying on IMU only";
-    frame_k->T_world_camera_ = nav_state_.pose();
+    std::stringstream ss;
+    ss << "Number usable static feature < 30 or status is invalid. ";
+
+    // check if we have a nav state update from the IMU (this is also a cheap
+    // way of checking that we HAVE an imu). If we do we can use the nav state
+    // directly to update the current pose as the nav state is the forward
+    // prediction from the IMU
+    if (last_imu_nav_state_update_ == frame_k_1->getFrameId()) {
+      frame_k->T_world_camera_ = nav_state_.pose();
+      ss << "Nav state was previous updated with IMU. Using predicted pose to "
+            "set camera transform; k"
+         << frame_k->getFrameId();
+    } else {
+      // no IMU for forward prediction, use constant velocity model to propogate
+      // pose expect previous_nav_state_ to always be updated with the best
+      // pose!
+      frame_k->T_world_camera_ = previous_nav_state_.pose() * vo_velocity_;
+      ss << "Nav state has no information from imu. Using constant velocity "
+            "model to propofate pose; k"
+         << frame_k->getFrameId();
+    }
+
+    VLOG(10) << ss.str();
+
     // if fails should we mark current inliers as outliers?
 
     // TODO: should almost definitely do this in future, but right now we use

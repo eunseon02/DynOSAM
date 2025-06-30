@@ -132,6 +132,16 @@ class ClusterSlamAllLoader {
     return rgb;
   }
 
+  cv::Mat getRightRGB(size_t idx) const {
+    cv::Mat rgb_right;
+    CHECK_LT(idx, right_rgb_image_paths_.size());
+
+    loadRGB(right_rgb_image_paths_.at(idx), rgb_right);
+    CHECK(!rgb_right.empty());
+
+    return rgb_right;
+  }
+
   cv::Mat getInstanceMask(size_t idx) const {
     CHECK_LT(idx, left_rgb_image_paths_.size());
     CHECK_LT(idx, dataset_size_);
@@ -330,12 +340,7 @@ class ClusterSlamAllLoader {
 
   cv::Mat denseStereoReconstruction(size_t frame) const {
     cv::Mat rgb_left = getRGB(frame);
-
-    cv::Mat rgb_right;
-    CHECK_LT(frame, right_rgb_image_paths_.size());
-
-    loadRGB(right_rgb_image_paths_.at(frame), rgb_right);
-    CHECK(!rgb_right.empty());
+    cv::Mat rgb_right = getRightRGB(frame);
 
     // this set of images are loaded as 8UC4
     CHECK_EQ(rgb_right.type(), CV_8UC4)
@@ -794,31 +799,34 @@ ClusterSlamDataLoader::ClusterSlamDataLoader(const fs::path& dataset_path)
       std::make_shared<FunctionalDataFolder<GroundTruthInputPacket>>(
           [loader](size_t idx) { return loader->getGtPacket(idx); });
 
+  auto rgb_right_loader =
+      std::make_shared<FunctionalDataFolder<std::optional<cv::Mat>>>(
+          [loader](size_t idx) { return loader->getRightRGB(idx); });
+
   this->setLoaders(timestamp_loader, rgb_loader, optical_flow_loader,
-                   depth_loader, instance_mask_loader, gt_loader);
+                   depth_loader, instance_mask_loader, gt_loader,
+                   rgb_right_loader);
 
   auto callback = [&](size_t frame_id, Timestamp timestamp, cv::Mat rgb,
                       cv::Mat optical_flow, cv::Mat depth,
                       cv::Mat instance_mask,
-                      GroundTruthInputPacket gt_object_pose_gt) -> bool {
+                      GroundTruthInputPacket gt_object_pose_gt,
+                      std::optional<cv::Mat> right_rgb) -> bool {
     CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
 
     CHECK(ground_truth_packet_callback_);
     if (ground_truth_packet_callback_)
       ground_truth_packet_callback_(gt_object_pose_gt);
 
-    // ImageContainer::Ptr image_container = nullptr;
-    // image_container = ImageContainer::Create(
-    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-    //     ImageWrapper<ImageType::Depth>(depth),
-    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-    //     ImageWrapper<ImageType::MotionMask>(instance_mask));
-    // CHECK(image_container);
     ImageContainer image_container(frame_id, timestamp);
     image_container.rgb(rgb)
         .depth(depth)
         .opticalFlow(optical_flow)
         .objectMotionMask(instance_mask);
+
+    // TODO: currently cannot use this as frontend does not take RGBDCamera as
+    // input (ie no baseline!!)
+    //  if (right_rgb) image_container.rightRgb(right_rgb.value());
 
     CHECK(image_container_callback_);
     if (image_container_callback_)

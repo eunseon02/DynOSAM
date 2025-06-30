@@ -727,7 +727,10 @@ void HybridFormulation::objectUpdateContext(
     //  from k-2 to k-1)
     // exists in the map or is about to exist via new values, add the
     //  smoothing factor
-    if (is_other_values_in_map.exists(object_motion_key_k_2) &&
+    bool smoothing_factor_added =
+        smoothing_factors_added_.exists(object_motion_key_k);
+    if (!smoothing_factor_added &&
+        is_other_values_in_map.exists(object_motion_key_k_2) &&
         is_other_values_in_map.exists(object_motion_key_k_1) &&
         is_other_values_in_map.exists(object_motion_key_k)) {
       new_factors.emplace_shared<HybridSmoothingFactor>(
@@ -736,6 +739,9 @@ void HybridFormulation::objectUpdateContext(
       if (result.debug_info)
         result.debug_info->getObjectInfo(context.getObjectId())
             .smoothing_factor_added = true;
+
+      // update internal containers
+      smoothing_factors_added_.insert(object_motion_key_k);
     }
   }
 }

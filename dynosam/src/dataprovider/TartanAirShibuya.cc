@@ -171,6 +171,12 @@ class TartanAirShibuyaAllLoader {
     while (infile >> value) {
       times_.push_back(value);
     }
+
+    // NOTE: the timestamps (for some reason) are not (all) in ascending order
+    // the images appear to be in order (there is no jump in motion visually the
+    // place where the timestamps jump) we assume something is weird with the
+    // timestamps only and therefore just re-order these!!!
+    std::sort(times_.begin(), times_.end());
   }
 
   void loadGroundTruth(const std::string& gt_file) {

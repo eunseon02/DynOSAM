@@ -350,3 +350,12 @@ gtsam::Cal3Fisheye CameraParams::constructGtsamCalibration<gtsam::Cal3Fisheye>()
 }
 
 }  // namespace dyno
+
+// specalising the printing function in the config utils namespace
+namespace config {
+
+template <>
+std::string toString(const dyno::CameraParams& config, bool) {
+  return config.toString();
+}
+}  // namespace config

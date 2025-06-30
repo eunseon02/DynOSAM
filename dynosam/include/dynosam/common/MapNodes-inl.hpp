@@ -225,6 +225,11 @@ DynamicPointSymbol LandmarkNode<MEASUREMENT>::makeDynamicSymbol(
   return key;
 }
 
+template <typename MEASUREMENT>
+FrameIds LandmarkNode<MEASUREMENT>::getSeenFrameIds() const {
+  return getSeenFrames().template collectIds<FrameId>();
+}
+
 /// ObjectNode
 template <typename MEASUREMENT>
 int ObjectNode<MEASUREMENT>::getId() const {

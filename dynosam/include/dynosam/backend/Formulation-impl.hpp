@@ -389,6 +389,9 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
   // keep track of the new factors added in this function
   // these are then appended to the internal factors_ and new_factors
   gtsam::NonlinearFactorGraph internal_new_factors;
+  // keep track of the new values added in this function
+  // these are then appended to the internal values_ and new_values
+  gtsam::Values internal_new_values;
 
   UpdateObservationResult result(update_params);
   //! At least three points on the object are required to solve
@@ -548,13 +551,12 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
           utils::TimingStatsCollector dyn_point_update_timer(
               this->loggerPrefix() + ".dyn_point_update_1");
           // the true set of values that are added from the update
-          gtsam::Values local_new_values;
-          dynamicPointUpdateCallback(point_context, result, local_new_values,
+          dynamicPointUpdateCallback(point_context, result, internal_new_values,
                                      internal_new_factors);
-          // update internal theta and factors
-          theta_.insert(local_new_values);
-          // add to the external new_values
-          new_values.insert(local_new_values);
+          // // update internal theta and factors
+          // theta_.insert(local_new_values);
+          // // add to the external new_values
+          // new_values.insert(local_new_values);
         }
       } else {
         // these tracklets should already be in the graph so we should only need
@@ -572,13 +574,13 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
         utils::TimingStatsCollector dyn_point_update_timer(
             this->loggerPrefix() + ".dyn_point_update_2");
         // the true set of values that are added from the update
-        gtsam::Values local_new_values;
-        dynamicPointUpdateCallback(point_context, result, local_new_values,
+        // gtsam::Values local_new_values;
+        dynamicPointUpdateCallback(point_context, result, internal_new_values,
                                    internal_new_factors);
-        // update internal theta and factors
-        theta_.insert(local_new_values);
-        // add to the external new_values
-        new_values.insert(local_new_values);
+        // // update internal theta and factors
+        // theta_.insert(local_new_values);
+        // // add to the external new_values
+        // new_values.insert(local_new_values);
       }
     }
   }
@@ -621,13 +623,13 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
       object_update_context.frame_node_k = frame_node_k_impl;
       object_update_context.object_node = object_node;
 
-      gtsam::Values local_new_values;
-      objectUpdateContext(object_update_context, result, local_new_values,
+      // gtsam::Values local_new_values;
+      objectUpdateContext(object_update_context, result, internal_new_values,
                           internal_new_factors);
-      // update internal theta and factors
-      theta_.insert(local_new_values);
-      // add to the external new_values
-      new_values.insert(local_new_values);
+      // // update internal theta and factors
+      // theta_.insert(local_new_values);
+      // // add to the external new_values
+      // new_values.insert(local_new_values);
     }
   }
 
@@ -644,6 +646,11 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
 
   factors_ += internal_new_factors;
   new_factors += internal_new_factors;
+  // update internal theta and factors
+  theta_.insert(internal_new_values);
+  // add to the external new_values
+  new_values.insert(internal_new_values);
+
   return result;
 }
 

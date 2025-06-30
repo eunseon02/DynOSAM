@@ -131,7 +131,9 @@ int ImageTracksParams::featureThickness() const {
 cv::Mat FeatureTrackerBase::computeImageTracks(
     const Frame& previous_frame, const Frame& current_frame,
     const ImageTracksParams& config) const {
-  cv::Mat img_rgb = current_frame.image_container_.rgb().clone();
+  const ImageWrapper<ImageType::RGBMono>& img_wrapper =
+      current_frame.image_container_.rgb();
+  cv::Mat img_rgb = img_wrapper.toRGB().clone();
   const cv::Mat& object_mask =
       current_frame.image_container_.objectMotionMask();
 

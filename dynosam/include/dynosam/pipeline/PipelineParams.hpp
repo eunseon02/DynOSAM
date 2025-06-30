@@ -49,9 +49,7 @@ namespace dyno {
 
 enum class RuntimeSensorOptions : std::uint8_t {
   //! Use this sensor, if available
-  PreferSensor = 0,
-  //! Do not use this sensor, even if it is available
-  NoSensor = 1 << 0,
+  PreferSensor = 1 << 0,
   //! if we prefer the sensor but data is not available the system will use
   //! other information
   AcceptNoSensor = 1 << 1,
@@ -94,6 +92,7 @@ class DynoParams {
     //! Pipeline level params
     bool parallel_run{true};
 
+    // TODO: not used yet!!!!!
     RuntimeSensorFlags imu_runtime_options{DefaultRuntimeSensorOptions};
     RuntimeSensorFlags stereo_runtime_options{DefaultRuntimeSensorOptions};
   };
@@ -121,7 +120,6 @@ class DynoParams {
 };
 
 void declare_config(DynoParams::PipelineParams& config);
-
 // ! Original code from:
 // https://github.com/MIT-SPARK/Kimera-VIO/blob/master/include/kimera-vio/pipeline/PipelineParams.h
 // /**

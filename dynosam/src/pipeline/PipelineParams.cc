@@ -69,6 +69,8 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
 void DynoParams::printAllParams(bool print_glog_params) const {
   LOG(INFO) << "Frontend Params: " << config::toString(frontend_params_);
   LOG(INFO) << "Pipeline Params: " << config::toString(pipeline_params_);
+  LOG(INFO) << "Camera Params: " << config::toString(camera_params_);
+  LOG(INFO) << "IMU Params: " << config::toString(imu_params_);
 
   // TODO: currently cannot print camera params becuase we use intermediate
   // variables in the loading process!!

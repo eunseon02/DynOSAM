@@ -1,5 +1,7 @@
 from typing import List
 import csv
+from pathlib import Path
+
 
 class DataFiles:
     def __init__(self, prefix:str, output_folder_path: str, **kwargs) -> None:
@@ -10,6 +12,10 @@ class DataFiles:
         self.results_file_name = kwargs.get("results_file_name", self.prefix + "_results")
         self.plot_collection_name = kwargs.get("plot_collection_name", self.prefix.capitalize())
 
+    @property
+    def results_file_path(self) -> Path:
+        return Path(self.output_folder_path) / Path(self.results_file_name)
+
     def check_is_dynosam_results(self) -> bool:
         """
         Checks that the files that this datastructure represent actually exist (locally) and therefore is a valid
@@ -18,7 +24,6 @@ class DataFiles:
         Returns:
             bool: Is a valid dynosam results folder
         """
-        from pathlib import Path
         output_folder_path = Path(self.output_folder_path)
 
         expected_file_names = get_datafile_properties(self)
@@ -27,6 +32,9 @@ class DataFiles:
         # check if all names are found
         all_found = set(expected_file_names) <= set(found_file_names)
         return all_found
+
+    def plot_collection_exists(self) -> bool:
+        return self.results_file_path.exists()
 
 
 

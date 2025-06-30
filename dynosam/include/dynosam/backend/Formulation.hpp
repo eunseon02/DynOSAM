@@ -539,6 +539,8 @@ class Formulation {
    */
   void logBackendFromMap(const BackendMetaData& backend_info);
 
+  // virtual void
+
  protected:
   gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;
 

@@ -163,9 +163,30 @@ void WorldMotionFormulation::dynamicPointUpdateCallback(
   const gtsam::Key object_point_key_k =
       lmk_node->makeDynamicKey(frame_node_k->frame_id);
 
+  bool add_point_from_previous = context.is_starting_motion_frame;
+  bool does_previous_point_exist = new_values.exists(object_point_key_k_1) ||
+                                   theta_accessor->exists(object_point_key_k_1);
+
+  // check the case that the point exists at the previous frame
+  // this only happens when we have non-consequative frames ie 2 3 4 5 6 7 10 11
+  // and we are at frame 11!!
+  //  logically this occurs becuase of the implementation of Formulation which
+  //  checks for all the frames that the point has been observed in and only
+  //  sets is_starting_motion_frame = true on the first pair of motions it does
+  //  not account for inconsistencies in the frame order as pointed out...
+  // Jesse: honestly this should NOT happen but we handle the case anyway...
+  if (!add_point_from_previous && !does_previous_point_exist) {
+    // we could do many things including re-initing this point OR removing it
+    // from the tracked set
+    CHECK(lmk_node->seenAtFrame(frame_node_k_1->frame_id));
+    // if we think we shouldn't add the previous point but the previous point
+    // does not exist, add it!@!
+    add_point_from_previous = true;
+  }
+
   // if first motion (i.e first time we have both k-1 and k), add both at k-1
   // and k
-  if (context.is_starting_motion_frame) {
+  if (add_point_from_previous) {
     CHECK(!theta_accessor->exists(object_point_key_k_1));
 
     new_factors.emplace_shared<PoseToPointFactor>(
@@ -193,7 +214,10 @@ void WorldMotionFormulation::dynamicPointUpdateCallback(
 
   // previous point must be added by the previous iteration
   CHECK(new_values.exists(object_point_key_k_1) ||
-        theta_accessor->exists(object_point_key_k_1));
+        theta_accessor->exists(object_point_key_k_1))
+      << "Key: " << this->formatter()(object_point_key_k_1)
+      << " and seen at frames "
+      << container_to_string(lmk_node->getSeenFrameIds());
 
   const Landmark measured_k = lmk_node->getMeasurement(frame_node_k).landmark;
 

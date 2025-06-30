@@ -281,6 +281,10 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
   }
   CHECK_EQ(detection_mask_impl.type(), CV_8U);
 
+  // creating tracking mask
+  cv::Mat tracking_mask =
+      cv::Mat(detection_mask_impl.size(), CV_8U, cv::Scalar(0));
+
   if (previous_frame_) {
     const cv::Mat& previous_motion_mask =
         previous_frame_->image_container_.objectMotionMask();
@@ -378,12 +382,19 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
             detection_mask_impl, cv::Point2f(x, y),
             params_.min_distance_btw_tracked_and_detected_dynamic_features,
             cv::Scalar(0), cv::FILLED);
+
+        // fill tracking mask with tracked points, labelled with the object
+        // label (j) to indicate places on object with keypoints
+        cv::circle(
+            tracking_mask, cv::Point2f(x, y),
+            params_.min_distance_btw_tracked_and_detected_dynamic_features,
+            cv::Scalar(predicted_label), cv::FILLED);
       }
     }
   }
 
-  // cv::imshow("detection_mask_impl", detection_mask_impl);
-  // cv::waitKey(1);
+  cv::imshow("tracking_mask", tracking_mask);
+  cv::waitKey(1);
 
   // sanity check
   //  for(ObjectId object_id : instance_labels) {
@@ -485,9 +496,33 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
   static constexpr float tolerance = 0.01;
   Eigen::MatrixXd binning_mask;
 
+  // for(const auto& [object_id, opencv_keypoints] : sampled_keypoints) {
   tbb::parallel_for_each(
       sampled_keypoints.begin(), sampled_keypoints.end(), [&](auto& entry) {
         auto& [object_id, opencv_keypoints] = entry;
+
+        // float min_x = std::numeric_limits<float>::max();
+        // float max_x = std::numeric_limits<float>::lowest();
+        // float min_y = std::numeric_limits<float>::max();
+        // float max_y = std::numeric_limits<float>::lowest();
+
+        // for (const auto& kp : opencv_keypoints) {
+        //     min_x = std::min(min_x, kp.pt.x);
+        //     max_x = std::max(max_x, kp.pt.x);
+        //     min_y = std::min(min_y, kp.pt.y);
+        //     max_y = std::max(max_y, kp.pt.y);
+        // }
+
+        // int obj_rows = max_y - min_y;
+        // int obj_cols = max_x - min_x;
+
+        // for ssc it seems we canot request more features than the area of the
+        // image therefore, retrict the requested features (at least) the number
+        // of pixels in the obj-subregion
+        //  int augmented_max_features_to_track = std::min(obj_rows * obj_cols,
+        //  max_features_to_track);
+
+        // LOG(INFO) << "Object rows=" << obj_rows << " obj cols=" << obj_cols;
 
         const PerObjectStatus& object_tracking_info =
             info_.getObjectStatus(object_id);
@@ -495,7 +530,22 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
         int nr_corners_needed =
             std::max(max_features_to_track - number_tracked, 0);
 
+        // int nr_corners_needed =
+        //     std::max(augmented_max_features_to_track - number_tracked, 0);
+
+        // this number cannot be larger than the number of featues
+        //  nr_corners_needed = std::min(nr_corners_needed,
+        //  (int)opencv_keypoints.size());
+
         std::vector<KeypointCV>& max_keypoints = opencv_keypoints;
+
+        // for sssc?
+        //  //normnalize to a window starting at zero
+        //  for(auto& kp : max_keypoints) {
+        //    kp.pt.x -= min_x;
+        //    kp.pt.y -= min_y;
+        //  }
+
         const size_t sampled_size = max_keypoints.size();
 
         // TODO: Ssc better but maybe bad alloc????
@@ -504,6 +554,15 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
         max_keypoints = non_maximum_supression.suppressNonMax(
             opencv_keypoints, nr_corners_needed, tolerance, img_size_.width,
             img_size_.height, 5, 5, binning_mask);
+
+        // max_keypoints = non_maximum_supression.suppressNonMax(
+        //     max_keypoints, nr_corners_needed, tolerance, obj_cols,
+        //     obj_rows, 5, 5, binning_mask);
+
+        // for(auto& kp : max_keypoints) {
+        //   kp.pt.x += min_x;
+        //   kp.pt.y += min_y;
+        // }
 
         VLOG(10) << "Kps: " << max_keypoints.size() << " for j=" << object_id
                  << " after ANMS (originally " << sampled_size << ")";
@@ -542,7 +601,9 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
             objects_sampled.insert(feature->objectId());
           }
         }
+        // }
       });
+  // }
 }
 
 void FeatureTracker::propogateMask(ImageContainer& image_container) {

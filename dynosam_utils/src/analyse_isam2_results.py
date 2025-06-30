@@ -16,8 +16,10 @@ out_data_path = "/root/results/Dynosam_ecmr2024/"
 
 # results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
+sequence = "viode_city_night_mid"
 
-results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
+# results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
+results = load_bson(f"/root/results/Dynosam_ecmr2024/{sequence}/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/DynoSAM/incremental_kitti_00_test/parallel_isam2_results.bson")[0]['data']
 # results = load_bson("/root/results/DynoSAM/incremental_test/parallel_isam2_results.bson")[0]['data']
@@ -127,7 +129,7 @@ def compute_average(variable_name):
     for _, values in values_per_frame.items():
         means.append(np.mean(np.array(values)))
 
-    print(f"Mean value {np.mean(np.array(means))}, std= {np.std(np.array(means))} for var={variable_name}")
+    print(f"Mean value {variable_name} {np.mean(np.array(means))}, std= {np.std(np.array(means))} for var={variable_name}")
 
 
 # Plot each variable
@@ -140,5 +142,5 @@ plot_variable("num_variables", "Number of variables", r"Dynamic Map Size")
 plot_variable("num_landmarks_marked", "Number landmark variables", r"Landmarks Involved In Update")
 # plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 
-plt.show()
-# compute_average("timing")
+# plt.show()
+compute_average("timing")

@@ -560,6 +560,8 @@ bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
   Motion3SolverResult result = geometricOutlierRejection3d2d(
       frame_k_1, frame_k, frame_k->getPose(), object_id);
 
+  frame_k->dynamic_features_.markOutliers(result.outliers);
+
   VLOG(15) << " object motion estimate " << object_id << " at frame "
            << frame_k->frame_id_
            << (result.status == TrackingStatus::VALID ? " success "
@@ -573,8 +575,6 @@ bool ObjectMotionSovlerF2F::solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
 
   // if valid, remove outliers and add to motion estimation
   if (result.status == TrackingStatus::VALID) {
-    frame_k->dynamic_features_.markOutliers(result.outliers);
-
     motion_estimates.insert({object_id, result.best_result});
     return true;
   } else {
@@ -672,6 +672,12 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
     // sanity check that we have accounted for all initial matches
     CHECK_EQ(motion_result.inliers.size() + motion_result.outliers.size(),
              n_matches);
+  }
+
+  // needed when running things like TartanAir S where we get vew few point on
+  // the object...
+  if (motion_result.inliers.size() < 30) {
+    motion_result.status = TrackingStatus::FEW_MATCHES;
   }
 
   return motion_result;

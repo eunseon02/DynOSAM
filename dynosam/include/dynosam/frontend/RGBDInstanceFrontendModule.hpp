@@ -101,8 +101,19 @@ class RGBDInstanceFrontendModule : public FrontendModule {
 
   ImuFrontend imu_frontend_;
   gtsam::NavState nav_state_;
+  // this is always udpated with the best X_k pose but the velocity may be wrong
+  // if no IMU...
   gtsam::NavState previous_nav_state_;
-  //   gtsam::NavState previous_imu_state_;
+
+  //! Tracks when the nav state was updated using IMU, else VO
+  //! in the front-end, when updating with VO, the velocity will (currently) be
+  //! wrong!!
+  FrameId last_imu_nav_state_update_{0};
+
+  //! The relative camera pose (T_k_1_k) from the previous frame
+  //! this is used as a constant velocity model when VO tracking fails and the
+  //! IMU is not available!
+  gtsam::Pose3 vo_velocity_;
 };
 
 }  // namespace dyno

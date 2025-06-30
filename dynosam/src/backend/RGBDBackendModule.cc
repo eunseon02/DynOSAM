@@ -53,8 +53,12 @@
 DEFINE_int32(opt_window_size, 10, "Sliding window size for optimisation");
 DEFINE_int32(opt_window_overlap, 4, "Overlap for window size optimisation");
 
-DEFINE_bool(use_full_batch_opt, true,
-            "Use full batch optimisation if true, else sliding window");
+// DEFINE_bool(use_full_batch_opt, true,
+//             "Use full batch optimisation if true, else sliding window");
+
+DEFINE_int32(optimization_mode, 0,
+             "0: Full-batch, 1: sliding-window, 2: incremental");
+
 DEFINE_bool(
     use_vo_factor, true,
     "If true, use visual odometry measurement as factor from the frontend");
@@ -123,10 +127,12 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   // CHECK(false);
 
   gtsam::ISAM2Params isam2_params;
-  isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
+  // isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
   // isam2_params.relinearizeSkip = 2;
+  isam2_params.relinearizeThreshold = 0.01;
+  isam2_params.relinearizeSkip = 1;
   isam2_params.keyFormatter = DynoLikeKeyFormatter;
-  isam2_params.enablePartialRelinearizationCheck = true;
+  // isam2_params.enablePartialRelinearizationCheck = true;
   isam2_params.evaluateNonlinearError = true;
   smoother_ = std::make_unique<gtsam::ISAM2>(isam2_params);
   fixed_lag_smoother_ =
@@ -168,16 +174,6 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
   gtsam::NonlinearFactorGraph new_factors;
 
   addInitialStates(input, new_updater_.get(), new_values, new_factors);
-  // // Pose estimate from the front-end
-  // gtsam::Pose3 T_world_cam_k_frontend;
-  // updateMap(T_world_cam_k_frontend, input);
-
-  // gtsam::Values new_values;
-  // gtsam::NonlinearFactorGraph new_factors;
-
-  // new_updater_->setInitialPose(T_world_cam_k_frontend, frame_k, new_values);
-  // new_updater_->setInitialPosePrior(T_world_cam_k_frontend, frame_k,
-  //                                   new_factors);
 
   if (callback) {
     callback(new_updater_, frame_k, new_values, new_factors);
@@ -244,11 +240,87 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   LOG(INFO) << "Starting any updates";
 
   bool incremental = false;
-  if (incremental) {
+
+  // 0: Full-batch, 1: sliding-window, 2: incremental
+  const int optimization_mode = FLAGS_optimization_mode;
+
+  if (optimization_mode == 2) {
     LOG(INFO) << "Updating incremental";
     auto tic = utils::Timer::tic();
-    auto result = smoother_->update(new_factors, new_values);
-    smoother_->update();
+
+    // / This is not doing a full deep copy: it is keeping same shared_ptrs for
+    // factors but copying the isam result.
+    ISAM2 smoother_backup(*smoother_);
+
+    gtsam::ISAM2Result result;
+    try {
+      result = smoother_->update(new_factors, new_values);
+      smoother_->update();
+    } catch (gtsam::IndeterminantLinearSystemException& e) {
+      const gtsam::Key& var = e.nearbyVariable();
+      LOG(ERROR) << "gtsam::IndeterminantLinearSystemException with variable "
+                 << DynoLikeKeyFormatter(var);
+
+      // // Add priors on all variables to fix indeterminant linear system
+      const gtsam::Values values = smoother_->calculateEstimate();
+      gtsam::NonlinearFactorGraph nfg;
+
+      ApplyFunctionalSymbol afs;
+      afs.cameraPose([&nfg, &values](FrameId, const gtsam::Symbol& sym) {
+           const gtsam::Key& key = sym;
+           gtsam::Pose3 pose = values.at<gtsam::Pose3>(key);
+           gtsam::Vector6 sigmas;
+           sigmas.head<3>().setConstant(0.001);  // rotation
+           sigmas.tail<3>().setConstant(0.01);   // translation
+           gtsam::SharedNoiseModel noise =
+               gtsam::noiseModel::Diagonal::Sigmas(sigmas);
+           nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose,
+                                                                noise);
+         })
+          .objectMotion([&nfg, &values](FrameId, ObjectId,
+                                        const gtsam::LabeledSymbol& sym) {
+            const gtsam::Key& key = sym;
+            gtsam::Pose3 pose = values.at<gtsam::Pose3>(key);
+            gtsam::Vector6 sigmas;
+            sigmas.head<3>().setConstant(0.001);  // rotation
+            sigmas.tail<3>().setConstant(0.01);   // translation
+            gtsam::SharedNoiseModel noise =
+                gtsam::noiseModel::Diagonal::Sigmas(sigmas);
+            nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose,
+                                                                 noise);
+          })
+          .
+          operator()(var);
+
+      // afs callback did not occur
+      if (nfg.size() == 0) {
+        LOG(FATAL) << DynoLikeKeyFormatter(var)
+                   << " not recognised in indeterminant exception handling";
+      }
+
+      gtsam::NonlinearFactorGraph new_factors_mutable;
+      new_factors_mutable.push_back(new_factors.begin(), new_factors.end());
+      new_factors_mutable.push_back(nfg.begin(), nfg.end());
+
+      // Update with graph and GN optimized values
+      try {
+        // Update smoother
+        LOG(ERROR) << "Attempting to update smoother with added prior factors";
+        *smoother_ = smoother_backup;  // reset isam to backup
+        result = smoother_->update(new_factors_mutable, new_values);
+      } catch (...) {
+        // Catch the rest of exceptions.
+        // TODO: for experiments I guess keep going...?
+        LOG(FATAL) << "Smoother recovery failed. Most likely, the additional "
+                      "prior factors were insufficient to keep the system from "
+                      "becoming indeterminant.";
+        // return false;
+      }
+
+    } catch (gtsam::ValuesKeyDoesNotExist& e) {
+      LOG(FATAL) << "gtsam::ValuesKeyDoesNotExist with variable "
+                 << DynoLikeKeyFormatter(e.key());
+    }
 
     auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
     int64_t milliseconds =
@@ -270,18 +342,28 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
     }
     file_name += ".csv";
     const std::string file_path = getOutputFilePath(file_name);
+
+    static bool is_first = true;
+
+    if (is_first) {
+      // clear the file first
+      std::ofstream clear_file(file_path, std::ios::out | std::ios::trunc);
+      if (!clear_file.is_open()) {
+        LOG(FATAL) << "Error clearing file: " << file_path;
+      }
+      clear_file.close();  // Close the stream to ensure truncation is complete
+      is_first = false;
+    }
+
     std::fstream file(file_path, std::ios::in | std::ios::out | std::ios::app);
     file.precision(15);
     file << milliseconds << "," << frame_k << "," << optimised_values.size()
          << "," << smoother_->getFactorsUnsafe().size() << "\n";
     file.close();
 
-    // static CsvWriter
-    // timing_writer(CsvHeader("frame_id","isam2_update_time"));
-
     new_updater_->updateTheta(optimised_values);
     // new_updater_->updateTheta(dynamic_fixed_lag_smoother_->calculateEstimate());
-  } else if (FLAGS_use_full_batch_opt) {
+  } else if (optimization_mode == 0) {
     LOG(INFO) << " full batch frame " << base_params_.full_batch_frame;
     if (base_params_.full_batch_frame - 1 == (int)frame_k) {
       LOG(INFO) << " Doing full batch at frame " << frame_k;
@@ -315,7 +397,7 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
       LOG(INFO) << " Error before sliding window: " << error_before
                 << " error after: " << error_after;
     }
-  } else {
+  } else if (optimization_mode == 1) {
     const auto sw_result =
         sliding_window_opt_->update(new_factors, new_values, frame_k);
     LOG(INFO) << "Sliding window result - " << sw_result.optimized;
@@ -324,17 +406,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
       new_updater_->updateTheta(sw_result.result);
     }
 
-    // double error_before, error_after;
-    // gtsam::Values optimised_values;
-    // LOG(INFO) << "Doing sliding window";
-    // if (buildSlidingWindowOptimisation(frame_k, optimised_values,
-    // error_before,
-    //                                    error_after)) {
-    //   LOG(INFO) << "Updating values with opt!";
-    //   new_updater_->updateTheta(optimised_values);
-    //   LOG(INFO) << " Error before sliding window: " << error_before
-    //             << " error after: " << error_after;
-    // }
+  } else {
+    LOG(FATAL) << "Unknown optimisation mode" << optimization_mode;
   }
   LOG(INFO) << "Done any udpates";
 
@@ -538,7 +611,9 @@ RGBDBackendModule::makeUpdater() {
   FormulationParams formulation_params;
   // TODO: why are we copying params over???
   formulation_params.min_static_observations = base_params_.min_static_obs_;
-  formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
+  // formulation_params.min_dynamic_observations =
+  // base_params_.min_dynamic_obs_;
+  formulation_params.min_dynamic_observations = 2u;
   formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
 
   FormulationHooks hooks = createFormulationHooks();
