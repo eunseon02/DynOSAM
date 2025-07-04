@@ -673,7 +673,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   }
 
   tester.finishAll();
-  return;
+  //   return;
   //   dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
   //   dyno::writeStatisticsModuleSummariesToFile();
 
@@ -730,8 +730,8 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
 
   //     }
 
-  //   cv::imshow("Block Jacobians", block_jacobians);
-  //   cv::waitKey(0);
+  // cv::imshow("Block Jacobians", block_jacobians);
+  cv::waitKey(0);
 }
 
 TEST(RGBDBackendModule, testObjectCentric) {

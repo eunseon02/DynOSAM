@@ -541,17 +541,6 @@ ViodeLoader::ViodeLoader(const fs::path& dataset_path)
 
     if (right_rgb) image_container.rightRgb(right_rgb.value());
 
-    // ImageContainer::Ptr image_container = nullptr;
-    // image_container = ImageContainer::Create(
-    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-    //     ImageWrapper<ImageType::Depth>(depth),
-    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-    //     ImageWrapper<ImageType::MotionMask>(instance_mask));
-
-    // if (right_rgb) {
-    //   image_container->right_stereo_rgb = right_rgb.value();
-    // }
-
     CHECK(image_container_callback_);
     if (image_container_callback_)
       image_container_callback_(

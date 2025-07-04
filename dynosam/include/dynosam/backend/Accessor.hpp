@@ -147,6 +147,9 @@ class Accessor {
    */
   MotionEstimateMap getObjectMotions(FrameId frame_id) const;
 
+  // TODO: sort of remove if we add a post update call in the formulation (which
+  // then has access to the estimator!!)
+
   /**
    * @brief Virtual function that is called to indcate the associated
    * formulation has been updated. This can be used to trigger an internal

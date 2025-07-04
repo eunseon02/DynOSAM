@@ -138,43 +138,53 @@ def run_ecmr_experiment_sequences(dataset_path, dataset_name, dataset_loader, *a
     # run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=0"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
 
-    # # run the two batches again but with increemntal mode and additional suffix so we can individual logs!!!
+    # run the two batches again but with increemntal mode and additional suffix so we can individual logs!!!
     run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
-    run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
 def run_viodes():
 
-    # run_ecmr_experiment_sequences("/root/data/VIODE/city_day/mid", "viode_city_day_mid", viode)
-    # run_ecmr_experiment_sequences("/root/data/VIODE/city_day/high","viode_city_day_high", viode, "--ending_frame=1110")
-
+    # run_ecmr_experiment_sequences("/root/data/VIODE/city_day/mid", "viode_city_day_mid", viode, "--v=100")
+    run_ecmr_experiment_sequences("/root/data/VIODE/city_day/high","viode_city_day_high", viode, "--ending_frame=1110")
+# zero_elements_ratio
     # run_ecmr_experiment_sequences("/root/data/VIODE/city_night/mid", "viode_city_night_mid", viode)
-    run_ecmr_experiment_sequences("/root/data/VIODE/city_night/high", "viode_city_night_high", viode)
+    # run_ecmr_experiment_sequences("/root/data/VIODE/city_night/high", "viode_city_night_high", viode)
 
-    run_ecmr_experiment_sequences("/root/data/VIODE/parking_lot/mid", "parking_lot_night_mid", viode)
-    run_ecmr_experiment_sequences("/root/data/VIODE/parking_lot/high", "parking_lot_night_high", viode)
+    # run_ecmr_experiment_sequences("/root/data/VIODE/parking_lot/mid", "parking_lot_night_mid", viode)
+    # run_ecmr_experiment_sequences("/root/data/VIODE/parking_lot/high", "parking_lot_night_high", viode)
+
+def run_omd():
+    run_ecmr_experiment_sequences("/root/data/vdo_slam/omd/omd/swinging_4_unconstrained_stereo/","omd_s4u", omd_dataset, "--ending_frame=300")
 
 
 def run_tartan_air():
     # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing03", "tas_rc3", tartan_air) #max_object_depth: 10.0
-    # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing04", "tas_rc4", tartan_air)
-    # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing05", "tas_rc5", tartan_air)
-    # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing06", "tas_rc6", tartan_air)
-    # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing07", "tas_rc7", tartan_air, "--starting_frame=5", "--ending_frame=65")
-    run_analysis("tas_rc7")
+    run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing04", "tas_rc4", tartan_air, "--v=100")
+    run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing05", "tas_rc5", tartan_air)
+    run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing06", "tas_rc6", tartan_air)
+    run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/RoadCrossing07", "tas_rc7", tartan_air, "--starting_frame=5", "--ending_frame=65")
+    # run_analysis("tas_rc7")
 
     # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/Standing01", "tas_s1", tartan_air)
     # run_ecmr_experiment_sequences("/root/data/TartanAir_shibuya/Standing02", "tas_s2", tartan_air)
 
 def run_cluster():
     # run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-L2/", "cluster_l2", cluster_dataset)
-    # run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-L1/", "cluster_l1", cluster_dataset)
-    run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-S2/", "cluster_s2", cluster_dataset)
+    run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-L1/", "cluster_l1_map", cluster_dataset)
+    # run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-S2/", "cluster_s2", cluster_dataset)
     # run_ecmr_experiment_sequences("/root/data/cluster_slam/CARLA-S1/", "cluster_s1", cluster_dataset)
 
 def run_kitti():
-    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0001/", "kitti_01", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
-    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0002/", "kitti_02", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
-    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0000/", "kitti_00_test", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--use_propogate_mask=true")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0000/", "kitti_0000", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--use_propogate_mask=true")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0002/", "kitti_0002", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0003/", "kitti_0003", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0005/", "kitti_0005", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0006/", "kitti_0006", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0018/", "kitti_0018", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--updater_suffix=dkp_600")
+    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0020/", "kitti_0020_mem", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+
 
 
 if __name__ == '__main__':
@@ -187,8 +197,9 @@ if __name__ == '__main__':
     # run_viodes()
     # run_tartan_air()
     # run_cluster()
+    # run_omd()
     run_kitti()
-    # run_analysis("cluster_s2")
+    # run_analysis("kitti_0001")
     sys.exit(0)
 
 

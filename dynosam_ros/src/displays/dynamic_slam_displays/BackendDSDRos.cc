@@ -30,6 +30,8 @@
 
 #include "dynosam_ros/displays/dynamic_slam_displays/BackendDSDRos.hpp"
 
+#include <dynosam/utils/Timing.hpp>
+
 namespace dyno {
 
 BackendDSDRos::BackendDSDRos(const DisplayParams params,
@@ -43,13 +45,14 @@ BackendDSDRos::BackendDSDRos(const DisplayParams params,
 void BackendDSDRos::spinOnce(
     const BackendOutputPacket::ConstPtr& backend_output) {
   // publish vo and path
+  auto tic = utils::Timer::tic();
   constexpr static bool kPublishOdomAsTf = false;
   this->publishVisualOdometry(backend_output->pose(),
                               backend_output->getTimestamp(), kPublishOdomAsTf);
   this->publishVisualOdometryPath(backend_output->optimized_camera_poses,
                                   backend_output->getTimestamp());
 
-  LOG(INFO) << "published odom";
+  auto odom_toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
 
   // publish static cloud
   this->publishStaticPointCloud(backend_output->static_landmarks,
@@ -60,6 +63,7 @@ void BackendDSDRos::spinOnce(
                                  backend_output->pose());
 
   // publishTemporalDynamicMaps(backend_output);
+  auto clouds_toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
 
   const auto& object_motions = backend_output->optimized_object_motions;
   const auto& object_poses = backend_output->optimized_object_poses;
@@ -71,6 +75,17 @@ void BackendDSDRos::spinOnce(
       backend_output->getFrameId(), backend_output->getTimestamp());
   object_poses_publisher.publishObjectOdometry();
   object_poses_publisher.publishObjectPaths();
+  auto objects_toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
+
+  LOG(INFO)
+      << "Published odom: "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(odom_toc).count()
+      << "[ms], Clouds: "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(clouds_toc)
+             .count()
+      << "[ms], Objects: "
+      << std::chrono::duration_cast<std::chrono::milliseconds>(objects_toc)
+             .count();
 }
 
 void BackendDSDRos::publishTemporalDynamicMaps(

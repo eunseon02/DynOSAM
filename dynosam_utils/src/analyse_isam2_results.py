@@ -9,17 +9,21 @@ import sys
 # results = load_bson("/root/results/D/omd_swinging_4_unconstrained_long/parallel_isam2_results_beta_1.bson")[0]['data']
 
 
-file_name = "omd_swinging_4_unconstrained_long"
-out_data_path = "/root/results/Dynosam_ecmr2024/"
-# results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results.bson")[0]['data']
-# results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
+# file_name = "omd_swinging_4_unconstrained_long"
+# out_data_path = "/root/results/Dynosam_ecmr2024/"
+# # results = load_bson("/root/results/Dynosam_ecmr2024/omd_swinging_4_unconstrained_long/parallel_isam2_results.bson")[0]['data']
+# # results = load_bson("/root/results/Dynosam_ecmr2024/kitti_0000/parallel_isam2_results.bson")[0]['data']
 
-# results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
+# # results = load_bson("/root/results/misc/parallel_isam2_results.bson")[0]['data']
 
-sequence = "viode_city_night_mid"
+# sequence = "viode_city_night_mid"
+
+sequence = "omd_s4u"
+# sequence = "cluster_l1"
+result_path = f"/root/results/Dynosam_ecmr2024/{sequence}/"
 
 # results = load_bson("/root/results/DynoSAM/incremental_omd_test/parallel_isam2_results.bson")[0]['data']
-results = load_bson(f"/root/results/Dynosam_ecmr2024/{sequence}/parallel_isam2_results.bson")[0]['data']
+results = load_bson(f"{result_path}/parallel_isam2_results.bson")[0]['data']
 
 # results = load_bson("/root/results/DynoSAM/incremental_kitti_00_test/parallel_isam2_results.bson")[0]['data']
 # results = load_bson("/root/results/DynoSAM/incremental_test/parallel_isam2_results.bson")[0]['data']
@@ -35,6 +39,9 @@ startup_plotting(25)
 
 for object_id, per_frame_results in results.items():
     print(f"Object id {object_id}")
+
+    if object_id == "0":
+        continue
     for frame, object_isam_result in per_frame_results.items():
         was_smoother_ok = bool(object_isam_result["was_smoother_ok"])
         if not was_smoother_ok:
@@ -78,8 +85,8 @@ import os
 import numpy as np
 def plot_variable(variable_name, ylabel, title, **kwargs):
 
-    plot_file_name = file_name + "_" + variable_name + ".pdf"
-    output_file_name = os.path.join(out_data_path, plot_file_name)
+    # plot_file_name = file_name + "_" + variable_name + ".pdf"
+    # output_file_name = os.path.join(out_data_path, plot_file_name)
 
     fig = plt.figure()
     ax = fig.gca()
@@ -89,7 +96,8 @@ def plot_variable(variable_name, ylabel, title, **kwargs):
 
         values_np = np.array(values)
         print(f"Mean value {np.mean(values_np)} for var={variable_name}")
-
+ # plot_file_name = file_name + "_" + variable_name + ".pdf"
+    # output_file_name = os.path.join(out_data_path, plot_file_name)
         # Sort frames and associated values
         sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
         frames = [frames[i] for i in sorted_indices]
@@ -142,5 +150,5 @@ plot_variable("num_variables", "Number of variables", r"Dynamic Map Size")
 plot_variable("num_landmarks_marked", "Number landmark variables", r"Landmarks Involved In Update")
 # plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 
-# plt.show()
-compute_average("timing")
+plt.show()
+# compute_average("timing")

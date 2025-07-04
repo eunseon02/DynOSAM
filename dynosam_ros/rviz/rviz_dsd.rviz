@@ -7,9 +7,9 @@ Panels:
         - /Global Options1
         - /Status1
         - /Backend1
+        - /Backend1/Dynamic Map1
         - /Backend1/Visual Odometry1/Status1
         - /Backend1/Visual Odometry1/Shape1
-        - /Frontend1
         - /Frontend1/Static Map1
         - /Frontend1/Visual Odometry1/Shape1
         - /Ground Truth1
@@ -79,7 +79,7 @@ Visualization Manager:
           Position Transformer: XYZ
           Selectable: true
           Size (Pixels): 3
-          Size (m): 0.03999999910593033
+          Size (m): 0.07000000029802322
           Style: Flat Squares
           Topic:
             Depth: 5
@@ -433,7 +433,7 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /dynosam/frontend/odometry_path
           Value: true
-      Enabled: true
+      Enabled: false
       Name: Frontend
     - Class: rviz_common/Group
       Displays:
@@ -631,25 +631,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 51.28551483154297
+      Distance: 25.198711395263672
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 14.756819725036621
-        Y: 36.531009674072266
-        Z: -0.5347034335136414
-      Focal Shape Fixed Size: true
+        X: -6.418346405029297
+        Y: -1.297945499420166
+        Z: 3.6940412521362305
+      Focal Shape Fixed Size: false
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.9497965574264526
-      Target Frame: robot
+      Pitch: 0.3253993093967438
+      Target Frame: camera
       Value: Orbit (rviz_default_plugins)
-      Yaw: 1.85152006149292
+      Yaw: 0.5503278970718384
     Saved: ~
 Window Geometry:
   Displays:

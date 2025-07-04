@@ -187,13 +187,6 @@ EstimationModuleLogger::~EstimationModuleLogger() {
 std::optional<size_t> EstimationModuleLogger::logObjectMotion(
     FrameId frame_id, const MotionEstimateMap& motion_estimates,
     const std::optional<GroundTruthPacketMap>& gt_packets) {
-  // if gt packet provided by no data exists at this frame
-  if (gt_packets && !gt_packets->exists(frame_id)) {
-    VLOG(100) << "No gt packet at frame id " << frame_id
-              << ". Unable to log object motion errors";
-    return {};
-  }
-
   size_t number_logged = 0;
   for (const auto& [object_id, motions] : motion_estimates) {
     // use identity motion if no ground truth so that we keep the csv file
@@ -201,37 +194,6 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(
     if (logObjectMotion(*object_motion_csv_, motions, frame_id, object_id,
                         gt_packets))
       number_logged++;
-    // gtsam::Pose3 gt_motion = gtsam::Pose3::Identity();
-    // const gtsam::Pose3& estimate = motions;
-
-    // // gt packet provided so only log if gt pose data found
-    // if (gt_packets) {
-    //   if (gt_packets->exists(frame_id)) {
-    //     const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
-    //     // check object exists in this frame
-    //     ObjectPoseGT object_gt_k;
-    //     if (!gt_packet_k.getObject(object_id, object_gt_k)) {
-    //       // if no packet for this object found, continue and do not log
-    //       continue;
-    //     } else {
-    //       CHECK(object_gt_k.prev_H_current_world_);
-    //       gt_motion = *object_gt_k.prev_H_current_world_;
-    //     }
-    //   } else {
-    //     // gt packet has no entry for this frame id so skip
-    //     continue;
-    //   }
-    // }
-
-    // const auto& quat = estimate.rotation().toQuaternion();
-    // const auto& gt_quat = gt_motion.rotation().toQuaternion();
-
-    // *object_motion_csv_ << frame_id << object_id << estimate.x() <<
-    // estimate.y()
-    //                     << estimate.z() << quat.x() << quat.y() << quat.z()
-    //                     << quat.w() << gt_motion.x() << gt_motion.y()
-    //                     << gt_motion.z() << gt_quat.x() << gt_quat.y()
-    //                     << gt_quat.z() << gt_quat.w();
   }
   return number_logged;
 }
@@ -254,13 +216,6 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(
 std::optional<size_t> EstimationModuleLogger::logObjectPose(
     FrameId frame_id, const ObjectPoseMap& propogated_poses,
     const std::optional<GroundTruthPacketMap>& gt_packets) {
-  // if gt packet provided by no data exists at this frame
-  if (gt_packets && !gt_packets->exists(frame_id)) {
-    VLOG(100) << "No gt packet at frame id " << frame_id
-              << ". Unable to log object pose errors";
-    return {};
-  }
-
   size_t number_logged = 0;
   // assume object poses get logged in frame order!!!
   for (const auto& [object_id, poses_map] : propogated_poses) {
@@ -421,22 +376,24 @@ bool EstimationModuleLogger::logObjectMotion(
       << "Output evaluation expects motion in F2F representation";
   const gtsam::Pose3& estimate = motion;
 
-  // gt packet provided so only log if gt pose data found
   if (gt_packets) {
     if (gt_packets->exists(frame_id)) {
       const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
+
       // check object exists in this frame
       ObjectPoseGT object_gt_k;
       if (!gt_packet_k.getObject(object_id, object_gt_k)) {
         // if no packet for this object found, continue and do not log
-        return false;
+        // return false;
       } else {
         CHECK(object_gt_k.prev_H_current_world_);
         gt_motion = *object_gt_k.prev_H_current_world_;
       }
     } else {
-      // gt packet has no entry for this frame id so skip
-      return false;
+      // gt packet has no entry for this frame id and the object ground truth is
+      // valid
+      // TODO: for now?
+      // return false;
     }
   }
 
@@ -465,13 +422,14 @@ bool EstimationModuleLogger::logObjectPose(
       ObjectPoseGT object_gt_k;
       if (!gt_packet_k.getObject(object_id, object_gt_k)) {
         // if no packet for this object found, continue and do not log
-        return false;
+        // return false;
       } else {
         gt_L_world_k = object_gt_k.L_world_;
       }
     } else {
       // gt packet has no entry for this frame id so skip
-      return false;
+      // TODO: for now?
+      // return false;
     }
   }
   // we have either skipped logging (if gt provided by the object gt pose was

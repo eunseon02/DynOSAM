@@ -111,8 +111,10 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
 
   static_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
   static_isam2_params_.evaluateNonlinearError = true;
+  // this value is very important for accuracy
   static_isam2_params_.relinearizeThreshold = 0.01;
-  static_isam2_params_.relinearizeSkip = 1;
+  // this value is very important for accuracy
+  // static_isam2_params_.relinearizeSkip = 1;
 
   static_estimator_ = gtsam::ISAM2(static_isam2_params_);
 
@@ -325,40 +327,6 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
         static_formulation_->noiseModels(), X_k_initial);
   }
 
-  // gtsam::Values new_values;
-  // gtsam::NonlinearFactorGraph new_factors;
-
-  // static_formulation_->addSensorPoseValue(T_W_k_frontend, frame_k,
-  // new_values);
-
-  // auto initial_pose_prior =
-  //     static_formulation_->noiseModels().initial_pose_prior;
-  // static_formulation_->addSensorPosePriorFactor(
-  //     T_W_k_frontend, initial_pose_prior, frame_k, new_factors);
-
-  // // for IMU add velocity value and bias
-  // // this will mess with the internal states of the formulation but in
-  // // this mode it shouldnt matter...
-  // gtsam::SharedNoiseModel noise_init_vel_prior =
-  //     gtsam::noiseModel::Isotropic::Sigma(3, 1e-5);
-  // new_factors.emplace_shared<gtsam::PriorFactor<gtsam::Vector3>>(
-  //     gtsam::Symbol('V', frame_k), gtsam::Vector3(0, 0, 0),
-  //     noise_init_vel_prior);
-
-  // gtsam::Vector6 prior_biasSigmas;
-  // prior_biasSigmas.head<3>().setConstant(0.1);
-  // prior_biasSigmas.tail<3>().setConstant(0.01);
-  // // TODO(Toni): Make this noise model a member constant.
-  // gtsam::SharedNoiseModel imu_bias_prior_noise =
-  //     gtsam::noiseModel::Diagonal::Sigmas(prior_biasSigmas);
-  // new_factors.emplace_shared<gtsam::PriorFactor<gtsam::imuBias::ConstantBias>>(
-  //     gtsam::Symbol('b', frame_k), gtsam::imuBias::ConstantBias{},
-  //     imu_bias_prior_noise);
-
-  // new_values.insert(gtsam::Symbol('V', frame_k), gtsam::Vector3{});
-  // new_values.insert(gtsam::Symbol('b', frame_k),
-  //                   gtsam::imuBias::ConstantBias{});
-
   {
     utils::TimingStatsCollector timer(
         "parallel_object_sam.static_estimator.update");
@@ -381,10 +349,6 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
     bool should_calculate_covariance) {
   utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
 
-  // CHECK(input->pim_);
-  // const gtsam::NavState& navstate_k =
-  //     input->pim_->predict(nav_state_, imu_bias_);
-
   const FrameId frame_k = input->getFrameId();
   auto map = static_formulation_->map();
   map->updateObservations(input->collectStaticLandmarkKeypointMeasurements());
@@ -406,16 +370,25 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   static_formulation_->updateStaticObservations(frame_k, new_values,
                                                 new_factors, update_params);
 
-  gtsam::ISAM2Result result;
-  {
-    utils::TimingStatsCollector timer(
-        "parallel_object_sam.static_estimator.update");
-    result = static_estimator_.update(new_factors, new_values);
-  }
+  utils::StatsCollector stats("parallel_object_sam.static_estimator.update");
+  auto tic = utils::Timer::tic();
+  gtsam::ISAM2Result result = static_estimator_.update(new_factors, new_values);
+  auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
+  int64_t milliseconds =
+      std::chrono::duration_cast<std::chrono::milliseconds>(toc).count();
+  stats.AddSample(static_cast<double>(milliseconds));
 
   VLOG(5) << "Finished LC Static update k" << frame_k
           << "  error before: " << result.errorBefore.value_or(NaN)
           << " error after: " << result.errorAfter.value_or(NaN);
+
+  // update results struct for timing data of static estimator
+  ParallelObjectISAM::Result static_result;
+  static_result.isam_result = result;
+  static_result.was_smoother_ok = true;
+  static_result.frame_id = frame_k;
+  static_result.timing = milliseconds;
+  result_map_.insert22(0, static_result.frame_id, static_result);
 
   gtsam::Values optimised_values = static_estimator_.calculateBestEstimate();
   static_formulation_->updateTheta(optimised_values);
@@ -658,6 +631,8 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
       constructOutputPacket(frame_id_k, timestamp_k);
 
   const auto& gt_packets = shared_module_info.getGroundTruthPackets();
+
+  LOG(INFO) << "Has gt packets " << gt_packets.has_value();
 
   logger->logObjectMotion(output->optimized_object_motions, gt_packets);
   logger->logObjectPose(output->optimized_object_poses, gt_packets);

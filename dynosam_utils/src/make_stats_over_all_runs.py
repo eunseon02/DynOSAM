@@ -105,7 +105,7 @@ def plot(results_path, details_list):
         main(results_path, ax, details, title=title)
 
     fig.tight_layout()
-    fig.savefig("/root/results/TRO2025/combined_timing.pdf")
+    # fig.savefig("/root/results/TRO2025/combined_timing.pdf")
 
 def main(results_path:str, ax: plt.Axes, details: dict, title: Optional[str] = None):
     stats_keys = details["keys"]
@@ -246,6 +246,11 @@ REFINEMENT_STATS_KEYS = {"name": "Motion Estimation",
                       }
 
 SLIDING_WINDOW_STATS = {"name": "Sliding",
+                         "log_scale":False,
+                       "keys":{"sliding_window_optimise ": {"label":"SW"}}
+                      }
+
+INCREMENTAL_TIMING = {"name": "ISAM update",
                          "log_scale":False,
                        "keys":{"sliding_window_optimise ": {"label":"SW"}}
                       }

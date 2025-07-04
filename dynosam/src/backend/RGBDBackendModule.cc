@@ -126,11 +126,15 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   noise_models_.landmark_motion_noise->print("Landmark motion noise");
   // CHECK(false);
 
+  //  isam2_params.keyFormatter = DynoLikeKeyFormatter;
+  // isam2_params.enablePartialRelinearizationCheck = true;
+  // isam2_params.evaluateNonlinearError = true;
+
   gtsam::ISAM2Params isam2_params;
   // isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
   // isam2_params.relinearizeSkip = 2;
-  isam2_params.relinearizeThreshold = 0.01;
-  isam2_params.relinearizeSkip = 1;
+  // isam2_params.relinearizeThreshold = 0.01;
+  // isam2_params.relinearizeSkip = 1;
   isam2_params.keyFormatter = DynoLikeKeyFormatter;
   // isam2_params.enablePartialRelinearizationCheck = true;
   isam2_params.evaluateNonlinearError = true;
@@ -265,6 +269,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
       const gtsam::Values values = smoother_->calculateEstimate();
       gtsam::NonlinearFactorGraph nfg;
 
+      // HACK!
+      std::optional<std::pair<FrameId, ObjectId>> failed_on_object = {};
       ApplyFunctionalSymbol afs;
       afs.cameraPose([&nfg, &values](FrameId, const gtsam::Symbol& sym) {
            const gtsam::Key& key = sym;
@@ -277,18 +283,20 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
            nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose,
                                                                 noise);
          })
-          .objectMotion([&nfg, &values](FrameId, ObjectId,
-                                        const gtsam::LabeledSymbol& sym) {
-            const gtsam::Key& key = sym;
-            gtsam::Pose3 pose = values.at<gtsam::Pose3>(key);
-            gtsam::Vector6 sigmas;
-            sigmas.head<3>().setConstant(0.001);  // rotation
-            sigmas.tail<3>().setConstant(0.01);   // translation
-            gtsam::SharedNoiseModel noise =
-                gtsam::noiseModel::Diagonal::Sigmas(sigmas);
-            nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose,
-                                                                 noise);
-          })
+          .objectMotion(
+              [&nfg, &values, &failed_on_object](
+                  FrameId k, ObjectId j, const gtsam::LabeledSymbol& sym) {
+                const gtsam::Key& key = sym;
+                gtsam::Pose3 pose = values.at<gtsam::Pose3>(key);
+                gtsam::Vector6 sigmas;
+                sigmas.head<3>().setConstant(0.001);  // rotation
+                sigmas.tail<3>().setConstant(0.01);   // translation
+                gtsam::SharedNoiseModel noise =
+                    gtsam::noiseModel::Diagonal::Sigmas(sigmas);
+                nfg.emplace_shared<gtsam::PriorFactor<gtsam::Pose3>>(key, pose,
+                                                                     noise);
+                failed_on_object.emplace(std::make_pair(k, j));
+              })
           .
           operator()(var);
 
@@ -315,6 +323,18 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
                       "prior factors were insufficient to keep the system from "
                       "becoming indeterminant.";
         // return false;
+      }
+
+      // BIG HACK FOR HYBRID
+      auto* hybrid_formulation =
+          static_cast<HybridFormulation*>(new_updater_.get());
+
+      if (hybrid_formulation && failed_on_object) {
+        LOG(INFO) << "Is hybrid formulation with failed estimation at k="
+                  << failed_on_object->first
+                  << " j=" << failed_on_object->second;
+        hybrid_formulation->forceNewKeyFrame(failed_on_object->first,
+                                             failed_on_object->second);
       }
 
     } catch (gtsam::ValuesKeyDoesNotExist& e) {
@@ -355,10 +375,24 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
       is_first = false;
     }
 
+    gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+    gtsam::GaussianFactorGraph::shared_ptr gfg =
+        graph.linearize(optimised_values);
+    const auto sparsity_stats =
+        factor_graph_tools::computeHessianSparsityStats(gfg);
+
+    // larger the number the more sparse
+    double zero_elements_ratio = (double)sparsity_stats.nr_zero_elements /
+                                 (double)sparsity_stats.nr_elements;
+
+    const auto [max_clique_size, average_clique_size] =
+        factor_graph_tools::getCliqueSize(*smoother_);
+
     std::fstream file(file_path, std::ios::in | std::ios::out | std::ios::app);
     file.precision(15);
     file << milliseconds << "," << frame_k << "," << optimised_values.size()
-         << "," << smoother_->getFactorsUnsafe().size() << "\n";
+         << "," << graph.size() << "," << zero_elements_ratio << ","
+         << average_clique_size << "," << max_clique_size << "\n";
     file.close();
 
     new_updater_->updateTheta(optimised_values);
@@ -611,9 +645,8 @@ RGBDBackendModule::makeUpdater() {
   FormulationParams formulation_params;
   // TODO: why are we copying params over???
   formulation_params.min_static_observations = base_params_.min_static_obs_;
-  // formulation_params.min_dynamic_observations =
-  // base_params_.min_dynamic_obs_;
-  formulation_params.min_dynamic_observations = 2u;
+  formulation_params.min_dynamic_observations = base_params_.min_dynamic_obs_;
+  // formulation_params.min_dynamic_observations = 2u;
   formulation_params.use_smoothing_factor = base_params_.use_smoothing_factor;
 
   FormulationHooks hooks = createFormulationHooks();

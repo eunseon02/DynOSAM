@@ -185,13 +185,20 @@ class MotionErrorEvaluator(Evaluator):
                                             "tx", "ty", "tz", "qx", "qy", "qz", "qw",
                                             "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
+        self._object_poses_traj: ObjectTrajDict = None
+        self._object_poses_traj_ref: ObjectTrajDict = None
+
+        self._object_motions_traj: ObjectTrajDict = None
+        self._object_motions_traj_ref: ObjectTrajDict = None
 
         # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
-        # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
         self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file, convert_to_world_coordinates=True)
         self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file, convert_to_world_coordinates=True)
 
-        # self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
+        # cache of objects that exist per frame taken from the estimated _object_poses_traj
+        # dictionary of frame ids's to a list of objects in that frame
+        self._objects_at_frame = {}
+        self._calculate_objects_per_frame()
 
 
 
@@ -210,6 +217,17 @@ class MotionErrorEvaluator(Evaluator):
     @property
     def object_motion_traj_ref(self) -> ObjectTrajDict:
         return self._object_motions_traj_ref
+
+    @property
+    def frames(self):
+        return list(self._objects_at_frame.keys())
+
+    def objects_at_frame(self, frame):
+        if frame in self._objects_at_frame:
+            return self._objects_at_frame[frame]
+        return None
+
+
 
 
     def make_object_trajectory(self, object_id: int) -> Optional[tools.ObjectMotionTrajectory]:
@@ -236,7 +254,19 @@ class MotionErrorEvaluator(Evaluator):
         self._process_motion_traj(plot_collection, results)
         self._process_pose_traj(plot_collection, results)
 
-        # self._process_velocity(plot_collection, results)
+
+    def _calculate_objects_per_frame(self):
+        assert self._object_poses_traj is not None
+
+        # still asuming everything is by frame id!
+        for object_id, object_traj in self._object_poses_traj.items():
+            # for each 'timestamp
+            for idx in object_traj.timestamps:
+                idx = int(idx)
+                if idx not in self._objects_at_frame:
+                    self._objects_at_frame[idx] = []
+
+                self._objects_at_frame[idx].append(object_id)
 
 
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):

@@ -20,15 +20,25 @@ nice_colours={
     "vermillion": [213, 94, 0],
     "reddish_purple": [204, 121, 167]}
 
+
+def get_nice_colour(key):
+    if key in nice_colours:
+        return np.array(nice_colours[key]) / 255.0 # for plt range
+    print(f"Warning: nice colour key {key} does not exist. Colour must be one of {list(nice_colours.keys())}")
+    return None
+
 def get_nice_blue():
-    return np.array(nice_colours["blue"]) / 255.0 # for plt range
+    return get_nice_colour("blue")
 
 def get_nice_green():
-    return np.array(nice_colours["bluish_green"]) / 255.0 # for plt range
+    return get_nice_colour("bluish_green")
 
 def get_nice_red():
     # this is not super red (like a purple orange I guess?)
-    return np.array(nice_colours["vermillion"]) / 255.0 # for plt range
+    return get_nice_colour("vermillion")
+
+def get_nice_yellow():
+    return get_nice_colour("yellow")
 
 def prop_cycle() -> List[str]:
     return ["#0072B2", "#E69F00", "#009E73", "#CC79A7",

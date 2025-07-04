@@ -69,8 +69,6 @@ StateQuery<Motion3ReferenceFrame> ParallelObjectISAM::getFrame2FrameMotion(
   StateQuery<Motion3ReferenceFrame> H_W_km1_k =
       accessor_->getObjectMotionReferenceFrame(frame_id, object_id_);
   if (!H_W_km1_k) return H_W_km1_k;
-  // CHECK(H_W_km1_k) << "Failed to get object motion at j=" << object_id_
-  //                  << " k=" << frame_id;
   CHECK(H_W_km1_k->style() == MotionRepresentationStyle::F2F);
   CHECK(H_W_km1_k->origin() == ReferenceFrame::GLOBAL);
   CHECK(H_W_km1_k->to() == frame_id);
@@ -406,13 +404,6 @@ void ParallelObjectISAM::updateStates() {
       pcl::io::savePCDFileASCII(path, object_map_cloud);
     }
   }
-  // else {
-  //   LOG(WARNING) << "Could not update detailed motion results for frame "
-  //                << result_.frame_id << " as smoother status is "
-  //                << std::boolalpha << " " << result_.was_smoother_ok
-  //                << " or detailed results not available "
-  //                << (bool)detailed_results;
-  // }
 
   LOG(INFO) << "Motion change at frames "
             << container_to_string(motions_changed) << " for j=" << object_id_;

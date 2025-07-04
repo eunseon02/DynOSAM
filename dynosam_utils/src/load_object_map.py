@@ -185,8 +185,9 @@ def visualize_spinning_growth(pcd_files, spin_steps=10, total_spin_deg=15, delay
 #     show_ply_with_indirect_lighting("/root/results/DynoSAM/incremental_omd_test/object_map_k119_j2.pcd")
 
 if __name__ == "__main__":
-    directory = "/root/results/DynoSAM/incremental_omd_test/"
-    # directory = "/root/results/Dynosam_ecmr2024/cluster_l1/"
+    # directory = "/root/results/DynoSAM/incremental_omd_test/"
+    # directory = "/root/results/Dynosam_ecmr2024/cluster_l1_map/"
+    directory = "/root/results/Dynosam_ecmr2024/omd_s4u/"
     object_id = "j4"
     pcd_files = load_sorted_object_pcds(directory, object_id)
     visualize_spinning_growth(pcd_files)

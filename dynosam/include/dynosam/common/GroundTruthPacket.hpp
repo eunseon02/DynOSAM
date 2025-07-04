@@ -247,8 +247,18 @@ class GroundTruthInputPacket : public PipelinePayload {
  private:
 };
 
-/// @brief FastMap from frame id to GroundTruthInputPacket
-using GroundTruthPacketMap = gtsam::FastMap<FrameId, GroundTruthInputPacket>;
+/**
+ * @brief FastMap from frame id to GroundTruthInputPacket
+ *
+ */
+class GroundTruthPacketMap
+    : public gtsam::FastMap<FrameId, GroundTruthInputPacket> {
+ public:
+  using Base = gtsam::FastMap<FrameId, GroundTruthInputPacket>;
+  using Base::Base;
+
+  GroundTruthPacketMap() {}
+};
 
 /**
  * @brief Below is the JSON seralize/deseralize functions for all the
