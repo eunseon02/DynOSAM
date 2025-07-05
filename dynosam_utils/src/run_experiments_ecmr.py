@@ -139,8 +139,8 @@ def run_ecmr_experiment_sequences(dataset_path, dataset_name, dataset_loader, *a
 
 
     # run the two batches again but with increemntal mode and additional suffix so we can individual logs!!!
-    run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
-    # run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
+    run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=2", "--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
 def run_viodes():
 
@@ -183,7 +183,7 @@ def run_kitti():
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0005/", "kitti_0005", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0006/", "kitti_0006", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0018/", "kitti_0018", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--updater_suffix=dkp_600")
-    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0020/", "kitti_0020_mem", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0020/", "kitti_0020_mem", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--ending_frame=8")
 
 
 
