@@ -38,6 +38,8 @@
 #include "dynosam/backend/Accessor.hpp"
 #include "dynosam/backend/FactorGraphTools.hpp"
 #include "dynosam/backend/Formulation.hpp"
+#include "dynosam/backend/optimizers/ISAM2Params.hpp"
+#include "dynosam/backend/optimizers/ISAM2UpdateParams.hpp"
 #include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/HybridEstimator.hpp"
 #include "dynosam/backend/rgbd/impl/test_HybridFormulations.hpp"
@@ -79,6 +81,9 @@ DEFINE_bool(init_H_with_identity, true, "For experiments");
 // declared in BackendModule.hpp so it can be used accross multiple backends
 DEFINE_string(updater_suffix, "",
               "Suffix for updater to denote specific experiments");
+
+DEFINE_int32(regular_backend_relinearize_skip, 10,
+             "ISAM2 relinearize skip param for the regular backend");
 
 namespace dyno {
 
@@ -130,19 +135,19 @@ RGBDBackendModule::RGBDBackendModule(const BackendParams& backend_params,
   // isam2_params.enablePartialRelinearizationCheck = true;
   // isam2_params.evaluateNonlinearError = true;
 
-  gtsam::ISAM2Params isam2_params;
+  dyno::ISAM2Params isam2_params;
   // isam2_params.factorization = gtsam::ISAM2Params::Factorization::QR;
   // isam2_params.relinearizeSkip = 2;
-  // isam2_params.relinearizeThreshold = 0.01;
-  // isam2_params.relinearizeSkip = 1;
+  isam2_params.relinearizeThreshold = 0.01;
+  isam2_params.relinearizeSkip = FLAGS_regular_backend_relinearize_skip;
   isam2_params.keyFormatter = DynoLikeKeyFormatter;
   // isam2_params.enablePartialRelinearizationCheck = true;
   isam2_params.evaluateNonlinearError = true;
-  smoother_ = std::make_unique<gtsam::ISAM2>(isam2_params);
-  fixed_lag_smoother_ =
-      std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
-  dynamic_fixed_lag_smoother_ =
-      std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
+  smoother_ = std::make_unique<dyno::ISAM2>(isam2_params);
+  // fixed_lag_smoother_ =
+  //     std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
+  // dynamic_fixed_lag_smoother_ =
+  //     std::make_unique<gtsam::IncrementalFixedLagSmoother>(5, isam2_params);
 
   new_updater_ = std::move(makeUpdater());
   sliding_window_condition_ = std::make_unique<SlidingWindow>(
@@ -179,12 +184,18 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::boostrapSpinImpl(
 
   addInitialStates(input, new_updater_.get(), new_values, new_factors);
 
+  PreUpdateData pre_update_data(frame_k);
+  new_updater_->preUpdate(pre_update_data);
+
   if (callback) {
     callback(new_updater_, frame_k, new_values, new_factors);
   }
 
   smoother_->update(new_factors, new_values);
   sliding_window_opt_->update(new_factors, new_values, frame_k);
+
+  PostUpdateData post_update_data(frame_k);
+  new_updater_->postUpdate(post_update_data);
   // smoother_->update(new_factors, new_values);
   // updateNavStateFromFormulation(frame_k, new_updater_.get());
 
@@ -206,35 +217,30 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   gtsam::NonlinearFactorGraph new_factors;
 
   addStates(input, new_updater_.get(), new_values, new_factors);
-  // gtsam::Pose3 T_world_cam_k_frontend;
-  // updateMap(T_world_cam_k_frontend, input);
-
-  // gtsam::Values new_values;
-  // gtsam::NonlinearFactorGraph new_factors;
-
-  // new_updater_->addOdometry(frame_k, T_world_cam_k_frontend, new_values,
-  //                           new_factors);
+  new_updater_->preUpdate(PreUpdateData(frame_k));
 
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
   update_params.do_backtrack =
       false;  // apparently this is v important for making the results == ICRA
 
+  PostUpdateData post_update_data(frame_k);
   {
     LOG(INFO) << "Starting updateStaticObservations";
     utils::TimingStatsCollector timer("backend.update_static_obs");
-    new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
-                                           update_params);
+    post_update_data.static_update_result =
+        new_updater_->updateStaticObservations(frame_k, new_values, new_factors,
+                                               update_params);
   }
 
-  gtsam::Values new_dynamic_values;
-  gtsam::NonlinearFactorGraph new_dynamic_factors;
-
+  // gtsam::Values new_dynamic_values;
+  // gtsam::NonlinearFactorGraph new_dynamic_factors;
   {
     LOG(INFO) << "Starting updateDynamicObservations";
     utils::TimingStatsCollector timer("backend.update_dynamic_obs");
-    new_updater_->updateDynamicObservations(frame_k, new_values, new_factors,
-                                            update_params);
+    post_update_data.dynamic_update_result =
+        new_updater_->updateDynamicObservations(frame_k, new_values,
+                                                new_factors, update_params);
   }
 
   if (callback) {
@@ -254,9 +260,9 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
 
     // / This is not doing a full deep copy: it is keeping same shared_ptrs for
     // factors but copying the isam result.
-    ISAM2 smoother_backup(*smoother_);
+    dyno::ISAM2 smoother_backup(*smoother_);
 
-    gtsam::ISAM2Result result;
+    dyno::ISAM2Result result;
     try {
       result = smoother_->update(new_factors, new_values);
       smoother_->update();
@@ -351,48 +357,153 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
               << " error after " << result.getErrorAfter();
     gtsam::Values optimised_values = smoother_->calculateEstimate();
 
+    auto file_name_maker = [&](const std::string& name,
+                               const std::string& file_type =
+                                   ".csv") -> std::string {
+      std::string file_name = new_updater_->getFullyQualifiedName() + name;
+      const std::string suffix = FLAGS_updater_suffix;
+      if (!suffix.empty()) {
+        file_name += ("_" + suffix);
+      }
+      file_name += file_type;
+      return getOutputFilePath(file_name);
+    };
+
+    gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
+    // gtsam::GaussianFactorGraph::shared_ptr gfg =
+    //     graph.linearize(optimised_values);
+    // const auto sparsity_stats =
+    //     factor_graph_tools::computeCholeskySparsityStats(gfg);
+
+    // size_t nnz_graph = sparsity_stats.nnz_elements;
+    // size_t nnz_bayes = smoother_->roots().at(0)->calculate_nnz();
+    size_t nnz_graph = 0;
+    size_t nnz_bayes = 0;
+
+    const auto [max_clique_size, average_clique_size] =
+        factor_graph_tools::getCliqueSize(*smoother_);
+
+    // {
+    //   const std::string isam2_tree_file = file_name_maker("_isam2_tree_k" +
+    //   std::to_string(frame_k)); std::fstream iasm2_file(isam2_tree_file,
+    //   std::ios::in | std::ios::out | std::ios::trunc);
+    //   factor_graph_tools::travsersal::depthFirstTraversalEliminiationOrder<dyno::ISAM2Clique>(
+    //     *smoother_,
+    //     [&](const boost::shared_ptr<dyno::ISAM2Clique>& clique) {
+    //       auto conditional = clique->conditional();
+    //       auto numFrontals = conditional->nrFrontals();
+    //       auto numParents = conditional->nrParents();
+
+    //       size_t f_dym_lmk = 0, f_static_lmk = 0, f_motion = 0, f_pose = 0;
+    //       size_t p_dym_lmk = 0, p_static_lmk = 0, p_motion = 0, p_pose = 0;
+
+    //       ApplyFunctionalSymbol afs_fontal;
+    //       afs_fontal.cameraPose([&](FrameId, const gtsam::Symbol& sym) {
+    //          f_pose++;
+    //         })
+    //         .objectMotion([&](FrameId k, ObjectId j, const
+    //         gtsam::LabeledSymbol& sym) {
+    //           f_motion++;
+    //         })
+    //         .
+    //         staticLandmark([&](TrackletId, const gtsam::Symbol& sym) {
+    //           f_static_lmk++;
+    //         })
+    //         .dynamicLandmark([&](TrackletId, const DynamicPointSymbol& sym) {
+    //           f_dym_lmk++;
+    //         });
+
+    //       // it is FACTOR::const_iterator
+    //       for (auto it = conditional->beginFrontals();
+    //           it != conditional->endFrontals(); it++) {
+    //         gtsam::Key key = *it;
+    //         afs_fontal(key);
+    //       }
+
+    //       ApplyFunctionalSymbol afs_sep;
+    //       afs_sep.cameraPose([&](FrameId, const gtsam::Symbol& sym) {
+    //          p_pose++;
+    //         })
+    //         .objectMotion([&](FrameId k, ObjectId j, const
+    //         gtsam::LabeledSymbol& sym) {
+    //           p_motion++;
+    //         })
+    //         .
+    //         staticLandmark([&](TrackletId, const gtsam::Symbol& sym) {
+    //           p_static_lmk++;
+    //         })
+    //         .dynamicLandmark([&](TrackletId, const DynamicPointSymbol& sym) {
+    //           p_dym_lmk++;
+    //         });
+
+    //       // it is FACTOR::const_iterator
+    //       for (auto it = conditional->beginParents();
+    //           it != conditional->endParents(); it++) {
+    //         gtsam::Key key = *it;
+    //         afs_sep(key);
+    //       }
+
+    //        iasm2_file << "numFrontals=" << numFrontals << ", numParents=" <<
+    //        numParents
+    //                   << ", f_dym_lmk=" <<  f_dym_lmk << ", f_static_lmk=" <<
+    //                   f_static_lmk
+    //                   << ", f_motion= " << f_motion << ", f_pose=" << f_pose
+    //                   << ", p_dym_lmk=" <<  p_dym_lmk << ", p_static_lmk=" <<
+    //                   p_static_lmk
+    //                   << ", p_motion= " << p_motion << ", p_pose=" << p_pose
+    //                   << "\n";
+    //     }
+    //   );
+    //   iasm2_file.close();
+    // }
+
     // TODO: currently for ECMR we write at every frame becuase eventually will
     // run out of memory and if we dont log
     //  at each frame we wont get any results!!!
-    std::string file_name =
-        new_updater_->getFullyQualifiedName() + "_isam2_timing";
-    const std::string suffix = FLAGS_updater_suffix;
-    if (!suffix.empty()) {
-      file_name += ("_" + suffix);
-    }
-    file_name += ".csv";
-    const std::string file_path = getOutputFilePath(file_name);
+    const std::string isam2_log_file = file_name_maker("_isam2_timing");
 
     static bool is_first = true;
 
     if (is_first) {
       // clear the file first
-      std::ofstream clear_file(file_path, std::ios::out | std::ios::trunc);
+      std::ofstream clear_file(isam2_log_file, std::ios::out | std::ios::trunc);
       if (!clear_file.is_open()) {
-        LOG(FATAL) << "Error clearing file: " << file_path;
+        LOG(FATAL) << "Error clearing file: " << isam2_log_file;
       }
       clear_file.close();  // Close the stream to ensure truncation is complete
       is_first = false;
+
+      std::ofstream header_file(isam2_log_file,
+                                std::ios::out | std::ios::trunc);
+      if (!header_file.is_open()) {
+        LOG(FATAL) << "Error writing file header file: " << isam2_log_file;
+      }
+
+      header_file
+          << "timing [ms], frame id, num opt values, num factors, nnz (graph), "
+             "nnz (isam), avg. clique size, max clique size, num variables "
+             "re-elinm, num variables relinearized, num new, num involved, num "
+             "(only) relin, num fluid, is batch \n",
+
+          header_file
+              .close();  // Close the stream to ensure truncation is complete
+      is_first = false;
     }
 
-    gtsam::NonlinearFactorGraph graph = smoother_->getFactorsUnsafe();
-    gtsam::GaussianFactorGraph::shared_ptr gfg =
-        graph.linearize(optimised_values);
-    const auto sparsity_stats =
-        factor_graph_tools::computeHessianSparsityStats(gfg);
-
-    // larger the number the more sparse
-    double zero_elements_ratio = (double)sparsity_stats.nr_zero_elements /
-                                 (double)sparsity_stats.nr_elements;
-
-    const auto [max_clique_size, average_clique_size] =
-        factor_graph_tools::getCliqueSize(*smoother_);
-
-    std::fstream file(file_path, std::ios::in | std::ios::out | std::ios::app);
+    std::fstream file(isam2_log_file,
+                      std::ios::in | std::ios::out | std::ios::app);
     file.precision(15);
     file << milliseconds << "," << frame_k << "," << optimised_values.size()
-         << "," << graph.size() << "," << zero_elements_ratio << ","
-         << average_clique_size << "," << max_clique_size << "\n";
+         << "," << graph.size() << "," << nnz_graph << "," << nnz_bayes << ","
+         << average_clique_size << "," << max_clique_size <<
+        // number variables involved in the bayes tree (ie effected because they
+        // are in cliques with marked variables)
+        "," << result.getVariablesReeliminated() <<
+        // number variables that are marked
+        "," << result.getVariablesRelinearized() << "," << result.newVariables
+         << "," << result.involvedVariables << ","
+         << result.onlyRelinearizedVariables << "," << result.fluidVariables
+         << "," << result.isBatch << "\n";
     file.close();
 
     new_updater_->updateTheta(optimised_values);
@@ -459,6 +570,8 @@ RGBDBackendModule::SpinReturn RGBDBackendModule::nominalSpinImpl(
   BackendMetaData backend_info = createBackendMetadata();
   new_updater_->accessorFromTheta()->postUpdateCallback(
       backend_info);  // force update every time (slow! and just for testing)
+
+  new_updater_->postUpdate(post_update_data);
 
   BackendOutputPacket::Ptr backend_output =
       constructOutputPacket(frame_k, timestamp);
@@ -662,8 +775,8 @@ RGBDBackendModule::makeUpdater() {
                                                   noise_models_, hooks);
   } else if (updater_type_ == RGBDFormulationType::HYBRID) {
     LOG(INFO) << "Using HYBRID";
-    return std::make_unique<HybridFormulation>(formulation_params, getMap(),
-                                               noise_models_, hooks);
+    return std::make_unique<RegularHybridFormulation>(
+        formulation_params, getMap(), noise_models_, hooks);
   } else if (updater_type_ == RGBDFormulationType::TESTING_HYBRID_SD) {
     LOG(INFO) << "Using Hybrid Structureless Decoupled. Warning this is a "
                  "testing only formulation!";

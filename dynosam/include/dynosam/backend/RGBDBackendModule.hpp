@@ -40,6 +40,7 @@
 #include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
 #include "dynosam/backend/VisionImuBackendModule.hpp"
+#include "dynosam/backend/optimizers/ISAM2.hpp"
 #include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/WorldMotionEstimator.hpp"
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
@@ -48,6 +49,7 @@
 
 namespace dyno {
 
+// TODO: change name to RegularBackendModule...
 class RGBDBackendModule
     : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
@@ -200,7 +202,7 @@ class RGBDBackendModule
   // logger here!!
   BackendLogger::UniquePtr logger_{nullptr};
   DebugInfo debug_info_;
-  std::unique_ptr<gtsam::ISAM2> smoother_;
+  std::unique_ptr<dyno::ISAM2> smoother_;
   std::unique_ptr<gtsam::IncrementalFixedLagSmoother> fixed_lag_smoother_;
   std::unique_ptr<gtsam::IncrementalFixedLagSmoother>
       dynamic_fixed_lag_smoother_;

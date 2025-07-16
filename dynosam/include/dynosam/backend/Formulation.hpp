@@ -66,6 +66,7 @@ struct UpdateObservationResult {
   // struct IncrementalDetail {
 
   // };
+  UpdateObservationResult() {}
 
   UpdateObservationResult(const UpdateObservationParams& update_params) {
     if (update_params.enable_debug_info) {
@@ -139,6 +140,24 @@ struct ObjectUpdateContext {
 
 // forward declare
 class BackendParams;
+
+// TODO: comments
+struct PreUpdateData {
+  FrameId frame_id;
+
+  PreUpdateData() {}
+  PreUpdateData(FrameId _frame_id) : frame_id(_frame_id) {}
+};
+
+// TODO: comments
+struct PostUpdateData {
+  FrameId frame_id;
+  UpdateObservationResult dynamic_update_result;
+  UpdateObservationResult static_update_result;
+
+  PostUpdateData() {}
+  PostUpdateData(FrameId _frame_id) : frame_id(_frame_id) {}
+};
 
 // TODO: copy so many of these params from backendparams, why not just use the
 // same one?
@@ -539,7 +558,11 @@ class Formulation {
    */
   void logBackendFromMap(const BackendMetaData& backend_info);
 
-  // virtual void
+  // TODO: comments etc...
+  // called after map is updated but before value/factor construction
+  virtual void preUpdate(const PreUpdateData& data){};
+  // after graph construction and optimization!!
+  virtual void postUpdate(const PostUpdateData& data){};
 
  protected:
   gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;

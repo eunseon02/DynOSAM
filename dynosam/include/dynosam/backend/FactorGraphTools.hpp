@@ -307,17 +307,33 @@ std::pair<size_t, double> getCliqueSize(const gtsam::BayesTree<CLIQUE>& isam2) {
 
 struct SparsityStats {
   gtsam::Matrix matrix;
+  //! Number of zero elements
   size_t nr_zero_elements{0};
+  //! Number total elements in the matrix (rows * cols)
   size_t nr_elements{0};
+  //! Number of non-zero elements
+  size_t nnz_elements{0};
 
   SparsityStats(){};
-  SparsityStats(const gtsam::Matrix& M)
-      : matrix(M), nr_zero_elements(0), nr_elements(0) {
+
+  /**
+   * @brief Construct details from a matrix.
+   *
+   * Stat values are set upon construction
+   *
+   * @tparam Derived
+   * @param M
+   */
+  template <typename Derived>
+  SparsityStats(const Eigen::MatrixBase<Derived>& M)
+      : matrix(M.template cast<double>()), nr_zero_elements(0), nr_elements(0) {
     nr_elements = M.rows() * M.cols();
     for (int i = 0; i < M.rows(); ++i) {
       for (int j = 0; j < M.cols(); ++j) {
         if (std::fabs(M(i, j)) < 1e-15) {
-          nr_zero_elements += 1;
+          nr_zero_elements++;
+        } else {
+          nnz_elements++;
         }
       }
     }
@@ -332,6 +348,10 @@ struct SparsityStats {
     gtsam::save(matrix, "sparse_matrix", file_path);
   }
 };
+
+SparsityStats computeCholeskySparsityStats(
+    gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,
+    const std::optional<gtsam::Ordering>& ordering = {});
 
 SparsityStats computeHessianSparsityStats(
     gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,

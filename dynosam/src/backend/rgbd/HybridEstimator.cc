@@ -442,6 +442,8 @@ bool HybridAccessor::getDynamicLandmarkImpl(
   return getDynamicLandmarkImpl(frame_id, tracklet_id, query);
 }
 
+// this needs to happen (mostly) before factor graph construction to take
+// effect!!
 std::pair<FrameId, gtsam::Pose3> HybridFormulation::forceNewKeyFrame(
     FrameId frame_id, ObjectId object_id) {
   LOG(INFO) << "Starting new range of object k=" << frame_id
@@ -472,7 +474,6 @@ std::pair<FrameId, gtsam::Pose3> HybridFormulation::forceNewKeyFrame(
 // TODO: no keyframing
 bool HybridFormulation::hasObjectKeyFrame(ObjectId object_id,
                                           FrameId frame_id) const {
-  // return L0_.exists(object_id);
   return static_cast<bool>(key_frame_data_.find(object_id, frame_id));
 }
 std::pair<FrameId, gtsam::Pose3> HybridFormulation::getObjectKeyFrame(
@@ -545,11 +546,6 @@ void HybridFormulation::dynamicPointUpdateCallback(
       frame_node_k->makeObjectMotionKey(context.getObjectId());
   const gtsam::Key object_motion_key_k_1 =
       frame_node_k_1->makeObjectMotionKey(context.getObjectId());
-
-  // LOG(INFO) << "Dynamic point update context tracklet " <<
-  // context.getTrackletId() << " object id " << context.getObjectId() << " "
-  //   << DynoLikeKeyFormatter(object_motion_key_k_1) << " " <<
-  //   DynoLikeKeyFormatter(object_motion_key_k);
 
   gtsam::Pose3 L_e;
   FrameId s0;
@@ -982,6 +978,63 @@ gtsam::Pose3 HybridFormulation::calculateObjectCentroid(
   gtsam::Point3 translation = pclPointToGtsam(centroid);
   gtsam::Pose3 center(gtsam::Rot3::Identity(), X_world * translation);
   return center;
+}
+
+void RegularHybridFormulation::preUpdate(const PreUpdateData& data) {
+  // get objects seen in this frame from the map
+  const typename Map::Ptr map = this->map();
+  const auto frame_id_k = data.frame_id;
+  const auto frame_node = map->getFrame(frame_id_k);
+  CHECK(frame_node) << "Frame node null at k=" << data.frame_id;
+
+  for (const auto& obj_node : frame_node->objects_seen) {
+    ObjectId obj_id = obj_node->getId();
+    // we have seen this object before
+    if (objects_update_data_.exists(obj_id)) {
+      const ObjectUpdateData& update_data = objects_update_data_.at(obj_id);
+
+      // first appeared in this frame
+      bool is_object_new = obj_node->getFirstSeenFrame() == frame_id_k;
+      FrameId last_update_frame = update_data.frame_id;
+
+      // duplicate logic from ParallelBackend!
+      if (!is_object_new && (frame_id_k > 0) &&
+          (last_update_frame < (frame_id_k - 1u))) {
+        VLOG(5)
+            << "Only update k=" << frame_id_k << " j= " << obj_id
+            << " as object is not new but has reappeared. Previous update was "
+            << last_update_frame << ". Making keyframe";
+
+        this->forceNewKeyFrame(frame_id_k, obj_id);
+      }
+    }
+  }
+}
+
+// TODO: we should actually get this information from the frontend (ie object
+// keyframe!!!) the logic is then build into the formulation itself via the same
+// calls (post/pre) but then the parallel has no need for additional logic and
+// we dont have to have independant logic to decide if a new keyframe should be
+// formed!!
+void RegularHybridFormulation::postUpdate(const PostUpdateData& data) {
+  const auto& affected_objects =
+      data.dynamic_update_result.objects_affected_per_frame;
+
+  // Jesse: I guess seen frames could be size > 1 but it SHOULD only matter if
+  // its seen in the current frame
+  for (const auto& [object_id, seen_frames] : affected_objects) {
+    CHECK(seen_frames.find(data.frame_id) != seen_frames.end());
+
+    if (!objects_update_data_.exists(object_id)) {
+      ObjectUpdateData oud;
+      oud.count = 1;
+      objects_update_data_.insert2(object_id, oud);
+    } else {
+      auto& oud = objects_update_data_.at(object_id);
+      oud.frame_id = data.frame_id;
+      oud.count++;
+    }
+  }
 }
 
 }  // namespace dyno

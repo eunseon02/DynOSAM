@@ -209,7 +209,7 @@ def load_dynosam_node(context, *args, **kwargs):
             ("dataprovider/image/mask", motion_mask_cam_topic_config),
             ("dataprovider/image/flow", optical_flow_cam_topic_config)
         ],
-        prefix='valgrind --tool=massif --massif-out-file=/tmp/massif.out',
+        # prefix='valgrind --tool=massif --massif-out-file=/tmp/massif.out',
         arguments=arguments,
         **node_kwargs
     )

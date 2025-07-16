@@ -84,6 +84,23 @@ void addSmartProjectionMeasurement(
   smart_factor->add(measurement, CameraPoseSymbol(frame_id));
 }
 
+SparsityStats computeCholeskySparsityStats(
+    gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,
+    const std::optional<gtsam::Ordering>& ordering) {
+  gtsam::Ordering order;
+  if (ordering) {
+    order = *ordering;
+  } else {
+    order = gtsam::Ordering::Colamd(*gaussian_fg);
+  }
+
+  auto [conditional, joint_factor] =
+      gtsam::EliminateCholesky(*gaussian_fg, order);
+
+  const gtsam::VerticalBlockMatrix::constBlock R = conditional->R();
+  return SparsityStats(R);
+}
+
 SparsityStats computeHessianSparsityStats(
     gtsam::GaussianFactorGraph::shared_ptr gaussian_fg,
     const std::optional<gtsam::Ordering>& ordering) {

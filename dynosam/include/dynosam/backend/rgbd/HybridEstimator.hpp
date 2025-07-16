@@ -795,6 +795,9 @@ using KeyFrameRange = KeyFrameData::FrameRangeT;
  *
  */
 struct SharedHybridFormulationData {
+  //! Maps an object j with an embedded frame (gtsam::Pose3) for a range of
+  //! timesteps k. Each embedded frame L_e is defined such that the range is e
+  //! to e + N.
   const KeyFrameData* key_frame_data;
   //! Tracklet Id to the embedded frame (e) the point is represented in (ie.
   //! which timestep, k)
@@ -962,6 +965,38 @@ class HybridFormulation : public Formulation<Map3d2d>,
 
  private:
   KeyFrameData key_frame_data_;
+};
+
+// additional functionality when solved with the Regular Backend!
+class RegularHybridFormulation : public HybridFormulation {
+ public:
+  using Base = HybridFormulation;
+
+  RegularHybridFormulation(const FormulationParams& params,
+                           typename Map::Ptr map,
+                           const NoiseModels& noise_models,
+                           const FormulationHooks& hooks)
+      : Base(params, map, noise_models, hooks) {}
+
+  // using previous (postUdpate) check when the last time an object was updated
+  // (in the estimator) if more than 1 frame ago, create new keyframe - this
+  // will then take affect as this function is called prior to the graph
+  // construction!
+  void preUpdate(const PreUpdateData& data) override;
+  // use post update information to set internal data about when objects were
+  // last udpated!!
+  void postUpdate(const PostUpdateData& data) override;
+
+ protected:
+  struct ObjectUpdateData {
+    FrameId frame_id{0};  //! Last time the object was updted in the estimator
+    size_t count{0};  //! Number of (total) times the object has been updated.
+                      //! If 1, then new
+
+    inline bool isNew() const { return count == 1u; }
+  };
+  // The last frame
+  gtsam::FastMap<ObjectId, ObjectUpdateData> objects_update_data_;
 };
 
 }  // namespace dyno

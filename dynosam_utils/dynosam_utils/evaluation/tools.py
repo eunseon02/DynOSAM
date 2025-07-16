@@ -93,15 +93,15 @@ def load_pose_from_row(row) -> Tuple[np.ndarray, np.ndarray]:
 
     return T_est, T_ref
 
+# opencv coordiante frame to robotic convention
 def camera_coordinate_to_world() -> np.ndarray:
     # we construct the transform that takes somethign in the robot convention
     # to the opencv convention and then apply the inverse
-    return evo_lie_algebra.se3_inverse(se3(
-        np.array([[1.0, 0.0, 0.0],
-                  [0.0, 0.0, -1.0],
-                  [0.0, 1.0, 0.0]]),
+    return se3(
+        np.array([[0.0, 0.0, 1.0],
+                  [-1.0, 0.0, 0.0],
+                  [0.0, -1.0, 0.0]]),
         np.array([0.0, 0.0, 0.0]))
-    )
 
 def transform_camera_trajectory_to_world(traj):
     from copy import deepcopy

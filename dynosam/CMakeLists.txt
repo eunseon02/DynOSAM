@@ -135,6 +135,12 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/ParallelObjectISAM.cc
   src/backend/ParallelRGBDBackendModule.cc
   src/backend/optimizers/SlidingWindowOptimization.cc
+
+  src/backend/optimizers/ISAM2-impl.cc
+  src/backend/optimizers/ISAM2.cc
+  src/backend/optimizers/ISAM2Clique.cc
+  src/backend/optimizers/ISAM2Params.cc
+
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
 
@@ -193,14 +199,13 @@ target_link_libraries(${PROJECT_NAME}
   gflags
   gtsam
   gtsam_unstable
-  # gtsamDebug
-  # gtsam_unstableDebug
   Boost::boost
   png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
   TBB::tbb
+  TBB::tbbmalloc
   # PRIVATE
 )
 
@@ -216,6 +221,7 @@ ament_export_libraries(${PROJECT_NAME}
   ${OpenCV_LIBRARIES}
   png
   TBB::tbb
+  TBB::tbbmalloc
 )
 
 

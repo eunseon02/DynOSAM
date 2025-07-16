@@ -8,24 +8,24 @@
 # --constant_object_motion_rotation_sigma=0.1
 # --constant_object_motion_translation_sigma=0.01
 
---constant_object_motion_rotation_sigma=0.4
---constant_object_motion_translation_sigma=0.5
+--constant_object_motion_rotation_sigma=0.01
+--constant_object_motion_translation_sigma=1.0
 
 
 
 # --motion_ternary_factor_noise_sigma=0.00000000001
---motion_ternary_factor_noise_sigma=0.01
+--motion_ternary_factor_noise_sigma=0.001
 
 # --odometry_rotation_sigma=0.02
 # --odometry_translation_sigma=0.3
 
---odometry_rotation_sigma=0.05
---odometry_translation_sigma=0.01
+--odometry_rotation_sigma=0.005
+--odometry_translation_sigma=0.001
 
 
 
 --static_point_noise_sigma=0.01
---dynamic_point_noise_sigma=0.1
+--dynamic_point_noise_sigma=0.02
 # --dynamic_point_noise_sigma=0.00006
 
 --opt_window_size=40
@@ -40,6 +40,7 @@
 
 
 # for ISAM2 params using ParallelObjectSAM
+--use_marginal_covariance=false
 --use_relinearize_threshold_as_double=true
 --relinearize_threshold=0.1
 --X_trans_relinearize_threshold=20.0

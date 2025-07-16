@@ -64,6 +64,11 @@ DEFINE_int32(relinearize_skip, 1, "Relinearize skip for ISAM2 params");
 DEFINE_int32(num_dynamic_optimize, 1,
              "Number of update steps to run for the object ISAM estimators");
 
+DEFINE_bool(use_marginal_covariance, true,
+            "If we should actually use the marginal covariance of X to "
+            "condition the camera pose (as in the paper). "
+            "Turning off is more computationall performant");
+
 namespace dyno {
 
 ParallelRGBDBackendModule::ParallelRGBDBackendModule(
@@ -114,9 +119,12 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   // this value is very important for accuracy
   static_isam2_params_.relinearizeThreshold = 0.01;
   // this value is very important for accuracy
-  // static_isam2_params_.relinearizeSkip = 1;
+  static_isam2_params_.relinearizeSkip = 1;
 
-  static_estimator_ = gtsam::ISAM2(static_isam2_params_);
+  // sliding window of 20 frames...
+  static_estimator_ =
+      gtsam::IncrementalFixedLagSmoother(20u, static_isam2_params_);
+  // static_estimator_ = gtsam::ISAM2(static_isam2_params_);
 
   FormulationHooks hooks;
   hooks.ground_truth_packets_request =
@@ -310,6 +318,10 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
+  std::map<gtsam::Key, double> timestamps;
+  double curr_id = static_cast<double>(this->spin_state_.iteration);
+  timestamps[CameraPoseSymbol(frame_k)] = curr_id;
+
   // update formulation with initial states
   gtsam::NavState nav_state;
   if (input->pim_) {
@@ -319,6 +331,9 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
         static_formulation_->noiseModels(),
         gtsam::NavState(X_k_initial, gtsam::Vector3(0, 0, 0)),
         gtsam::imuBias::ConstantBias{});
+
+    timestamps[gtsam::Symbol(kImuBiasSymbolChar, frame_k)] = curr_id;
+    timestamps[gtsam::Symbol(kVelocitySymbolChar, frame_k)] = curr_id;
 
   } else {
     LOG(INFO) << "Initialising backend with VO only states!";
@@ -330,7 +345,7 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
   {
     utils::TimingStatsCollector timer(
         "parallel_object_sam.static_estimator.update");
-    static_estimator_.update(new_factors, new_values);
+    static_estimator_.update(new_factors, new_values, timestamps);
   }
 
   const auto& initial_pose_prior =
@@ -356,12 +371,21 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
+  std::map<gtsam::Key, double> timestamps;
+  double curr_id = static_cast<double>(this->spin_state_.iteration);
+  timestamps[CameraPoseSymbol(frame_k)] = curr_id;
+
   const gtsam::NavState predicted_nav_state = this->addVisualInertialStates(
       frame_k, static_formulation_.get(), new_values, new_factors,
       noise_models_, input->T_k_1_k_, input->pim_);
   // we dont have an uncertainty from the frontend
   map->updateSensorPoseMeasurement(
       frame_k, Pose3Measurement(predicted_nav_state.pose()));
+
+  if (this->isImuInitalized()) {
+    timestamps[gtsam::Symbol(kImuBiasSymbolChar, frame_k)] = curr_id;
+    timestamps[gtsam::Symbol(kVelocitySymbolChar, frame_k)] = curr_id;
+  }
 
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
@@ -372,11 +396,13 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
 
   utils::StatsCollector stats("parallel_object_sam.static_estimator.update");
   auto tic = utils::Timer::tic();
-  gtsam::ISAM2Result result = static_estimator_.update(new_factors, new_values);
+  static_estimator_.update(new_factors, new_values, timestamps);
   auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
   int64_t milliseconds =
       std::chrono::duration_cast<std::chrono::milliseconds>(toc).count();
   stats.AddSample(static_cast<double>(milliseconds));
+
+  gtsam::ISAM2Result result = static_estimator_.getISAM2Result();
 
   VLOG(5) << "Finished LC Static update k" << frame_k
           << "  error before: " << result.errorBefore.value_or(NaN)
@@ -390,7 +416,7 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   static_result.timing = milliseconds;
   result_map_.insert22(0, static_result.frame_id, static_result);
 
-  gtsam::Values optimised_values = static_estimator_.calculateBestEstimate();
+  gtsam::Values optimised_values = static_estimator_.calculateEstimate();
   static_formulation_->updateTheta(optimised_values);
 
   const gtsam::NavState& updated_nav_state =
@@ -405,15 +431,27 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   LOG(INFO) << "Bias after estimation " << imu_bias_;
 
   if (should_calculate_covariance) {
-    gtsam::Matrix66 X_w_k_cov;
-    utils::TimingStatsCollector timer(
-        "parallel_object_sam.camera_pose_cov_calc");
-    gtsam::Marginals marginals(static_estimator_.getFactorsUnsafe(),
-                               optimised_values,
-                               gtsam::Marginals::Factorization::CHOLESKY);
-    X_w_k_cov = marginals.marginalCovariance(X_w_k_opt_query.key());
-    return Pose3Measurement(X_w_k_opt_query.get(), X_w_k_cov);
-
+    if (FLAGS_use_marginal_covariance) {
+      gtsam::Matrix66 X_w_k_cov;
+      utils::TimingStatsCollector timer(
+          "parallel_object_sam.camera_pose_cov_calc");
+      gtsam::Marginals marginals(static_estimator_.getFactors(),
+                                 optimised_values,
+                                 gtsam::Marginals::Factorization::CHOLESKY);
+      X_w_k_cov = marginals.marginalCovariance(X_w_k_opt_query.key());
+      return Pose3Measurement(X_w_k_opt_query.get(), X_w_k_cov);
+    } else {
+      // arbitrary covariance to fix the camera pose in each DOFG
+      const static double rotation_std = 0.01, translation_std = 0.1;
+      gtsam::Matrix66 X_w_k_cov =
+          (Eigen::Matrix<double, 6, 1>() << rotation_std * rotation_std,
+           rotation_std * rotation_std, rotation_std * rotation_std,
+           translation_std * translation_std, translation_std * translation_std,
+           translation_std * translation_std)
+              .finished()
+              .asDiagonal();
+      return Pose3Measurement(X_w_k_opt_query.get(), X_w_k_cov);
+    }
   } else {
     return Pose3Measurement(X_w_k_opt_query.get());
   }
@@ -676,14 +714,15 @@ void ParallelRGBDBackendModule::logGraphs() {
   }
 
   // static
-  static_estimator_.getFactorsUnsafe().saveGraph(
+  static_estimator_.getFactors().saveGraph(
       dyno::getOutputFilePath("parallel_object_sam_k" +
                               std::to_string(frame_id_k) + "_static.dot"),
       dyno::DynoLikeKeyFormatter);
 
-  if (!static_estimator_.empty()) {
+  const auto& smoother = static_estimator_.getISAM2();
+  if (!smoother.empty()) {
     dyno::factor_graph_tools::saveBayesTree(
-        static_estimator_,
+        smoother,
         dyno::getOutputFilePath("parallel_object_sam_btree_k" +
                                 std::to_string(frame_id_k) + "_static.dot"),
         dyno::DynoLikeKeyFormatter);

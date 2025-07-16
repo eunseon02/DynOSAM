@@ -401,7 +401,7 @@ def plot_ame_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, mot
     plot_per_frame_error(fig, ape_E, label)
 
 # needs to be RPE so we can check for pose
-def plot_per_frame_error(fig: Figure, errors:  dynosam_metrics.RPE , label:str):
+def plot_per_frame_error(fig: Figure, errors: dynosam_metrics.RPE , label:str, frames = None):
 
     if len(errors.E) == 0:
         print(f"Cannot plot per frame error as metric {errors} is empty!")
@@ -436,14 +436,19 @@ def plot_per_frame_error(fig: Figure, errors:  dynosam_metrics.RPE , label:str):
     trans_error_axes.margins(0.001)
     rot_error_axes.margins(0.001)
 
+    if frames is not None:
+        assert len(frames) == len(errors.E)
+    else:
+        frames = np.arange(1, len(errors.E) + 1)
 
-    rot_error_axes.plot(rot_error[:,0], label="rx", color=get_nice_red())
-    rot_error_axes.plot(rot_error[:,1], label="ry", color=get_nice_green())
-    rot_error_axes.plot(rot_error[:,2], label="rz", color=get_nice_blue())
 
-    trans_error_axes.plot(trans_error[:,0], label="tx", color=get_nice_red())
-    trans_error_axes.plot(trans_error[:,1], label="ty", color=get_nice_green())
-    trans_error_axes.plot(trans_error[:,2], label="tz", color=get_nice_blue())
+    rot_error_axes.plot(frames, rot_error[:,0], label="rx", color=get_nice_red())
+    rot_error_axes.plot(frames, rot_error[:,1], label="ry", color=get_nice_green())
+    rot_error_axes.plot(frames, rot_error[:,2], label="rz", color=get_nice_blue())
+
+    trans_error_axes.plot(frames, trans_error[:,0], label="tx", color=get_nice_red())
+    trans_error_axes.plot(frames, trans_error[:,1], label="ty", color=get_nice_green())
+    trans_error_axes.plot(frames, trans_error[:,2], label="tz", color=get_nice_blue())
 
     trans_error_axes.set_xlabel("Frame Index [-]")
     rot_error_axes.set_xlabel("Frame Index [-]")

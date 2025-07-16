@@ -31,6 +31,7 @@
 #pragma once
 
 #include <gtsam/navigation/NavState.h>
+#include <gtsam_unstable/nonlinear/IncrementalFixedLagSmoother.h>
 
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
@@ -102,7 +103,8 @@ class ParallelRGBDBackendModule
 
   gtsam::ISAM2Params static_isam2_params_;
   HybridFormulation::UniquePtr static_formulation_;
-  gtsam::ISAM2 static_estimator_;
+  //   gtsam::ISAM2 static_estimator_;
+  gtsam::IncrementalFixedLagSmoother static_estimator_;
 
   gtsam::ISAM2Params dynamic_isam2_params_;
   gtsam::FastMap<ObjectId, ParallelObjectISAM::Ptr> sam_estimators_;

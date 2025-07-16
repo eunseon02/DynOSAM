@@ -347,6 +347,9 @@ class MotionErrorEvaluator(Evaluator):
         # ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
         # ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
 
+        print(object_poses_ref_traj)
+        print(object_motion_traj_est)
+
         data = (object_poses_ref_traj, object_motion_traj_est)
         rme_trans = dyno_metrics.RME(metrics.PoseRelation.translation_part)
         rme_rot = dyno_metrics.RME(metrics.PoseRelation.rotation_angle_deg)
@@ -376,7 +379,8 @@ class MotionErrorEvaluator(Evaluator):
             core.plotting.plot_per_frame_error(
                 fig,
                 rme_full,
-                f"RME Object {object_id}"
+                f"RME Object {object_id}",
+                frames=rme_full.timestamps
             )
             plots.add_figure(
                 f"Object RME {object_id}",
@@ -402,8 +406,6 @@ class MotionErrorEvaluator(Evaluator):
             data = (object_traj_ref, object_traj)
 
             object_traj.check()
-
-            # evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
             trajectory_helper.append(object_traj)
 
@@ -563,12 +565,15 @@ class MotionErrorEvaluator(Evaluator):
                 frames = data["timestamps"]
                 traj = data["traj"]
 
-                # Sort frames and associated values
+                # # Sort frames and associated values
                 sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
                 frames = [frames[i] for i in sorted_indices]
                 traj = [traj[i] for i in sorted_indices]
 
-                # Update map data
+                # Sort traj based on the order of frames
+                # sorted_frames, sorted_traj = zip(*sorted(zip(frames, traj)))
+
+                # # Update map data
                 object_T_dict[object_id]["timestamps"] = frames
                 object_T_dict[object_id]["traj"] = traj
 
@@ -620,6 +625,8 @@ class MotionErrorEvaluator(Evaluator):
             else:
                 object_poses_traj[object_id] =  trajectory.PoseTrajectory3D(poses_se3=np.array(poses_est), timestamps=timestamps)
                 object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=np.array(poses_ref), timestamps=timestamps_ref)
+
+
 
         return object_poses_traj, object_poses_traj_ref
 
@@ -968,7 +975,7 @@ class MapPlotter3D(Evaluator):
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
         if plot_gt_objects:
-            core.plotting.plot_object_trajectories(map_fig, all_gt_trxyzaj,
+            core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
                                         plot_mode=evo_plot.PlotMode.xyz,
                                         colours=colour_list,
                                         plot_axis_est=True,

@@ -6,13 +6,15 @@ import numpy as np
 import dynosam_utils.evaluation.evaluation_lib as eval
 
 from dynosam_utils.evaluation.core.plotting import *
+import dynosam_utils.evaluation.formatting_utils as formatting
+
 
 
 plt.rcdefaults()
-startup_plotting(27, line_width=3.0)
+startup_plotting(32, line_width=3.0)
 
 
-def print_timing(file):
+def print_timing(file, actual_last_frame = None):
     with open(file) as csvfile:
         reader = csv.reader(csvfile)
 
@@ -20,6 +22,13 @@ def print_timing(file):
         frames = []
         last_frame_id = 0
         for r in reader:
+
+            # check if first row is header
+            try:
+                int(r[0])
+            except ValueError as e:
+                continue
+
             # awful header form
             # timing (ms), frame, opt values size, graph size
             timing.append(int(r[0]))
@@ -30,6 +39,11 @@ def print_timing(file):
 
         timing = np.array(timing)
         print(f"{file} \n\tTiming mean {np.mean(timing)} \n\tMedian {np.median(timing)} \n\tStd {np.std(timing)} \n\tLast frame {last_frame_id}")
+
+        if actual_last_frame is not None:
+            print(actual_last_frame)
+            print(last_frame_id)
+            print(f"\t Was actual last frame {actual_last_frame == last_frame_id}")
 
         return timing, frames, last_frame_id, np.where(timing == last_frame_id)
 
@@ -109,6 +123,7 @@ def load_parallel_hybrid_data(file, variable_name="timing"):
 
         if frame in values_per_frame:
             dynamic_mean = np.mean(np.array(values_per_frame[frame]))
+            # dynamic_mean = np.max(np.array(values_per_frame[frame]))
             combined_timing = (static_mean + dynamic_mean)
         else:
             combined_timing = static_mean
@@ -220,6 +235,8 @@ def draw_objects_frames(ax, motion_error_evaluator = None, result_path=None, dat
 
 
 def plot_timing(ax, result_path, title, do_ph_evaluation = False, **kwargs):
+    # hybrid_file = result_path + "hybrid_isam2_timing_inc_relin1.csv"
+    # wcme_file = result_path + "wcme_isam2_timing_inc_relin1.csv"
     hybrid_file = result_path + "hybrid_isam2_timing_inc.csv"
     wcme_file = result_path + "wcme_isam2_timing_inc.csv"
 
@@ -232,12 +249,12 @@ def plot_timing(ax, result_path, title, do_ph_evaluation = False, **kwargs):
     last_frame = all_frames[-1]
 
 
-    h_timing, h_frames, h_last_frame, h_last_index = print_timing(hybrid_file)
-    wcme_timing, wcme_frames, wcme_last_frame, wcme_last_index = print_timing(wcme_file)
+    h_timing, h_frames, h_last_frame, h_last_index = print_timing(hybrid_file, actual_last_frame=last_frame)
+    wcme_timing, wcme_frames, wcme_last_frame, wcme_last_index = print_timing(wcme_file,actual_last_frame=last_frame)
 
 
     ax.plot(h_frames, h_timing, label="Hybrid", color=get_nice_blue())
-    ax.plot(wcme_frames ,wcme_timing, label="WCME", color=get_nice_red())
+    ax.plot(wcme_frames ,wcme_timing, label="Baseline", color=get_nice_red())
 
     max_timing = max(np.max(h_timing), np.max(wcme_timing))
 
@@ -282,7 +299,7 @@ def plot_timing(ax, result_path, title, do_ph_evaluation = False, **kwargs):
         draw_oom_line(h_last_frame, "Hybrid", get_nice_blue())
 
     if wcme_last_frame < last_frame:
-        draw_oom_line(wcme_last_frame, "WCME", get_nice_red())
+        draw_oom_line(wcme_last_frame, "Baseline", get_nice_red())
 
     ax.set_yscale("log")
     # ax.margins(x=0)
@@ -295,57 +312,272 @@ def plot_timing(ax, result_path, title, do_ph_evaluation = False, **kwargs):
     ax.legend(loc="lower right")
     ax.grid(True)
 
+import itertools
+colour_iter = itertools.cycle(formatting.prop_cycle())
 
-fig = plt.figure(figsize=(13,6), constrained_layout=True)
-ax = fig.add_subplot(111)
+def plot_nnz_wc_hybrid_isam_results(ax, result_path, prefix, scale='linear'):
+    # hybrid_inc_relin10 = result_path + "hybrid_isam2_timing_inc.csv"
+    # hybrid_inc_relin1 = result_path + "hybrid_isam2_timing_inc_relin1.csv"
 
-# sequence = "parking_lot_night_mid"
-# sequence = "viode_city_night_high"
-# sequence = "tas_rc6"
-sequence = "kitti_0000"
-# sequence = "cluster_l1"
+    inc_relin10 = result_path + f"{prefix}_isam2_timing_inc.csv"
+    inc_relin1 = result_path + f"{prefix}_isam2_timing_inc_relin1.csv"
+
+    # fig = plt.figure(figsize=(13,6), constrained_layout=True)
+    # ax_hybrid = fig.add_subplot(111)
+    # ax_wc = fig.add_subplot(122)
+
+    import pandas as pd
+
+    frame_id_var = ' frame id'
+
+    def _plot_impl(ax, df, variable_to_plot, label, color, line_style = "-"):
+        column_names = df.columns.tolist()
+        print(column_names)
+        assert variable_to_plot in column_names
+        assert frame_id_var in column_names
+
+        data = np.array(df[variable_to_plot]).astype(np.float64)
+        frames = np.array(df[frame_id_var])
+
+        num_vars = ' num opt values'
+        assert num_vars in column_names
+        num_vars_data = np.array(df[num_vars]).astype(np.float64)
+
+        num_factors = ' num factors'
+        assert num_factors in column_names
+        num_factors_data = np.array(df[num_factors]).astype(np.float64)
+
+        # data /= ((num_vars_data**2.0/2.0) + num_vars_data/2.0)
+        data /= num_factors_data
+
+        ax.plot(frames, data, linestyle=line_style, color=color, label=label)
+
+    nnz_graph = ' nnz (graph)'
+    nnz_isam = ' nnz (isam)'
+
+    inc_relin10_df = pd.read_csv(inc_relin10)
+
+    inc_relin1_df = pd.read_csv(inc_relin1)
+
+    _plot_impl(ax, inc_relin1_df, nnz_graph, f"{prefix} (batch every step)", get_nice_green())
+    # _plot_impl(ax, inc_relin1_df, nnz_graph, f"{prefix} relin=1 (graph)", get_nice_blue(), line_style="--")
+
+    _plot_impl(ax, inc_relin10_df, nnz_isam, f"{prefix} relin=10 (bayes tree)", get_nice_red())
+    _plot_impl(ax, inc_relin1_df, nnz_isam, f"{prefix} relin=1 (bayes tree)", get_nice_red(), line_style="--")
+
+    ax.legend()
+    ax.set_yscale(scale)
+
+
+
+# plot inc and inc_relin1
+def plot_wc_hybrid_isam_results(ax, result_path, variable_to_plot, scale='linear', title=None, y_label=None, plot_wcme_termination=True):
+    hybrid_inc_relin10 = result_path + "hybrid_isam2_timing_inc.csv"
+    hybrid_inc_relin1 = result_path + "hybrid_isam2_timing_inc_relin1.csv"
+
+    wc_inc_relin10 = result_path + "wcme_isam2_timing_inc.csv"
+    wc_inc_relin1 = result_path + "wcme_isam2_timing_inc_relin1.csv"
+
+    import pandas as pd
+
+    frame_id_var = ' frame id'
+
+    def _plot_impl(ax, df, label, color, line_style = "-", plot_termination = False):
+        column_names = df.columns.tolist()
+
+        # older version of code did not have header in .csv file...
+        if column_names[0] == 'timing [ms]':
+            assert variable_to_plot in column_names
+            assert frame_id_var in column_names
+
+            data = np.array(df[variable_to_plot])
+            frames = np.array(df[frame_id_var])
+        else:
+            header = ["timing [ms]", "frame id", "num opt values", "num factors", "nnz (graph)", "nnz (isam)", "avg. clique size", "max clique size", "num variables re-elinm", "num variables relinearized", "num new", "num involved", "num (only) relin", "num fluid", "is batch"]
+            variable_to_plot_trim = variable_to_plot.strip()
+            assert variable_to_plot_trim in header
+
+            idx = header.index(variable_to_plot_trim)
+
+            def _try_catch_iloc(df, idx):
+                try:
+                    return np.array(df.iloc[idx])
+                except IndexError as e:
+                    raise IndexError(f"{str(e)}: idx {idx}, variable {variable_to_plot_trim}")
+
+            data = _try_catch_iloc(df, idx)
+            frames = _try_catch_iloc(df, 1)
+
+
+
+
+        if variable_to_plot == ' nnz (isam)' or variable_to_plot == ' nnz (graph)':
+            num_vars = ' num opt values'
+            assert num_vars in column_names
+            num_vars_data = np.array(df[num_vars]).astype(np.float64)
+
+            num_factors = ' num factors'
+            assert num_factors in column_names
+            num_factors_data = np.array(df[num_factors]).astype(np.float64)
+
+            data = data.astype(np.float64)
+
+            # normalize by 'size' of problem
+            # data /= ((num_vars_data**2.0/2.0) + num_vars_data/2.0)
+            # data /= (num_vars_data*(num_vars_data +1)/2)
+            # data /= num_factors_data
+            # data /= num_vars_data
+
+        ax.plot(frames, data, linestyle=line_style, color=color, label=label)
+
+        if plot_termination:
+            x_last = frames[-1]
+            y_last = data[-1]
+            ax.plot(x_last, y_last, 'ro')
+
+            ax.annotate(f'Failure',
+             xy=(x_last, y_last),
+             xytext=(x_last + 3, y_last -2 ),  # Offset for better visibility
+             arrowprops=dict(arrowstyle="simple",facecolor='red',edgecolor='none'),
+             fontsize=27,
+             color='red')
+
+    hybrid_inc_relin10_df = pd.read_csv(hybrid_inc_relin10)
+    wc_inc_relin10_df = pd.read_csv(wc_inc_relin10)
+
+    hybrid_inc_relin1_df = pd.read_csv(hybrid_inc_relin1)
+    wc_inc_relin1_df = pd.read_csv(wc_inc_relin1)
+
+
+    hybrid_colour = get_nice_blue()
+    wc_colour = get_nice_red()
+    _plot_impl(ax, hybrid_inc_relin10_df, "iHybrid (relinSkip=10)",hybrid_colour)
+    _plot_impl(ax, wc_inc_relin10_df,"iBaseline (relinSkip=10)",wc_colour, plot_termination=plot_wcme_termination)
+
+    _plot_impl(ax, hybrid_inc_relin1_df, "iHybrid (relinSkip=1)",hybrid_colour,line_style="--")
+    _plot_impl(ax, wc_inc_relin1_df, "iBaseline (relinSkip=1)",wc_colour,line_style="--",plot_termination=plot_wcme_termination)
+
+    if title is None:
+        title = variable_to_plot
+
+    if y_label is None:
+        y_label = variable_to_plot
+
+
+    ax.set_title(title)
+    ax.set_yscale(scale)
+    # ax.set_xlabel("Frame")
+    ax.set_ylabel(y_label)
+
+
+
+
+
+# sequence = "tas_rc7"
+sequence = "kitti_0020_mem"
 result_path = f"/root/results/Dynosam_ecmr2024/{sequence}/"
 
-ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_50.bson", variable_name="num_variables")
-ax.plot(ph_frames ,ph_timing, label="Kp=50")
 
-ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_150.bson", variable_name="num_variables")
-ax.plot(ph_frames ,ph_timing, label="Kp=150")
+plot_comparison = True
+plot_nnz = False
+plot_per_frame_timing = False
 
-# ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results.bson")
-# ax.plot(ph_frames ,ph_timing, label="Kp=300")
+# fig = plt.figure(figsize=(13,6), constrained_layout=True)
+# fig = plt.figure(figsize=(20,20), constrained_layout=True)
+if plot_comparison:
+    fig, axes = plt.subplots(2, 2, sharex='col', figsize=(20, 13), constrained_layout=True)
+
+    ax1 = axes[0, 0]
+    ax2 = axes[0, 1]
+    ax3 = axes[1, 0]
+    ax4 = axes[1, 1]
+
+    ax3.set_xlabel("Frame")
+    ax4.set_xlabel("Frame")
+    # ax = fig.add_subplot(111)
+    # ax = fig.add_subplot(121)
+    # ax1 = fig.add_subplot(221)
+    # ax2 = fig.add_subplot(222)
+    # ax3 = fig.add_subplot(223)
+    # ax4 = fig.add_subplot(224)
+
+    # sequence = "parking_lot_night_mid"
+    # sequence = "viode_city_night_high"
+    # sequence = "tas_rc6"
+
+    plot_wc_hybrid_isam_results(ax3, result_path, 'timing [ms]', scale="log", title="iSAM2 update time", y_label="Timing [ms]",plot_wcme_termination=False)
+    plot_wc_hybrid_isam_results(ax1, result_path, ' avg. clique size', title="Avg. Clique Size", y_label="Number of variables")
+    plot_wc_hybrid_isam_results(ax4, result_path, ' max clique size', title="Max Clique Size", y_label="Number of variables", plot_wcme_termination=False)
+    plot_wc_hybrid_isam_results(ax2, result_path, ' num variables re-elinm', title="Re-eliminated Variables", y_label="Number of variables",plot_wcme_termination=False)
+
+    ax1.legend()
+    fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_wc_hybrid_bt_analysis.pdf", format="pdf")
+    # plt.show()
+
+    # fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_wc_hybrid_max_clique_size.pdf", format="pdf")
+    # fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_wc_hybrid_reeliminated_vars.pdf", format="pdf")
+    # fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_wc_hybrid_avg_clique_size.pdf", format="pdf")
+    # plot_wc_hybrid_isam_results(ax, result_path, ' num variables re-elinm')
+    # plot_wc_hybrid_isam_results(ax, result_path, ' num variables relinearized')
+    # plot_wc_hybrid_isam_results(ax, result_path, ' max clique size')
+    # plot_wc_hybrid_isam_results(ax, result_path, ' nnz (isam)',scale="linear")
+
+if plot_nnz:
+    fig = plt.figure(figsize=(13,6), constrained_layout=True)
+    ax = fig.add_subplot(121)
+    plot_nnz_wc_hybrid_isam_results(ax, result_path, "hybrid", scale="log")
+
+    ax = fig.add_subplot(122)
+    plot_nnz_wc_hybrid_isam_results(ax, result_path, "wcme",scale="log")
+
+    fig.supxlabel("Frames")
+    fig.supylabel("nnz (R)")
+    # plot_wc_hybrid_isam_results(ax, result_path, 'timing [ms]', scale="log")
 
 
-# ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_1000.bson")
-# ax.plot(ph_frames ,ph_timing, label="Kp=600")
+if plot_per_frame_timing:
+    fig = plt.figure(figsize=(13,6), constrained_layout=True)
+    ax = fig.gca()
+    # ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_50.bson", variable_name="num_variables")
+    # ax.plot(ph_frames ,ph_timing, label="Kp=50")
 
-# ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_600.bson")
-# ax.plot(ph_frames ,ph_timing, label="Kp=1000")
+    # ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_150.bson", variable_name="num_variables")
+    # ax.plot(ph_frames ,ph_timing, label="Kp=150")
 
-# draw_objects_frames(ax, result_path=result_path, data_file_suffix="parallel_hybrid_dkp_600_backend", alpha=0.1)
+    # ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results.bson")
+    # ax.plot(ph_frames ,ph_timing, label="Kp=300")
 
-# import matplotlib
-# formatter = matplotlib.ticker.ScalarFormatter(useMathText=True)
-# formatter.set_scientific(True)
-# formatter.set_powerlimits((0, 3))  # Force scientific notation outside this range
 
-# ax.yaxis.set_major_formatter(formatter)
+    # ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_1000.bson")
+    # ax.plot(ph_frames ,ph_timing, label="Kp=600")
 
-# ax.set_ylabel("Timing [ms]")
-# ax.set_xlabel("Frame Index [-]")
-# ax.legend(loc="lower right")
-# ax.grid(True)
+    # ph_frames, ph_timing = load_parallel_hybrid_data(result_path + "parallel_isam2_results_dkp_600.bson")
+    # ax.plot(ph_frames ,ph_timing, label="Kp=1000")
 
-# ax.set_yscale("log")
-ax.legend()
+    # draw_objects_frames(ax, result_path=result_path, data_file_suffix="parallel_hybrid_dkp_600_backend", alpha=0.1)
 
-# plot_timing(ax, result_path, None, do_ph_evaluation=True, y_failure_offset=-3, x_failure_offset=0.15)
+    # import matplotlib
+    # formatter = matplotlib.ticker.ScalarFormatter(useMathText=True)
+    # formatter.set_scientific(True)
+    # formatter.set_powerlimits((0, 3))  # Force scientific notation outside this range
 
-# # fig.tight_layout()
+    # ax.yaxis.set_major_formatter(formatter)
+
+    # ax.set_ylabel("Timing [ms]")
+    # ax.set_xlabel("Frame Index [-]")
+    # ax.legend(loc="lower right")
+    # ax.grid(True)
+
+    # ax.set_yscale("log")
+    # ax.legend()
+
+    plot_timing(ax, result_path, None, do_ph_evaluation=True, y_failure_offset=-2, x_failure_offset=0.15)
+
+    # # fig.tight_layout()
 plt.show()
 
-# fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_timing.pdf", format="pdf")
-# fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_dkp_timing.pdf", format="pdf")
+    # fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_timing.pdf", format="pdf")
+    # fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_dkp_timing.pdf", format="pdf")
 
-# print_timing(f"/root/results/Dynosam_ecmr2024/{sequence}/hybrid_isam2_timing_inc.csv")
-# print_timing(f"/root/results/Dynosam_ecmr2024/{sequence}/wcme_isam2_timing_inc.csv")
+    # print_timing(f"/root/results/Dynosam_ecmr2024/{sequence}/hybrid_isam2_timing_inc.csv")
+    # print_timing(f"/root/results/Dynosam_ecmr2024/{sequence}/wcme_isam2_timing_inc.csv")

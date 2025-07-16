@@ -432,9 +432,7 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   std::string toString() const override {
     std::stringstream ss;
     ss << "Frame Id: " << frame_id << "\n";
-    ss << "Objects seen: "
-       << container_to_string(objects_seen.template collectIds<ObjectId>())
-       << "\n";
+    ss << "Objects seen: " << container_to_string(getObservedObjects()) << "\n";
     ss << "Num dynamic measurements: " << numDynamicMeasurements() << "\n";
     ss << "Num static measurements: " << numStaticMeasurements();
     return ss.str();
@@ -526,6 +524,15 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
    * @return size_t
    */
   inline size_t numObjects() const { return objects_seen.size(); }
+
+  /**
+   * @brief Get the ids (j) of objects observed at this frame.
+   *
+   * @return ObjectIds
+   */
+  ObjectIds getObservedObjects() const {
+    return objects_seen.template collectIds<ObjectId>();
+  }
 
   /**
    * @brief Number of dynamic measurements for this frame.
