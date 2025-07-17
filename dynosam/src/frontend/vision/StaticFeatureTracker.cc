@@ -566,10 +566,11 @@ Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(
   TrackletId tracklet_to_use = tracklet_id;
   // if age is too large, or age is zero, retrieve new tracklet id
   if (age > params_.max_feature_track_age) {
-    TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
-    tracklet_to_use = tracked_id_manager.getTrackletIdCount();
-    tracked_id_manager.incrementTrackletIdCount();
-    age = 0u;
+    // TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
+    // tracklet_to_use = tracked_id_manager.getTrackletIdCount();
+    // tracked_id_manager.incrementTrackletIdCount();
+    // age = 0u;
+    return nullptr;
   }
 
   // update previous keypoint

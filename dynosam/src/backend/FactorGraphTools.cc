@@ -524,4 +524,73 @@ void NonlinearFactorGraphManager::writeDynosamGraphFile(
   std::flush(of);
 }
 
+bool ISAM2Helper::marginalizeKeys(gtsam::ISAM2Result* result,
+                                  gtsam::ISAM2* smoother,
+                                  const gtsam::KeyVector& marginalize_keys) {
+  CHECK_NOTNULL(smoother);
+
+  // checks all keys are in the smoother
+  gtsam::KeyVector keys_to_marginalize;
+  for (const auto& key : marginalize_keys) {
+    if (smoother->valueExists(key)) keys_to_marginalize.push_back(key);
+  }
+
+  if (keys_to_marginalize.empty()) {
+    return false;
+  }
+
+  // create ordering constraints; forcing ISAM2 to put marginalizable variables
+  // at the beginning
+  boost::optional<gtsam::FastMap<gtsam::Key, int>> constrainedKeys = {};
+  createOrderingConstraints(keys_to_marginalize, *smoother, constrainedKeys);
+
+  if (!constrainedKeys) {
+    return false;
+  }
+  // gather additional keys to re-eliminate
+  std::unordered_set<gtsam::Key> additionalKeys =
+      Base::gatherAdditionalKeysToReEliminate(*smoother, keys_to_marginalize);
+  gtsam::KeyList additionalMarkedKeys(additionalKeys.begin(),
+                                      additionalKeys.end());
+  // update ISAM
+  const auto isam_result = smoother->update(
+      gtsam::NonlinearFactorGraph(), gtsam::Values(), gtsam::FactorIndices(),
+      constrainedKeys, {}, additionalMarkedKeys);
+  // marginalize leaf keys!
+  gtsam::FastList<gtsam::Key> leafKeys(keys_to_marginalize.begin(),
+                                       keys_to_marginalize.end());
+  smoother->marginalizeLeaves(leafKeys);
+
+  if (result) *result = isam_result;
+  return true;
+}
+
+void ISAM2Helper::createOrderingConstraints(
+    const gtsam::KeyVector& marginalizableKeys, const ISAM2& smoother,
+    boost::optional<gtsam::FastMap<gtsam::Key, int>>& constrainedKeys) {
+  if (marginalizableKeys.size() > 0) {
+    // find the set difference to identify keys we dont want to marginalize
+    gtsam::KeySet all_keys_sorted = smoother.getLinearizationPoint().keySet();
+    gtsam::KeySet marginalizableKeys_sorted(marginalizableKeys.begin(),
+                                            marginalizableKeys.end());
+
+    gtsam::KeyVector other_variables;
+    std::set_difference(
+        all_keys_sorted.begin(), all_keys_sorted.end(),
+        marginalizableKeys_sorted.begin(), marginalizableKeys_sorted.end(),
+        std::inserter(other_variables, other_variables.begin()));
+
+    constrainedKeys = FastMap<Key, int>();
+    // Generate ordering constraints so that the marginalizable variables will
+    // be eliminated first Set all variables to Group1
+    for (gtsam::Key key : other_variables) {
+      constrainedKeys->operator[](key) = 1;
+    }
+    // Set marginalizable variables to Group0
+    for (gtsam::Key key : marginalizableKeys_sorted) {
+      constrainedKeys->operator[](key) = 0;
+    }
+  }
+}
+
 }  // namespace dyno

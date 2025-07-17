@@ -1034,4 +1034,16 @@ class BayesTreeMarginalizationHelper {
 };
 // BayesTreeMarginalizationHelper
 
+class ISAM2Helper : public BayesTreeMarginalizationHelper<gtsam::ISAM2::Base> {
+ public:
+  using Base = BayesTreeMarginalizationHelper<gtsam::ISAM2::Base>;
+
+  static bool marginalizeKeys(gtsam::ISAM2Result* result,
+                              gtsam::ISAM2* smoother,
+                              const gtsam::KeyVector& marginalize_keys);
+  static void createOrderingConstraints(
+      const gtsam::KeyVector& marginalizableKeys, const ISAM2& smoother,
+      boost::optional<gtsam::FastMap<gtsam::Key, int> >& constrainedKeys);
+};
+
 }  // namespace dyno

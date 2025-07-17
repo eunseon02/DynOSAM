@@ -46,6 +46,7 @@ class ProjectAriaAllLoader {
 
   ProjectAriaAllLoader(const std::string& file_path)
       : rgb_images_folder_path_(file_path + "/rgb_sync"),
+        right_rgb_images_folder_path_(file_path + "/right"),
         depth_images_folder_path_(file_path + "/depth_sync"),
         optical_flow_folder_path_(file_path + "/optical_flow"),
         instance_masks_folder_(file_path + "/instance_masks"),
@@ -90,6 +91,16 @@ class ProjectAriaAllLoader {
 
     cv::Mat rgb;
     loadRGB(rgb_image_paths_.at(idx), rgb);
+    CHECK(!rgb.empty());
+
+    return rgb;
+  }
+
+  cv::Mat getRightRGB(size_t idx) const {
+    CHECK_LT(idx, right_rgb_image_paths_.size());
+
+    cv::Mat rgb;
+    loadRGB(right_rgb_image_paths_.at(idx), rgb);
     CHECK(!rgb.empty());
 
     return rgb;
@@ -164,12 +175,21 @@ class ProjectAriaAllLoader {
 
   void loadOtherImages() {
     auto rgb_image_files = getAllFilesInDir(rgb_images_folder_path_);
+    auto right_rgb_images_files =
+        getAllFilesInDir(right_rgb_images_folder_path_);
     auto depth_image_files = getAllFilesInDir(depth_images_folder_path_);
     auto instance_masks_image_files = getAllFilesInDir(instance_masks_folder_);
 
     for (auto f : rgb_image_files) {
       rgb_image_paths_.push_back(f);
     }
+
+    // left images are sync and right images are raw so we need one less
+    for (auto f : right_rgb_images_files) {
+      right_rgb_image_paths_.push_back(f);
+    }
+    right_rgb_image_paths_.pop_back();
+
     for (auto f : depth_image_files) {
       depth_image_paths_.push_back(f);
     }
@@ -178,6 +198,7 @@ class ProjectAriaAllLoader {
     }
 
     CHECK_EQ(rgb_image_paths_.size(), depth_image_paths_.size());
+    CHECK_EQ(right_rgb_image_paths_.size(), depth_image_paths_.size());
     CHECK_EQ(depth_image_paths_.size(), instance_masks_image_paths_.size());
 
     // dataset size is number optical flow which should be one less!!
@@ -263,6 +284,7 @@ class ProjectAriaAllLoader {
 
  private:
   std::string rgb_images_folder_path_;
+  std::string right_rgb_images_folder_path_;
   std::string depth_images_folder_path_;
   std::string optical_flow_folder_path_;
   std::string instance_masks_folder_;
@@ -270,6 +292,7 @@ class ProjectAriaAllLoader {
   std::string rgb_timestamps_file_path_;
 
   std::vector<std::string> rgb_image_paths_;
+  std::vector<std::string> right_rgb_image_paths_;
   std::vector<std::string> depth_image_paths_;
   std::vector<std::string> optical_flow_image_paths_;
   std::vector<std::string> instance_masks_image_paths_;
@@ -316,6 +339,10 @@ ProjectARIADataLoader::ProjectARIADataLoader(const fs::path& dataset_path)
   auto instance_mask_loader = std::make_shared<FunctionalDataFolder<cv::Mat>>(
       [loader](size_t idx) { return loader->getInstanceMask(idx); });
 
+  auto right_rgb =
+      std::make_shared<FunctionalDataFolder<std::optional<cv::Mat>>>(
+          [loader](size_t idx) { return loader->getRightRGB(idx); });
+
   // auto gt_loader =
   // std::make_shared<FunctionalDataFolder<GroundTruthInputPacket>>(
   //     [loader](size_t idx) {
@@ -324,32 +351,22 @@ ProjectARIADataLoader::ProjectARIADataLoader(const fs::path& dataset_path)
   // );
 
   this->setLoaders(timestamp_loader, rgb_loader, optical_flow_loader,
-                   depth_loader, instance_mask_loader
+                   depth_loader, instance_mask_loader, right_rgb
                    // gt_loader
   );
 
   auto callback = [&](size_t frame_id, Timestamp timestamp, cv::Mat rgb,
-                      cv::Mat optical_flow, cv::Mat depth, cv::Mat instance_mask
+                      cv::Mat optical_flow, cv::Mat depth,
+                      cv::Mat instance_mask, std::optional<cv::Mat> right_rgb
                       /**GroundTruthInputPacket gt_object_pose_gt**/) -> bool {
     // CHECK_EQ(timestamp, gt_object_pose_gt.timestamp_);
-
-    // CHECK(ground_truth_packet_callback_);
-    // if(ground_truth_packet_callback_)
-    // ground_truth_packet_callback_(gt_object_pose_gt);
-
-    // ImageContainer::Ptr image_container = nullptr;
-    // image_container = ImageContainer::Create(
-    //     timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-    //     ImageWrapper<ImageType::Depth>(depth),
-    //     ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-    //     ImageWrapper<ImageType::MotionMask>(instance_mask));
-    // CHECK(image_container);
-
     ImageContainer image_container(frame_id, timestamp);
     image_container.rgb(rgb)
         .depth(depth)
         .opticalFlow(optical_flow)
         .objectMotionMask(instance_mask);
+
+    // if (right_rgb) image_container.rightRgb(right_rgb.value());
 
     CHECK(image_container_callback_);
     if (image_container_callback_)

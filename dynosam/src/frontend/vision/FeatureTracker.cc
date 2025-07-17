@@ -393,9 +393,6 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
     }
   }
 
-  cv::imshow("tracking_mask", tracking_mask);
-  cv::waitKey(1);
-
   // sanity check
   //  for(ObjectId object_id : instance_labels) {
   //    size_t n = dynamic_features.size(object_id);
@@ -527,6 +524,15 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
         const PerObjectStatus& object_tracking_info =
             info_.getObjectStatus(object_id);
         const int& number_tracked = object_tracking_info.num_track;
+
+        // dont track new features if greater than a specific size...
+        // sort of Keyframe hack until we implement this properly....
+        // TODO: also very inefficient as need to sample anyway with current
+        // implementation!!
+        if (number_tracked > 20) {
+          return;
+        }
+
         int nr_corners_needed =
             std::max(max_features_to_track - number_tracked, 0);
 

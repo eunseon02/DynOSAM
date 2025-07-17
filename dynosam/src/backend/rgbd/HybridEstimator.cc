@@ -459,16 +459,38 @@ std::pair<FrameId, gtsam::Pose3> HybridFormulation::forceNewKeyFrame(
   // happens... in combinating with clearing the internal graph
   // (this->clearGraph) and resetting the smoother in ParlallelObjectSAM. I
   // think we should do this!!
-  //  is_dynamic_tracklet_in_map_.clear();
-  // clear factors but keep current theta as this is the current linearisation
-  // point
-  // TODO: what about values that exist between across keyframes - there will be
-  // bugs in the Formulation as it currently cannot handle this!!
-  //  this->clearGraph();
+  // HACK - these vairblaes will still be in the values and therefore we will
+  // get some kind of 'gtsam::ValuesKeyAlreadyExists' when updating the
+  // formulation we therefore need to remove these from the theta - this will
+  // remove old data
+  // from the accessor (even though we keep track of the meta-data)
+  // when the frontend is updated to include keyframe information this should
+  // not be an issue as the frontend will ensure new measurements dont refer to
+  // landmarks in old keypoints
+  // for (const auto& [tracklet_id, _] : is_dynamic_tracklet_in_map_) {
+  //     ObjectId lmk_object_id;
+  //     CHECK(map()->getLandmarkObjectId(lmk_object_id, tracklet_id));
+  //     //only delete for requested object
+  //     if(lmk_object_id == object_id) {
+  //       theta_.erase(this->makeDynamicKey(tracklet_id));
+  //     }
+  // }
+  // is_dynamic_tracklet_in_map_.clear();
 
   // sanity check
   CHECK_EQ(result.first, frame_id);
   return result;
+}
+
+bool HybridFormulation::getObjectKeyFrameHistory(
+    ObjectId object_id, const KeyFrameRanges* ranges) const {
+  CHECK_NOTNULL(ranges);
+  if (!key_frame_data_.exists(object_id)) {
+    return false;
+  }
+
+  ranges = &key_frame_data_.at(object_id);
+  return true;
 }
 
 // TODO: no keyframing
@@ -509,6 +531,22 @@ StateQuery<Motion3ReferenceFrame> HybridFormulation::getEstimatedMotion(
                                ReferenceFrame::GLOBAL, reference_frame,
                                frame_id);
   return StateQuery<Motion3ReferenceFrame>(e_H_k_world.key(), motion);
+}
+
+TrackletIds HybridFormulation::collectPointsAtKeyFrame(ObjectId object_id,
+                                                       FrameId frame_id) const {
+  if (!hasObjectKeyFrame(object_id, frame_id)) {
+    return {};
+  }
+
+  TrackletIds tracklets;
+  const auto [keyframe_k, _] = getObjectKeyFrame(object_id, frame_id);
+  for (const auto& [tracklet_id, tracklet_keyframe] : all_dynamic_landmarks_) {
+    if (tracklet_keyframe == keyframe_k) {
+      tracklets.push_back(tracklet_id);
+    }
+  }
+  return tracklets;
 }
 
 void HybridFormulation::dynamicPointUpdateCallback(
@@ -910,6 +948,8 @@ gtsam::Pose3 HybridFormulation::computeInitialH(ObjectId object_id,
       //   // L0_.erase(object_id);
 
       // }
+    } else {
+      DYNO_THROW_MSG(DynosamException) << "Unknown MotionRepresentationStyle";
     }
   }
 }

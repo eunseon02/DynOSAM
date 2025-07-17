@@ -788,6 +788,7 @@ struct HybridFormulationProperties {
 };
 
 using KeyFrameData = MultiFrameRangeData<ObjectId, gtsam::Pose3>;
+using KeyFrameRanges = KeyFrameData::FrameRangeDataTVector;
 using KeyFrameRange = KeyFrameData::FrameRangeT;
 
 /**
@@ -894,6 +895,9 @@ class HybridFormulation : public Formulation<Map3d2d>,
   }
 
   // TODO: functions should be shared with accessor
+  bool getObjectKeyFrameHistory(ObjectId object_id,
+                                const KeyFrameRanges* ranges) const;
+
   bool hasObjectKeyFrame(ObjectId object_id, FrameId frame_id) const;
   std::pair<FrameId, gtsam::Pose3> getObjectKeyFrame(ObjectId object_id,
                                                      FrameId frame_id) const;
@@ -905,6 +909,17 @@ class HybridFormulation : public Formulation<Map3d2d>,
 
   std::pair<FrameId, gtsam::Pose3> forceNewKeyFrame(FrameId frame_id,
                                                     ObjectId object_id);
+  /**
+   * @brief
+   *
+   * frame_id is not necessary a keyframe but will be used to search for the
+   * keyframe in the range
+   *
+   * @param frame_id
+   * @return TrackletIds
+   */
+  TrackletIds collectPointsAtKeyFrame(ObjectId object_id,
+                                      FrameId frame_id) const;
 
  protected:
   AccessorTypePointer createAccessor(

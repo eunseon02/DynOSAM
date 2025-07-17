@@ -580,11 +580,11 @@ class Formulation {
   //! the set of (static related) values managed by this updater. Allows
   //! checking if values have already been added over successive function calls
   gtsam::FastMap<gtsam::Key, bool> is_other_values_in_map;
-
- private:
   //! Current linearisation that will be associated with the current graph
   gtsam::Values theta_;
   gtsam::NonlinearFactorGraph factors_;
+
+ private:
   mutable typename AccessorType::Ptr accessor_theta_;
   //! Full name of the formulation and accounts for the additional configuration
   //! from the FormulationParams

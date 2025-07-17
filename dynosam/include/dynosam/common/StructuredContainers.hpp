@@ -199,6 +199,7 @@ struct FrameRangeBase {
       : start(start_), end(end_), is_active(is_active_) {}
 
   bool contains(FrameId frame_id) const;
+  bool operator<(const FrameRangeBase& rhs) const { return start < rhs.start; }
 };
 
 template <typename T>
@@ -220,7 +221,7 @@ class FrameRangeData {
  public:
   using This = FrameRangeData<T>;
   using FrameRangeT = FrameRange<T>;
-  using FrameRangeTVector = std::vector<typename FrameRangeT::Ptr>;
+  using FrameRangeTVector = std::set<typename FrameRangeT::Ptr>;
 
   const typename FrameRangeT::ConstPtr find(FrameId frame_id) const {
     typename FrameRangeT::Ptr active_range = getActiveRange();
@@ -256,7 +257,12 @@ class FrameRangeData {
     return updateRanges(new_range, old_active_range);
   }
 
- private:
+  auto begin() { return ranges.begin(); }
+  auto end() { return ranges.end(); }
+
+  auto begin() const { return ranges.begin(); }
+  auto end() const { return ranges.end(); }
+
   typename FrameRangeT::Ptr getActiveRange() const {
     if (!active_range) {
       // no range means no data
@@ -267,6 +273,7 @@ class FrameRangeData {
     return active_range;
   }
 
+ private:
   typename FrameRangeT::Ptr updateRanges(
       typename FrameRangeT::Ptr new_range,
       typename FrameRangeT::Ptr old_active_range = nullptr) {
@@ -278,7 +285,8 @@ class FrameRangeData {
       old_active_range->is_active = false;
     }
 
-    ranges.push_back(new_range);
+    // ranges.push_back(new_range);
+    ranges.insert(new_range);
     // set new active range
     active_range = new_range;
     return new_range;
@@ -313,6 +321,16 @@ class MultiFrameRangeData {
     }
 
     return ranges.at(query).startNewActiveRange(frame_id, data);
+  }
+
+  bool exists(V query) const { return ranges.exists(query); }
+
+  const FrameRangeDataTVector& at(V query) const {
+    if (!ranges.exists(query)) {
+      DYNO_THROW_MSG(std::out_of_range) << "Query " << query << " out of range";
+    }
+
+    return ranges.at(query);
   }
 
  private:

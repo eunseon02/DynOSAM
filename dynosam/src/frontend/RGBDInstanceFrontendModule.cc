@@ -145,14 +145,17 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
 
   bool stereo_result = false;
+  // static const double base_line = 0.05; //VIODE
+  static const double base_line = 0.12;  // ZED
 
   if (has_stereo) {
     const cv::Mat& left_rgb = image_container->rgb();
     const cv::Mat& right_rgb = image_container->rightRgb();
 
     FeaturePtrs stereo_features_1;
-    stereo_result = tracker_->stereoTrack(
-        stereo_features_1, frame->static_features_, left_rgb, right_rgb, 0.05);
+    stereo_result =
+        tracker_->stereoTrack(stereo_features_1, frame->static_features_,
+                              left_rgb, right_rgb, base_line);
   }
 
   // this includes the refine correspondances with joint optical flow
@@ -168,8 +171,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     const cv::Mat& left_rgb = image_container->rgb();
     const cv::Mat& right_rgb = image_container->rightRgb();
     FeaturePtrs stereo_features_2;
-    stereo_result &= tracker_->stereoTrack(
-        stereo_features_2, frame->static_features_, left_rgb, right_rgb, 0.05);
+    stereo_result &=
+        tracker_->stereoTrack(stereo_features_2, frame->static_features_,
+                              left_rgb, right_rgb, base_line);
   }
 
   // VERY important calculation

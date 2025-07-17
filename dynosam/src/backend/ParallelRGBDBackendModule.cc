@@ -122,8 +122,10 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
   static_isam2_params_.relinearizeSkip = 1;
 
   // sliding window of 20 frames...
+  // this should be greater than the max track age to avoid adding static points
+  // to poses that have been removed! (and becuase we dont keyframe...)
   static_estimator_ =
-      gtsam::IncrementalFixedLagSmoother(20u, static_isam2_params_);
+      gtsam::IncrementalFixedLagSmoother(25.0, static_isam2_params_);
   // static_estimator_ = gtsam::ISAM2(static_isam2_params_);
 
   FormulationHooks hooks;
@@ -294,10 +296,10 @@ ParallelRGBDBackendModule::nominalSpinImpl(
     }
   }
 
-  if (!backend_output->debug_image.empty() && display_queue_) {
-    display_queue_->push(
-        ImageToDisplay("Object Trajectories", backend_output->debug_image));
-  }
+  // if (!backend_output->debug_image.empty() && display_queue_) {
+  //   display_queue_->push(
+  //       ImageToDisplay("Object Trajectories", backend_output->debug_image));
+  // }
 
   new_objects_estimators_.clear();
   return {State::Nominal, backend_output};
@@ -318,10 +320,6 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  std::map<gtsam::Key, double> timestamps;
-  double curr_id = static_cast<double>(this->spin_state_.iteration);
-  timestamps[CameraPoseSymbol(frame_k)] = curr_id;
-
   // update formulation with initial states
   gtsam::NavState nav_state;
   if (input->pim_) {
@@ -332,14 +330,18 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
         gtsam::NavState(X_k_initial, gtsam::Vector3(0, 0, 0)),
         gtsam::imuBias::ConstantBias{});
 
-    timestamps[gtsam::Symbol(kImuBiasSymbolChar, frame_k)] = curr_id;
-    timestamps[gtsam::Symbol(kVelocitySymbolChar, frame_k)] = curr_id;
-
   } else {
     LOG(INFO) << "Initialising backend with VO only states!";
     nav_state = this->addInitialVisualState(
         frame_k, static_formulation_.get(), new_values, new_factors,
         static_formulation_->noiseModels(), X_k_initial);
+  }
+
+  // marginalise all values
+  std::map<gtsam::Key, double> timestamps;
+  double curr_id = static_cast<double>(this->spin_state_.iteration);
+  for (const auto& key_value : new_values) {
+    timestamps[key_value.key] = curr_id;
   }
 
   {
@@ -371,9 +373,7 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
 
-  std::map<gtsam::Key, double> timestamps;
-  double curr_id = static_cast<double>(this->spin_state_.iteration);
-  timestamps[CameraPoseSymbol(frame_k)] = curr_id;
+  // timestamps[CameraPoseSymbol(frame_k)] = curr_id;
 
   const gtsam::NavState predicted_nav_state = this->addVisualInertialStates(
       frame_k, static_formulation_.get(), new_values, new_factors,
@@ -382,19 +382,24 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   map->updateSensorPoseMeasurement(
       frame_k, Pose3Measurement(predicted_nav_state.pose()));
 
-  if (this->isImuInitalized()) {
-    timestamps[gtsam::Symbol(kImuBiasSymbolChar, frame_k)] = curr_id;
-    timestamps[gtsam::Symbol(kVelocitySymbolChar, frame_k)] = curr_id;
-  }
-
   UpdateObservationParams update_params;
   update_params.enable_debug_info = true;
+  // eventually should not need this if we start to use smart factors at least
+  // for the static update
   update_params.do_backtrack = true;
 
   static_formulation_->updateStaticObservations(frame_k, new_values,
                                                 new_factors, update_params);
 
+  // marginalise all values
+  std::map<gtsam::Key, double> timestamps;
+  double curr_id = static_cast<double>(this->spin_state_.iteration);
+  for (const auto& key_value : new_values) {
+    timestamps[key_value.key] = curr_id;
+  }
+
   utils::StatsCollector stats("parallel_object_sam.static_estimator.update");
+  VLOG(10) << "Starting static estimator update...";
   auto tic = utils::Timer::tic();
   static_estimator_.update(new_factors, new_values, timestamps);
   auto toc = utils::Timer::toc<std::chrono::nanoseconds>(tic);
@@ -406,7 +411,8 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
 
   VLOG(5) << "Finished LC Static update k" << frame_k
           << "  error before: " << result.errorBefore.value_or(NaN)
-          << " error after: " << result.errorAfter.value_or(NaN);
+          << " error after: " << result.errorAfter.value_or(NaN)
+          << " timing [ms]:" << milliseconds;
 
   // update results struct for timing data of static estimator
   ParallelObjectISAM::Result static_result;

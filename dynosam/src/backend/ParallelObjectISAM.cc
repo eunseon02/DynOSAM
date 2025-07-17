@@ -114,10 +114,17 @@ std::pair<FrameId, gtsam::Pose3> ParallelObjectISAM::insertNewKeyFrame(
   // this will clear internal factors and meta-data
   // TODO: what about values that exist between across keyframes - there will be
   // bugs in the Formulation as it currently cannot handle this!!
+  // when we make a new keyframe we delete all old point variables (m) for this
+  // object
+  // this will mean we cannot get them even from the accessor as the
+  // gtsam::Values used to store all variables is shared
   const auto new_key_frame =
       decoupled_formulation_->forceNewKeyFrame(frame_id, object_id_);
+
+  // TrackletIds tracklets_in_key_frame
+  // is_dynamic_tracklet_in_map_ shoulld be cleared!!!
+  // smoother_.reset(new gtsam::ISAM2(params_.isam));
   // clear isam2 estimator
-  //  smoother_.reset(new gtsam::ISAM2(params_.isam));
   return new_key_frame;
 }
 
@@ -166,7 +173,7 @@ void ParallelObjectISAM::updateFormulation(
            << " j= " << object_id_;
   decoupled_formulation_->updateDynamicObservations(frame_k, new_values,
                                                     new_factors, update_params);
-  // LOG(INFO) << "Done updateDynamicObservations";
+  VLOG(10) << "Done updateDynamicObservations";
   // TODO: use update result - if the object is not updated, should we remove
   // the frame node at k-1...?
 }
@@ -177,6 +184,20 @@ bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
   // result_ = Result();
   gtsam::Values new_values;
   gtsam::NonlinearFactorGraph new_factors;
+
+  // manually force keyframe every N frames
+  //  const bool has_keyframe =
+  //  decoupled_formulation_->hasObjectKeyFrame(object_id_, frame_k);
+  //  if(has_keyframe) {
+  //    const auto [keyframe_k, _] =
+  //    decoupled_formulation_->getObjectKeyFrame(object_id_, frame_k);
+
+  //   constexpr static FrameId N_keyframe = 40;
+  //   if (frame_k - keyframe_k > N_keyframe) {
+  //     LOG(INFO) << "Manually forcing KEYFRAME in backend at " <<
+  //     info_string(frame_k, object_id_); insertNewKeyFrame(frame_k);
+  //   }
+  // }
 
   updateFormulation(frame_k, X_W_k, new_factors, new_values);
 
