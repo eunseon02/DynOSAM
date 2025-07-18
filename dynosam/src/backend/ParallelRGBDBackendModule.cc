@@ -492,6 +492,11 @@ ParallelRGBDBackendModule::collectPerObjectUpdates(
     PerObjectUpdate object_update;
     object_update.frame_id = frame_id_k;
     object_update.object_id = object_id;
+
+    if (input->is_keyframe_.find(object_id) != input->is_keyframe_.end()) {
+      object_update.is_keyframe = true;
+    }
+
     object_update.measurements = collected_measurements;
     // object_update.X_k_measurement = X_k_measurement;
 
@@ -499,7 +504,7 @@ ParallelRGBDBackendModule::collectPerObjectUpdates(
     object_update.H_k_measurement = estimated_motions.at(object_id);
 
     object_updates.push_back(object_update);
-    ss << object_id << " ";
+    ss << object_id << " (KF: " << object_update.is_keyframe << ") ";
   }
 
   // log inf
@@ -586,6 +591,10 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
     // only works if should_update_smoother makes sure that the formulation is
     // not updated but the map is
     should_update_smoother = false;
+    needs_new_key_frame = true;
+  }
+
+  if (object_update.is_keyframe) {
     needs_new_key_frame = true;
   }
 

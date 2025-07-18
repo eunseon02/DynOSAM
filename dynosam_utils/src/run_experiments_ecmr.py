@@ -183,11 +183,11 @@ def run_kitti():
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0000/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=300")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0002/", "kitti_0002", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
-    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0003/", "kitti_0003", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0003/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0004/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0005/", "kitti_0005", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0006/", "kitti_0006", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
-    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0018/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
+    # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0018/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0020/", "kitti_0020", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
 
 def run_aria():
@@ -206,7 +206,7 @@ if __name__ == '__main__':
     # run_cluster()
     # run_omd()
     # run_aria()
-    run_omd()
+    run_kitti()
     # run_analysis("kitti_0004_test")
     # run_analysis("kitti_0020")
     sys.exit(0)

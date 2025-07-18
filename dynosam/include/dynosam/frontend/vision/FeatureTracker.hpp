@@ -63,8 +63,11 @@ class FeatureTracker : public FeatureTrackerBase {
   // note: MOTION MASK!!
   //  Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const
   //  TrackingInputImages& tracking_images);
+  // object keyframes should not be part of the function here. How should we get
+  // this data? Put in frame or get as function?
   Frame::Ptr track(FrameId frame_id, Timestamp timestamp,
                    const ImageContainer& image_container,
+                   std::set<ObjectId>& object_keyframes,
                    const std::optional<gtsam::Rot3>& R_km1_k = {});
 
   bool stereoTrack(FeaturePtrs& stereo_features,
@@ -98,30 +101,33 @@ class FeatureTracker : public FeatureTrackerBase {
     return boarder_detection_mask_;
   }
 
-  // void resampleDynamicTracks();
-
  protected:
   // detection mask is additional mask It must be a 8-bit integer matrix with
   // non-zero values in the region of interest, indicating what featues to not
   // track
   void trackDynamic(FrameId frame_id, const ImageContainer& image_container,
                     FeatureContainer& dynamic_features,
-                    const cv::Mat& detection_mask = cv::Mat());
+                    std::set<ObjectId>& object_keyframes,
+                    const cv::Mat& detection_mask = cv::Mat(),
+                    const cv::Mat& coloured_boarder_detection_mask = cv::Mat());
 
   void sampleDynamic(FrameId frame_id, const ImageContainer& image_container,
+                     const std::set<ObjectId>& objects_to_sample,
                      FeatureContainer& dynamic_features,
                      std::set<ObjectId>& objects_sampled,
                      const cv::Mat& detection_mask = cv::Mat());
+
+  void requiresSampling(
+      std::set<ObjectId>& objects_to_sample, const FeatureTrackerInfo& info,
+      const ImageContainer& image_container,
+      const gtsam::FastMap<ObjectId, FeatureContainer>& features_per_object,
+      const cv::Mat& coloured_boarder_detection_mask = cv::Mat()) const;
 
   void propogateMask(ImageContainer& image_container);
 
  private:
   void computeImageBounds(const cv::Size& size, int& min_x, int& max_x,
                           int& min_y, int& max_y) const;
-
-  // Feature::Ptr constructStaticFeature(const ImageContainer& image_container,
-  // const Keypoint& kp, size_t age, TrackletId tracklet_id,
-  //                                   FrameId frame_id) const;
 
  private:
   const FrontendParams frontend_params_;

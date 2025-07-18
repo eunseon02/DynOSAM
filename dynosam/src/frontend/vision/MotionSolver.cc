@@ -676,9 +676,9 @@ Motion3SolverResult ObjectMotionSovlerF2F::geometricOutlierRejection3d2d(
 
   // needed when running things like TartanAir S where we get vew few point on
   // the object...
-  if (motion_result.inliers.size() < 30) {
-    motion_result.status = TrackingStatus::FEW_MATCHES;
-  }
+  // if (motion_result.inliers.size() < 30) {
+  //   motion_result.status = TrackingStatus::FEW_MATCHES;
+  // }
 
   return motion_result;
 }

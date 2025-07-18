@@ -192,7 +192,7 @@ bool ParallelObjectISAM::updateSmoother(FrameId frame_k,
   //    const auto [keyframe_k, _] =
   //    decoupled_formulation_->getObjectKeyFrame(object_id_, frame_k);
 
-  //   constexpr static FrameId N_keyframe = 40;
+  //   constexpr static FrameId N_keyframe = 30;
   //   if (frame_k - keyframe_k > N_keyframe) {
   //     LOG(INFO) << "Manually forcing KEYFRAME in backend at " <<
   //     info_string(frame_k, object_id_); insertNewKeyFrame(frame_k);

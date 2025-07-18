@@ -611,6 +611,11 @@ class FeatureContainer {
    */
   bool exists(TrackletId tracklet_id) const;
 
+  FeatureContainer& operator+=(const FeatureContainer& other) {
+    feature_map_.insert(other.feature_map_.begin(), other.feature_map_.end());
+    return *this;
+  }
+
   // vector begin
   inline vector_iterator begin() {
     return vector_iterator(feature_map_.begin());

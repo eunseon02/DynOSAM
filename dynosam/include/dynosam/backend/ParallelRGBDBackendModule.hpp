@@ -80,6 +80,7 @@ class ParallelRGBDBackendModule
     GenericTrackedStatusVector<LandmarkKeypointStatus> measurements;
     Pose3Measurement X_k_measurement;
     Motion3ReferenceFrame H_k_measurement;
+    bool is_keyframe = false;
   };
 
   std::vector<PerObjectUpdate> collectPerObjectUpdates(

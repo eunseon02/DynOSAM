@@ -58,6 +58,14 @@ struct image_traits_impl {
   constexpr static int OpenCVType = IMAGETYPE::OpenCVType;
   static void validate(const cv::Mat& input) { IMAGETYPE::validate(input); }
   static std::string name() { return IMAGETYPE::name(); }
+  static cv::Mat convertTo(cv::Mat mat, bool clone = false) {
+    cv::Mat converted_mat = mat;
+    if (clone) {
+      converted_mat = mat.clone();
+    }
+    converted_mat.convertTo(converted_mat, OpenCVType);
+    return converted_mat;
+  }
 };
 
 template <typename T>
@@ -232,6 +240,17 @@ struct image_traits<ImageType::SemanticMask>
 template <>
 struct image_traits<ImageType::MotionMask>
     : public image_traits_impl<ImageType::MotionMask> {};
+
+//! Alias to an ImageWrapper<ImageType::RGBMono>
+typedef ImageWrapper<ImageType::RGBMono> WrappedRGBMono;
+//! Alias to an ImageWrapper<ImageType::Depth>
+typedef ImageWrapper<ImageType::Depth> WrappedDepth;
+//! Alias to an ImageWrapper<ImageType::OpticalFlow>
+typedef ImageWrapper<ImageType::OpticalFlow> WrappedOpticalFlow;
+//! Alias to an ImageWrapper<ImageType::SemanticMask>
+typedef ImageWrapper<ImageType::SemanticMask> WrappedSemanticMask;
+//! Alias to an ImageWrapper<ImageType::MotionMask>
+typedef ImageWrapper<ImageType::MotionMask> WrappedMotionMask;
 
 }  // namespace dyno
 

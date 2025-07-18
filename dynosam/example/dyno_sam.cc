@@ -136,7 +136,9 @@ int main(int argc, char* argv[]) {
     // cv::waitKey(1);
     cv::imshow("Depth", depth_viz);
 
-    auto frame = tracker->track(frame_id, timestamp, image_container);
+    std::set<ObjectId> object_keyframes;
+    auto frame =
+        tracker->track(frame_id, timestamp, image_container, object_keyframes);
     Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
     // // motion_viz =

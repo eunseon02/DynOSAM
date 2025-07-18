@@ -102,8 +102,11 @@ RGBDInstanceFrontendModule::validateImageContainer(
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
+
+  std::set<ObjectId> keyframed_objects;
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
-                                     *image_container);
+                                     *image_container, keyframed_objects);
+  (void)keyframed_objects;
   CHECK(frame->updateDepths());
 
   return {State::Nominal, nullptr};
@@ -131,8 +134,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         previous_nav_state_.attitude().inverse() * nav_state_.attitude();
   }
 
-  Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
-                                     *image_container, R_curr_ref);
+  std::set<ObjectId> keyframed_objects;
+  Frame::Ptr frame =
+      tracker_->track(input->getFrameId(), input->getTimestamp(),
+                      *image_container, keyframed_objects, R_curr_ref);
 
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
@@ -253,6 +258,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   output->pim_ = pim;
   output->T_k_1_k_ = T_k_1_k;
   vo_velocity_ = T_k_1_k;
+  // output->is_keyframe_ = keyframed_objects;
 
   if (FLAGS_save_frontend_json)
     output_packet_record_.insert({output->getFrameId(), output});

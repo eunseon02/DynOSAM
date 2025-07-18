@@ -68,18 +68,12 @@ void getCorrespondences(FeaturePairs& correspondences,
 
 ObjectIds getObjectLabels(const cv::Mat& image) {
   CHECK(!image.empty());
-  // TODO: this could be optimised by mapping the data directly to a std::set?
   std::set<ObjectId> unique_labels;
-  for (int i = 0; i < image.rows; i++) {
-    for (int j = 0; j < image.cols; j++) {
-      const ObjectId label = image.at<ObjectId>(i, j);
-
-      if (label != background_label) {
-        unique_labels.insert(label);
-      }
+  for (auto it = image.begin<ObjectId>(); it != image.end<ObjectId>(); ++it) {
+    if (*it != background_label) {
+      unique_labels.insert(*it);
     }
   }
-
   return ObjectIds(unique_labels.begin(), unique_labels.end());
 }
 
@@ -514,7 +508,8 @@ void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size) {
 
 void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
                                    int thickness,
-                                   bool use_as_feature_detection_mask) {
+                                   bool use_as_feature_detection_mask,
+                                   cv::Mat* coloured_boundary_mask) {
   cv::Mat thicc_boarder;  // god im so funny
   cv::Scalar fill_colour;
 
@@ -536,7 +531,10 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
     std::vector<std::vector<cv::Point>> detected_contours;
     vision_tools::findObjectBoundingBox(mask, object_id, detected_contours);
 
-    cv::drawContours(thicc_boarder, detected_contours, -1, 255, cv::FILLED);
+    // cv::drawContours(thicc_boarder, detected_contours, -1, 255, cv::FILLED);
+    CHECK_LE(object_id, 255);  // works only with uint8 types...
+    cv::drawContours(thicc_boarder, detected_contours, -1, object_id,
+                     cv::FILLED);
   }
 
   // Dilate the mask to expand outwards by 'thickness' pixels
@@ -564,6 +562,12 @@ void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
   // detection mask)
   boundary_mask.setTo(fill_colour, thicc_outer_boarder_mask);
   boundary_mask.setTo(fill_colour, thicc_inner_boarder_mask);
+
+  if (coloured_boundary_mask != nullptr) {
+    *coloured_boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
+    cv::bitwise_or(thicc_outer_boarder_mask, thicc_inner_boarder_mask,
+                   *coloured_boundary_mask);
+  }
 }
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask,

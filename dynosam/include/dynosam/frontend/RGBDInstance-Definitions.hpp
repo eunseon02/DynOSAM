@@ -74,6 +74,8 @@ struct RGBDInstanceOutputPacket : public FrontendOutputPacketBase {
   // the camera frame (at k-1)
   gtsam::Pose3 T_k_1_k_;
 
+  std::set<ObjectId> is_keyframe_;
+
   RGBDInstanceOutputPacket(
       const StatusKeypointVector& static_keypoint_measurements,
       const StatusKeypointVector& dynamic_keypoint_measurements,

@@ -93,7 +93,9 @@ int main(int argc, char* argv[]) {
         .opticalFlow(optical_flow)
         .objectMotionMask(motion);
 
-    auto frame = tracker->track(frame_id, timestamp, image_container);
+    std::set<ObjectId> object_keyframes;
+    auto frame =
+        tracker->track(frame_id, timestamp, image_container, object_keyframes);
     Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
     cv::Mat tracking;
