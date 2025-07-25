@@ -101,6 +101,8 @@ class FunctionalParallelOpenCVMat
 
 namespace utils {
 
+double calculateIoU(const cv::Rect& a, const cv::Rect& b);
+
 bool cvSizeEqual(const cv::Size& a, const cv::Size& b);
 bool cvSizeEqual(const cv::Mat& a, const cv::Mat& b);
 

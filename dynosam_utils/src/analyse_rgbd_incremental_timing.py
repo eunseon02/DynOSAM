@@ -11,7 +11,7 @@ import dynosam_utils.evaluation.formatting_utils as formatting
 
 
 plt.rcdefaults()
-startup_plotting(32, line_width=3.0)
+startup_plotting(40, line_width=3.0)
 
 
 def print_timing(file, actual_last_frame = None):
@@ -235,10 +235,10 @@ def draw_objects_frames(ax, motion_error_evaluator = None, result_path=None, dat
 
 
 def plot_timing(ax, result_path, title, do_ph_evaluation = False, **kwargs):
-    # hybrid_file = result_path + "hybrid_isam2_timing_inc_relin1.csv"
-    # wcme_file = result_path + "wcme_isam2_timing_inc_relin1.csv"
-    hybrid_file = result_path + "hybrid_isam2_timing_inc.csv"
-    wcme_file = result_path + "wcme_isam2_timing_inc.csv"
+    hybrid_file = result_path + "hybrid_isam2_timing_inc_relin1.csv"
+    wcme_file = result_path + "wcme_isam2_timing_inc_relin1.csv"
+    # hybrid_file = result_path + "hybrid_isam2_timing_inc.csv"
+    # wcme_file = result_path + "wcme_isam2_timing_inc.csv"
 
 
     dataset_eval = eval.DatasetEvaluator(result_path)
@@ -382,7 +382,7 @@ def plot_wc_hybrid_isam_results(ax, result_path, variable_to_plot, scale='linear
 
     frame_id_var = ' frame id'
 
-    def _plot_impl(ax, df, label, color, line_style = "-", plot_termination = False):
+    def _plot_impl(ax, df, label, color, line_style = "-", plot_termination = False, termination_label = None):
         column_names = df.columns.tolist()
 
         # older version of code did not have header in .csv file...
@@ -433,14 +433,11 @@ def plot_wc_hybrid_isam_results(ax, result_path, variable_to_plot, scale='linear
         if plot_termination:
             x_last = frames[-1]
             y_last = data[-1]
-            ax.plot(x_last, y_last, 'ro')
+            if termination_label is not None:
+                ax.plot(x_last, y_last, 'rx',markersize=15, markeredgewidth=4, label=termination_label)
+            else:
+                ax.plot(x_last, y_last, 'rx',markersize=15, markeredgewidth=4)
 
-            ax.annotate(f'Failure',
-             xy=(x_last, y_last),
-             xytext=(x_last + 3, y_last -2 ),  # Offset for better visibility
-             arrowprops=dict(arrowstyle="simple",facecolor='red',edgecolor='none'),
-             fontsize=27,
-             color='red')
 
     hybrid_inc_relin10_df = pd.read_csv(hybrid_inc_relin10)
     wc_inc_relin10_df = pd.read_csv(wc_inc_relin10)
@@ -451,11 +448,12 @@ def plot_wc_hybrid_isam_results(ax, result_path, variable_to_plot, scale='linear
 
     hybrid_colour = get_nice_blue()
     wc_colour = get_nice_red()
-    _plot_impl(ax, hybrid_inc_relin10_df, "iHybrid (relinSkip=10)",hybrid_colour)
-    _plot_impl(ax, wc_inc_relin10_df,"iBaseline (relinSkip=10)",wc_colour, plot_termination=plot_wcme_termination)
+    _plot_impl(ax, hybrid_inc_relin1_df, r"iHybrid ($\lambda_{rs}=1$)",hybrid_colour,line_style="--")
+    _plot_impl(ax, hybrid_inc_relin10_df, r"iHybrid ($\lambda_{rs}=10$)",hybrid_colour)
 
-    _plot_impl(ax, hybrid_inc_relin1_df, "iHybrid (relinSkip=1)",hybrid_colour,line_style="--")
-    _plot_impl(ax, wc_inc_relin1_df, "iBaseline (relinSkip=1)",wc_colour,line_style="--",plot_termination=plot_wcme_termination)
+    _plot_impl(ax, wc_inc_relin1_df, r"iBaseline ($\lambda_{rs}=1$)",wc_colour,line_style="--",plot_termination=plot_wcme_termination)
+    _plot_impl(ax, wc_inc_relin10_df,r"iBaseline ($\lambda_{rs}=10$)",wc_colour, plot_termination=plot_wcme_termination, termination_label="Failure")
+
 
     if title is None:
         title = variable_to_plot
@@ -505,10 +503,10 @@ if plot_comparison:
     # sequence = "viode_city_night_high"
     # sequence = "tas_rc6"
 
-    plot_wc_hybrid_isam_results(ax3, result_path, 'timing [ms]', scale="log", title="iSAM2 update time", y_label="Timing [ms]",plot_wcme_termination=False)
+    plot_wc_hybrid_isam_results(ax3, result_path, 'timing [ms]', scale="log", title="iSAM2 update time", y_label="Timing [ms]",plot_wcme_termination=True)
     plot_wc_hybrid_isam_results(ax1, result_path, ' avg. clique size', title="Avg. Clique Size", y_label="Number of variables")
-    plot_wc_hybrid_isam_results(ax4, result_path, ' max clique size', title="Max Clique Size", y_label="Number of variables", plot_wcme_termination=False)
-    plot_wc_hybrid_isam_results(ax2, result_path, ' num variables re-elinm', title="Re-eliminated Variables", y_label="Number of variables",plot_wcme_termination=False)
+    plot_wc_hybrid_isam_results(ax4, result_path, ' max clique size', title="Max Clique Size", y_label="Number of variables", plot_wcme_termination=True)
+    plot_wc_hybrid_isam_results(ax2, result_path, ' num variables re-elinm', title="Re-eliminated Variables", y_label="Number of variables",plot_wcme_termination=True)
 
     ax1.legend()
     fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_wc_hybrid_bt_analysis.pdf", format="pdf")

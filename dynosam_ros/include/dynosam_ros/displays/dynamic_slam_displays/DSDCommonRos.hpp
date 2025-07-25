@@ -95,7 +95,8 @@ class DSDTransport {
   static MultiObjectOdometryPath constructMultiObjectOdometryPaths(
       const ObjectMotionMap& motions, const ObjectPoseMap& poses,
       Timestamp timestamp_k, const FrameIdTimestampMap& frame_timestamp_map,
-      const std::string& frame_id_link);
+      const std::string& frame_id_link,
+      bool interpolate_missing_segments = true);
 
   /**
    * @brief Nested Publisher that publishes all the object odometries for a

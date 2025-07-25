@@ -144,6 +144,28 @@ bool findObjectBoundingBox(
     const cv::Mat& mask, ObjectId object_id,
     std::vector<std::vector<cv::Point>>& detected_contours);
 
+struct ObjectBoundaryMaskResult {
+  //! Modified boundary mask for each object (dilated and eroded) representing
+  //! the allowing feature detection pixels for each object
+  cv::Mat boundary_mask;
+  //! If the boundary mask should treated as a feature detection mask. See
+  //! computeObjectMaskBoundaryMask for more details.
+  bool is_feature_detection_mask;
+  //! Same boundary mask will be set but with the object mask boarders set to
+  //! the object id (j) instead of 0/255. The background will be 0. This makes
+  //! it easier to do object level association.
+  cv::Mat labelled_boundary_mask;
+  //! Object labels (j) detected on the imput mask
+  ObjectIds objects_detected;
+  //! Bounding boxes of objects as detected on the original mask. In order of
+  //! objects_detected.
+  std::vector<cv::Rect> object_bounding_boxes;
+  //! Bounding boxes 'inner' layer of the boundary mask; this roughly indicates
+  //! the inner area of the object which features can be detected on. In order
+  //! of objects_detected.
+  std::vector<cv::Rect> inner_boarder_object_bounding_boxes;
+};
+
 /**
  * @brief From  an input instance/semantic mask type img construct a image mask
  * (binary) that has True values around each object in the image, with a certain
@@ -157,21 +179,10 @@ bool findObjectBoundingBox(
  * boarder are set to zero, and all other values are 255. If this argument is
  * False, the opposite is true (pixels inside the boarder are 255 and others are
  * set to 0)
- *
- * @param mask const cv::Mat&
- * @param boundary_mask cv::Mat&
- * @param thickness int Specifies the thickness of the boarder to be created on
- * the outside of the detected object
- * @param use_as_feature_detection_mask. bool Default is true.
- * @param coloured_boundary_mask cv::Mat*. If provided (not null) then the same
- * boundary mask will be set but with the object mask boarders set to the object
- * id (j) instead of 0/255. The background will be 0. This makes it easier to do
- * object level association
  */
-void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
-                                   int thickness,
-                                   bool use_as_feature_detection_mask = true,
-                                   cv::Mat* coloured_boundary_mask = nullptr);
+void computeObjectMaskBoundaryMask(ObjectBoundaryMaskResult& result,
+                                   const cv::Mat& mask, int thickness,
+                                   bool use_as_feature_detection_mask = true);
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask,
                   const ObjectIds& old_labels, const ObjectIds& new_labels);

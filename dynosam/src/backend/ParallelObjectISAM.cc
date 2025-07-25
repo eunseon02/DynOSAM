@@ -138,8 +138,8 @@ void ParallelObjectISAM::updateFormulation(
     auto frame_km1 = frame_k - 1u;
 
     if (!accessor_->exists(CameraPoseSymbol(frame_km1))) {
-      LOG(INFO) << "Previous camera pose does not exist!! k=" << frame_km1
-                << "j=" << object_id_;
+      VLOG(5) << "Previous camera pose does not exist!! k=" << frame_km1
+              << "j=" << object_id_;
       Pose3Measurement T_W_cam_km1;
       CHECK(this->map()->hasInitialSensorPose(frame_km1, &T_W_cam_km1));
 
@@ -426,8 +426,8 @@ void ParallelObjectISAM::updateStates() {
     }
   }
 
-  LOG(INFO) << "Motion change at frames "
-            << container_to_string(motions_changed) << " for j=" << object_id_;
+  VLOG(5) << "Motion change at frames " << container_to_string(motions_changed)
+          << " for j=" << object_id_;
 
   decoupled_formulation_->updateTheta(estimate);
 }

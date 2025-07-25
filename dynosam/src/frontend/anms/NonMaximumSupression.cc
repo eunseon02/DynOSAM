@@ -112,7 +112,6 @@ std::vector<cv::KeyPoint> AdaptiveNonMaximumSuppression::suppressNonMax(
   }
   //   VLOG(1) << "Non Maximum Suppression Timing [ms]: "
   //           << utils::Timer::toc(tic).count();
-  LOG(INFO) << "Done Anms";
   return keypoints;
 }
 

@@ -25,8 +25,8 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
 
     plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval, title=prefix,
                                 plot_object_points=False,
-                                plot_gt_objects=False,
-                                plot_gt_camera=False,
+                                plot_gt_objects=True,
+                                plot_gt_camera=True,
                                 downsample_static_cloud=0.05)
 
     if plot_collection is None:
@@ -37,7 +37,7 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
     ax.view_init(azim=-113, elev=38, roll=1)
     ax.grid(False)
     fig.tight_layout()
-    ax.get_legend().remove()
+    # ax.get_legend().remove()
 
     ax.set_rasterization_zorder(10)
 
@@ -67,10 +67,14 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
 # make_plot("/root/results/misc/", "object_centric_LM_opt_backend")
 
 plot_collection = evo_plot.PlotCollection("Map")
-make_plot("/root/results/TRO2025/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend", plot_collection)
+# make_plot("/root/results/TRO2025/omd_swinging_4_unconstrained_sliding", "rgbd_motion_world_backend", plot_collection)
 
 
-# make_plot("/root/results/misc/", "rgbd_motion_world_LM_opt_backend", plot_collection)
+make_plot("/root/results/misc/", "hybrid_backend", plot_collection)
+make_plot("/root/results/misc/", "hybrid_batch_opt_backend", plot_collection)
+
+make_plot("/root/results/misc/", "hybrid_smart_structureless_backend", plot_collection)
+make_plot("/root/results/misc/", "hybrid_smart_structureless_batch_opt_backend", plot_collection)
 # make_plot("/root/results/misc/", "rgbd_motion_world_backend", plot_collection)
 
 # make_plot("/root/results/misc/test_oc/", "object_centric_backend", plot_collection)

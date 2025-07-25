@@ -59,6 +59,23 @@ std::string to_string<cv::Rect>(const cv::Rect& t) {
 
 namespace utils {
 
+double calculateIoU(const cv::Rect& a, const cv::Rect& b) {
+  cv::Rect intersection = a & b;
+  double intersection_area = intersection.area();
+
+  // Calculate union area
+  double union_area = a.area() + b.area() - intersection_area;
+
+  // Handle case where unionArea is zero (e.g., no overlap and one or both rects
+  // have zero area)
+  if (union_area == 0) {
+    return 0.0;
+  }
+
+  // Calculate IoU
+  return intersection_area / union_area;
+}
+
 bool cvSizeEqual(const cv::Size& a, const cv::Size& b) {
   return a.height == b.height && a.width == b.width;
 }

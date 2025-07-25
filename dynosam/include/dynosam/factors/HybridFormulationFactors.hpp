@@ -66,9 +66,9 @@ struct HybridObjectMotion {
    * Implements: z_k = ^{X_k}m_k =  ^WX_k^{-1} ^W_eH_k ^WL_e ^L_m
    *
    * @param X_k const gtsam::Pose3& X_k Observing camera pose.
-   * @param e_H_k_world const gtsam::Pose3& object motion from s to k in the
+   * @param e_H_k_world const gtsam::Pose3& object motion from e to k in the
    * world frame.
-   * @param L_s0 const gtsam::Pose3& embedded object frame.
+   * @param L_e const gtsam::Pose3& embedded object frame.
    * @param m_L gtsam::Point3 point in the object frame (m_L).
    * @return gtsam::Point3 measured 3D point in the camera frame (z_k).
    */
@@ -76,6 +76,20 @@ struct HybridObjectMotion {
                                         const gtsam::Pose3& e_H_k_world,
                                         const gtsam::Pose3& L_e,
                                         const gtsam::Point3& m_L);
+
+  /**
+   * @brief Constructs the transform that projects a point/pose in L_e into W.
+   * This is also the design matrix (A in Ax=b) LHSfor the linear system.
+   *
+   * @param X_k  const gtsam::Pose3& X_k Observing camera pose.
+   * @param e_H_k_world const gtsam::Pose3& object motion from eto k in the
+   * world frame.
+   * @param L_e const gtsam::Pose3& embedded object frame.
+   * @return gtsam::Pose3
+   */
+  static gtsam::Pose3 projectToCamera3Transform(const gtsam::Pose3& X_k,
+                                                const gtsam::Pose3& e_H_k_world,
+                                                const gtsam::Pose3& L_e);
 
   /**
    * @brief Residual 3D error for a measured 3D point (z_k) and an estimated

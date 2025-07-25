@@ -378,9 +378,11 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
     getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
                  lmk_L0_init);
 
+    // HybridSmartFactor::shared_ptr smart_factor =
+    //     boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise,
+    //                                           lmk_L0_init);
     HybridSmartFactor::shared_ptr smart_factor =
-        boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise,
-                                              lmk_L0_init);
+        boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise);
 
     new_factors.push_back(smart_factor);
     tracklet_id_to_smart_factor_.insert2(context.getTrackletId(), smart_factor);

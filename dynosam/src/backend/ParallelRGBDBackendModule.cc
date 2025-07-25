@@ -678,14 +678,12 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
   Timestamp timestamp_k = this->spin_state_.timestamp;
   FrameId frame_id_k = this->spin_state_.frame_id;
 
-  LOG(INFO) << "Logging Parallel RGBD backend at frame " << frame_id_k;
+  VLOG(20) << "Logging Parallel RGBD backend at frame " << frame_id_k;
 
   BackendOutputPacket::Ptr output =
       constructOutputPacket(frame_id_k, timestamp_k);
 
   const auto& gt_packets = shared_module_info.getGroundTruthPackets();
-
-  LOG(INFO) << "Has gt packets " << gt_packets.has_value();
 
   logger->logObjectMotion(output->optimized_object_motions, gt_packets);
   logger->logObjectPose(output->optimized_object_poses, gt_packets);

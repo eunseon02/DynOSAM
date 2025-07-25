@@ -150,8 +150,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
 
   bool stereo_result = false;
-  // static const double base_line = 0.05; //VIODE
-  static const double base_line = 0.12;  // ZED
+  static const double base_line = 0.05;  // VIODE
+  // static const double base_line = 0.12;  // ZED
 
   if (has_stereo) {
     const cv::Mat& left_rgb = image_container->rgb();

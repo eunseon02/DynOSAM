@@ -339,6 +339,22 @@ StatusLandmarkVector HybridAccessor::getLocalDynamicLandmarkEstimates(
   return estimates;
 }
 
+std::optional<Motion3ReferenceFrame> HybridAccessor::getRelativeLocalMotion(
+    FrameId frame_id, ObjectId object_id) const {
+  const auto from = frame_id - 1u;
+  const auto to = frame_id;
+  auto L_W_k_1 = this->getObjectPose(from, object_id);
+  auto L_W_k = this->getObjectPose(to, object_id);
+
+  if (L_W_k_1 && L_W_k) {
+    const gtsam::Pose3 L_k_1_k = L_W_k_1->inverse() * L_W_k.value();
+    return Motion3ReferenceFrame(L_k_1_k, MotionRepresentationStyle::F2F,
+                                 ReferenceFrame::OBJECT, from, to);
+  } else {
+    return {};
+  }
+}
+
 bool HybridAccessor::getDynamicLandmarkImpl(FrameId frame_id,
                                             TrackletId tracklet_id,
                                             DynamicLandmarkQuery& query) const {
@@ -697,8 +713,7 @@ void HybridFormulation::objectUpdateContext(
     // gtsam::Pose3 motion;
     const gtsam::Pose3 X_world = getInitialOrLinearizedSensorPose(frame_id);
     gtsam::Pose3 motion = computeInitialH(object_id, frame_id);
-    LOG(INFO) << "Added motion at  "
-              << DynoLikeKeyFormatter(object_motion_key_k);
+    VLOG(5) << "Added motion at  " << DynoLikeKeyFormatter(object_motion_key_k);
     // gtsam::Pose3 motion;
     new_values.insert(object_motion_key_k, motion);
     is_other_values_in_map.insert2(object_motion_key_k, true);

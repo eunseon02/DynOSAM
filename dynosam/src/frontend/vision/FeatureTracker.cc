@@ -102,28 +102,27 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // edge of the dynamic object as there are lots of inconsistencies here the
   // detection mask is in the opencv mask form: CV_8UC1 where white pixels (255)
   // are valid and black pixels (0) should not be detected on
-  cv::Mat boarder_detection_mask;
-  // the boarder detection mask but pixels are labelled with their
-  // tracking/object label j and the background is 0: this allows per-object
-  // association of the mask
-  cv::Mat coloured_detection_mask;
-  vision_tools::computeObjectMaskBoundaryMask(
-      input_images.objectMotionMask(), boarder_detection_mask,
-      scaled_boarder_thickness, true, &coloured_detection_mask);
+  static constexpr bool kUseAsFeatureDetectionMask = true;
+  vision_tools::ObjectBoundaryMaskResult boundary_mask_result;
+  vision_tools::computeObjectMaskBoundaryMask(boundary_mask_result,
+                                              input_images.objectMotionMask(),
+                                              kUseAsFeatureDetectionMask);
+
   FeatureContainer static_features;
   {
-    LOG(INFO) << "Starting static track";
+    VLOG(20) << "Starting static track";
     utils::TimingStatsCollector static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
-        previous_frame_, input_images, info_, boarder_detection_mask, R_km1_k);
+        previous_frame_, input_images, info_,
+        boundary_mask_result.boundary_mask, R_km1_k);
   }
 
   FeatureContainer dynamic_features;
   {
-    LOG(INFO) << "Starting dynamic track";
+    VLOG(20) << "Starting dynamic track";
     utils::TimingStatsCollector dynamic_track_timer("dynamic_feature_track");
     trackDynamic(frame_id, input_images, dynamic_features, object_keyframes,
-                 boarder_detection_mask, coloured_detection_mask);
+                 boundary_mask_result);
   }
 
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
@@ -141,7 +140,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
           << timestamp << ", object ids "
           << container_to_string(new_frame->getObjectIds());
   previous_frame_ = new_frame;
-  boarder_detection_mask_ = boarder_detection_mask;
+  boarder_detection_mask_ = boundary_mask_result.boundary_mask;
 
   return new_frame;
 }
@@ -260,8 +259,7 @@ bool FeatureTracker::stereoTrack(FeaturePtrs& stereo_features,
 void FeatureTracker::trackDynamic(
     FrameId frame_id, const ImageContainer& image_container,
     FeatureContainer& dynamic_features, std::set<ObjectId>& object_keyframes,
-    const cv::Mat& detection_mask,
-    const cv::Mat& coloured_boarder_detection_mask) {
+    const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result) {
   // first dectect dynamic points
   const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
@@ -275,7 +273,7 @@ void FeatureTracker::trackDynamic(
   dynamic_features.clear();
 
   gtsam::FastMap<ObjectId, FeatureContainer> tracks_per_object;
-
+  const cv::Mat& detection_mask = boundary_mask_result.boundary_mask;
   // internal detection mask that is appended with new invalid pixels
   // this builds the static detection mask over the existing input mask
   cv::Mat detection_mask_impl;
@@ -290,8 +288,11 @@ void FeatureTracker::trackDynamic(
   }
   CHECK_EQ(detection_mask_impl.type(), CV_8U);
 
-  // creating tracking mask
-  cv::Mat tracking_mask =
+  // creating tracking mask, pixel level indicator (1....N) of dynamic feature
+  // location this is different to the detection_mask_impl which is a binary
+  // mask (0/255) and indicates the location of all features (static and
+  // dynamic) and is used to avoid detecting features near existing ones
+  cv::Mat dynamic_tracking_mask =
       cv::Mat(detection_mask_impl.size(), CV_8U, cv::Scalar(0));
 
   if (previous_frame_) {
@@ -397,7 +398,7 @@ void FeatureTracker::trackDynamic(
         // fill tracking mask with tracked points, labelled with the object
         // label (j) to indicate places on object with keypoints
         cv::circle(
-            tracking_mask, cv::Point2f(x, y),
+            dynamic_tracking_mask, cv::Point2f(x, y),
             params_.min_distance_btw_tracked_and_detected_dynamic_features,
             cv::Scalar(predicted_label), cv::FILLED);
       }
@@ -409,7 +410,7 @@ void FeatureTracker::trackDynamic(
   }
 
   requiresSampling(object_keyframes, info_, image_container, tracks_per_object,
-                   coloured_boarder_detection_mask);
+                   boundary_mask_result, dynamic_tracking_mask);
 
   std::set<ObjectId> objects_sampled;
   sampleDynamic(frame_id, image_container,
@@ -588,16 +589,21 @@ void FeatureTracker::requiresSampling(
     std::set<ObjectId>& objects_to_sample, const FeatureTrackerInfo& info,
     const ImageContainer& image_container,
     const gtsam::FastMap<ObjectId, FeatureContainer>& features_per_object,
-    const cv::Mat& coloured_boarder_detection_mask) const {
-  // cv::imshow("Board detection mask",
-  //   WrappedMotionMask(
-  //     image_traits<ImageType::MotionMask>::convertTo(coloured_boarder_detection_mask,
-  //     true)).toRGB());
-  // cv::waitKey(1);
-
-  LOG(INFO) << "Starting sampling check";
+    const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result,
+    const cv::Mat& dynamic_tracking_mask) const {
+  VLOG(20) << "Starting sampling check";
   ObjectIds detected_objects =
       vision_tools::getObjectLabels(image_container.objectMotionMask());
+
+  {
+    // sanity check assert
+    CHECK(equals_with_abs_tol(detected_objects,
+                              boundary_mask_result.objects_detected))
+        << "Explicit detected objects " << container_to_string(detected_objects)
+        << " != boundary mask result: "
+        << container_to_string(boundary_mask_result.objects_detected)
+        << " this could happen if the object mask changes dramatically...!!";
+  }
 
   if (!previous_frame_) {
     if (!detected_objects.empty()) {
@@ -615,11 +621,14 @@ void FeatureTracker::requiresSampling(
   // earlier than that to ensure we dont have a frame with NO points
   static constexpr int age_buffer = 3;
   static constexpr int min_tracks = 20;
+  static constexpr double min_iou = 0.3;
   const size_t expiry_age =
       static_cast<size_t>(max_dynamic_point_age - age_buffer);
   CHECK_GT(expiry_age, 0u);
 
-  for (ObjectId object_id : detected_objects) {
+  for (size_t i = 0; i < detected_objects.size(); i++) {
+    ObjectId object_id = detected_objects.at(i);
+
     // object is tracked and therefore should exist in the previous frame!
     if (info.dynamic_track.exists(object_id)) {
       const auto& per_object_status = info.dynamic_track.at(object_id);
@@ -649,7 +658,20 @@ void FeatureTracker::requiresSampling(
       const bool too_few_tracks = num_tracked < min_tracks;
       // eventually also area based tings
 
-      const bool needs_sampling = many_old_points || too_few_tracks;
+      // bounding box of the whole mask, representing the object detected in the
+      // actual image
+      const cv::Rect& detection_bb =
+          boundary_mask_result.inner_boarder_object_bounding_boxes.at(i);
+
+      // bounding box of the tracked feature points on the object
+      cv::Rect tracked_bb =
+          cv::boundingRect(per_object_tracks.toOpenCV(nullptr, true));
+
+      double iou = utils::calculateIoU(detection_bb, tracked_bb);
+      const bool small_iou = iou < min_iou;
+
+      const bool needs_sampling =
+          many_old_points || too_few_tracks || small_iou;
 
       if (needs_sampling) {
         objects_to_sample.insert(object_id);
@@ -659,6 +681,7 @@ void FeatureTracker::requiresSampling(
 
         VLOG_IF(5, many_old_points) << "Sampling reason: too many old points";
         VLOG_IF(5, too_few_tracks) << "Sampling reason: too few points";
+        VLOG_IF(5, small_iou) << "Sampling reason: IoU too small";
       }
     } else {
       objects_to_sample.insert(object_id);

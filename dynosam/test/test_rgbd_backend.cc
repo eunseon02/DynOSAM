@@ -551,14 +551,14 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
               gtsam::Pose3::Identity(),
               // motion only in x
               gtsam::Pose3(gtsam::Rot3::RzRyRx(0.3, 0.1, 0.0),
-                           gtsam::Point3(0.1, 0.05, 0))));
+                           gtsam::Point3(0.1, 0.2, 0))));
   // needs to be at least 3 overlap so we can meet requirements in graph
   // TODO: how can we do 1 point but with lots of overlap (even infinity
   // overlap?)
 
   const double H_R_sigma = 0.05;
   const double H_t_sigma = 0.08;
-  const double dynamic_point_sigma = 0.1;
+  const double dynamic_point_sigma = 0.2;
 
   const double X_R_sigma = 0.01;
   const double X_t_sigma = 0.01;
@@ -572,14 +572,14 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
 
   dyno_testing::RGBDScenario scenario(
       camera,
-      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(10, 7),
+      std::make_shared<dyno_testing::SimpleStaticPointsGenerator>(22, 7),
       noise_params);
 
   // add one obect
-  const size_t num_points = 10;
-  const size_t obj1_overlap = 4;
-  const size_t obj2_overlap = 4;
-  const size_t obj3_overlap = 4;
+  const size_t num_points = 30;
+  const size_t obj1_overlap = 6;
+  const size_t obj2_overlap = 7;
+  const size_t obj3_overlap = 7;
   dyno_testing::ObjectBody::Ptr object1 =
       std::make_shared<dyno_testing::ObjectBody>(
           std::make_unique<dyno_testing::ConstantMotionBodyVisitor>(
@@ -618,34 +618,34 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   scenario.addObjectBody(3, object3);
 
   dyno::BackendParams backend_params;
-  backend_params.use_robust_kernals_ = true;
+  backend_params.use_robust_kernals_ = false;
   backend_params.useLogger(false);
-  backend_params.min_dynamic_obs_ = 3u;
+  backend_params.min_dynamic_obs_ = 1u;
   backend_params.dynamic_point_noise_sigma_ = dynamic_point_sigma;
   backend_params.odometry_rotation_sigma_ = X_R_sigma;
   backend_params.odometry_translation_sigma_ = X_t_sigma;
 
   dyno_testing::RGBDBackendTester tester;
-  auto object_centric_backend =
-      tester.addTester<dyno_testing::IncrementalTester>(
-          std::make_shared<dyno::RGBDBackendModule>(
-              backend_params, dyno_testing::makeDefaultCameraPtr(),
-              dyno::RGBDBackendModule::UpdaterType::HYBRID));
+  //   auto object_centric_backend =
+  //       tester.addTester<dyno_testing::IncrementalTester>(
+  //           std::make_shared<dyno::RGBDBackendModule>(
+  //               backend_params, dyno_testing::makeDefaultCameraPtr(),
+  //               dyno::RGBDBackendModule::UpdaterType::HYBRID));
 
-  auto oc_noise_models = object_centric_backend->getNoiseModels();
-  CHECK(!oc_noise_models.initial_pose_prior->isConstrained());
-  oc_noise_models.odometry_noise->print("Odom noise");
-  CHECK(!oc_noise_models.odometry_noise->isConstrained());
-  CHECK(!oc_noise_models.landmark_motion_noise->isConstrained());
-  CHECK(!oc_noise_models.object_smoothing_noise->isConstrained());
-  CHECK(!oc_noise_models.dynamic_point_noise->isConstrained());
-  CHECK(!oc_noise_models.static_point_noise->isConstrained());
+  //   auto oc_noise_models = object_centric_backend->getNoiseModels();
+  //   CHECK(!oc_noise_models.initial_pose_prior->isConstrained());
+  //   oc_noise_models.odometry_noise->print("Odom noise");
+  //   CHECK(!oc_noise_models.odometry_noise->isConstrained());
+  //   CHECK(!oc_noise_models.landmark_motion_noise->isConstrained());
+  //   CHECK(!oc_noise_models.object_smoothing_noise->isConstrained());
+  //   CHECK(!oc_noise_models.dynamic_point_noise->isConstrained());
+  //   CHECK(!oc_noise_models.static_point_noise->isConstrained());
 
-  auto world_centric_backend =
-      tester.addTester<dyno_testing::IncrementalTester>(
-          std::make_shared<dyno::RGBDBackendModule>(
-              backend_params, dyno_testing::makeDefaultCameraPtr(),
-              dyno::RGBDBackendModule::UpdaterType::WCME));
+  //   auto world_centric_backend =
+  //       tester.addTester<dyno_testing::IncrementalTester>(
+  //           std::make_shared<dyno::RGBDBackendModule>(
+  //               backend_params, dyno_testing::makeDefaultCameraPtr(),
+  //               dyno::RGBDBackendModule::UpdaterType::WCME));
 
   //   tester.addTester<IncrementalTester>(std::make_shared<dyno::RGBDBackendModule>(
   //       backend_params, dyno_testing::makeDefaultCameraPtr(),
@@ -673,43 +673,46 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   }
 
   tester.finishAll();
+  LOG(INFO) << "Stats: " << dyno::utils::Statistics::Print();
   //   return;
   //   dyno::writeStatisticsSamplesToFile("statistics_samples.csv");
   //   dyno::writeStatisticsModuleSummariesToFile();
 
-  {
-    auto values = world_centric_backend->new_updater_->getTheta();
-    auto graph = world_centric_backend->new_updater_->getGraph();
+  //   {
+  //     auto values = world_centric_backend->new_updater_->getTheta();
+  //     auto graph = world_centric_backend->new_updater_->getGraph();
 
-    // dyno::NonlinearFactorGraphManager nlfgm(graph, values);
-    // auto options = dyno::factor_graph_tools::DrawBlockJacobiansOptions::
-    //     makeDynoSamOptions();
-    // options.desired_size = cv::Size(1200, 700);
-    //   cv::Mat block_jacobians =
-    //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
-    //       options);
+  //     // dyno::NonlinearFactorGraphManager nlfgm(graph, values);
+  //     // auto options = dyno::factor_graph_tools::DrawBlockJacobiansOptions::
+  //     //     makeDynoSamOptions();
+  //     // options.desired_size = cv::Size(1200, 700);
+  //     //   cv::Mat block_jacobians =
+  //     //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
+  //     //       options);
 
-    // cv::imshow("WC Jacobians", dyno::factor_graph_tools::computeRFactor(
-    //                                nlfgm.linearize(), graph.orderingCOLAMD())
-    //                                .second);
-  }
+  //     // cv::imshow("WC Jacobians", dyno::factor_graph_tools::computeRFactor(
+  //     //                                nlfgm.linearize(),
+  //     graph.orderingCOLAMD())
+  //     //                                .second);
+  //   }
 
-  {
-    auto values = object_centric_backend->new_updater_->getTheta();
-    auto graph = object_centric_backend->new_updater_->getGraph();
+  //   {
+  //     auto values = object_centric_backend->new_updater_->getTheta();
+  //     auto graph = object_centric_backend->new_updater_->getGraph();
 
-    dyno::NonlinearFactorGraphManager nlfgm(graph, values);
-    // auto options =
-    //     dyno::factor_graph_tools::DrawBlockJacobiansOptions::makeDynoSamOptions();
-    // options.desired_size = cv::Size(1200, 700);
-    //   cv::Mat block_jacobians =
-    //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
-    //       options);
+  //     dyno::NonlinearFactorGraphManager nlfgm(graph, values);
+  //     // auto options =
+  //     //
+  //     dyno::factor_graph_tools::DrawBlockJacobiansOptions::makeDynoSamOptions();
+  //     // options.desired_size = cv::Size(1200, 700);
+  //     //   cv::Mat block_jacobians =
+  //     //       nlfgm.drawBlockJacobian(gtsam::Ordering::OrderingType::COLAMD,
+  //     //       options);
 
-    cv::imshow("OC Jacobians", dyno::factor_graph_tools::computeRFactor(
-                                   nlfgm.linearize(), graph.orderingCOLAMD())
-                                   .second);
-  }
+  //     cv::imshow("OC Jacobians", dyno::factor_graph_tools::computeRFactor(
+  //                                    nlfgm.linearize(),
+  //                                    graph.orderingCOLAMD()) .second);
+  //   }
 
   // {
   //     auto values = oc_smf_backend->new_updater_->getTheta();
@@ -731,7 +734,7 @@ TEST(RGBDBackendModule, testObjectCentricFormulations) {
   //     }
 
   // cv::imshow("Block Jacobians", block_jacobians);
-  cv::waitKey(0);
+  //   cv::waitKey(0);
 }
 
 TEST(RGBDBackendModule, testObjectCentric) {

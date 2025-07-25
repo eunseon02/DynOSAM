@@ -663,17 +663,18 @@ class RGBDScenario : public Scenario {
     gt_packet.X_world_ = X_world_k;
 
     gtsam::Pose3 noisy_X_world_k;
+    gtsam::Pose3 w_T_k_1_k;
+    gtsam::Pose3 noisy_w_T_k_1_k;
     if (frame_id > 0) {
       // add noise on relative transformation of camera pose using gt poses to
       // calculate gt realtive pose
       const gtsam::Pose3 X_world_k_1 = cameraPose(frame_id - 1u);
-      const gtsam::Pose3 w_T_k_1_k = X_world_k_1.inverse() * X_world_k;
+      w_T_k_1_k = X_world_k_1.inverse() * X_world_k;
 
       gtsam::Vector6 pose_sigmas;
       pose_sigmas.head<3>().setConstant(noise_params_.X_R_sigma);
       pose_sigmas.tail<3>().setConstant(noise_params_.X_t_sigma);
-      const gtsam::Pose3 noisy_w_T_k_1_k =
-          dyno::utils::perturbWithNoise(w_T_k_1_k, pose_sigmas);
+      noisy_w_T_k_1_k = dyno::utils::perturbWithNoise(w_T_k_1_k, pose_sigmas);
 
       CHECK(noisy_camera_poses_.exists(frame_id - 1u));
       noisy_X_world_k = noisy_camera_poses_.at(frame_id - 1u) * noisy_w_T_k_1_k;
@@ -780,16 +781,21 @@ class RGBDScenario : public Scenario {
     object_motions_.insert2(frame_id, motions);
     noisy_object_motions_.insert2(frame_id, noisy_motions);
 
-    return {std::make_shared<RGBDInstanceOutputPacket>(
-                static_keypoint_measurements, dynamic_keypoint_measurements,
-                static_landmarks, dynamic_landmarks, X_world_k, frame_id,
-                frame_id, object_motions_, ObjectPoseMap{},
-                gtsam::Pose3Vector{}, nullptr, gt_packet),
-            std::make_shared<RGBDInstanceOutputPacket>(
-                static_keypoint_measurements, dynamic_keypoint_measurements,
-                noisy_static_landmarks, noisy_dynamic_landmarks,
-                noisy_X_world_k, frame_id, frame_id, noisy_object_motions_,
-                ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr, gt_packet)};
+    auto gt_output = std::make_shared<RGBDInstanceOutputPacket>(
+        static_keypoint_measurements, dynamic_keypoint_measurements,
+        static_landmarks, dynamic_landmarks, X_world_k, frame_id, frame_id,
+        object_motions_, ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr,
+        gt_packet);
+    gt_output->T_k_1_k_ = w_T_k_1_k;
+
+    auto noisy_output = std::make_shared<RGBDInstanceOutputPacket>(
+        static_keypoint_measurements, dynamic_keypoint_measurements,
+        noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world_k,
+        frame_id, frame_id, noisy_object_motions_, ObjectPoseMap{},
+        gtsam::Pose3Vector{}, nullptr, gt_packet);
+    noisy_output->T_k_1_k_ = noisy_w_T_k_1_k;
+
+    return {gt_output, noisy_output};
   }
 
   const GroundTruthPacketMap& getGroundTruths() const { return ground_truths_; }

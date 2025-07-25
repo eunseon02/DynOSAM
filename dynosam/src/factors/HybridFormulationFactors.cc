@@ -48,10 +48,15 @@ gtsam::Point3 HybridObjectMotion::projectToCamera3(
     const gtsam::Pose3& X_k, const gtsam::Pose3& e_H_k_world,
     const gtsam::Pose3& L_e, const gtsam::Point3& m_L) {
   // apply transform to put map point into world via its motion
-  gtsam::Point3 m_world_k = e_H_k_world * (L_e * m_L);
-  // put map_point_world into local camera coordinate
-  gtsam::Point3 m_camera_k = X_k.inverse() * m_world_k;
+  const auto A = projectToCamera3Transform(X_k, e_H_k_world, L_e);
+  gtsam::Point3 m_camera_k = A * m_L;
   return m_camera_k;
+}
+
+gtsam::Pose3 HybridObjectMotion::projectToCamera3Transform(
+    const gtsam::Pose3& X_k, const gtsam::Pose3& e_H_k_world,
+    const gtsam::Pose3& L_e) {
+  return X_k.inverse() * e_H_k_world * L_e;
 }
 
 gtsam::Vector3 HybridObjectMotion::residual(const gtsam::Pose3& X_k,

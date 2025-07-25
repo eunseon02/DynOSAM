@@ -21,8 +21,21 @@ CloudPerObject DisplayCommon::publishPointCloud(
                          cloud.points.push_back(point);
                        });
 
+  pcl::PointCloud<pcl::PointXYZRGB> filtered_and_merged_cloud;
+  for (auto [_, obj_cloud] : clouds_per_obj) {
+    auto cloud = pcl::make_shared<pcl::PointCloud<pcl::PointXYZRGB>>(obj_cloud);
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_filtered(
+        new pcl::PointCloud<pcl::PointXYZRGB>);
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZRGB> sor;
+    sor.setInputCloud(cloud);
+    sor.setMeanK(50);             // Number of neighbors to analyze
+    sor.setStddevMulThresh(1.0);  // Threshold based on std dev
+    sor.filter(*cloud_filtered);
+    filtered_and_merged_cloud += (*cloud_filtered);
+  }
+
   sensor_msgs::msg::PointCloud2 pc2_msg;
-  pcl::toROSMsg(cloud, pc2_msg);
+  pcl::toROSMsg(filtered_and_merged_cloud, pc2_msg);
   pc2_msg.header.frame_id = frame_id;
   pub->publish(pc2_msg);
 

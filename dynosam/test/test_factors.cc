@@ -283,7 +283,7 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
   // gtsam::Pose3 pose(gtsam::Rot3::Identity(), gtsam::Point3(1.4, 0, 0));
   gtsam::Pose3 motion = gtsam::Pose3::Identity();
   gtsam::Pose3 L_e = gtsam::Pose3::Identity();
-  gtsam::Point3 point(1.0, 0, 0);
+  gtsam::Point3 point(1.0, 1.4, 2);
   gtsam::Point3 noise(10.0, 0.0, 7.0);
   gtsam::Point3 measured = point + noise;
 
@@ -389,7 +389,6 @@ TEST(SmartMotionFactor, testBasicSchurCompliment) {
     // Make full stock block matrix
     gtsam::Matrix F_block_matrix(m * 3, m * HessianDim);
     F_block_matrix.setZero();
-    LOG(INFO) << "F=" << F_block_matrix;
     // gtsam::SymmetricBlockMatrix F_block_matrix(f_block_dims);
     // size_t block_idx = 0;
     for (size_t i = 0; i < m; i++) {
@@ -453,8 +452,9 @@ gtsam::Point3 perturbCameraAndMotion(const gtsam::Point3& point_l,
                                      gtsam::Pose3& motion, gtsam::Pose3& pose,
                                      double sigma = 0.2) {
   motion = utils::perturbWithNoise(motion, sigma);
-  pose = utils::perturbWithNoise(motion, sigma);
-  return pose.inverse() * motion * L_e * (point_l);
+  pose = utils::perturbWithNoise(pose, sigma);
+  auto result = pose.inverse() * motion * L_e * (point_l);
+  return result;
 }
 
 TEST(SmartMotionFactor, testSimpleOptimise) {
@@ -466,39 +466,67 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   gtsam::Pose3 L_e = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
   gtsam::Pose3 motion1 = gtsam::Pose3::Identity();
   gtsam::Pose3 motion2 = utils::createRandomAroundIdentity<gtsam::Pose3>(3.0);
-  gtsam::Point3 point(3.0, 0, 1.2);
+  gtsam::Point3 point1(3.0, 0, 1.2);
+  gtsam::Point3 point2(2.0, -5, 3.2);
 
-  double sigma = 0.2;
-
-  // measurements have explicity noisy since we puerturb both motions and poses
-  // however the noisy is not propogated correctly since we do not add sigma
-  // noisy to the measurements
-  gtsam::Point3 measurement1 =
-      perturbCameraAndMotion(point, L_e, motion1, pose1, sigma);
-  gtsam::Point3 measurement2 =
-      perturbCameraAndMotion(point, L_e, motion2, pose2, sigma);
+  double sigma = 0.001;
 
   gtsam::Key pose_key1(1);
   gtsam::Key motion_key1(2);
 
   gtsam::Key pose_key2(3);
   gtsam::Key motion_key2(4);
+
+  auto create_smart_factor = [=](const gtsam::Point3& point,
+                                 double sigma) -> SmartFactor::shared_ptr {
+    // start with actual point ie no linearization error here
+    SmartFactor::shared_ptr factor(new SmartFactor(
+        L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
+
+    auto Z1 = HybridObjectMotion::projectToCamera3(pose1, motion1, L_e, point);
+    Z1 = utils::perturbWithNoise(Z1, sigma);
+
+    auto Z2 = HybridObjectMotion::projectToCamera3(pose2, motion2, L_e, point);
+    Z2 = utils::perturbWithNoise(Z2, sigma);
+
+    factor->add(Z1, motion_key1, pose_key1);
+    factor->add(Z2, motion_key2, pose_key2);
+
+    return factor;
+  };
+
+  // measurements have explicity noisy since we puerturb both motions and poses
+  // however the noisy is not propogated correctly since we do not add sigma
+  // noisy to the measurements
+  gtsam::Pose3 pose1_peturb = utils::perturbWithNoise(pose1, sigma);
+  gtsam::Pose3 pose2_peturb = utils::perturbWithNoise(pose2, sigma);
+  gtsam::Pose3 motion1_peturb = utils::perturbWithNoise(motion1, sigma);
+  gtsam::Pose3 motion2_peturb = utils::perturbWithNoise(motion2, sigma);
+
+  // gtsam::Point3 measurement1 =
+  //     perturbCameraAndMotion(point, L_e, motion1_peturb, pose1_peturb,
+  //     sigma);
+  // gtsam::Point3 measurement2 =
+  //     perturbCameraAndMotion(point, L_e, motion2_peturb, pose2_peturb,
+  //     sigma);
+
   gtsam::Values values;
-  values.insert(pose_key1, pose1);
-  values.insert(motion_key1, motion1);
-  values.insert(pose_key2, pose2);
-  values.insert(motion_key2, motion2);
+  values.insert(pose_key1, pose1_peturb);
+  values.insert(motion_key1, motion1_peturb);
+  values.insert(pose_key2, pose2_peturb);
+  values.insert(motion_key2, motion2_peturb);
 
-  SmartFactor::shared_ptr factor(new SmartFactor(
-      L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
+  // SmartFactor::shared_ptr factor(new SmartFactor(
+  //     L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma), point));
 
-  factor->add(measurement1, motion_key1, pose_key1);
-  factor->add(measurement2, motion_key2, pose_key2);
+  // factor->add(measurement1, motion_key1, pose_key1);
+  // factor->add(measurement2, motion_key2, pose_key2);
 
   gtsam::NonlinearFactorGraph graph;
   graph.addPrior<gtsam::Pose3>(motion_key1, gtsam::Pose3::Identity(),
                                gtsam::noiseModel::Isotropic::Sigma(6, 1e-5));
-  graph.add(factor);
+  graph.add(create_smart_factor(point1, sigma));
+  graph.add(create_smart_factor(point2, sigma));
 
   gtsam::LevenbergMarquardtParams lmParams;
   lmParams.relativeErrorTol = 1e-8;
@@ -511,9 +539,157 @@ TEST(SmartMotionFactor, testSimpleOptimise) {
   result = optimizer.optimize();
   result.print("After ");
 
+  EXPECT_TRUE(
+      gtsam::assert_equal(result.at<gtsam::Pose3>(pose_key1), pose1, 1E-5));
+  EXPECT_TRUE(
+      gtsam::assert_equal(result.at<gtsam::Pose3>(pose_key2), pose2, 1E-5));
+  EXPECT_TRUE(
+      gtsam::assert_equal(result.at<gtsam::Pose3>(motion_key1), motion1, 1E-5));
+  EXPECT_TRUE(
+      gtsam::assert_equal(result.at<gtsam::Pose3>(motion_key2), motion2, 1E-5));
+
   LOG(INFO) << graph.error(values);
   LOG(INFO) << graph.error(result);
 }
+TEST(SmartMotionFactor, computeTriangulationBasic) {
+  using SmartFactor = dyno::SmartMotionFactor<3, gtsam::Pose3, gtsam::Pose3>;
+  gtsam::Pose3 pose1 = gtsam::Pose3::Identity();
+  gtsam::Pose3 pose2(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                     gtsam::Point3(0.05, -0.10, 0.20));
+  gtsam::Pose3 L_e = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
+  gtsam::Pose3 motion1 = gtsam::Pose3::Identity();
+  gtsam::Pose3 motion2 = utils::createRandomAroundIdentity<gtsam::Pose3>(3.0);
+  gtsam::Point3 point(3.0, 0, 1.2);
+
+  // no noise!!!
+  const double sigma = 0.00;
+
+  gtsam::Values values;
+  gtsam::Key pose_key1(1);
+  gtsam::Key motion_key1(2);
+
+  gtsam::Key pose_key2(3);
+  gtsam::Key motion_key2(4);
+
+  values.insert(pose_key1, pose1);
+  values.insert(motion_key1, motion1);
+  values.insert(pose_key2, pose2);
+  values.insert(motion_key2, motion2);
+
+  SmartFactor::shared_ptr factor(
+      new SmartFactor(L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma)));
+
+  auto Z1 = HybridObjectMotion::projectToCamera3(pose1, motion1, L_e, point);
+  Z1 = utils::perturbWithNoise(Z1, sigma);
+
+  auto Z2 = HybridObjectMotion::projectToCamera3(pose2, motion2, L_e, point);
+  Z2 = utils::perturbWithNoise(Z2, sigma);
+
+  EXPECT_FALSE(factor->point(values));
+  EXPECT_FALSE(factor->point());
+
+  // should now be degenerate
+  factor->add(Z1, motion_key1, pose_key1);
+  EXPECT_FALSE(factor->point(values));
+  EXPECT_TRUE(factor->point(values).degenerate());
+
+  factor->add(Z2, motion_key2, pose_key2);
+
+  EXPECT_EQ(factor->numMeasurements(), 2u);
+
+  // given erroneous measurements but accurayte motion/pose
+  // actually should only be okay given the params!!
+  EXPECT_TRUE(factor->point(values));
+
+  LOG(INFO) << "Triangulated point = " << factor->point();
+  EXPECT_TRUE(gtsam::assert_equal(point, factor->point().value(), 1E-5));
+}
+
+// TEST(SmartMotionFactor, computeTriangulationBasic) {
+//    using SmartFactor = dyno::SmartMotionFactor<3, gtsam::Pose3,
+//    gtsam::Pose3>; gtsam::Pose3 pose1 = gtsam::Pose3::Identity();
+//   gtsam::Pose3 pose2(gtsam::Rot3::Rodrigues(-0.1, 0.2, 0.25),
+//                     gtsam::Point3(0.05, -0.10, 0.20));
+//   gtsam::Pose3 L_e = utils::createRandomAroundIdentity<gtsam::Pose3>(2.0);
+//   // gtsam::Pose3 motion1 = gtsam::Pose3::Identity();
+//   // gtsam::Pose3 motion2 =
+//   utils::createRandomAroundIdentity<gtsam::Pose3>(3.0); gtsam::Point3
+//   point(3.0, 0, 1.2); gtsam::Values values; gtsam::Values values_perturb;
+
+//   double sigma = 0.001;
+
+//    SmartFactor::shared_ptr factor(new SmartFactor(
+//       L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma)));
+
+//   size_t NumObs = 20;
+//   for(size_t i =0; i < NumObs; i++) {
+//     gtsam::Key pose_key(2 * i);
+//    gtsam::Key motion_key(2*i+1);
+//    gtsam::Pose3 cam_pose;
+//    gtsam::Pose3 object_motion;
+//     if(i == 0) {
+//         cam_pose = gtsam::Pose3::Identity();
+//         object_motion = gtsam::Pose3::Identity();
+//     }
+//     else {
+//       gtsam::Key last_pose_key(2 * (i-1));
+//       gtsam::Pose3 last_cam_pose = values.at<gtsam::Pose3>(last_pose_key);
+
+//       gtsam::Pose3 relative_cam_motion =
+//       utils::createRandomAroundIdentity<gtsam::Pose3>(3.0); cam_pose =
+//       last_cam_pose * relative_cam_motion;
+
+//       object_motion = utils::createRandomAroundIdentity<gtsam::Pose3>(6.0);
+//     }
+
+//     values.insert(pose_key, cam_pose);
+//     values.insert(motion_key, object_motion);
+
+//     //this will pereturb the motion and pose
+//     gtsam::Point3 measurement =
+//       perturbCameraAndMotion(point, L_e, object_motion, cam_pose, sigma);
+
+//     values_perturb.insert(pose_key, cam_pose);
+//     values_perturb.insert(motion_key, object_motion);
+
+//     factor->add(measurement, motion_key, pose_key);
+
+//   }
+// perturbCameraAndMotion
+//   // gtsam::Point3 measurement1 =
+//   //     perturbCameraAndMotion(point, L_e, motion1, pose1, sigma);
+//   // gtsam::Point3 measurement2 =
+//   //     perturbCameraAndMotion(point, L_e, motion2, pose2, sigma);
+
+//   // SmartFactor::shared_ptr factor(new SmartFactor(
+//   //     L_e, gtsam::noiseModel::Isotropic::Sigma(3, sigma)));
+//   // EXPECT_FALSE(factor->point());
+
+//   //  gtsam::Key pose_key1(1);
+//   // gtsam::Key motion_key1(2);
+
+//   // gtsam::Key pose_key2(3);
+//   // gtsam::Key motion_key2(4);
+
+//   // gtsam::Values values;
+//   // values.insert(pose_key1, pose1);
+//   // values.insert(motion_key1, motion1);
+//   // values.insert(pose_key2, pose2);
+//   // values.insert(motion_key2, motion2);
+
+//   //should now be degenerate
+//   // factor->add(measurement1, motion_key1, pose_key1);
+//   // EXPECT_FALSE(factor->point(values));
+//   // EXPECT_TRUE(factor->point(values).degenerate());
+
+//   // factor->add(measurement2, motion_key2, pose_key2);
+
+//   //given erroneous measurements but accurayte motion/pose
+//   EXPECT_TRUE(factor->point(values));
+
+//   LOG(INFO) << "Triangulated point = " << factor->point();
+//   EXPECT_TRUE(gtsam::assert_equal(point, factor->point().value(), 1E-5));
+// }
 
 // TEST(SmartMotionFactor, LostTriangulation3D) {
 

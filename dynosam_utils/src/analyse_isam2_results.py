@@ -33,7 +33,7 @@ results = load_bson(f"{result_path}/parallel_isam2_results_beta_1.bson")[0]['dat
 object_map = {}
 
 plt.rcdefaults()
-startup_plotting(32, line_width=3.0)
+startup_plotting(40, line_width=3.0)
 
 
 
@@ -140,7 +140,7 @@ def compute_average(variable_name):
 
     print(f"Mean value {variable_name} {np.mean(np.array(means))}, std= {np.std(np.array(means))} for var={variable_name}")
 
-fig, axes = plt.subplots(2, 2, sharex='col', figsize=(20, 13), constrained_layout=True)
+fig, axes = plt.subplots(2, 2, sharex='col', figsize=(20, 13),  constrained_layout=True)
 
 ax1 = axes[0, 0]
 ax2 = axes[0, 1]
@@ -161,7 +161,9 @@ plot_variable("num_landmarks_marked", "Number of variables", r"Landmarks Involve
 plot_variable("num_variables", "Number of variables", r"Dynamic Map Size", ax=ax4)
 
 ax1.legend()
-fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_parallel_hybrid_bt_analysis.pdf", format="pdf")
+# fig.tight_layout()
+
+fig.savefig(f"/root/results/Dynosam_ecmr2024/{sequence}_parallel_hybrid_bt_analysis.pdf")
 
 # plot_variable("num_motions_marked", "Number Motion Variables ", r"Num Motion Involved In Update")
 

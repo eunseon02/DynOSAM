@@ -157,16 +157,20 @@ struct BatchTester : public TesterBase {
         backend_info);
     backend->new_updater_->logBackendFromMap(backend_info);
 
-    gtsam::LevenbergMarquardtParams opt_params;
-    gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(
-                                   data->factors, data->values, opt_params)
-                                   .optimize();
-
-    backend_info.logging_suffix = "batch_opt";
-    backend->new_updater_->updateTheta(opt_values);
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
-        backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
+    LOG(INFO) << "Starting batch opt";
+    try {
+      gtsam::LevenbergMarquardtParams opt_params;
+      gtsam::Values opt_values = gtsam::LevenbergMarquardtOptimizer(
+                                     data->factors, data->values, opt_params)
+                                     .optimize();
+      backend_info.logging_suffix = "batch_opt";
+      backend->new_updater_->updateTheta(opt_values);
+      backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+          backend_info);
+      backend->new_updater_->logBackendFromMap(backend_info);
+    } catch (const std::exception& e) {
+      LOG(FATAL) << "Batch opt failed with exception: " << e.what();
+    }
   }
   std::shared_ptr<Data> data;
 };

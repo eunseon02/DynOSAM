@@ -90,7 +90,7 @@ ObjectOdometryMap DSDTransport::constructObjectOdometries(
 MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
     const ObjectMotionMap& motions, const ObjectPoseMap& poses,
     Timestamp timestamp_k, const FrameIdTimestampMap& frame_timestamp_map,
-    const std::string& frame_id_link) {
+    const std::string& frame_id_link, bool interpolate_missing_segments) {
   MultiObjectOdometryPath multi_path;
   multi_path.header.stamp = utils::toRosTime(timestamp_k);
   multi_path.header.frame_id = frame_id_link;
@@ -155,6 +155,41 @@ MultiObjectOdometryPath DSDTransport::constructMultiObjectOdometryPaths(
 
       ObjectOdometryPath& path = segmented_paths.at(path_segment);
       path.object_odometries.push_back(object_odometry);
+    }
+
+    // TODO: make this a flag and the frame diff!
+    if (interpolate_missing_segments) {
+      // assume segmented paths are in order
+      for (auto it = segmented_paths.begin();
+           std::next(it) != segmented_paths.end(); ++it) {
+        auto current_segment_id = it->first;
+        auto next_segment_id = std::next(it)->first;
+        CHECK_EQ(current_segment_id + 1, next_segment_id);
+
+        const ObjectOdometryPath& current_path_segment = it->second;
+        const ObjectOdometryPath& next_path_segment = std::next(it)->second;
+
+        const auto begin_object_odom =
+            current_path_segment.object_odometries.back();
+        const auto end_object_odom =
+            next_path_segment.object_odometries.front();
+        // interpolate between end of current and start of next
+        // less than 5 frames appart
+
+        if (end_object_odom.sequence - begin_object_odom.sequence < 5) {
+          ObjectOdometryPath interpolated_segment;
+          interpolated_segment.colour = colour_msg;
+          interpolated_segment.object_id = object_id;
+          //-1 for path segment
+          interpolated_segment.path_segment = -1;
+          interpolated_segment.header = multi_path.header;
+          // NOTE: this is not actually interpolating its just going to make
+          // RVIZ draw a line between them!!
+          interpolated_segment.object_odometries.push_back(begin_object_odom);
+          interpolated_segment.object_odometries.push_back(end_object_odom);
+          multi_path.paths.push_back(interpolated_segment);
+        }
+      }
     }
 
     for (const auto& [_, path] : segmented_paths) {

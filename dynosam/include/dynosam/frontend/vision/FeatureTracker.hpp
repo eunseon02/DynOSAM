@@ -105,23 +105,23 @@ class FeatureTracker : public FeatureTrackerBase {
   // detection mask is additional mask It must be a 8-bit integer matrix with
   // non-zero values in the region of interest, indicating what featues to not
   // track
-  void trackDynamic(FrameId frame_id, const ImageContainer& image_container,
-                    FeatureContainer& dynamic_features,
-                    std::set<ObjectId>& object_keyframes,
-                    const cv::Mat& detection_mask = cv::Mat(),
-                    const cv::Mat& coloured_boarder_detection_mask = cv::Mat());
+  void trackDynamic(
+      FrameId frame_id, const ImageContainer& image_container,
+      FeatureContainer& dynamic_features, std::set<ObjectId>& object_keyframes,
+      const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result);
 
   void sampleDynamic(FrameId frame_id, const ImageContainer& image_container,
                      const std::set<ObjectId>& objects_to_sample,
                      FeatureContainer& dynamic_features,
                      std::set<ObjectId>& objects_sampled,
-                     const cv::Mat& detection_mask = cv::Mat());
+                     const cv::Mat& detection_mask);
 
   void requiresSampling(
       std::set<ObjectId>& objects_to_sample, const FeatureTrackerInfo& info,
       const ImageContainer& image_container,
       const gtsam::FastMap<ObjectId, FeatureContainer>& features_per_object,
-      const cv::Mat& coloured_boarder_detection_mask = cv::Mat()) const;
+      const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result,
+      const cv::Mat& dynamic_tracking_mask) const;
 
   void propogateMask(ImageContainer& image_container);
 
