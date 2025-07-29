@@ -75,8 +75,13 @@ typedef Eigen::Matrix<double, 3, 4> transformation_t;
 #if GTSAM_VERSION_MAJOR <= 4 && GTSAM_VERSION_MINOR < 3
 template <typename T>
 using GtsamSharedPtr = boost::shared_ptr<T>;
+using GtsamOptionalMatrixType = boost::optional<gtsam::Matrix&>;
+#define JACOBIAN_DEFAULT \
+  {}
 #else
 using GtsamSharedPtr = std::shared_ptr<T>;
+using GtsamOptionalMatrixType = gtsam::OptionalMatrixType;
+#define JACOBIAN_DEFAULT nullptr
 #endif
 
 namespace {

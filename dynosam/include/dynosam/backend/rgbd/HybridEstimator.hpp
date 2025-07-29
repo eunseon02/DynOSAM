@@ -751,83 +751,194 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
     return gtsam::SymmetricBlockMatrix(dims, gtsam::Matrix::Zero(M1, M1));
   }
 
-  // static gtsam::SymmetricBlockMatrix SchurComplement(
-  //     const GFBlocks& GFs, const gtsam::Matrix& E,
-  //     const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
+  // N should be point dimension
+  // JDim = HDim = XDim (we assume these are the same size!!!)
+  //  static gtsam::SymmetricBlockMatrix SchurComplement(
+  //      const GFBlocks& GFs, const gtsam::Matrix& E,
+  //      const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
+
+  //   utils::TimingStatsCollector timer("smf_SchurComplement");
   //     size_t m = GFs.size();
 
-  //   // Create a SymmetricBlockMatrix (augmented hessian, with extra
-  //   row/column
-  //   // with info vector)
-  //   // size_t M1 = HessianDim * m + 1;
-  //   // std::vector<Eigen::DenseIndex> dims(2*m +
-  //   //                                     1);  // this also includes the b
-  //   term
-  //   // // vertical dimensions of ATA
-  //   // std::fill(dims.begin(), dims.end() - 1, HessianDim);
-  //   // dims.back() = 1;
   //   // SymmetricBlockMatrix augmentedHessian(dims, Matrix::Zero(M1, M1));
   //   //make zero-filled block matrix of the right dimensions
   //   SymmetricBlockMatrix augmentedHessian = constructSymmetricBlockMatrix(m);
 
+  //   const size_t last_block_idx = 2*m;
+
   //   // Blockwise Schur complement
-  //   for (size_t i = 0; i < m; i++) {  // for each camera
+  //   for (size_t i = 0; i < m; ++i) {
+  //     const auto& GFi = GFs[i];
+  //     const Eigen::Matrix<double, ZDim, HDim>& Gi = GFi.block(0, 0, ZDim,
+  //     HDim); const Eigen::Matrix<double, ZDim, XDim>& Fi = GFi.block(0, HDim,
+  //     ZDim, XDim); const Eigen::Matrix<double, ZDim, N>& Ei = E.block(ZDim *
+  //     i, 0, ZDim, N);
 
-  //     const Eigen::Matrix<double, ZDim, HessianDim>& GFi = GFs[i];
-  //     const auto GFiT = GFi.transpose();
-  //     const Eigen::Matrix<double, ZDim, N> Ei_P =  //
-  //         E.block(ZDim * i, 0, ZDim, N) * P;
+  //     //TODO: should return const ref?
+  //     auto A = [&](size_t idx, bool is_G) -> Eigen::Matrix<double, ZDim,
+  //     HDim> {
+  //       if(is_G) return GFs[idx].block(0, 0, ZDim, HDim);
+  //       else return GFs[idx].block(0, HDim, ZDim, XDim);
+  //     };
 
-  //     const Eigen::Matrix<double, HessianDim, 1> g_block =
-  //       GFiT * b.segment<ZDim>(ZDim * i) - GFiT *
-  //                 (Ei_P *
-  //                  (E.transpose() *
-  //                   b));
+  //     {
+  //       //construct linear gradient term
+  //       Eigen::Matrix<double, ZDim, 1> inner_sum;
+  //       for (size_t j = 0; j < m; ++j) {
+  //         const Eigen::Matrix<double, ZDim, N>& Ej = E.block(ZDim * j, 0,
+  //         ZDim, N); inner_sum += -Ei * P * Ej.transpose() *
+  //         b.segment<ZDim>(ZDim * j);
+  //       }
+  //       inner_sum += b.segment<ZDim>(ZDim * i);
 
-  //     const size_t H_index = 2 * i;
-  //     const size_t X_index = 2 * i + 1;
-  //     // const Eigen::Matrix<double, HDim, 1> h_block = g_block.block(0, 0,
-  //     HDim, 1);
-  //     // const Eigen::Matrix<double, XDim, 1> x_block = g_block.block(HDim,
-  //     0, XDim, 1);
+  //       //block dimension
+  //       Eigen::Matrix<double, HDim, 1> linear_term_G = Gi.transpose() *
+  //       inner_sum; Eigen::Matrix<double, HDim, 1> linear_term_F =
+  //       Fi.transpose() * inner_sum;
 
-  //     Eigen::Matrix<double,HDim,1> h_block = g_block.head<HDim>();
-  //     Eigen::Matrix<double,XDim,1> x_block = fullVec.tail<XDim>();
+  //       const int g_block_idx = 2 * i;
+  //       const int f_block_idx = 2 * i + 1;
 
-  //     augmentedHessian.setOffDiagonalBlock(H_index, m, h_block);
-  //     augmentedHessian.setOffDiagonalBlock(X_index, m, x_block);
+  //       //2m takes us to the last block
+  //       augmentedHessian.setOffDiagonalBlock(
+  //         g_block_idx, last_block_idx, linear_term_G);
 
-  //     // D = (Dx2) * ZDim
-  //     // augmentedHessian.setOffDiagonalBlock(
-  //     //     i, m,
-  //     //     GFiT * b.segment<ZDim>(ZDim * i)  // F' * b
-  //     //         -
-  //     //         GFiT *
-  //     //             (Ei_P *
-  //     //              (E.transpose() *
-  //     //               b)));  // D = (DxZDim) * (ZDimx3) * (N*ZDimm) * (ZDimm
-  //     x 1)
+  //       augmentedHessian.setOffDiagonalBlock(
+  //         f_block_idx, last_block_idx, linear_term_F);
 
-  //     // (DxD) = (DxZDim) * ( (ZDimxD) - (ZDimx3) * (3xZDim) * (ZDimxD) )
-  //     const Eigen::Matrix<double, HessianDim, HessianDim> G block =
-  //     // augmentedHessian.setDiagonalBlock(
-  //     //     i,
-  //     //     GFiT * (GFi - Ei_P * E.block(ZDim * i, 0, ZDim, N).transpose() *
-  //     GFi));
+  //     }
 
-  //     // // upper triangular part of the hessian
-  //     // for (size_t j = i + 1; j < m; j++) {  // for each camera
-  //     //   const Eigen::Matrix<double, ZDim, HessianDim>& GFj = GFs[j];
+  //     for (size_t j = i; j < m; ++j) {
+  //       const Eigen::Matrix<double, ZDim, N>& Ej = E.block(ZDim * j, 0, ZDim,
+  //       N); const Eigen::Matrix<double, ZDim, N>& Ei = E.block(ZDim * i, 0,
+  //       ZDim, N);
 
-  //     //   // (DxD) = (Dx2) * ( (2x2) * (2xD) )
-  //     //   augmentedHessian.setOffDiagonalBlock(
-  //     //       i, j,
-  //     //       -GFiT * (Ei_P * E.block(ZDim * j, 0, ZDim, N).transpose() *
-  //     GFj));
-  //     // }
-  //   }  // end of for over cameras
+  //       for (int r_is_G = 0; r_is_G <= 1; ++r_is_G) {
+  //         for (int c_is_G = 0; c_is_G <= 1; ++c_is_G) {
+  //           bool rowIsG = static_cast<bool>(r_is_G);
+  //           bool colIsG = static_cast<bool>(c_is_G);
 
-  //   augmentedHessian.diagonalBlock(m)(0, 0) += b.squaredNorm();
+  //           int rowIndex = 2 * static_cast<int>(i) + r_is_G;  // r_is_G ∈ {0,
+  //           1} int colIndex = 2 * static_cast<int>(j) + c_is_G;
+
+  //           Eigen::Matrix<double, ZDim, HDim> Ai, Aj;
+  //           Ai = A(i, rowIsG);
+  //           Aj = A(j, colIsG);
+
+  //           Eigen::Matrix<double, HDim, HDim> block_value;
+
+  //           if (i == j) {
+  //             // diagonal block
+  //             block_value = Ai.transpose() * Aj - Ai.transpose() * Ei * P *
+  //             Ei.transpose() * Aj;
+  //           }
+  //           else {
+  //             block_value = -Ai.transpose() * Ei * P * Ej.transpose() * Aj;
+  //           }
+
+  //           if(rowIndex == colIndex) {
+  //             augmentedHessian.setDiagonalBlock(rowIndex, block_value);
+  //           }
+  //           else {
+  //             augmentedHessian.setOffDiagonalBlock(rowIndex, colIndex,
+  //             block_value);
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+  //   augmentedHessian.diagonalBlock(last_block_idx)(0, 0) += b.squaredNorm();
+  //   return augmentedHessian;
+  // }
+
+  //   static gtsam::SymmetricBlockMatrix SchurComplement(
+  //     const GFBlocks& GFs, const gtsam::Matrix& E,
+  //     const Eigen::Matrix<double, N, N>& P, const gtsam::Vector& b) {
+
+  //   utils::TimingStatsCollector timer("smf_SchurComplement");
+  //   const size_t m = GFs.size();
+  //   const size_t last_block_idx = 2 * m;
+
+  //   SymmetricBlockMatrix augmentedHessian = constructSymmetricBlockMatrix(m);
+
+  //   // Accessor for G or F blocks
+  //   auto A = [&](size_t idx, bool is_G) -> Eigen::Ref<const
+  //   Eigen::Matrix<double, ZDim, HDim>> {
+  //         if(is_G) return GFs[idx].block(0, 0, ZDim, HDim);
+  //         else return GFs[idx].block(0, HDim, ZDim, XDim);
+  //   };
+
+  //   // Precompute Eᵢ, Eᵢᵀ, bᵢ to avoid recomputation
+  //   std::vector<Eigen::Matrix<double, ZDim, N>> E_blocks(m);
+  //   std::vector<Eigen::Matrix<double, N, ZDim>> E_transpose(m);
+  //   std::vector<Eigen::Matrix<double, ZDim, 1>> b_segments(m);
+
+  //   for (size_t i = 0; i < m; ++i) {
+  //     E_blocks[i] = E.block<ZDim, N>(ZDim * i, 0);
+  //     E_transpose[i] = E_blocks[i].transpose();
+  //     b_segments[i] = b.segment<ZDim>(ZDim * i);
+  //   }
+
+  //   for (size_t i = 0; i < m; ++i) {
+  //     const auto& Ei = E_blocks[i];
+  //     const auto& EiT = E_transpose[i];
+
+  //     // Construct linear term: inner_sum = bᵢ - Eᵢ P ∑ⱼ (Eⱼᵀ bⱼ)
+  //     Eigen::Matrix<double, ZDim, 1> inner_sum = b_segments[i];
+  //     for (size_t j = 0; j < m; ++j) {
+  //       inner_sum.noalias() -= Ei * P * E_transpose[j] * b_segments[j];
+  //     }
+
+  //     // Compute linear terms
+  //     const auto& Gi = A(i, true);
+  //     const auto& Fi = A(i, false);
+
+  //     const Eigen::Matrix<double, HDim, 1> linear_term_G = Gi.transpose() *
+  //     inner_sum; const Eigen::Matrix<double, HDim, 1> linear_term_F =
+  //     Fi.transpose() * inner_sum;
+
+  //     const int g_block_idx = 2 * static_cast<int>(i);
+  //     const int f_block_idx = g_block_idx + 1;
+
+  //     augmentedHessian.setOffDiagonalBlock(g_block_idx, last_block_idx,
+  //     linear_term_G); augmentedHessian.setOffDiagonalBlock(f_block_idx,
+  //     last_block_idx, linear_term_F);
+
+  //     // Quadratic terms
+  //     for (size_t j = i; j < m; ++j) {
+  //       const auto& Ej = E_blocks[j];
+  //       const auto& EjT = E_transpose[j];
+
+  //       for (int r_is_G = 0; r_is_G <= 1; ++r_is_G) {
+  //         for (int c_is_G = 0; c_is_G <= 1; ++c_is_G) {
+  //           const int row_index = 2 * static_cast<int>(i) + r_is_G;
+  //           const int col_index = 2 * static_cast<int>(j) + c_is_G;
+
+  //           const auto& Ai = A(i, r_is_G);
+  //           const auto& Aj = A(j, c_is_G);
+
+  //           Eigen::Matrix<double, HDim, HDim> block_value;
+
+  //           if (i == j) {
+  //             block_value.noalias() = Ai.transpose() * Aj;
+  //             block_value.noalias() -= Ai.transpose() * Ei * P * EiT * Aj;
+  //           } else {
+  //             block_value.noalias() = -Ai.transpose() * Ei * P * EjT * Aj;
+  //           }
+
+  //           if (row_index == col_index) {
+  //             augmentedHessian.setDiagonalBlock(row_index, block_value);
+  //           } else {
+  //             augmentedHessian.setOffDiagonalBlock(row_index, col_index,
+  //             block_value);
+  //           }
+  //         }
+  //       }
+  //     }
+  //   }
+
+  //   // Final scalar term (bottom right block)
+  //   augmentedHessian.diagonalBlock(last_block_idx)(0, 0) += b.squaredNorm();
   //   return augmentedHessian;
   // }
 
@@ -841,9 +952,7 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
 
     gtsam::Matrix F_block_matrix(m * 3, m * HessianDim);
     F_block_matrix.setZero();
-    // LOG(INFO) << "F=" << F_block_matrix;
-    // gtsam::SymmetricBlockMatrix F_block_matrix(f_block_dims);
-    // size_t block_idx = 0;
+
     for (size_t i = 0; i < m; i++) {
       const Eigen::Matrix<double, 3, HessianDim>& GFblock = GFs.at(i);
       F_block_matrix.block<3, HessianDim>(3 * i, HessianDim * i) = GFblock;
@@ -851,18 +960,26 @@ class SmartMotionFactor : public gtsam::NonlinearFactor,
 
     // TODO: F block should be close to diagonal - inverting can be made much
     // faster!!!!
+    auto ft_timer =
+        std::make_unique<utils::TimingStatsCollector>("smf_F_transpose");
     gtsam::Matrix F = F_block_matrix;
     gtsam::Matrix Ft = F.transpose();
-    // LOG(INFO) << "F=" << F;
+    ft_timer.reset();
 
+    auto gg_timer =
+        std::make_unique<utils::TimingStatsCollector>("smf_Gg_calc");
     gtsam::Matrix g = Ft * (b - E * P * Et * b);
     gtsam::Matrix G = Ft * F - Ft * E * P * Et * F;
+    gg_timer.reset();
 
     // size of schur = num measurements * Hessian size + 1
+    auto shur_timer =
+        std::make_unique<utils::TimingStatsCollector>("smf_schur");
     size_t aug_hessian_size = m * HessianDim + 1;
     gtsam::Matrix schur(aug_hessian_size, aug_hessian_size);
 
     schur << G, g, g.transpose(), b.squaredNorm();
+    shur_timer.reset();
 
     std::vector<Eigen::DenseIndex> dims(2 * m + 1);  // includes b term
     std::fill(dims.begin(), dims.end() - 1,
@@ -1015,6 +1132,11 @@ class HybridAccessor : public Accessor<Map3d2d>,
     KeyFrameRange::ConstPtr* frame_range_ptr = nullptr;
   };
 
+  // TODO: dont need this - evenetually put structureless etc into an
+  // encapsualted class
+  virtual StateQuery<gtsam::Point3> queryPoint(gtsam::Key point_key,
+                                               TrackletId tracklet_id) const;
+
   // should treturn true if and only if all valid queries (ie, non-null queries)
   // were set with valid dataa!!
   bool getDynamicLandmarkImpl(FrameId frame_id, TrackletId tracklet_id,
@@ -1089,7 +1211,9 @@ class HybridFormulation : public Formulation<Map3d2d>,
                                       FrameId frame_id) const;
 
  protected:
-  AccessorTypePointer createAccessor(
+  // TODO: make this virtual for now - eventual move structureless etc
+  // properties into a class to encapsulate!
+  virtual AccessorTypePointer createAccessor(
       const SharedFormulationData& shared_data) const override {
     SharedHybridFormulationData shared_hybrid_data;
     shared_hybrid_data.key_frame_data = &key_frame_data_;
@@ -1145,7 +1269,7 @@ class HybridFormulation : public Formulation<Map3d2d>,
   //! smoothing factor as the key!
   gtsam::KeySet smoothing_factors_added_;
 
- private:
+ protected:
   KeyFrameData key_frame_data_;
 };
 

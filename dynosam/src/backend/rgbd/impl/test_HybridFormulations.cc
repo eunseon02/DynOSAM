@@ -317,6 +317,26 @@ void StructurlessFormulation::dynamicPointUpdateCallback(
   result.updateAffectedObject(frame_node_k->frame_id, context.getObjectId());
 }
 
+StateQuery<gtsam::Point3> SmartStructurlessAccessor::queryPoint(
+    gtsam::Key point_key, TrackletId tracklet_id) const {
+  if (tracklet_id_to_smart_factor_->exists(tracklet_id)) {
+    HybridSmartFactor::shared_ptr smart_factor =
+        tracklet_id_to_smart_factor_->at(tracklet_id);
+
+    gtsam::TriangulationResult point_result = smart_factor->point();
+
+    if (point_result) {
+      return StateQuery<gtsam::Point3>(point_key, *point_result);
+    } else {
+      // TODO: not actually the resason!!
+      return StateQuery<gtsam::Point3>::NotInMap(point_key);
+    }
+
+  } else {
+    return StateQuery<gtsam::Point3>::NotInMap(point_key);
+  }
+}
+
 void SmartStructurlessFormulation::dynamicPointUpdateCallback(
     const PointUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
@@ -358,6 +378,7 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
 
     // mark as now in map and include associated frame!!s
     is_dynamic_tracklet_in_map_.insert2(context.getTrackletId(), s0);
+    all_dynamic_landmarks_.insert2(context.getTrackletId(), s0);
     CHECK(isDynamicTrackletInMap(lmk_node));
 
     // gtsam::Pose3 L_k = e_H_k_world * L_e;
@@ -378,11 +399,11 @@ void SmartStructurlessFormulation::dynamicPointUpdateCallback(
     getSafeQuery(lmk_L0, theta_accessor->query<Landmark>(point_key),
                  lmk_L0_init);
 
-    // HybridSmartFactor::shared_ptr smart_factor =
-    //     boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise,
-    //                                           lmk_L0_init);
     HybridSmartFactor::shared_ptr smart_factor =
-        boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise);
+        boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise,
+                                              lmk_L0_init);
+    // HybridSmartFactor::shared_ptr smart_factor =
+    //     boost::make_shared<HybridSmartFactor>(L_e, dynamic_point_noise);
 
     new_factors.push_back(smart_factor);
     tracklet_id_to_smart_factor_.insert2(context.getTrackletId(), smart_factor);

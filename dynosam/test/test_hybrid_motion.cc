@@ -35,6 +35,45 @@ TEST(HybridObjectMotion, testProjections) {
   EXPECT_TRUE(gtsam::assert_equal(projected_m_camera, m_camera));
 }
 
+// TEST(HybridObjectMotion, ProjectToCamera3Jacobian) {
+//   using namespace gtsam;
+
+//   // Create random inputs
+//   Pose3 X_k = Pose3(Rot3::RzRyRx(0.1, 0.2, 0.3), Point3(1.0, 2.0, 3.0));
+//   Pose3 e_H_k_world = Pose3(Rot3::RzRyRx(-0.2, 0.1, 0.05), Point3(-1.0,
+//   0.5, 2.0)); Pose3 L_e = Pose3(Rot3::RzRyRx(0.05, -0.1, 0.2),
+//   Point3(0.0, 1.0, -1.0)); Point3 m_L(0.5, -0.4, 1.2);
+
+//   // Storage for analytical Jacobians
+//   Matrix36 H_Xk, H_eHk, H_Le;
+//   Matrix33 H_mL;
+
+//   // Evaluate function with analytical Jacobians
+//   Point3 result = HybridObjectMotion::projectToCamera3(X_k, e_H_k_world, L_e,
+//   m_L,
+//                                        &H_Xk, &H_eHk, &H_Le, &H_mL);
+
+//   // Numerical Jacobians
+//   auto f_Xk = [&](const Pose3& X) { return
+//   HybridObjectMotion::projectToCamera3(X, e_H_k_world, L_e, m_L); }; auto
+//   f_eHk = [&](const Pose3& E) { return
+//   HybridObjectMotion::projectToCamera3(X_k, E, L_e, m_L); }; auto f_Le =
+//   [&](const Pose3& L) { return HybridObjectMotion::projectToCamera3(X_k,
+//   e_H_k_world, L, m_L); }; auto f_mL = [&](const Point3& p) { return
+//   HybridObjectMotion::projectToCamera3(X_k, e_H_k_world, L_e, p); };
+
+//   Matrix H_Xk_num = numericalDerivative11<Point3, Pose3>(f_Xk, X_k);
+//   Matrix H_eHk_num = numericalDerivative11<Point3, Pose3>(f_eHk,
+//   e_H_k_world); Matrix H_Le_num = numericalDerivative11<Point3, Pose3>(f_Le,
+//   L_e); Matrix H_mL_num = numericalDerivative11<Point3, Point3>(f_mL, m_L);
+
+//   // Compare
+//   EXPECT_TRUE(assert_equal(H_Xk_num, H_Xk, 1e-7));
+//   EXPECT_TRUE(assert_equal(H_eHk_num, H_eHk, 1e-7));
+//   EXPECT_TRUE(assert_equal(H_Le_num, H_Le, 1e-7));
+//   EXPECT_TRUE(assert_equal(H_mL_num, H_mL, 1e-7));
+// }
+
 TEST(StructurelessObjectCentricMotionFactor2, testZeroError) {
   // construct point in L and then move it
   using namespace dyno::test_hybrid;

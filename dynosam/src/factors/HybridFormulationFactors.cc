@@ -59,6 +59,57 @@ gtsam::Pose3 HybridObjectMotion::projectToCamera3Transform(
   return X_k.inverse() * e_H_k_world * L_e;
 }
 
+// gtsam::Point3 HybridObjectMotion::projectToCamera3(
+//     const gtsam::Pose3& X_k,
+//     const gtsam::Pose3& e_H_k_world,
+//     const gtsam::Pose3& L_e,
+//     const gtsam::Point3& m_L,
+//     gtsam::OptionalJacobian<3, 6> H_Xk,
+//     gtsam::OptionalJacobian<3, 6> H_eHk,
+//     gtsam::OptionalJacobian<3, 6> H_Le,
+//     gtsam::OptionalJacobian<3, 6> H_mL) {
+
+//   gtsam::Matrix36 H_A_Xk, H_A_eHk, H_A_Le;
+//   gtsam::Pose3 A = projectToCamera3Transform(X_k, e_H_k_world, L_e,
+//                                       H_Xk ? &H_A_Xk : {},
+//                                       H_eHk ? &H_A_eHk : boost::none,
+//                                       H_Le ? &H_A_Le : boost::none);
+
+//   gtsam::Matrix33 H_mL_local;
+//   gtsam::Point3 m_camera_k = A.transformFrom(m_L, H_mL ? &H_mL_local :
+//   boost::none);
+
+//   // Chain Jacobians
+//   if (H_Xk)   *H_Xk   = H_mL_local * H_A_Xk;
+//   if (H_eHk)  *H_eHk  = H_mL_local * H_A_eHk;
+//   if (H_Le)   *H_Le   = H_mL_local * H_A_Le;
+//   if (H_mL)   *H_mL   = H_mL_local;
+
+//   return m_camera_k;
+// }
+
+// gtsam::Pose3 HybridObjectMotion::projectToCamera3Transform(
+//     const gtsam::Pose3& X_k,
+//     const gtsam::Pose3& e_H_k_world,
+//     const gtsam::Pose3& L_e,
+//     gtsam::OptionalJacobian<6, 6> H_Xk,
+//     gtsam::OptionalJacobian<6, 6> H_eHk,
+//     gtsam::OptionalJacobian<6, 6> H_Le) {
+
+//   gtsam::Matrix66 H_inv_Xk, H_comp1, H_comp2;
+//   gtsam::Pose3 X_k_inv = X_k.inverse(H_Xk ? &H_inv_Xk : boost::none);
+//   gtsam::Pose3 comp1 = X_k_inv.compose(e_H_k_world, H_Xk ? &H_comp1 :
+//   boost::none, H_eHk ? &H_comp2 : nullptr); gtsam::Pose3 result =
+//   comp1.compose(L_e, H_Xk ? H_Xk : boost::none, H_Le ? &H_comp2 :
+//   boost::none);
+
+//   if (H_Xk) {
+//     *H_Xk = H_comp2 * H_comp1 * H_inv_Xk;  // chain rule: dR/dX = dR/dC1 *
+//     dC1/dXinv * dXinv/dX
+//   }
+//   return result;
+// }
+
 gtsam::Vector3 HybridObjectMotion::residual(const gtsam::Pose3& X_k,
                                             const gtsam::Pose3& e_H_k_world,
                                             const gtsam::Point3& m_L,

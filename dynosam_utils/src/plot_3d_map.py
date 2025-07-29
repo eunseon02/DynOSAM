@@ -24,7 +24,7 @@ def make_plot(results_folder_path, prefix, plot_collection: evo_plot.PlotCollect
     motion_eval = dataset_eval.create_motion_error_evaluator(data_files)
 
     plotter = eval.MapPlotter3D(map_points_log_path, camera_pose_eval, motion_eval, title=prefix,
-                                plot_object_points=False,
+                                plot_object_points=True,
                                 plot_gt_objects=True,
                                 plot_gt_camera=True,
                                 downsample_static_cloud=0.05)

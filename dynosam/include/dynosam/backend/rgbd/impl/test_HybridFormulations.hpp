@@ -216,11 +216,29 @@ class StructurlessFormulation : public HybridFormulation {
   std::string loggerPrefix() const override { return "hybrid_structureless"; }
 };
 
-class SmartStructurlessFormulation : public HybridFormulation {
+class SmartStructurlessAccessor : public HybridAccessor {
+ public:
+  SmartStructurlessAccessor(
+      const SharedFormulationData& shared_data, Map3d2d::Ptr map,
+      const SharedHybridFormulationData& shared_hybrid_formulation_data,
+      const gtsam::FastMap<TrackletId, HybridSmartFactor::shared_ptr>*
+          tracklet_id_to_smart_factor)
+      : HybridAccessor(shared_data, map, shared_hybrid_formulation_data),
+        tracklet_id_to_smart_factor_(tracklet_id_to_smart_factor) {}
+
+  StateQuery<gtsam::Point3> queryPoint(gtsam::Key point_key,
+                                       TrackletId tracklet_id) const override;
+
+ private:
+  const gtsam::FastMap<TrackletId, HybridSmartFactor::shared_ptr>*
+      tracklet_id_to_smart_factor_;
+};
+
+class SmartStructurlessFormulation : public RegularHybridFormulation {
  public:
   DYNO_POINTER_TYPEDEFS(SmartStructurlessFormulation)
 
-  using Base = HybridFormulation;
+  using Base = RegularHybridFormulation;
   SmartStructurlessFormulation(const FormulationParams& params,
                                typename Map::Ptr map,
                                const NoiseModels& noise_models,
@@ -231,6 +249,17 @@ class SmartStructurlessFormulation : public HybridFormulation {
       const PointUpdateContextType& context, UpdateObservationResult& result,
       gtsam::Values& new_values,
       gtsam::NonlinearFactorGraph& new_factors) override;
+
+  AccessorTypePointer createAccessor(
+      const SharedFormulationData& shared_data) const override {
+    SharedHybridFormulationData shared_hybrid_data;
+    shared_hybrid_data.key_frame_data = &key_frame_data_;
+    shared_hybrid_data.tracklet_id_to_keyframe = &all_dynamic_landmarks_;
+
+    return std::make_shared<SmartStructurlessAccessor>(
+        shared_data, this->map(), shared_hybrid_data,
+        &tracklet_id_to_smart_factor_);
+  }
 
   std::string loggerPrefix() const override {
     return "hybrid_smart_structureless";

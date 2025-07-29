@@ -355,6 +355,11 @@ std::optional<Motion3ReferenceFrame> HybridAccessor::getRelativeLocalMotion(
   }
 }
 
+StateQuery<gtsam::Point3> HybridAccessor::queryPoint(gtsam::Key point_key,
+                                                     TrackletId) const {
+  return this->query<gtsam::Point3>(point_key);
+}
+
 bool HybridAccessor::getDynamicLandmarkImpl(FrameId frame_id,
                                             TrackletId tracklet_id,
                                             DynamicLandmarkQuery& query) const {
@@ -406,7 +411,8 @@ bool HybridAccessor::getDynamicLandmarkImpl(FrameId frame_id,
   }
 
   // point in local frame
-  StateQuery<gtsam::Point3> m_Le = this->query<gtsam::Point3>(point_key);
+  // StateQuery<gtsam::Point3> m_Le = this->query<gtsam::Point3>(point_key);
+  StateQuery<gtsam::Point3> m_Le = this->queryPoint(point_key, tracklet_id);
   // get motion from S0 to k
   StateQuery<gtsam::Pose3> e_H_k_world =
       this->query<gtsam::Pose3>(frame_node_k->makeObjectMotionKey(object_id));
