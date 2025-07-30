@@ -28,7 +28,7 @@ def run_sequnce(path, name, data_loader_num, backend_type, *args, **kwargs):
 
     additional_args = [
         "--data_provider_type={}".format(data_loader_num),
-        "--v=0"
+        "--v=20"
     ]
 
     parsed_args["launch_file"] = "dyno_sam_launch.py"
@@ -136,7 +136,7 @@ def run_ecmr_experiment_sequences(dataset_path, dataset_name, dataset_loader, *a
         args_list.extend(list(specific_args))
         return args_list
     # run fukk hybrid in (full)batch mode to get results!!
-    run_sequnce(dataset_path, dataset_name, dataset_loader, parallel_hybrid,  *append_args_list(), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
+    # run_sequnce(dataset_path, dataset_name, dataset_loader, parallel_hybrid,  *append_args_list(), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
     # run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=0"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
     # run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=0"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
@@ -144,7 +144,7 @@ def run_ecmr_experiment_sequences(dataset_path, dataset_name, dataset_loader, *a
 
     # pass
     # run the two batches again but with increemntal mode and additional suffix so we can individual logs!!!
-    # run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--regular_backend_relinearize_skip=10","--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
+    run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--regular_backend_relinearize_skip=10","--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=False)
     # run_sequnce(dataset_path, dataset_name, dataset_loader, motion_world_backend_type, *append_args_list("--optimization_mode=2", "--regular_backend_relinearize_skip=10","--updater_suffix=inc"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
 
     # run_sequnce(dataset_path, dataset_name, dataset_loader, full_hybrid, *append_args_list("--optimization_mode=2", "--regular_backend_relinearize_skip=1","--updater_suffix=inc_relin1"), run_as_frontend=False, run_as_experiment=False, run_analysis=True)
@@ -187,7 +187,7 @@ def run_kitti():
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0000/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=300")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0002/", "kitti_0002", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
-    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0003/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--save_per_frame_dynamic_cloud=true")
+    run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0003/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50", "--save_per_frame_dynamic_cloud=false")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0005/", "kitti_0005", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0006/", "kitti_0006", kitti_dataset, "--shrink_row=25", "--shrink_col=50")
     # run_ecmr_experiment_sequences("/root/data/vdo_slam/kitti/kitti/0018/", "test", kitti_dataset, "--shrink_row=25", "--shrink_col=50")

@@ -41,6 +41,7 @@
 #include "dynosam/backend/RGBDBackendDefinitions.hpp"
 #include "dynosam/backend/VisionImuBackendModule.hpp"
 #include "dynosam/backend/optimizers/ISAM2.hpp"
+#include "dynosam/backend/optimizers/IncrementalOptimization.hpp"
 #include "dynosam/backend/optimizers/SlidingWindowOptimization.hpp"
 #include "dynosam/backend/rgbd/WorldMotionEstimator.hpp"
 #include "dynosam/backend/rgbd/WorldPoseEstimator.hpp"
@@ -49,11 +50,10 @@
 
 namespace dyno {
 
-// TODO: change name to RegularBackendModule...
-class RGBDBackendModule
+class RegularBackendModule
     : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
-  DYNO_POINTER_TYPEDEFS(RGBDBackendModule)
+  DYNO_POINTER_TYPEDEFS(RegularBackendModule)
 
   using Base = VisionImuBackendModule<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
@@ -62,24 +62,45 @@ class RGBDBackendModule
   // for backwards compatability!
   using UpdaterType = RGBDFormulationType;
 
-  RGBDBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
-                    const UpdaterType& updater_type,
-                    ImageDisplayQueue* display_queue = nullptr);
-  ~RGBDBackendModule();
+  RegularBackendModule(const BackendParams& backend_params, Camera::Ptr camera,
+                       const UpdaterType& updater_type,
+                       ImageDisplayQueue* display_queue = nullptr);
+  ~RegularBackendModule();
 
   using SpinReturn = Base::SpinReturn;
 
-  // TODO: move to optimizer and put into pipeline manager where we know the
-  // type and bind write output to shutdown procedure
-  void saveGraph(const std::string& file = "rgbd_graph.dot");
-  void saveTree(const std::string& file = "rgbd_bayes_tree.dot");
+  const FormulationType* formulation() const { return formulation_.get(); }
 
-  std::tuple<gtsam::Values, gtsam::NonlinearFactorGraph> constructGraph(
-      FrameId from_frame, FrameId to_frame, bool set_initial_camera_pose_prior,
-      std::optional<gtsam::Values> initial_theta = {});
+  // also provide non-const access (this should only be used with caution and is
+  // really only there to enable specific unit-tests!)
+  FormulationType* formulation() { return formulation_.get(); }
+
+  using PostFormulationUpdateCallback = std::function<void(
+      const Formulation<RGBDMap>::UniquePtr&, FrameId, const gtsam::Values&,
+      const gtsam::NonlinearFactorGraph&)>;
+  void registerPostFormulationUpdateCallback(
+      const PostFormulationUpdateCallback& cb) {
+    post_formulation_update_cb_ = cb;
+  }
+
+ protected:
+  void setupUpdates();
+
+  void updateAndOptimize(FrameId frame_id_k, const gtsam::Values& new_values,
+                         const gtsam::NonlinearFactorGraph& new_factors);
+  void updateIncremental(FrameId frame_id_k, const gtsam::Values& new_values,
+                         const gtsam::NonlinearFactorGraph& new_factors);
+  void updateBatch(FrameId frame_id_k, const gtsam::Values& new_values,
+                   const gtsam::NonlinearFactorGraph& new_factors);
+  void updateSlidingWindow(FrameId frame_id_k, const gtsam::Values& new_values,
+                           const gtsam::NonlinearFactorGraph& new_factors);
+
+  void logIncrementalStats(
+      FrameId frame_id_k,
+      const IncrementalInterface<dyno::ISAM2>& smoother_interface) const;
 
   // TODO: for now
- public:
+ protected:
   SpinReturn boostrapSpinImpl(
       RGBDInstanceOutputPacket::ConstPtr input) override;
   SpinReturn nominalSpinImpl(RGBDInstanceOutputPacket::ConstPtr input) override;
@@ -96,84 +117,9 @@ class RGBDBackendModule
       FrameId frame_id_k, const RGBDInstanceOutputPacket::ConstPtr& input,
       const gtsam::Pose3& X_k_w);
 
-  // FOR NOW!!
-  std::function<void(const Formulation<RGBDMap>::UniquePtr&, FrameId,
-                     const gtsam::Values&, const gtsam::NonlinearFactorGraph&)>
-      callback;
-
- public:
-  /**
-   * @brief Helper struct to determine the conditions for the sliding window
-   * optimisation. Only works when called in consequative frame order as we use
-   * the last trigger frame (the last frame when the sliding window conditions
-   * were true) to determine the next one
-   */
-  struct SlidingWindow {
-    DYNO_POINTER_TYPEDEFS(SlidingWindow)
-
-    /**
-     * @brief Result of the condition check.
-     * If the sliding window conditions have been met, and the window range
-     * (start/ending frame) that should be covered. Calculated from the
-     * sliding_window value.
-     *
-     */
-    struct Result {
-      bool condition;
-      FrameId starting_frame;
-      FrameId ending_frame;
-
-      explicit operator bool() const { return condition; }
-    };
-
-    const int sliding_window;
-    const int overlap_size;
-    int previous_trigger_frame{
-        -1};  //! The last frame where the sliding window conditions were true.
-              //! Used to determine the next frame
-    int first_frame{
-        -1};  //! The first frame that is checked. Used to offset the condition
-              //! checking if the first frame is not zero!
-
-    // previous_trigger_frame starts at overlap
-    SlidingWindow(const int window, const int overlap)
-        : sliding_window(window),
-          overlap_size(overlap),
-          previous_trigger_frame(overlap) {}
-
-    Result check(FrameId frame_k) {
-      if (first_frame == -1) {
-        first_frame = static_cast<int>(frame_k);
-        CHECK_GE(first_frame, 0);
-      }
-
-      auto frame = static_cast<int>(frame_k) - first_frame;
-      const bool condition =
-          (previous_trigger_frame - (frame - sliding_window)) == overlap_size;
-      if (condition) {
-        previous_trigger_frame = frame;
-      }
-
-      Result result;
-      result.condition = condition;
-      result.ending_frame = frame_k;
-      int starting_frame = frame_k - sliding_window;
-
-      // some logic checks
-      if (condition) {
-        CHECK_GE(starting_frame, first_frame);
-      }
-      result.starting_frame = static_cast<FrameId>(starting_frame);
-      return result;
-    }
-  };
-
-  bool buildSlidingWindowOptimisation(FrameId frame_k,
-                                      gtsam::Values& optimised_values,
-                                      double& error_before,
-                                      double& error_after);
-
-  Formulation<RGBDMap>::UniquePtr makeUpdater();
+ private:
+  // Also sets up error hooks based on the formulation
+  Formulation<RGBDMap>::UniquePtr makeFormulation();
 
   BackendMetaData createBackendMetadata() const;
   FormulationHooks createFormulationHooks() const;
@@ -183,15 +129,9 @@ class RGBDBackendModule
       const Formulation<RGBDMap>::UniquePtr& formulation, FrameId frame_k,
       Timestamp timestamp);
 
- public:
   Camera::Ptr camera_;
   const UpdaterType updater_type_;
-  // Updater::UniquePtr new_updater_;
-  Formulation<RGBDMap>::UniquePtr new_updater_;
-  SlidingWindow::UniquePtr sliding_window_condition_;
-  SlidingWindowOptimization::UniquePtr sliding_window_opt_;
-  FrameId first_frame_id_;  // the first frame id that is received
-
+  Formulation<RGBDMap>::UniquePtr formulation_;
   // new calibration every time
   inline auto getGtsamCalibration() const {
     const CameraParams& camera_params = camera_->getParams();
@@ -202,10 +142,14 @@ class RGBDBackendModule
   // logger here!!
   BackendLogger::UniquePtr logger_{nullptr};
   DebugInfo debug_info_;
+  ErrorHandlingHooks error_hooks_;
+
+  // optimizers are set in setupUpdates() depending on
+  SlidingWindowOptimization::UniquePtr sliding_window_opt_;
   std::unique_ptr<dyno::ISAM2> smoother_;
-  std::unique_ptr<gtsam::IncrementalFixedLagSmoother> fixed_lag_smoother_;
-  std::unique_ptr<gtsam::IncrementalFixedLagSmoother>
-      dynamic_fixed_lag_smoother_;
+
+  //! External callback containing formulation data and new values and factors
+  PostFormulationUpdateCallback post_formulation_update_cb_;
 };
 
 }  // namespace dyno

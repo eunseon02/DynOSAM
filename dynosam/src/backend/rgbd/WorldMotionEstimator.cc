@@ -276,7 +276,9 @@ void WorldMotionFormulation::objectUpdateContext(
   if (!is_other_values_in_map.exists(object_motion_key_k)) {
     // when we have an initial motion
     Motion3 initial_motion = Motion3::Identity();
-    if (!FLAGS_init_H_with_identity) {
+
+    constexpr static bool init_H_with_identity = false;
+    if (!init_H_with_identity) {
       map()->hasInitialObjectMotion(frame_id, object_id, &initial_motion);
       LOG(INFO) << "Using motion from frontend " << initial_motion;
       initial_motion =

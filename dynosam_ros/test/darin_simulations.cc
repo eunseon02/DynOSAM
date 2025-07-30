@@ -32,7 +32,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include <dynosam/backend/ParallelRGBDBackendModule.hpp>
+#include <dynosam/backend/ParallelHybridBackendModule.hpp>
 #include <dynosam/test/backend_runners.hpp>
 #include <dynosam/test/helpers.hpp>
 #include <dynosam/test/simulator.hpp>
@@ -181,14 +181,14 @@ TEST(DarinSimulations, test1) {
   backend_params.odometry_rotation_sigma_ = X_R_sigma;
   backend_params.odometry_translation_sigma_ = X_t_sigma;
 
-  auto backend = std::make_shared<dyno::ParallelRGBDBackendModule>(
+  auto backend = std::make_shared<dyno::ParallelHybridBackendModule>(
       backend_params, dyno_testing::makeDefaultCameraPtr());
 
   // dyno_testing::RGBDBackendTester tester;
 
-  //  auto backend = std::make_shared<dyno::RGBDBackendModule>(
+  //  auto backend = std::make_shared<dyno::RegularBackendModule>(
   //     backend_params, dyno_testing::makeDefaultCameraPtr(),
-  //     dyno::RGBDBackendModule::UpdaterType::HYBRID);
+  //     dyno::RegularBackendModule::UpdaterType::HYBRID);
 
   auto node = std::make_shared<rclcpp::Node>("dynosam");
   auto viz = std::make_shared<dyno::BackendDisplayRos>(DisplayParams{}, node);

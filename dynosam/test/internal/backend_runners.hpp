@@ -32,7 +32,7 @@
 #include <gtsam/nonlinear/ISAM2.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
 
-#include "dynosam/backend/RGBDBackendModule.hpp"
+#include "dynosam/backend/RegularBackendModule.hpp"
 
 namespace dyno_testing {
 
@@ -41,18 +41,18 @@ using namespace dyno;
 struct TesterBase {
   virtual ~TesterBase() = default;
 
-  virtual bool addBackend(dyno::RGBDBackendModule::Ptr backend) = 0;
+  virtual bool addBackend(dyno::RegularBackendModule::Ptr backend) = 0;
   virtual void onFinish() = 0;
 };
 
 struct IncrementalTester : public TesterBase {
   struct Data {
-    dyno::RGBDBackendModule::Ptr backend;
+    dyno::RegularBackendModule::Ptr backend;
     std::shared_ptr<gtsam::ISAM2> isam2;
     gtsam::Values opt_values;
   };
 
-  bool addBackend(dyno::RGBDBackendModule::Ptr backend) override {
+  bool addBackend(dyno::RegularBackendModule::Ptr backend) override {
     data = std::make_shared<Data>();
 
     gtsam::ISAM2Params isam2_params;
@@ -60,41 +60,42 @@ struct IncrementalTester : public TesterBase {
     isam2_params.factorization = gtsam::ISAM2Params::Factorization::CHOLESKY;
     data->isam2 = std::make_shared<gtsam::ISAM2>(isam2_params);
 
-    backend->callback =
+    backend->registerPostFormulationUpdateCallback(
         [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
             dyno::FrameId frame_id, const gtsam::Values& new_values,
             const gtsam::NonlinearFactorGraph& new_factors) -> void {
-      LOG(INFO) << "Running isam2 update " << frame_id << " for formulation "
-                << formulation->getFullyQualifiedName();
-      CHECK_NOTNULL(data);
-      CHECK_NOTNULL(data->isam2);
-      auto isam = data->isam2;
-      gtsam::ISAM2Result result;
-      {
-        dyno::utils::TimingStatsCollector timer(
-            "isam2_oc_test_update." + formulation->getFullyQualifiedName());
-        result = isam->update(new_factors, new_values);
-      }
+          LOG(INFO) << "Running isam2 update " << frame_id
+                    << " for formulation "
+                    << formulation->getFullyQualifiedName();
+          CHECK_NOTNULL(data);
+          CHECK_NOTNULL(data->isam2);
+          auto isam = data->isam2;
+          gtsam::ISAM2Result result;
+          {
+            dyno::utils::TimingStatsCollector timer(
+                "isam2_oc_test_update." + formulation->getFullyQualifiedName());
+            result = isam->update(new_factors, new_values);
+          }
 
-      LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
-                << " error after " << result.getErrorAfter();
-      data->opt_values = isam->calculateEstimate();
+          LOG(INFO) << "ISAM2 result. Error before " << result.getErrorBefore()
+                    << " error after " << result.getErrorAfter();
+          data->opt_values = isam->calculateEstimate();
 
-      isam->getFactorsUnsafe().saveGraph(
-          dyno::getOutputFilePath("isam_graph_" + std::to_string(frame_id) +
-                                  "_" + formulation->getFullyQualifiedName() +
-                                  ".dot"),
-          dyno::DynoLikeKeyFormatter);
+          isam->getFactorsUnsafe().saveGraph(
+              dyno::getOutputFilePath(
+                  "isam_graph_" + std::to_string(frame_id) + "_" +
+                  formulation->getFullyQualifiedName() + ".dot"),
+              dyno::DynoLikeKeyFormatter);
 
-      if (!isam->empty()) {
-        dyno::factor_graph_tools::saveBayesTree(
-            *isam,
-            dyno::getOutputFilePath(
-                "oc_bayes_tree_" + std::to_string(frame_id) + "_" +
-                formulation->getFullyQualifiedName() + ".dot"),
-            dyno::DynoLikeKeyFormatter);
-      }
-    };
+          if (!isam->empty()) {
+            dyno::factor_graph_tools::saveBayesTree(
+                *isam,
+                dyno::getOutputFilePath(
+                    "oc_bayes_tree_" + std::to_string(frame_id) + "_" +
+                    formulation->getFullyQualifiedName() + ".dot"),
+                dyno::DynoLikeKeyFormatter);
+          }
+        });
 
     data->backend = backend;
     return true;
@@ -105,15 +106,15 @@ struct IncrementalTester : public TesterBase {
     dyno::BackendMetaData backend_info;
     backend_info.backend_params = &backend->getParams();
 
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+    backend->formulation()->accessorFromTheta()->postUpdateCallback(
         backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
+    backend->formulation()->logBackendFromMap(backend_info);
 
     backend_info.logging_suffix = "isam_opt";
-    backend->new_updater_->updateTheta(data->opt_values);
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+    backend->formulation()->updateTheta(data->opt_values);
+    backend->formulation()->accessorFromTheta()->postUpdateCallback(
         backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
+    backend->formulation()->logBackendFromMap(backend_info);
   }
 
   std::shared_ptr<Data> data;
@@ -121,29 +122,29 @@ struct IncrementalTester : public TesterBase {
 
 struct BatchTester : public TesterBase {
   struct Data {
-    dyno::RGBDBackendModule::Ptr backend;
+    dyno::RegularBackendModule::Ptr backend;
 
     gtsam::Values values;
     gtsam::NonlinearFactorGraph factors;
   };
 
-  bool addBackend(dyno::RGBDBackendModule::Ptr backend) override {
+  bool addBackend(dyno::RegularBackendModule::Ptr backend) override {
     data = std::make_shared<Data>();
     data->backend = backend;
 
-    backend->callback =
+    backend->registerPostFormulationUpdateCallback(
         [&](const dyno::Formulation<dyno::Map3d2d>::UniquePtr& formulation,
             dyno::FrameId frame_id, const gtsam::Values& new_values,
             const gtsam::NonlinearFactorGraph& new_factors) -> void {
-      data->values = formulation->getTheta();
-      data->factors = formulation->getGraph();
+          data->values = formulation->getTheta();
+          data->factors = formulation->getGraph();
 
-      data->factors.saveGraph(
-          dyno::getOutputFilePath("batch_graph_" + std::to_string(frame_id) +
-                                  "_" + formulation->getFullyQualifiedName() +
-                                  ".dot"),
-          dyno::DynoLikeKeyFormatter);
-    };
+          data->factors.saveGraph(
+              dyno::getOutputFilePath(
+                  "batch_graph_" + std::to_string(frame_id) + "_" +
+                  formulation->getFullyQualifiedName() + ".dot"),
+              dyno::DynoLikeKeyFormatter);
+        });
     return true;
   }
 
@@ -153,9 +154,9 @@ struct BatchTester : public TesterBase {
     dyno::BackendMetaData backend_info;
     backend_info.backend_params = &backend->getParams();
 
-    backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+    backend->formulation()->accessorFromTheta()->postUpdateCallback(
         backend_info);
-    backend->new_updater_->logBackendFromMap(backend_info);
+    backend->formulation()->logBackendFromMap(backend_info);
 
     LOG(INFO) << "Starting batch opt";
     try {
@@ -164,10 +165,10 @@ struct BatchTester : public TesterBase {
                                      data->factors, data->values, opt_params)
                                      .optimize();
       backend_info.logging_suffix = "batch_opt";
-      backend->new_updater_->updateTheta(opt_values);
-      backend->new_updater_->accessorFromTheta()->postUpdateCallback(
+      backend->formulation()->updateTheta(opt_values);
+      backend->formulation()->accessorFromTheta()->postUpdateCallback(
           backend_info);
-      backend->new_updater_->logBackendFromMap(backend_info);
+      backend->formulation()->logBackendFromMap(backend_info);
     } catch (const std::exception& e) {
       LOG(FATAL) << "Batch opt failed with exception: " << e.what();
     }
@@ -177,7 +178,8 @@ struct BatchTester : public TesterBase {
 
 struct RGBDBackendTester {
   template <typename TESTER>
-  dyno::RGBDBackendModule::Ptr addTester(dyno::RGBDBackendModule::Ptr backend) {
+  dyno::RegularBackendModule::Ptr addTester(
+      dyno::RegularBackendModule::Ptr backend) {
     std::shared_ptr<TesterBase> tester = std::make_shared<TESTER>();
     tester->addBackend(backend);
     testers.push_back(tester);
@@ -198,7 +200,7 @@ struct RGBDBackendTester {
   }
 
   std::vector<std::shared_ptr<TesterBase>> testers;
-  std::vector<dyno::RGBDBackendModule::Ptr> backends;
+  std::vector<dyno::RegularBackendModule::Ptr> backends;
 };
 
 }  // namespace dyno_testing

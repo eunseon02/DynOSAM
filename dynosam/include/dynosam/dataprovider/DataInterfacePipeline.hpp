@@ -108,17 +108,6 @@ class DataInterfacePipeline
     ground_truth_packets_[gt_packet.frame_id_] = gt_packet;
   }
 
-  // // TODO: for now!!
-  // //  frame id should be k and data goes from k-1 to k
-  // inline void addImuMeasurements(const ImuMeasurements& imu_measurements) {
-  //   if (imu_measurements.synchronised_frame_id)
-  //     imu_measurements_[*imu_measurements.synchronised_frame_id] =
-  //         imu_measurements;
-  //   else
-  //     LOG(WARNING) << " Skipping IMU data - synchronised_frame_id must be "
-  //                     "currently provided to use IMU data!";
-  // }
-
   inline void registerImageContainerPreprocessor(
       const ImageContainerPreprocesser& func) {
     image_container_preprocessor_ = func;

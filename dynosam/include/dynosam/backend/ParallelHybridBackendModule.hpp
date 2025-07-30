@@ -46,18 +46,18 @@
 namespace dyno {
 
 // TODO: should have a special accessor for this class....
-class ParallelRGBDBackendModule
+class ParallelHybridBackendModule
     : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
-  DYNO_POINTER_TYPEDEFS(ParallelRGBDBackendModule)
+  DYNO_POINTER_TYPEDEFS(ParallelHybridBackendModule)
 
   using Base = VisionImuBackendModule<RGBDBackendModuleTraits>;
   using RGBDMap = Base::MapType;
 
-  ParallelRGBDBackendModule(const BackendParams& backend_params,
-                            Camera::Ptr camera,
-                            ImageDisplayQueue* display_queue = nullptr);
-  ~ParallelRGBDBackendModule();
+  ParallelHybridBackendModule(const BackendParams& backend_params,
+                              Camera::Ptr camera,
+                              ImageDisplayQueue* display_queue = nullptr);
+  ~ParallelHybridBackendModule();
 
   void logGraphs();
 

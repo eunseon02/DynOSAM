@@ -38,6 +38,25 @@
 
 namespace dyno {
 
+/**
+ * @brief Class that handles the management of ego-motion (NavState) states from
+ * VO and (optionally) IMU.
+ *
+ * This class encapsualtes the current NavState and handles the forward
+ * prediction of the current state given new VO/IMU data and the addition of
+ * odometry/pre-integration factors into the factor graph. In this way it acts a
+ * bit like a Formulation where the internal state is updated and returns (by
+ * out-args) the resultant new values and factors.
+ *
+ * NOTE: needs access to frame id/timestamp data which it gets from the
+ * shared_module_info from the base BackendModule. This is a bit confusing as
+ * its not obvious how this data is updated (usually it gets updated in the base
+ * class on spin) but this data is really important as it is used by the forward
+ * prediction
+ *
+ *
+ * @tparam MODULE_TRAITS
+ */
 template <class MODULE_TRAITS>
 class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
  public:
@@ -216,7 +235,7 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
 
   gtsam::NavState predictNewState(FrameId frame_id_k,
                                   const gtsam::Pose3& T_k_1_k,
-                                  const ImuFrontend::PimPtr& pim) {
+                                  const ImuFrontend::PimPtr& pim) const {
     CHECK_GT(frame_id_k, 0);
     CHECK_EQ(frame_id_k, (last_nav_state_frame_id_ + 1))
         << "State frame id's are not incrementally ascending. Are we dropping "

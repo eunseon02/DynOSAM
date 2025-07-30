@@ -32,8 +32,8 @@
 
 #include <glog/logging.h>
 
-#include "dynosam/backend/ParallelRGBDBackendModule.hpp"
-#include "dynosam/backend/RGBDBackendModule.hpp"
+#include "dynosam/backend/ParallelHybridBackendModule.hpp"
+#include "dynosam/backend/RegularBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/logger/Logger.hpp"
@@ -267,7 +267,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
       if (use_offline_frontend_) {
         LOG(INFO) << "Offline RGBD frontend";
         using OfflineFrontend =
-            FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
+            FrontendOfflinePipeline<RegularBackendModule::ModuleTraits>;
         const std::string file_path =
             getOutputFilePath(kRgbdFrontendOutputJsonFile);
         LOG(INFO) << "Loading RGBD frontend output packets from " << file_path;
@@ -329,12 +329,12 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
             static_cast<RGBDFormulationType>(FLAGS_backend_updater_enum);
 
         if (updater_type == RGBDFormulationType::PARALLEL_HYBRID) {
-          backend = std::make_shared<ParallelRGBDBackendModule>(
+          backend = std::make_shared<ParallelHybridBackendModule>(
               params_.backend_params_, camera, &display_queue_);
         } else {
           params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
 
-          backend = std::make_shared<RGBDBackendModule>(
+          backend = std::make_shared<RegularBackendModule>(
               params_.backend_params_, camera, updater_type, &display_queue_);
         }
 

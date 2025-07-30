@@ -28,7 +28,7 @@
  *   SOFTWARE.
  */
 
-#include "dynosam/backend/ParallelRGBDBackendModule.hpp"
+#include "dynosam/backend/ParallelHybridBackendModule.hpp"
 
 #include <gflags/gflags.h>
 #include <glog/logging.h>
@@ -71,11 +71,11 @@ DEFINE_bool(use_marginal_covariance, true,
 
 namespace dyno {
 
-ParallelRGBDBackendModule::ParallelRGBDBackendModule(
+ParallelHybridBackendModule::ParallelHybridBackendModule(
     const BackendParams& backend_params, Camera::Ptr camera,
     ImageDisplayQueue* display_queue)
     : Base(backend_params, display_queue), camera_(CHECK_NOTNULL(camera)) {
-  LOG(INFO) << "Creating ParallelRGBDBackendModule";
+  LOG(INFO) << "Creating ParallelHybridBackendModule";
 
   // TODO: set isam params
   dynamic_isam2_params_.keyFormatter = DynoLikeKeyFormatter;
@@ -145,8 +145,8 @@ ParallelRGBDBackendModule::ParallelRGBDBackendModule(
       formulation_params, RGBDMap::create(), noise_models_, hooks);
 }
 
-ParallelRGBDBackendModule::~ParallelRGBDBackendModule() {
-  LOG(INFO) << "Desctructing ParallelRGBDBackendModule";
+ParallelHybridBackendModule::~ParallelHybridBackendModule() {
+  LOG(INFO) << "Desctructing ParallelHybridBackendModule";
 
   if (base_params_.use_logger_) {
     logBackendFromEstimators();
@@ -166,8 +166,8 @@ ParallelRGBDBackendModule::~ParallelRGBDBackendModule() {
 
 // implementation taken from ObjectMotionSolverSAM
 // TODO: update api
-ParallelRGBDBackendModule::SpinReturn
-ParallelRGBDBackendModule::boostrapSpinImpl(
+ParallelHybridBackendModule::SpinReturn
+ParallelHybridBackendModule::boostrapSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
   const Timestamp timestamp = input->getTimestamp();
@@ -203,8 +203,8 @@ ParallelRGBDBackendModule::boostrapSpinImpl(
   return {State::Nominal, nullptr};
 }
 
-ParallelRGBDBackendModule::SpinReturn
-ParallelRGBDBackendModule::nominalSpinImpl(
+ParallelHybridBackendModule::SpinReturn
+ParallelHybridBackendModule::nominalSpinImpl(
     RGBDInstanceOutputPacket::ConstPtr input) {
   const FrameId frame_k = input->getFrameId();
   const Timestamp timestamp = input->getTimestamp();
@@ -305,7 +305,7 @@ ParallelRGBDBackendModule::nominalSpinImpl(
   return {State::Nominal, backend_output};
 }
 
-Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
+Pose3Measurement ParallelHybridBackendModule::bootstrapUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input) {
   utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
 
@@ -361,7 +361,7 @@ Pose3Measurement ParallelRGBDBackendModule::bootstrapUpdateStaticEstimator(
   return Pose3Measurement(nav_state.pose(), gaussian_pose_prior);
 }
 
-Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
+Pose3Measurement ParallelHybridBackendModule::nominalUpdateStaticEstimator(
     RGBDInstanceOutputPacket::ConstPtr input,
     bool should_calculate_covariance) {
   utils::TimingStatsCollector timer("parallel_object_sam.static_estimator");
@@ -463,8 +463,8 @@ Pose3Measurement ParallelRGBDBackendModule::nominalUpdateStaticEstimator(
   }
 }
 
-std::vector<ParallelRGBDBackendModule::PerObjectUpdate>
-ParallelRGBDBackendModule::collectPerObjectUpdates(
+std::vector<ParallelHybridBackendModule::PerObjectUpdate>
+ParallelHybridBackendModule::collectPerObjectUpdates(
     RGBDInstanceOutputPacket::ConstPtr input) const {
   GenericTrackedStatusVector<LandmarkKeypointStatus> all_dynamic_measurements =
       input->collectDynamicLandmarkKeypointMeasurements();
@@ -513,7 +513,7 @@ ParallelRGBDBackendModule::collectPerObjectUpdates(
   return object_updates;
 }
 
-ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
+ParallelObjectISAM::Ptr ParallelHybridBackendModule::getEstimator(
     ObjectId object_id, bool* is_object_new) {
   std::lock_guard<std::mutex> lock(mutex_);
 
@@ -546,7 +546,7 @@ ParallelObjectISAM::Ptr ParallelRGBDBackendModule::getEstimator(
   return sam_estimators_.at(object_id);
 }
 
-void ParallelRGBDBackendModule::parallelObjectSolve(
+void ParallelHybridBackendModule::parallelObjectSolve(
     const std::vector<PerObjectUpdate>& object_updates) {
   utils::TimingStatsCollector timer("parallel_object_sam.dynamic_estimator");
   tbb::parallel_for_each(
@@ -554,7 +554,7 @@ void ParallelRGBDBackendModule::parallelObjectSolve(
       [&](const PerObjectUpdate& update) { this->implSolvePerObject(update); });
 }
 
-bool ParallelRGBDBackendModule::implSolvePerObject(
+bool ParallelHybridBackendModule::implSolvePerObject(
     const PerObjectUpdate& object_update) {
   const auto object_id = object_update.object_id;
   const auto frame_id_k = object_update.frame_id;
@@ -610,7 +610,7 @@ bool ParallelRGBDBackendModule::implSolvePerObject(
   }
 }
 
-BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
+BackendOutputPacket::Ptr ParallelHybridBackendModule::constructOutputPacket(
     FrameId frame_k, Timestamp timestamp) const {
   auto backend_output = std::make_shared<BackendOutputPacket>();
   backend_output->timestamp = timestamp;
@@ -664,7 +664,7 @@ BackendOutputPacket::Ptr ParallelRGBDBackendModule::constructOutputPacket(
   return backend_output;
 }
 
-void ParallelRGBDBackendModule::logBackendFromEstimators() {
+void ParallelHybridBackendModule::logBackendFromEstimators() {
   // TODO: name + suffix
   std::string name = "parallel_hybrid";
 
@@ -705,7 +705,7 @@ void ParallelRGBDBackendModule::logBackendFromEstimators() {
   logger.reset();
 }
 
-void ParallelRGBDBackendModule::logGraphs() {
+void ParallelHybridBackendModule::logGraphs() {
   FrameId frame_id_k = this->spin_state_.frame_id;
   for (const auto& [object_id, estimator] : sam_estimators_) {
     const auto& smoother = estimator->getSmoother();

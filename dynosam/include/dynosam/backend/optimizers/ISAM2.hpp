@@ -37,6 +37,7 @@
 #include "dynosam/backend/optimizers/ISAM2Params.hpp"
 #include "dynosam/backend/optimizers/ISAM2Result.hpp"
 #include "dynosam/backend/optimizers/ISAM2UpdateParams.hpp"
+#include "dynosam/backend/optimizers/IncrementalOptimization.hpp"
 
 namespace dyno {
 
@@ -363,6 +364,11 @@ class GTSAM_EXPORT ISAM2 : public gtsam::BayesTree<ISAM2Clique> {
 #endif
 
 };  // ISAM2
+
+template <>
+struct iOptimizationTraits<dyno::ISAM2>
+    : public internal::isam2_like_traits<dyno::ISAM2, dyno::ISAM2Result,
+                                         dyno::ISAM2UpdateParams> {};
 
 }  // namespace dyno
 

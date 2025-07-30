@@ -34,7 +34,7 @@
 #include <type_traits>
 #include <variant>
 
-#include "dynosam/backend/RGBDBackendModule.hpp"
+#include "dynosam/backend/RegularBackendModule.hpp"
 #include "dynosam/common/ModuleBase.hpp"
 #include "dynosam/frontend/FrontendPipeline.hpp"
 #include "dynosam/pipeline/PipelineBase.hpp"
@@ -75,7 +75,7 @@ TEST_F(FrontendWithFiles, testLoadingFrontendWithJson) {
   JsonConverter::WriteOutJson(rgbd_output, tmp_bison_path_str,
                               JsonConverter::Format::BSON);
 
-  FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits> offline_backed(
+  FrontendOfflinePipeline<RegularBackendModule::ModuleTraits> offline_backed(
       "offline-rgbdfrontend", tmp_bison_path_str);
 
   ThreadsafeQueue<FrontendOutputPacketBase::ConstPtr> queue;

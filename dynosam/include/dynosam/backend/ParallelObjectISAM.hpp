@@ -186,12 +186,12 @@ class ParallelObjectISAM {
                          gtsam::NonlinearFactorGraph& new_factors,
                          gtsam::Values& new_values);
 
-  bool optimize(
-      gtsam::ISAM2Result* result,
-      const gtsam::NonlinearFactorGraph& new_factors =
-          gtsam::NonlinearFactorGraph(),
-      const gtsam::Values& new_values = gtsam::Values(),
-      const ISAM2UpdateParams& update_params = gtsam::ISAM2UpdateParams());
+  // bool optimize(
+  //     gtsam::ISAM2Result* result,
+  //     const gtsam::NonlinearFactorGraph& new_factors =
+  //         gtsam::NonlinearFactorGraph(),
+  //     const gtsam::Values& new_values = gtsam::Values(),
+  //     const ISAM2UpdateParams& update_params = gtsam::ISAM2UpdateParams());
 
   void updateStates();
 

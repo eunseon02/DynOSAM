@@ -127,19 +127,20 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendParams.cc
   src/backend/FactorGraphTools.cc
   src/backend/DynamicPointSymbol.cc
-  src/backend/RGBDBackendModule.cc
+  src/backend/RegularBackendModule.cc
   src/backend/rgbd/WorldMotionEstimator.cc
   src/backend/rgbd/WorldPoseEstimator.cc
   src/backend/rgbd/HybridEstimator.cc
   src/backend/rgbd/impl/test_HybridFormulations.cc
   src/backend/ParallelObjectISAM.cc
-  src/backend/ParallelRGBDBackendModule.cc
+  src/backend/ParallelHybridBackendModule.cc
   src/backend/optimizers/SlidingWindowOptimization.cc
 
   src/backend/optimizers/ISAM2-impl.cc
   src/backend/optimizers/ISAM2.cc
   src/backend/optimizers/ISAM2Clique.cc
   src/backend/optimizers/ISAM2Params.cc
+  src/backend/optimizers/IncrementalOptimization.cc
 
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
@@ -332,6 +333,7 @@ if(BUILD_TESTING)
     test/test_factors.cc
     test/test_numerical.cc
     test/test_params.cc
+    test/test_optimizations.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})
