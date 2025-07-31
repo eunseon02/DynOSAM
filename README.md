@@ -166,8 +166,8 @@ run dynosam_ros run_dynosam_gtest.py --package=dynosam_ros --gtest_filter=TestCo
 
 We provide a number of data providers which process datasets into the input format specified by DynoSAM which includes input images for the pipeline and ground truth data for evaluation.
 
-
-[Download](https://unisyd-my.sharepoint.com/:f:/g/personal/jesse_morris_sydney_edu_au/EhK53_rmAqRDtHslS9HEuwwByFpR2oX59A_CKQTKrc9dAA?e=nbmM8h) processed version of the KITTI tracking and OMD sequences. The other sequences were used in their raw form.
+All datasets (including pre-processed images) can be found at the [ACFR-RPG Datasets page](https://data.acfr.usyd.edu.au/rpg/).
+The provided dataset loaders are written to parse the datasets as provided.
 
 ### i. KITTI Tracking Dataset
 We use a modified version of the KITTI tracking dataset which includes ground truth motion data, as well dense optical-flow, depth and segmentation masks.
@@ -178,14 +178,12 @@ The required dataset loader can be specified by setting `--data_provider_type=0`
 Raw data can be downloaded from the [project page](https://robotic-esp.com/datasets/omd/).
 For our 2024 T-RO paper we used a modified version of the dataset which can be downloaded from the above link.
 
-C++ code to parse the raw dataset (although not used) is also provided and the code used to pre-process the dataset (as optical flow and segmentation masks are not provided in the raw dataset) will also be provided soon.
-
 The required dataset loader can be specified by setting `--data_provider_type=3`
 
 
 
 ### iii. Cluster Dataset
-Access [raw dataset](https://huangjh-pub.github.io/page/clusterslam-dataset/) and download the CARLA-* sequences. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
+The [raw dataset](https://huangjh-pub.github.io/page/clusterslam-dataset/) can be downloaded for the the CARLA-* sequences, although we recommend using our provided data.
 
 The required dataset loader can be specified by setting `--data_provider_type=2`
 
@@ -193,6 +191,13 @@ The required dataset loader can be specified by setting `--data_provider_type=2`
 Access [raw dataset](https://europe.naverlabs.com/research/computer-vision/proxy-virtual-worlds-vkitti-2/) and extract in a folder. No pre-processing is needed on this dataset and the raw data can be parsed by DynoSAM directly.
 
 The required dataset loader can be specified by setting `--data_provider_type=1`
+
+### v. TartanAir Shibuya
+Details coming soon...
+
+
+### vi. VIODE
+Details coming soon...
 
 ### Online Dataprovider
 An online data-provider can be specified using the ROS arg `online:=True`.
