@@ -158,8 +158,6 @@ StateQuery<gtsam::Pose3> HybridAccessor::getObjectMotion(
 
   auto motion_key = frame_node_k->makeObjectMotionKey(object_id);
   StateQuery<gtsam::Pose3> e_H_k_world = this->query<gtsam::Pose3>(motion_key);
-  // TODO: this might be okay ---- its becuase we addd the sensor pose everytime
-  // (since we dont know when the object will be added)
   if (!e_H_k_world) {
     VLOG(30) << "Could not construct object motion frame id=" << frame_id
              << " object id=" << object_id
@@ -515,7 +513,6 @@ bool HybridFormulation::getObjectKeyFrameHistory(
   return true;
 }
 
-// TODO: no keyframing
 bool HybridFormulation::hasObjectKeyFrame(ObjectId object_id,
                                           FrameId frame_id) const {
   return static_cast<bool>(key_frame_data_.find(object_id, frame_id));
@@ -574,29 +571,9 @@ TrackletIds HybridFormulation::collectPointsAtKeyFrame(ObjectId object_id,
 void HybridFormulation::dynamicPointUpdateCallback(
     const PointUpdateContextType& context, UpdateObservationResult& result,
     gtsam::Values& new_values, gtsam::NonlinearFactorGraph& new_factors) {
-  // //acrew PointUpdateContextType for each object and trigger the update
-  // const auto frame_node_k_1 = context.frame_node_k_1;
-  // const auto frame_node_k = context.frame_node_k;
-  // const auto object_id = context.getObjectId();
-
-  // //TODO: for now lets just use k (which means we are dropping a
-  // measurement!)
-  // //just for initial testing!!
-  // result.updateAffectedObject(frame_node_k_1->frame_id, object_id);
-  // result.updateAffectedObject(frame_node_k->frame_id, object_id);
-
-  // if(!point_contexts_.exists(object_id)) {
-  //     point_contexts_.insert2(object_id,
-  //     std::vector<PointUpdateContextType>());
-  // }
-  // point_contexts_.at(object_id).push_back(context);
   const auto lmk_node = context.lmk_node;
   const auto frame_node_k_1 = context.frame_node_k_1;
   const auto frame_node_k = context.frame_node_k;
-
-  // if(frame_node_k_1->getId() % 2 == 0) {
-  //   return;
-  // }
 
   auto theta_accessor = this->accessorFromTheta();
 

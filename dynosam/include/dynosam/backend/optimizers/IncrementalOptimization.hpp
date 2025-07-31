@@ -172,7 +172,8 @@ class IncrementalInterface {
   typedef typename SmootherTraitsType::ResultType ResultType;
   typedef typename SmootherTraitsType::FillArguments FillArguments;
 
-  IncrementalInterface(Smoother* smoother) : smoother_(smoother) {}
+  IncrementalInterface(Smoother* smoother)
+      : smoother_(CHECK_NOTNULL(smoother)) {}
 
   bool optimize(ResultType* result,
                 const FillArguments& update_arguments_filler,
@@ -308,7 +309,7 @@ class IncrementalInterface {
   size_t max_extra_iterations_ = 3u;
 
   //! state variables indicating result of last call to optimize
-  //!  Time in ms for last call to optimize
+  //! Time in ms for last call to optimize
   int64_t timing_;
   //! Result of last call to optimize
   ResultType result_;

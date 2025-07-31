@@ -106,14 +106,13 @@ struct IncrementalTester : public TesterBase {
     dyno::BackendMetaData backend_info;
     backend_info.backend_params = &backend->getParams();
 
-    backend->formulation()->accessorFromTheta()->postUpdateCallback(
-        backend_info);
+    dyno::PostUpdateData post_update(backend->getSpinState().frame_id);
+    backend->formulation()->postUpdate(post_update);
     backend->formulation()->logBackendFromMap(backend_info);
 
     backend_info.logging_suffix = "isam_opt";
     backend->formulation()->updateTheta(data->opt_values);
-    backend->formulation()->accessorFromTheta()->postUpdateCallback(
-        backend_info);
+    backend->formulation()->postUpdate(post_update);
     backend->formulation()->logBackendFromMap(backend_info);
   }
 
@@ -154,8 +153,8 @@ struct BatchTester : public TesterBase {
     dyno::BackendMetaData backend_info;
     backend_info.backend_params = &backend->getParams();
 
-    backend->formulation()->accessorFromTheta()->postUpdateCallback(
-        backend_info);
+    dyno::PostUpdateData post_update(backend->getSpinState().frame_id);
+    backend->formulation()->postUpdate(post_update);
     backend->formulation()->logBackendFromMap(backend_info);
 
     LOG(INFO) << "Starting batch opt";
@@ -166,8 +165,7 @@ struct BatchTester : public TesterBase {
                                      .optimize();
       backend_info.logging_suffix = "batch_opt";
       backend->formulation()->updateTheta(opt_values);
-      backend->formulation()->accessorFromTheta()->postUpdateCallback(
-          backend_info);
+      backend->formulation()->postUpdate(post_update);
       backend->formulation()->logBackendFromMap(backend_info);
     } catch (const std::exception& e) {
       LOG(FATAL) << "Batch opt failed with exception: " << e.what();

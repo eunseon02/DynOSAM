@@ -41,6 +41,13 @@
 
 namespace dyno {
 
+template <typename M>
+struct measurement_traits {
+  // Template for derivation
+  static constexpr bool has_point = false;
+  static constexpr bool has_keypoint = false;
+};
+
 /**
  * @brief Defines a single visual measurement with tracking label, object id,
  * frame id and measurement.
@@ -227,11 +234,10 @@ class MeasurementWithCovariance {
                             const gtsam::SharedGaussian& model)
       : measurement_(measurement), model_(CHECK_NOTNULL(model)) {
     if (static_cast<int>(model->dim()) != This::dimension) {
-      throw DynosamException(
-          "Invalid gtsam::SharedGaussian model provided to "
-          "MeasurementWithCovariance. Type dimensions are " +
-          std::to_string(This::dimension) + " but noise models dims are " +
-          std::to_string(model->dim()));
+      DYNO_THROW_MSG(DynosamException)
+          << "Invalid gtsam::SharedGaussian model provided to "
+          << "MeasurementWithCovariance. Type dimensions are "
+          << This::dimension << " but noise models dims are " << model->dim();
     }
   }
 
@@ -416,6 +422,20 @@ struct VisualNoiseParams {
   //! sigma (standard deviation) on the depth of each measured keypoint. Pixel
   //! meters.
   double depth_sigma = 0.3;
+};
+
+template <>
+struct measurement_traits<LandmarkKeypoint> {
+  static constexpr bool has_point = true;
+  static constexpr bool has_keypoint = true;
+
+  static Landmark point(const LandmarkKeypoint& measurement) {
+    return measurement.landmark;
+  }
+
+  static Keypoint keypoint(const LandmarkKeypoint& measurement) {
+    return measurement.keypoint;
+  }
 };
 
 }  // namespace dyno

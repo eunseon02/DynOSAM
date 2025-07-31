@@ -123,6 +123,16 @@ struct TrackerParams {
   // Dynamic tracking specific
   size_t max_dynamic_features_per_frame = 50u;
   size_t max_dynamic_feature_age = 25u;
+
+  // Dynamic 'keyframing' criteria
+  //! How early we want to retrack points based on their expiry age
+  int dynamic_feature_age_buffer = 3;
+  //! Smallest number of good tracks on an object before re-sampling
+  int min_dynamic_tracks = 20;
+  //! Minimum IOU percetage between currently tracked area and actual mask
+  //! before re-sampling
+  double min_dynamic_mask_iou = 0.3;
+
   bool use_propogate_mask = false;
 };
 

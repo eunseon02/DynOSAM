@@ -84,11 +84,6 @@ inline std::string to_string(const TrackingStatus& status) {
   return status_str;
 }
 
-// TODO: depcricate!!!
-using TrackingInputImages =
-    ImageContainerSubset<ImageType::RGBMono, ImageType::OpticalFlow,
-                         ImageType::MotionMask>;
-
 /**
  * @brief Struct containing debug imagery from the frontend that (optionally) is
  * included in the frontend output
@@ -101,7 +96,6 @@ struct DebugImagery {
   cv::Mat detected_bounding_boxes;
   cv::Mat tracking_image;
   // TODO: for now!
-  //  TrackingInputImages input_images;
   cv::Mat rgb_viz;
   cv::Mat flow_viz;
   cv::Mat depth_viz;

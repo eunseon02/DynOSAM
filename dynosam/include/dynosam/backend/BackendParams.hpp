@@ -53,9 +53,6 @@ DECLARE_bool(use_smoothing_factor);
 
 namespace dyno {
 
-// TODO: DEFINE_bool(use_full_batch_opt, true, "Use full batch optimisation if
-// true, else sliding window");
-
 struct BackendParams {
   //! Only Mono
   double static_smart_projection_noise_sigma_ =

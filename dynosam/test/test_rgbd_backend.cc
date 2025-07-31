@@ -1055,12 +1055,13 @@ TEST(RegularBackendModule, testObjectCentric) {
 
   // log results of LM optimisation with different suffix
   dyno::BackendMetaData backend_info;
-  backend.formulation()->accessorFromTheta()->postUpdateCallback(backend_info);
+  dyno::PostUpdateData post_update(backend.getSpinState().frame_id);
+  backend.formulation()->postUpdate(post_update);
   backend.formulation()->logBackendFromMap(backend_info);
 
   backend_info.logging_suffix = "LM_opt";
   backend.formulation()->updateTheta(opt_values);
-  backend.formulation()->accessorFromTheta()->postUpdateCallback(backend_info);
+  backend.formulation()->postUpdate(post_update);
   backend.formulation()->logBackendFromMap(backend_info);
 }
 

@@ -144,8 +144,6 @@ class ParallelObjectISAM {
   // due to the nature of this formulation, this will be the accumulated cloud!!
   StatusLandmarkVector getDynamicLandmarks(FrameId frame_id) const;
 
-  // TODO: is motion in map (not just observed but we have a motion )
-
   std::pair<FrameId, gtsam::Pose3> insertNewKeyFrame(FrameId frame_id);
 
   inline const gtsam::ISAM2& getSmoother() const { return *smoother_; }

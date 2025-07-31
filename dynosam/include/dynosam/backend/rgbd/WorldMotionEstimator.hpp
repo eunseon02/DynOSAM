@@ -54,8 +54,14 @@ class WorldMotionAccessor : public WorldPoseAccessor {
   EstimateMap<ObjectId, gtsam::Pose3> getObjectPoses(
       FrameId frame_id) const override;
 
-  // this will update the object_pose_cache_ so call it every frame?
-  void postUpdateCallback(const BackendMetaData&) override;
+  /**
+   * @brief Update the object pose (cache) estimation based on the latest set of
+   * estated values stored in theta!
+   *
+   * Should be called after every successful optimisation
+   *
+   */
+  void refreshPoseCache();
 
  private:
   ObjectPoseMap object_pose_cache_;  //! Updated every time set/update theta is
@@ -74,7 +80,10 @@ class WorldMotionFormulation : public WorldPoseFormulation {
   WorldMotionFormulation(const FormulationParams& params, typename Map::Ptr map,
                          const NoiseModels& noise_models,
                          const FormulationHooks& hooks)
-      : WorldPoseFormulation(params, map, noise_models, hooks) {}
+      : WorldPoseFormulation(params, map, noise_models, hooks) {
+    derived_accessor_ = derivedAccessor<WorldMotionAccessor>();
+    CHECK_NOTNULL(derived_accessor_);
+  }
 
   void dynamicPointUpdateCallback(
       const PointUpdateContextType& context, UpdateObservationResult& result,
@@ -91,7 +100,15 @@ class WorldMotionFormulation : public WorldPoseFormulation {
     return std::make_shared<WorldMotionAccessor>(shared_data, this->map());
   }
 
+  void postUpdate(const PostUpdateData&) {
+    // update pose cache in accessor
+    CHECK_NOTNULL(derived_accessor_)->refreshPoseCache();
+  }
+
   std::string loggerPrefix() const override { return "wcme"; }
+
+ private:
+  std::shared_ptr<WorldMotionAccessor> derived_accessor_;
 };
 
 }  // namespace dyno

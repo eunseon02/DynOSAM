@@ -96,7 +96,6 @@ class ImageContainerSubset {
   }
   virtual ~ImageContainerSubset() = default;
 
-  // TODO: need to do test for default assignment
   // eg ImageContainerSubset sub;
   // sub = ImageContainerSubset(...types...)
 
@@ -251,12 +250,8 @@ class ImageContainerSubset {
                                           // default
 };
 
-class UndistorterRectifier;  // TODO:!!
+class UndistorterRectifier;
 
-// TODO: make some clone or better tested copy function so we can control when
-// cv::mats are cloned difficult as we want the behaviour in the base class but
-// the base class does not know the derived type this and also implicit casting
-// to other subset types
 class [[deprecated(
     "This class is deprecated. Use ImageContainer "
     "instead.")]] ImageContainerDeprecate
@@ -272,9 +267,6 @@ class [[deprecated(
                            ImageType::OpticalFlow, ImageType::SemanticMask,
                            ImageType::MotionMask, ImageType::ClassSegmentation>;
 
-  // TODO: gross, think of a better way of doing this (I think will need to have
-  // the base know abot derived type, but
-  //  unsure how to do this as we already have much templating!!)
   inline auto toBaseSubset(bool clone = false) const {
     // auto construct_subset = [&](auto&&... args) { return
     // Base::makeSubset(args..); }; return std::apply(construct_subset,
@@ -336,9 +328,6 @@ class [[deprecated(
 
   std::string toString() const;
 
-  // TODO:hack
-  cv::Mat right_stereo_rgb;
-
   /**
    * @brief Construct an image container equivalent to RGBD + Semantic Mask
    * input
@@ -393,8 +382,6 @@ class [[deprecated(
       const ImageWrapper<ImageType::Depth>& depth,
       const ImageWrapper<ImageType::OpticalFlow>& optical_flow,
       const ImageWrapper<ImageType::MotionMask>& motion_mask);
-  // TODO:would be nice to have this in the base class (maybe )
-  // TODO: this should really be a free function which is templated but issues
   // making it nice and elegant (easily template deducted + ImageCotnainer has
   // const variables in it) ideally also templated on the base class!!
   static ImageContainerDeprecate::Ptr RectifyImages(

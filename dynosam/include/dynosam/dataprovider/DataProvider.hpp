@@ -24,8 +24,6 @@ namespace dyno {
  *
  */
 class DataProvider {
-  // TODO: add gt callback - synchronize to timestamp? or frame?
-
  public:
   DYNO_POINTER_TYPEDEFS(DataProvider)
   DYNO_DELETE_COPY_CONSTRUCTORS(DataProvider)

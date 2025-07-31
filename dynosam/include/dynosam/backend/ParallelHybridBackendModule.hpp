@@ -45,7 +45,6 @@
 
 namespace dyno {
 
-// TODO: should have a special accessor for this class....
 class ParallelHybridBackendModule
     : public VisionImuBackendModule<RGBDBackendModuleTraits> {
  public:
@@ -104,7 +103,6 @@ class ParallelHybridBackendModule
 
   gtsam::ISAM2Params static_isam2_params_;
   HybridFormulation::UniquePtr static_formulation_;
-  //   gtsam::ISAM2 static_estimator_;
   gtsam::IncrementalFixedLagSmoother static_estimator_;
 
   gtsam::ISAM2Params dynamic_isam2_params_;
@@ -115,9 +113,6 @@ class ParallelHybridBackendModule
 
   //! used to cache the result of each update which will we log to file
   GenericObjectCentricMap<ParallelObjectISAM::Result> result_map_;
-
-  gtsam::NavState nav_state_;
-  gtsam::imuBias::ConstantBias imu_bias_;
 };
 
 }  // namespace dyno

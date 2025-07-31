@@ -73,7 +73,9 @@ add_library(${PROJECT_NAME} SHARED
   src/common/PointCloudProcess.cc
   src/common/Algorithms.cc
   src/common/StereoCamera.cc
+  src/common/RGBDCamera.cc
   src/common/SharedModuleInfo.cc
+  src/common/SensorModels.cc
 
   src/common/byte_tracker/ByteTracker.cc
   src/common/byte_tracker/Detection.cc

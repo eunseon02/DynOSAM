@@ -217,8 +217,6 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
           new_factors);
 
     } else {
-      // TODO: depricate odometry since this ALSO adds in the initial states
-      // which we dont want...
       VLOG(10) << "Adding states/factors between frames " << from_id << " -> "
                << to_id << " using VO";
       formulation->addFactorsFunctional(
@@ -290,6 +288,7 @@ class VisionImuBackendModule : public BackendModuleType<MODULE_TRAITS> {
     return updateNavState(frame_id_k, nav_state);
   }
 
+  // Ideally this should be const but it updated the imu_bias_... why?
   gtsam::NavState navState(FrameId frame_id_k,
                            const FormulationType* formulation) {
     auto accessor = CHECK_NOTNULL(formulation)->accessorFromTheta();

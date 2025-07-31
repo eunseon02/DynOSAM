@@ -67,7 +67,7 @@ EstimateMap<ObjectId, gtsam::Pose3> WorldMotionAccessor::getObjectPoses(
   return object_poses;
 }
 
-void WorldMotionAccessor::postUpdateCallback(const BackendMetaData&) {
+void WorldMotionAccessor::refreshPoseCache() {
   // this is pretty slow!!
   // update object_pose_cache_ with new values
   // this means we have to start again at the first frame and update all the
@@ -327,14 +327,7 @@ void WorldMotionFormulation::objectUpdateContext(
       if (result.debug_info)
         result.debug_info->getObjectInfo(context.getObjectId())
             .smoothing_factor_added = true;
-
-      // object_debug_info.smoothing_factor_added = true;
     }
-
-    // if(smoothing_added) {
-    //     //TODO: add back in
-    //     // object_debug_info.smoothing_factor_added = true;
-    // }
   }
 }
 

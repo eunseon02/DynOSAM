@@ -498,36 +498,4 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
   return tracking_image;
 }
 
-// TrackingInputImages RGBDInstanceFrontendModule::constructTrackingImages(
-//     const ImageContainer::Ptr image_container) {
-//   // if we only have instance semgentation (not motion) then we need to make
-//   a
-//   // motion mask out of the semantic mask we cannot do this for the first
-//   frame
-//   // so we will just treat the semantic mask and the motion mask and then
-//   // subsequently elimate non-moving objects later on
-//   TrackingInputImages tracking_images;
-//   if (image_container->hasSemanticMask()) {
-//     CHECK(!image_container->hasMotionMask());
-//     // TODO: some bug when going from semantic mask to motion mask as motion
-//     // mask is empty in the tracker after this process!!! its becuase we dont
-//     // actually use the tracking_images!!
-//     auto intermediate_tracking_images =
-//         image_container->makeSubset<ImageType::RGBMono,
-//         ImageType::OpticalFlow,
-//                                     ImageType::SemanticMask>();
-//     tracking_images = TrackingInputImages(
-//         intermediate_tracking_images.getImageWrapper<ImageType::RGBMono>(),
-//         intermediate_tracking_images.getImageWrapper<ImageType::OpticalFlow>(),
-//         ImageWrapper<ImageType::MotionMask>(
-//             intermediate_tracking_images.get<ImageType::SemanticMask>()));
-//   } else {
-//     tracking_images =
-//         image_container->makeSubset<ImageType::RGBMono,
-//         ImageType::OpticalFlow,
-//                                     ImageType::MotionMask>();
-//   }
-//   return tracking_images;
-// }
-
 }  // namespace dyno

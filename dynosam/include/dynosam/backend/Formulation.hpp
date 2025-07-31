@@ -40,6 +40,7 @@ namespace dyno {
 template <typename MAP>
 struct MapTraits {
   using Map = MAP;
+  using MeasurementType = typename Map::Measurement;
   using FrameNode = typename Map::FrameNodeM;
   using ObjectNode = typename Map::ObjectNodeM;
   using LandmarkNode = typename Map::LandmarkNodeM;
@@ -63,9 +64,6 @@ struct UpdateObservationResult {
       objects_affected_per_frame;  // per frame
   DebugInfo::Optional debug_info{};
 
-  // struct IncrementalDetail {
-
-  // };
   UpdateObservationResult() {}
 
   UpdateObservationResult(const UpdateObservationParams& update_params) {
@@ -141,7 +139,10 @@ struct ObjectUpdateContext {
 // forward declare
 class BackendParams;
 
-// TODO: comments
+/**
+ * @brief Meta-data struct used for the Formulation::preUpdate hook.
+ *
+ */
 struct PreUpdateData {
   FrameId frame_id;
 
@@ -149,7 +150,10 @@ struct PreUpdateData {
   PreUpdateData(FrameId _frame_id) : frame_id(_frame_id) {}
 };
 
-// TODO: comments
+/**
+ * @brief Metdata struct used for the Formulation::poseUpdate hook.
+ *
+ */
 struct PostUpdateData {
   FrameId frame_id;
   UpdateObservationResult dynamic_update_result;
@@ -213,6 +217,9 @@ class Formulation {
   using Map = MAP;
   using This = Formulation<Map>;
   using MapTraitsType = MapTraits<Map>;
+  using MeasurementType = typename MapTraitsType::MeasurementType;
+
+  using MeasurementTraits = measurement_traits<MeasurementType>;
 
   using PointUpdateContextType = PointUpdateContext<Map>;
   using ObjectUpdateContextType = ObjectUpdateContext<Map>;
@@ -409,6 +416,16 @@ class Formulation {
    * @return AccessorType::Ptr
    */
   typename AccessorType::Ptr accessorFromTheta() const;
+
+  template <typename Derived>
+  std::shared_ptr<Derived> derivedAccessor() const {
+    if (!accessor_theta_) {
+      return nullptr;
+    }
+
+    return std::dynamic_pointer_cast<Derived>(accessor_theta_);
+  }
+
   /**
    * @brief Makes a logger using the fully-qualified name for this formulation.
    *
@@ -450,33 +467,6 @@ class Formulation {
   void setInitialPosePrior(const gtsam::Pose3& T_world_camera,
                            FrameId frame_id_k,
                            gtsam::NonlinearFactorGraph& new_factors);
-
-  /**
-   * @brief Adds odometry factor between multiple frames using the initial
-   * values from the front-end (as stored in the map) to calculate the odometry.
-   *
-   * @param from_frame FrameId
-   * @param to_frame FrameId
-   * @param new_values gtsam::Values&
-   * @param new_factors gtsam::NonlinearFactorGraph&
-   */
-  void addOdometry(FrameId from_frame, FrameId to_frame,
-                   gtsam::Values& new_values,
-                   gtsam::NonlinearFactorGraph& new_factors);
-
-  /**
-   * @brief Adds odometry factor betwene k-1 and k using T_world_camera as the
-   * measurement at k and the existing value in the graph (or initial value from
-   * the front-end) as the pose measurement for k-1.
-   *
-   * @param frame_id_k FrameId
-   * @param T_world_camera const gtsam::Pose3&
-   * @param new_values gtsam::Values&
-   * @param new_factors gtsam::NonlinearFactorGraph&
-   */
-  void addOdometry(FrameId frame_id_k, const gtsam::Pose3& T_world_camera,
-                   gtsam::Values& new_values,
-                   gtsam::NonlinearFactorGraph& new_factors);
 
   /**
    * @brief Update the static-point part of the factor graph between multiple
@@ -558,11 +548,20 @@ class Formulation {
    */
   void logBackendFromMap(const BackendMetaData& backend_info);
 
-  // TODO: comments etc...
-  // called after map is updated but before value/factor construction
-  virtual void preUpdate(const PreUpdateData& data){};
-  // after graph construction and optimization!!
-  virtual void postUpdate(const PostUpdateData& data){};
+  /**
+   * @brief Pre update hook called in the RegularBackend after the map is
+   * updated with new measurements but before new values/factors are constructed
+   * from this formulation.
+   *
+   */
+  virtual void preUpdate(const PreUpdateData&){};
+
+  /**
+   * @brief Post-update hook called in the RegulatBackend after graph
+   * construction and optimization!
+   *
+   */
+  virtual void postUpdate(const PostUpdateData&){};
 
  protected:
   gtsam::Pose3 getInitialOrLinearizedSensorPose(FrameId frame_id) const;

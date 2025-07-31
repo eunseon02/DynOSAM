@@ -96,6 +96,9 @@ using Keypoint = gtsam::Point2;
 using Keypoints = gtsam::Point2Vector;  //! Vector of 2D keypoints using gtsam's
                                         //! definition for allocation
 
+//! For RGBD/StereoCamera
+using Baseline = double;
+
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 

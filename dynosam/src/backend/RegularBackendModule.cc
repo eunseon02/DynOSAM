@@ -109,7 +109,8 @@ RegularBackendModule::~RegularBackendModule() {
 
   if (base_params_.use_logger_) {
     auto backend_info = createBackendMetadata();
-    formulation_->accessorFromTheta()->postUpdateCallback(backend_info);
+    PostUpdateData post_update_data(spin_state_.frame_id);
+    formulation_->postUpdate(post_update_data);
     formulation_->logBackendFromMap(backend_info);
   }
 }
@@ -198,10 +199,6 @@ RegularBackendModule::SpinReturn RegularBackendModule::nominalSpinImpl(
 
   utils::TimingStatsCollector timer(formulation_->getFullyQualifiedName() +
                                     ".post_update");
-  BackendMetaData backend_info = createBackendMetadata();
-  formulation_->accessorFromTheta()->postUpdateCallback(
-      backend_info);  // force update every time (slow! and just for testing)
-
   formulation_->postUpdate(post_update_data);
 
   BackendOutputPacket::Ptr backend_output =

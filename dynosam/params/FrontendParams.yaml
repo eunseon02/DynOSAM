@@ -47,6 +47,11 @@ tracker_params:
   min_distance_btw_tracked_and_detected_dynamic_features: 2
   max_dynamic_feature_age: 20
 
+  # dynamic keyframing criteria
+  dynamic_feature_age_buffer: 3
+  min_dynamic_tracks: 20
+  min_dynamic_mask_iou: 0.3
+
 image_tracks_vis_params:
   is_debug: true
   show_frame_info: true

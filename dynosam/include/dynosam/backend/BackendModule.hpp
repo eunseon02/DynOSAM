@@ -82,6 +82,7 @@ class BackendModule
 
   const BackendParams& getParams() const { return base_params_; }
   const NoiseModels& getNoiseModels() const { return noise_models_; }
+  const BackendSpinState& getSpinState() const { return spin_state_; }
 
   // void optimize(FrameId frame_id_k, gtsam::Values& new_values,
   // gtsam::NonlinearFactorGraph& new_factors) const;
@@ -101,18 +102,12 @@ class BackendModule
 
  protected:
   const BackendParams base_params_;
-  // NOTE: this is copied directly from the frontend module.
-  GroundTruthPacketMap
-      gt_packet_map_;  //! Updated in the backend module base via InputCallback
-                       //! (see BackendModule constructor).
   ImageDisplayQueue* display_queue_{nullptr};  //! Optional display queue
 
   BackendSpinState
       spin_state_;  //! Spin state of the backend. Updated in the backend module
                     //! base via InputCallback (see BackendModule constructor).
   NoiseModels noise_models_;
-
-  // std::function<void(const Accessor&)> frontend_updater_;
 
  private:
 };

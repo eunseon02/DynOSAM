@@ -147,18 +147,6 @@ class Accessor {
    */
   MotionEstimateMap getObjectMotions(FrameId frame_id) const;
 
-  // TODO: sort of remove if we add a post update call in the formulation (which
-  // then has access to the estimator!!)
-
-  /**
-   * @brief Virtual function that is called to indcate the associated
-   * formulation has been updated. This can be used to trigger an internal
-   * update of variables/cache if necessary.
-   *
-   * @param const BackendMetaData&
-   */
-  virtual void postUpdateCallback(const BackendMetaData&){};
-
   /**
    * @brief Gets an estimate map of objects with their motion and and PREVIOUS
    * pose. This will find motions and poses (using the internal API) and return

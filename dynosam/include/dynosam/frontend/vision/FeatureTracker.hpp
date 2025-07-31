@@ -61,8 +61,6 @@ class FeatureTracker : public FeatureTrackerBase {
   virtual ~FeatureTracker() {}
 
   // note: MOTION MASK!!
-  //  Frame::Ptr track(FrameId frame_id, Timestamp timestamp, const
-  //  TrackingInputImages& tracking_images);
   // object keyframes should not be part of the function here. How should we get
   // this data? Put in frame or get as function?
   Frame::Ptr track(FrameId frame_id, Timestamp timestamp,
@@ -115,7 +113,21 @@ class FeatureTracker : public FeatureTrackerBase {
                      FeatureContainer& dynamic_features,
                      std::set<ObjectId>& objects_sampled,
                      const cv::Mat& detection_mask);
-
+  /**
+   * @brief Check which objects require new features to be detected on them
+   * based on a set of 'keyframing' criteria.
+   *
+   * The number of current tracks for each object is encapsualted in
+   * FeatureTrackerInfo.
+   *
+   * @param objects_to_sample  std::set<ObjectId>&
+   * @param info const FeatureTrackerInfo&
+   * @param image_container const ImageContainer&
+   * @param features_per_object const gtsam::FastMap<ObjectId,
+   * FeatureContainer>&
+   * @param boundary_mask_result const vision_tools::ObjectBoundaryMaskResult&
+   * @param dynamic_tracking_mask const cv::Mat&
+   */
   void requiresSampling(
       std::set<ObjectId>& objects_to_sample, const FeatureTrackerInfo& info,
       const ImageContainer& image_container,

@@ -1,31 +1,34 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
-
-#include "dynosam/common/CameraParams.hpp"
-#include "dynosam/common/Camera.hpp"
-#include "dynosam/frontend/vision/UndistortRectifier.hpp"
 
 #include <gtsam/geometry/Cal3_S2Stereo.h>
 #include <gtsam/geometry/Pose3.h>
@@ -33,59 +36,59 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 
+#include "dynosam/common/Camera.hpp"
+#include "dynosam/common/CameraParams.hpp"
+#include "dynosam/frontend/vision/UndistortRectifier.hpp"
+
 namespace dyno {
 
 class StereoCamera {
-public:
-    DYNO_POINTER_TYPEDEFS(StereoCamera)
-    DYNO_DELETE_COPY_CONSTRUCTORS(StereoCamera)
+ public:
+  DYNO_POINTER_TYPEDEFS(StereoCamera)
+  DYNO_DELETE_COPY_CONSTRUCTORS(StereoCamera)
 
-    using Baseline = double;
+  StereoCamera(Camera::ConstPtr left_camera, Camera::ConstPtr right_camera);
 
-    StereoCamera(Camera::ConstPtr left_camera, Camera::ConstPtr right_camera);
-
-
-    StereoCamera(const CameraParams& left_cam_params,
+  StereoCamera(const CameraParams& left_cam_params,
                const CameraParams& right_cam_params);
 
+  inline const Camera::ConstPtr& getOriginalLeftCamera() const {
+    return original_left_camera_;
+  }
 
+  inline const Camera::ConstPtr& getOriginalRightCamera() const {
+    return original_right_camera_;
+  }
 
-    inline const Camera::ConstPtr& getOriginalLeftCamera() const {
-        return original_left_camera_;
-    }
+  inline gtsam::StereoCamera getUndistortedRectifiedStereoCamera() const {
+    return undistorted_rectified_stereo_camera_impl_;
+  }
 
-    inline const Camera::ConstPtr& getOriginalRightCamera() const {
-        return original_right_camera_;
-    }
+  inline const gtsam::Cal3_S2Stereo& getStereoCameraCalibration() const {
+    return undistorted_rectified_stereo_camera_impl_.calibration();
+  }
 
-    inline gtsam::StereoCamera getUndistortedRectifiedStereoCamera() const {
-        return undistorted_rectified_stereo_camera_impl_;
-    }
+  inline cv::Mat getP1() const { return P1_; }
 
-    inline const gtsam::Cal3_S2Stereo& getStereoCameraCalibration() const {
-        return undistorted_rectified_stereo_camera_impl_.calibration();
-    }
+  inline cv::Mat getP2() const { return P2_; }
 
-    inline cv::Mat getP1() const { return P1_; }
+  inline cv::Mat getR1() const { return R1_; }
 
-    inline cv::Mat getP2() const { return P2_; }
+  inline cv::Mat getR2() const { return R2_; }
 
-    inline cv::Mat getR1() const { return R1_; }
+  inline cv::Mat getQ() const { return Q_; }
 
-    inline cv::Mat getR2() const { return R2_; }
+  inline cv::Rect getROI1() const { return ROI1_; }
 
-    inline cv::Mat getQ() const { return Q_; }
+  inline cv::Rect getROI2() const { return ROI2_; }
 
-    inline cv::Rect getROI1() const { return ROI1_; }
+  inline Baseline getBaseline() const { return stereo_baseline_; }
 
-    inline cv::Rect getROI2() const { return ROI2_; }
+  void undistortRectifyImages(cv::Mat& rectify_left, cv::Mat& rectify_right,
+                              const cv::Mat& left, const cv::Mat& right) const;
 
-    inline Baseline getBaseline() const { return stereo_baseline_; }
-
-    void undistortRectifyImages(cv::Mat& rectify_left, cv::Mat& rectify_right, const cv::Mat& left, const cv::Mat& right) const;
-
-private:
-    /**
+ private:
+  /**
    * @brief computeRectificationParameters
    *
    * Outputs new rotation matrices R1,R2
@@ -110,54 +113,45 @@ private:
    * @param ROI2 Region of interest in image 2.
    */
   static void computeRectificationParameters(
-      const CameraParams& left_cam_params,
-      const CameraParams& right_cam_params,
-      cv::Mat& R1,
-      cv::Mat& R2,
-      cv::Mat& P1,
-      cv::Mat& P2,
-      cv::Mat& Q,
-      cv::Rect& ROI1,
-      cv::Rect& ROI2);
+      const CameraParams& left_cam_params, const CameraParams& right_cam_params,
+      cv::Mat& R1, cv::Mat& R2, cv::Mat& P1, cv::Mat& P2, cv::Mat& Q,
+      cv::Rect& ROI1, cv::Rect& ROI2);
 
-  static void calculateBaseLine(StereoCamera::Baseline& base_line, const cv::Mat& Q);
+  static void calculateBaseLine(Baseline& base_line, const cv::Mat& Q);
 
-private:
-    Camera::ConstPtr original_left_camera_;
-    Camera::ConstPtr original_right_camera_;
+ private:
+  Camera::ConstPtr original_left_camera_;
+  Camera::ConstPtr original_right_camera_;
 
-    //! Stereo camera implementation
-    gtsam::StereoCamera undistorted_rectified_stereo_camera_impl_;
+  //! Stereo camera implementation
+  gtsam::StereoCamera undistorted_rectified_stereo_camera_impl_;
 
-    //! Stereo camera calibration
-    gtsam::Cal3_S2Stereo::shared_ptr stereo_calibration_;
+  //! Stereo camera calibration
+  gtsam::Cal3_S2Stereo::shared_ptr stereo_calibration_;
 
-    //! Undistortion rectification pre-computed maps for cv::remap
-    UndistorterRectifier::UniquePtr left_cam_undistort_rectifier_;
-    UndistorterRectifier::UniquePtr right_cam_undistort_rectifier_;
+  //! Undistortion rectification pre-computed maps for cv::remap
+  UndistorterRectifier::UniquePtr left_cam_undistort_rectifier_;
+  UndistorterRectifier::UniquePtr right_cam_undistort_rectifier_;
 
-    // TODO(Toni): perhaps wrap these params in a struct instead.
-    /// Projection matrices after rectification
-    /// P1,P2 Output 3x4 projection matrix in the new (rectified) coordinate
-    /// systems for the left and right camera (see cv::stereoRectify).
-    cv::Mat P1_, P2_;
+  // TODO(Toni): perhaps wrap these params in a struct instead.
+  /// Projection matrices after rectification
+  /// P1,P2 Output 3x4 projection matrix in the new (rectified) coordinate
+  /// systems for the left and right camera (see cv::stereoRectify).
+  cv::Mat P1_, P2_;
 
-    /// R1,R2 Output 3x3 rectification transform (rotation matrix) for the left
-    /// and for the right camera.
-    cv::Mat R1_, R2_;
+  /// R1,R2 Output 3x3 rectification transform (rotation matrix) for the left
+  /// and for the right camera.
+  cv::Mat R1_, R2_;
 
-    /// Q Output 4x4 disparity-to-depth mapping matrix (see
-    /// cv::reprojectImageTo3D or cv::stereoRectify).
-    cv::Mat Q_;
+  /// Q Output 4x4 disparity-to-depth mapping matrix (see
+  /// cv::reprojectImageTo3D or cv::stereoRectify).
+  cv::Mat Q_;
 
-    //! Regions of interest in the left/right image.
-    cv::Rect ROI1_, ROI2_;
+  //! Regions of interest in the left/right image.
+  cv::Rect ROI1_, ROI2_;
 
-    //! Stereo baseline
-    Baseline stereo_baseline_;
-
+  //! Stereo baseline
+  Baseline stereo_baseline_;
 };
 
-
-
-} //dyno
+}  // namespace dyno

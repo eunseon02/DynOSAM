@@ -120,6 +120,11 @@ void declare_config(TrackerParams& config) {
   field(config.max_dynamic_features_per_frame,
         "max_dynamic_features_per_frame");
   field(config.max_dynamic_feature_age, "max_dynamic_feature_age");
+
+  field(config.dynamic_feature_age_buffer, "dynamic_feature_age_buffer");
+  field(config.min_dynamic_tracks, "min_dynamic_tracks");
+  field(config.min_dynamic_mask_iou, "min_dynamic_mask_iou");
+
   field(config.use_propogate_mask, "use_propogate_mask");
 
   // update with FLAGS

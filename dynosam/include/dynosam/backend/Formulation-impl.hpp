@@ -143,64 +143,6 @@ void Formulation<MAP>::setInitialPosePrior(
 }
 
 template <typename MAP>
-void Formulation<MAP>::addOdometry(FrameId from_frame, FrameId to_frame,
-                                   gtsam::Values& new_values,
-                                   gtsam::NonlinearFactorGraph& new_factors) {
-  CHECK_LT(from_frame, to_frame);
-  CHECK_GT(from_frame, this->map()->firstFrameId());
-
-  for (auto frame_id = from_frame; frame_id <= to_frame; frame_id++) {
-    gtsam::Values values;
-    gtsam::NonlinearFactorGraph graph;
-
-    // pose estimate from frontend
-    gtsam::Pose3 T_world_camera_k;
-    CHECK(this->map()->hasInitialSensorPose(frame_id, &T_world_camera_k));
-
-    addOdometry(frame_id, T_world_camera_k, values, graph);
-
-    new_values.insert(values);
-    new_factors += graph;
-  }
-}
-
-template <typename MAP>
-void Formulation<MAP>::addOdometry(FrameId frame_id_k,
-                                   const gtsam::Pose3& T_world_camera,
-                                   gtsam::Values& new_values,
-                                   gtsam::NonlinearFactorGraph& new_factors) {
-  new_values.insert(CameraPoseSymbol(frame_id_k), T_world_camera);
-  theta_.insert_or_assign(new_values);
-  auto odometry_noise = noise_models_.odometry_noise;
-
-  typename Map::Ptr map = this->map();
-
-  CHECK_GT(frame_id_k, map->firstFrameId());
-  const FrameId frame_id_k_1 = frame_id_k - 1u;
-
-  gtsam::Pose3 T_world_camera_k_1_frontend;
-  CHECK(this->map()->hasInitialSensorPose(frame_id_k_1,
-                                          &T_world_camera_k_1_frontend));
-
-  LOG(INFO) << "Adding odom between " << frame_id_k_1 << " and " << frame_id_k;
-  gtsam::Pose3 odom = T_world_camera_k_1_frontend.inverse() * T_world_camera;
-
-  // keep track of the new factors added in this function
-  // these are then appended to the internal factors_ and new_factors
-  // TODO: put somewhere else?
-  // if (true) {
-  if (FLAGS_use_vo_factor) {
-    gtsam::NonlinearFactorGraph internal_new_factors;
-
-    factor_graph_tools::addBetweenFactor(frame_id_k_1, frame_id_k, odom,
-                                         odometry_noise, internal_new_factors);
-    factors_ += internal_new_factors;
-    new_factors += internal_new_factors;
-    LOG(INFO) << "Finished adding odom";
-  }
-}
-
-template <typename MAP>
 UpdateObservationResult Formulation<MAP>::updateStaticObservations(
     FrameId from_frame, FrameId to_frame, gtsam::Values& new_values,
     gtsam::NonlinearFactorGraph& new_factors,
@@ -349,7 +291,8 @@ UpdateObservationResult Formulation<MAP>::updateStaticObservations(
       }
 
       // pick the one in this frame
-      const Landmark& measured = lmk_node->getMeasurement(frame_id_k).landmark;
+      const Landmark& measured =
+          MeasurementTraits::point(lmk_node->getMeasurement(frame_id_k));
       // add initial value, either from measurement or previous estimate
       gtsam::Point3 lmk_world;
       getSafeQuery(lmk_world,

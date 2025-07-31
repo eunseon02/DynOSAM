@@ -336,7 +336,6 @@ std::tuple<gtsam::Point3, bool> Accessor<MAP>::computeObjectCentroid(
   CloudPerObject object_clouds =
       groupObjectCloud(dynamic_lmks, this->getSensorPose(frame_id).get());
   if (object_clouds.size() == 0) {
-    // TODO: why does this happen so much!!!
     VLOG(20) << "Cannot collect object clouds from dynamic landmarks of "
              << object_id << " and frame " << frame_id << "!! "
              << " # Dynamic lmks in the map for this object at this frame was "

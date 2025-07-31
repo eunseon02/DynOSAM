@@ -536,15 +536,6 @@ void FeatureTracker::sampleDynamic(FrameId frame_id,
             opencv_keypoints, nr_corners_needed, tolerance, img_size_.width,
             img_size_.height, 5, 5, binning_mask);
 
-        // max_keypoints = non_maximum_supression.suppressNonMax(
-        //     max_keypoints, nr_corners_needed, tolerance, obj_cols,
-        //     obj_rows, 5, 5, binning_mask);
-
-        // for(auto& kp : max_keypoints) {
-        //   kp.pt.x += min_x;
-        //   kp.pt.y += min_y;
-        // }
-
         VLOG(10) << "Kps: " << max_keypoints.size() << " for j=" << object_id
                  << " after ANMS (originally " << sampled_size << ")";
         {
@@ -619,9 +610,9 @@ void FeatureTracker::requiresSampling(
   // it takes a few frames for the feature to end up in the backend (ie. at
   // least twice, to ensure a valid track) so we want to track new points
   // earlier than that to ensure we dont have a frame with NO points
-  static constexpr int age_buffer = 3;
-  static constexpr int min_tracks = 20;
-  static constexpr double min_iou = 0.3;
+  const auto& age_buffer = std::max(3, params_.dynamic_feature_age_buffer);
+  const auto& min_dynamic_tracks = params_.min_dynamic_tracks;
+  const auto& min_iou = params_.min_dynamic_mask_iou;
   const size_t expiry_age =
       static_cast<size_t>(max_dynamic_point_age - age_buffer);
   CHECK_GT(expiry_age, 0u);
@@ -655,7 +646,7 @@ void FeatureTracker::requiresSampling(
       const bool many_old_points =
           (double)are_geriatric / (double)num_tracked > 0.8;
       // if we have less than N tracks
-      const bool too_few_tracks = num_tracked < min_tracks;
+      const bool too_few_tracks = num_tracked < min_dynamic_tracks;
       // eventually also area based tings
 
       // bounding box of the whole mask, representing the object detected in the
