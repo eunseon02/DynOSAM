@@ -55,10 +55,12 @@ using PoseToPointFactor = gtsam::PoseToPointFactor<gtsam::Pose3, Landmark>;
 
 using SymbolChar = unsigned char;
 static constexpr SymbolChar kPoseSymbolChar = 'X';
+static constexpr SymbolChar kVelocitySymbolChar = 'V';
 static constexpr SymbolChar kObjectMotionSymbolChar = 'H';
 static constexpr SymbolChar kObjectPoseSymbolChar = 'L';
 static constexpr SymbolChar kStaticLandmarkSymbolChar = 'l';
 static constexpr SymbolChar kDynamicLandmarkSymbolChar = 'm';
+static constexpr SymbolChar kImuBiasSymbolChar = 'b';
 
 inline gtsam::Key H(unsigned char label, std::uint64_t j) {
   return gtsam::LabeledSymbol(kObjectMotionSymbolChar, label, j);
@@ -93,6 +95,64 @@ bool reconstructMotionInfo(gtsam::Key key, ObjectId& object_label,
 bool reconstructPoseInfo(gtsam::Key key, ObjectId& object_label,
                          FrameId& frame_id);
 
+// TODO: this information is sort of duplicated when the ROS odometry messages
+// are constructed.
+//  streamline!!
+struct TemporalObjectMetaData {
+  //! ID of the object
+  ObjectId object_id;
+
+  FrameId first_seen;
+  FrameId last_seen;
+};
+
+/**
+ * @brief Helper class that allows functional callbacks to be triggered based on
+ * the type of gtsam::Key provided, where the key should refer to a valid type
+ * within the DynoSAM ecosystem.
+ *
+ * These include the symbols defined by CameraPoseSymbol, StaticLandmarkSymbol,
+ * DynamicLandmarkSymbol, ObjectMotionSymbol and ObjectPoseSymbol.
+ *
+ * Callbacks can be registered to the class and then the operator will trigger
+ * the callback based on the type, extracting and providing associated
+ * meta-data.
+ *
+ * Not all callbacks for all symbols need to be registered.
+ *
+ */
+class ApplyFunctionalSymbol {
+ public:
+  using CameraPoseFunc = std::function<void(FrameId, const gtsam::Symbol&)>;
+  using ObjectMotionFunc =
+      std::function<void(FrameId, ObjectId, const gtsam::LabeledSymbol&)>;
+  using ObjectPoseFunc =
+      std::function<void(FrameId, ObjectId, const gtsam::LabeledSymbol&)>;
+  using StaticLmkFunc = std::function<void(TrackletId, const gtsam::Symbol&)>;
+  using DynamicLmkFunc =
+      std::function<void(TrackletId, const DynamicPointSymbol&)>;
+
+  ApplyFunctionalSymbol() = default;
+  virtual ~ApplyFunctionalSymbol() = default;
+
+  bool operator()(gtsam::Key key) const;
+
+  void reset();
+
+  ApplyFunctionalSymbol& cameraPose(const CameraPoseFunc&);
+  ApplyFunctionalSymbol& objectMotion(const ObjectMotionFunc&);
+  ApplyFunctionalSymbol& objectPose(const ObjectPoseFunc&);
+  ApplyFunctionalSymbol& staticLandmark(const StaticLmkFunc&);
+  ApplyFunctionalSymbol& dynamicLandmark(const DynamicLmkFunc&);
+
+ protected:
+  CameraPoseFunc pose_func_;
+  ObjectMotionFunc object_motion_func_;
+  ObjectPoseFunc object_pose_func_;
+  StaticLmkFunc static_lmk_func_;
+  DynamicLmkFunc dynamic_lmk_func_;
+};
+
 struct NoiseModels {
   gtsam::SharedNoiseModel initial_pose_prior;
   //! Between factor noise for between two consequative poses
@@ -105,33 +165,43 @@ struct NoiseModels {
   gtsam::SharedNoiseModel dynamic_point_noise;
   //! Isometric [3x3] noise model on static points;
   gtsam::SharedNoiseModel static_point_noise;
+
+  static NoiseModels fromBackendParams(const BackendParams&);
 };
 
-// /**
-//  * @brief Internal back-end structure allowing Formulation/Accessors to get
-//  meta-data
-//  * about the backend via hooks
-//  *
-//  */
-// struct InternalBackendMetaData {
+/**
+ * @brief Defines a set of input hooks to the formulation that allow
+ * communication to outside the formulation
+ *
+ */
+struct FormulationHooks {
+  using GroundTruthPacketsRequest =
+      std::function<std::optional<GroundTruthPacketMap>()>;
 
-//     using BackendParamsRequest = std::function<const BackendParams&()>;
-//     using GroundTruthPacketsRequest = std::function<const
-//     std::optional<GroundTruthPacketMap>&()>;
+  GroundTruthPacketsRequest ground_truth_packets_request;
+};
 
-//     struct Hooks {
-//         BackendParamsRequest backend_params_request;
-//         GroundTruthPacketsRequest ground_truth_packets_request;
-//     };
+/**
+ * @brief Data shared between a Formulation and its accessor
+ *
+ */
+struct SharedFormulationData {
+  const gtsam::Values* values;
+  const FormulationHooks* hooks;
 
-//     Hooks hooks;
+  SharedFormulationData(const gtsam::Values* v, const FormulationHooks* h)
+      : values(v), hooks(h) {}
+};
 
-// };
-
-// better to change to hook (or pointer?) and parse as config
 struct BackendMetaData {
-  BackendParams params;
-  std::optional<GroundTruthPacketMap> ground_truth_packets;
+  // TODO: should streamline this to only include what we actually need from the
+  // params
+  const BackendParams* backend_params = nullptr;
+  //! Suffix that is used when logging data from a formulation
+  //! This is additional to the suffix specified in formulation params in case
+  //! further nameing specificity is needed; this is mostly helpful during
+  //! testing
+  std::string logging_suffix;
 };
 
 struct BackendSpinState {

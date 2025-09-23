@@ -29,5 +29,11 @@
  */
 #pragma once
 
+// #ifdef _MSC_VER
+// #pragma message("Colours functions are now defined in Colour.hpp")
+// #else
+// #warning "Colours functions are now defined in Colour.hpp"
+// #endif
+
 // for backwards compatability
 #include "dynosam/visualizer/Colour.hpp"

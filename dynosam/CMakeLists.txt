@@ -73,6 +73,9 @@ add_library(${PROJECT_NAME} SHARED
   src/common/PointCloudProcess.cc
   src/common/Algorithms.cc
   src/common/StereoCamera.cc
+  src/common/RGBDCamera.cc
+  src/common/SharedModuleInfo.cc
+  src/common/SensorModels.cc
 
   src/common/byte_tracker/ByteTracker.cc
   src/common/byte_tracker/Detection.cc
@@ -91,8 +94,13 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/OMDDataProvider.cc
   src/dataprovider/DatasetProvider.cc
   src/dataprovider/ProjectAriaDataProvider.cc
+  src/dataprovider/TartanAirShibuya.cc
+  src/dataprovider/ViodeDataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
+  src/frontend/imu/ImuFrontend.cc
+  src/frontend/imu/ImuParams.cc
+
   src/frontend/vision/Feature.cc
   src/frontend/vision/UndistortRectifier.cc
   src/frontend/vision/Frame.cc
@@ -121,15 +129,30 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/BackendParams.cc
   src/backend/FactorGraphTools.cc
   src/backend/DynamicPointSymbol.cc
-  src/backend/RGBDBackendModule.cc
+  src/backend/RegularBackendModule.cc
   src/backend/rgbd/WorldMotionEstimator.cc
   src/backend/rgbd/WorldPoseEstimator.cc
+  src/backend/rgbd/HybridEstimator.cc
+  src/backend/rgbd/impl/test_HybridFormulations.cc
+  src/backend/ParallelObjectISAM.cc
+  src/backend/ParallelHybridBackendModule.cc
+  src/backend/optimizers/SlidingWindowOptimization.cc
+
+  src/backend/optimizers/ISAM2-impl.cc
+  src/backend/optimizers/ISAM2.cc
+  src/backend/optimizers/ISAM2Clique.cc
+  src/backend/optimizers/ISAM2Params.cc
+  src/backend/optimizers/IncrementalOptimization.cc
+
+  # src/backend/ISAM2Agent.cc
+  #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
 
   src/factors/LandmarkMotionTernaryFactor.cc
   src/factors/Pose3FlowProjectionFactor.cc
   src/factors/ObjectKinematicFactor.cc
   src/factors/LandmarkMotionPoseFactor.cc
   src/factors/LandmarkPoseSmoothingFactor.cc
+  src/factors/HybridFormulationFactors.cc
 
   src/pipeline/PipelineManager.cc
   src/pipeline/PipelineParams.cc
@@ -179,14 +202,13 @@ target_link_libraries(${PROJECT_NAME}
   gflags
   gtsam
   gtsam_unstable
-  # gtsamDebug
-  # gtsam_unstableDebug
   Boost::boost
   png # We need png++ (libpng-dev) for png manipulation in VirtualKittiDatasetLoader
   # Eigen3::Eigen
   ${OpenCV_LIBRARIES}
   ${PCL_LIBRARIES}
   TBB::tbb
+  TBB::tbbmalloc
   # PRIVATE
 )
 
@@ -202,6 +224,7 @@ ament_export_libraries(${PROJECT_NAME}
   ${OpenCV_LIBRARIES}
   png
   TBB::tbb
+  TBB::tbbmalloc
 )
 
 
@@ -296,6 +319,7 @@ if(BUILD_TESTING)
     test/test_dynamic_point_symbol.cc
     test/internal/tmp_file.cc
     test/internal/simulator.cc
+    test/test_hybrid_motion.cc
     # test/test_landmark_quadric_factor.cc
     test/test_tools.cc
     test/test_map.cc
@@ -311,6 +335,7 @@ if(BUILD_TESTING)
     test/test_factors.cc
     test/test_numerical.cc
     test/test_params.cc
+    test/test_optimizations.cc
 )
 
   target_link_libraries(${PROJECT_NAME}_test ${PROJECT_NAME} ${rclcpp_LIBRARIES})

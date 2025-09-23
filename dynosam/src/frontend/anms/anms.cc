@@ -1,23 +1,30 @@
 /*
- *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2024 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
@@ -48,8 +55,8 @@ SOFTWARE.
 #include "dynosam/frontend/anms/anms/anms.h"
 
 #include <stdlib.h>
-#include <iostream>
 
+#include <iostream>
 #include <opencv2/opencv.hpp>
 
 #include "dynosam/frontend/anms/anms/nanoflann.hpp"
@@ -100,9 +107,7 @@ std::vector<cv::KeyPoint> BrownANMS(const std::vector<cv::KeyPoint>& keyPoints,
 }
 
 std::vector<cv::KeyPoint> Sdc(const std::vector<cv::KeyPoint>& keyPoints,
-                              int numRetPoints,
-                              float tolerance,
-                              int cols,
+                              int numRetPoints, float tolerance, int cols,
                               int rows) {
   double eps_var = 0.25;  // this parameter is chosen to be the most optimal in
                           // the original paper
@@ -181,9 +186,7 @@ std::vector<cv::KeyPoint> Sdc(const std::vector<cv::KeyPoint>& keyPoints,
 }
 
 std::vector<cv::KeyPoint> KdTree(const std::vector<cv::KeyPoint>& keyPoints,
-                                 int numRetPoints,
-                                 float tolerance,
-                                 int cols,
+                                 int numRetPoints, float tolerance, int cols,
                                  int rows) {
   // several temp expression variables to simplify solution equation
   int exp1 = rows + cols + 2 * numRetPoints;
@@ -207,9 +210,7 @@ std::vector<cv::KeyPoint> KdTree(const std::vector<cv::KeyPoint>& keyPoints,
   PointCloud<int> cloud;  // creating k-d tree with keypoints
   generatePointCloud(cloud, keyPoints);
   typedef nanoflann::KDTreeSingleIndexAdaptor<
-      nanoflann::L2_Simple_Adaptor<int, PointCloud<int> >,
-      PointCloud<int>,
-      2>
+      nanoflann::L2_Simple_Adaptor<int, PointCloud<int> >, PointCloud<int>, 2>
       my_kd_tree_t;
   my_kd_tree_t index(
       2, cloud, nanoflann::KDTreeSingleIndexAdaptorParams(25 /* max leaf */));
@@ -245,8 +246,8 @@ std::vector<cv::KeyPoint> KdTree(const std::vector<cv::KeyPoint>& keyPoints,
         nanoflann::SearchParams params;
         const int query_pt[2] = {(int)keyPoints[i].pt.x,
                                  (int)keyPoints[i].pt.y};
-        const size_t nMatches = index.radiusSearch(
-            &query_pt[0], search_radius, ret_matches, params);
+        const size_t nMatches = index.radiusSearch(&query_pt[0], search_radius,
+                                                   ret_matches, params);
 
         for (size_t nmIdx = 0; nmIdx < nMatches; nmIdx++) {
           if (Included[ret_matches[nmIdx].first])
@@ -275,9 +276,7 @@ std::vector<cv::KeyPoint> KdTree(const std::vector<cv::KeyPoint>& keyPoints,
 }
 
 std::vector<cv::KeyPoint> RangeTree(const std::vector<cv::KeyPoint>& keyPoints,
-                                    int numRetPoints,
-                                    float tolerance,
-                                    int cols,
+                                    int numRetPoints, float tolerance, int cols,
                                     int rows) {
   // several temp expression variables to simplify solution equation
   int exp1 = rows + cols + 2 * numRetPoints;
@@ -363,10 +362,10 @@ std::vector<cv::KeyPoint> RangeTree(const std::vector<cv::KeyPoint>& keyPoints,
 }
 
 std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
-                              int numRetPoints,
-                              float tolerance,
-                              int cols,
+                              int numRetPoints, float tolerance, int cols,
                               int rows) {
+  std::cout << "Starting SSc " << keyPoints.size() << " return=" << numRetPoints
+            << std::endl;
   // several temp expression variables to simplify solution equation
   int exp1 = rows + cols + 2 * numRetPoints;
   long long exp2 =
@@ -386,6 +385,8 @@ std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
           : sol2;  // binary search range initialization with positive solution
   int low = floor(sqrt((double)keyPoints.size() / numRetPoints));
 
+  std::cout << "here2 low=" << low << " high=" << high << std::endl;
+
   int width;
   int prevWidth = -1;
 
@@ -399,16 +400,29 @@ std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
   result.reserve(keyPoints.size());
   while (!complete) {
     width = low + (high - low) / 2;
+    // if (width == prevWidth ||
+    //     low >
+    //         high) {  // needed to reassure the same radius is not repeated
+    //         again
+    //   ResultVec = result;  // return the keypoints from the previous
+    //   iteration break;
+    // }
+
+    // added by jesse
+    // handle the case where low == high and therefore we cannot break down the
+    // prolem anymore!
     if (width == prevWidth ||
-        low >
+        low >=
             high) {  // needed to reassure the same radius is not repeated again
       ResultVec = result;  // return the keypoints from the previous iteration
       break;
     }
+
     result.clear();
     double c = width / 2;  // initializing Grid
     int numCellCols = floor(cols / c);
     int numCellRows = floor(rows / c);
+
     std::vector<std::vector<bool> > coveredVec(
         numCellRows + 1, std::vector<bool>(numCellCols + 1, false));
 
@@ -417,6 +431,7 @@ std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
           floor(keyPoints[i].pt.y /
                 c);  // get position of the cell current point is located at
       int col = floor(keyPoints[i].pt.x / c);
+
       if (coveredVec[row][col] == false) {  // if the cell is not covered
         result.push_back(i);
         int rowMin = ((row - floor(width / c)) >= 0)
@@ -450,6 +465,7 @@ std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
       low = width + 1;
     prevWidth = width;
   }
+
   // retrieve final keypoints
   std::vector<cv::KeyPoint> kp;
   for (unsigned int i = 0; i < ResultVec.size(); i++)
@@ -458,12 +474,11 @@ std::vector<cv::KeyPoint> Ssc(const std::vector<cv::KeyPoint>& keyPoints,
   return kp;
 }
 
-void VisualizeAll(cv::Mat Image,
-                  std::vector<cv::KeyPoint> keyPoints,
+void VisualizeAll(cv::Mat Image, std::vector<cv::KeyPoint> keyPoints,
                   string figureTitle) {
   cv::Mat resultImg;
-  cv::drawKeypoints(
-      Image, keyPoints, resultImg, cv::Scalar(94.0, 206.0, 165.0, 0.0));
+  cv::drawKeypoints(Image, keyPoints, resultImg,
+                    cv::Scalar(94.0, 206.0, 165.0, 0.0));
   cv::namedWindow(figureTitle, cv::WINDOW_AUTOSIZE);
   cv::imshow(figureTitle, resultImg);
   return;

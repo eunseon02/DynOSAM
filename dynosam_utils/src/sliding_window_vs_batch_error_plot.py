@@ -9,7 +9,8 @@ import numpy as np
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
-import dynosam_utils.evaluation.formatting_utils as formatting_utils
+from dynosam_utils.evaluation.core.plotting import startup_plotting, nice_colours
+
 from enum import Enum
 
 # batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000"
@@ -53,15 +54,17 @@ from enum import Enum
 # plt.rc('legend', fontsize=0.7*font_size)
 
 plt.rcdefaults()
-formatting_utils.startup_plotting(40)
+startup_plotting(24, line_width=3.0)
 
-# formatting_utils.startup_plotting(50)
-plt.rcParams["lines.linewidth"] = 4.0
-
-
+# # formatting_utils.startup_plotting(50)
+# plt.rcParams["lines.linewidth"] = 4.0
 
 
-def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_path, metrics_type:  eval_metrics.MetricType = eval_metrics.MetricType.rme):
+
+
+def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_path, metrics_type:  eval_metrics.MetricType = eval_metrics.MetricType.rme,
+              full_batch_colour=np.array(nice_colours["sky_blue"])/255.0,
+              sliding_window_colour=np.array(nice_colours["vermillion"])/255.0):
     batch_motion_eval = eval.MotionErrorEvaluator(
         batch_opt_folder_path + "/rgbd_motion_world_backend_object_motion_log.csv",
         batch_opt_folder_path + "/rgbd_motion_world_backend_object_pose_log.csv")
@@ -172,12 +175,12 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
 
         # trans_fig = plt.figure(figsize=(10,4))
         # ax = trans_fig.gca()
-        trans_axes.plot(batch_errors_timestamp, batch_errors_t, label="Batch")
+        trans_axes.plot(batch_errors_timestamp, batch_errors_t, label="Full-Batch", color=full_batch_colour)
         # trans_axes.set_ylabel("$E_t$(m)", fontsize=23)
-        trans_axes.set_ylabel("$E_t$(m)")
+        trans_axes.set_ylabel("ME$_t$(m)")
 
 
-        trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding")
+        trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding-Window", color=sliding_window_colour)
         trans_axes.patch.set_facecolor('white')
         trans_axes.margins(x=0)
         # Set the color and width of the border (spines)
@@ -186,12 +189,11 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
             spine.set_linewidth(1)        # Set the border width (adjust as needed)
 
 
-        # rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
-        rot_axes.set_ylabel("$E_r$(\N{degree sign})")
+        rot_axes.set_ylabel("ME$_r$(\N{degree sign})")
         # rot_axes.set_xlabel("Frame Index [-]")
         # rot_axes.set_title("Batch vs. Sliding Window: AME$_r$ Error Comparison", fontweight="bold",  fontsize=23)
-        rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Batch")
-        rot_axes.plot(batch_errors_timestamp, sliding_errors_r, label="Sliding")
+        rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Full-Batch", color=full_batch_colour)
+        rot_axes.plot(batch_errors_timestamp, sliding_errors_r, label="Sliding-Window", color=sliding_window_colour)
         rot_axes.patch.set_facecolor('white')
         rot_axes.margins(x=0)
         # Set the color and width of the border (spines)
@@ -200,6 +202,8 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
             spine.set_linewidth(1)        # Set the border width (adjust as needed)
 
 
+        rot_axes.legend(loc="upper right")
+        trans_axes.legend(loc="upper right")
         # print average errors
         print(f"Batch average t: {np.mean(batch_errors_t)}")
         print(f"Batch average r: {np.mean(batch_errors_r)}")
@@ -223,192 +227,79 @@ def make_plot(trans_axes, rot_axes, batch_opt_folder_path, sliding_opt_folder_pa
         print("NOT IMPLEMENTED")
         return
 
+# rot_fig = plt.figure(figsize=(13,9), layout='constrained')
+# trans_fig = plt.figure(figsize=(13,9), layout='constrained')
 
-    # for object_id, batch_object_traj, batch_object_traj_ref in eval.common_entries(batch_motion_eval.object_motion_traj, batch_motion_eval.object_motion_traj_ref):
-    #     sliding_object_traj = sliding_motion_eval.object_motion_traj[object_id]
-    #     sliding_object_traj_ref = sliding_motion_eval.object_motion_traj_ref[object_id]
+# rot_axes_1 = rot_fig.add_subplot(211)
+# # rot_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
+# rot_axes_1.set_title(r"Motion Error (rotation) on KITTI 00", loc="center")
 
-    #     common_timestamps = np.intersect1d(sliding_object_traj.timestamps, batch_object_traj.timestamps)
+# rot_axes_2 = rot_fig.add_subplot(212)
+# rot_axes_2.set_title(r"Motion Error (rotation) on OMD (S4U)", loc="center")
 
-    #     common_timestamps = common_timestamps[:-10]
+# trans_axes_1 = trans_fig.add_subplot(211)
+# trans_axes_1.set_title(r"Motion Error (translation) on KITTI 00", loc="center")
 
-    #     batch_ids = []
-    #     sliding_ids = []
-    #     # manually reduce to ids
-    #     for timestamp in common_timestamps:
-    #         batch_ids.append(int(np.where(batch_object_traj.timestamps == timestamp)[0][0]))
-    #         sliding_ids.append(int(np.where(sliding_object_traj.timestamps == timestamp)[0][0]))
+# trans_axes_2 = trans_fig.add_subplot(212)
+# trans_axes_2.set_title(r"Motion Error (translation) on OMD (S4U)", loc="center")
 
-    #     sliding_object_traj.reduce_to_ids(sliding_ids)
-    #     sliding_object_traj_ref.reduce_to_ids(sliding_ids)
-    #     batch_object_traj.reduce_to_ids(batch_ids)
-    #     batch_object_traj_ref.reduce_to_ids(batch_ids)
+# make_plot(trans_axes_1, rot_axes_1, "/root/results/TRO2025/kitti_0000", "/root/results/TRO2025/kitti_0000_sliding")
+# make_plot(trans_axes_2, rot_axes_2, "/root/results/TRO2025/omd_swinging_4_unconstrained_batch", "/root/results/TRO2025/omd_swinging_4_unconstrained_sliding")
 
 
-    #     batch_ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
-    #     batch_ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
-    #     batch_data = (batch_object_traj, batch_object_traj_ref)
-    #     batch_ape_trans.process_data(batch_data)
-    #     batch_ape_rot.process_data(batch_data)
+kitti_fig = plt.figure(figsize=(13,6), layout='constrained')
+omd_fig = plt.figure(figsize=(13,6), layout='constrained')
 
-    #     sliding_ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
-    #     sliding_ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
-    #     sliding_data = (sliding_object_traj,sliding_object_traj_ref)
-    #     sliding_ape_trans.process_data(sliding_data)
-    #     sliding_ape_rot.process_data(sliding_data)
-
-    #     assert sliding_ape_trans.error.shape == batch_ape_trans.error.shape, (sliding_ape_trans.error.shape, batch_ape_trans.error.shape)
-    #     assert sliding_ape_trans.error.shape[0] == len(common_timestamps)
-
-    #     for index, timestamp in enumerate(common_timestamps):
-    #         timestamp = int(timestamp)
-    #         sliding_t_error = sliding_ape_trans.error[index]
-    #         batch_t_error = batch_ape_trans.error[index]
-
-    #         sliding_r_error = sliding_ape_rot.error[index]
-    #         batch_r_error = batch_ape_rot.error[index]
-
-    #         if timestamp not in batch_errors_translation_per_frame:
-    #             batch_errors_translation_per_frame[timestamp] = []
-    #         batch_errors_translation_per_frame[timestamp].append(batch_t_error)
-
-    #         if timestamp not in batch_errors_rot_per_frame:
-    #             batch_errors_rot_per_frame[timestamp] = []
-    #         batch_errors_rot_per_frame[timestamp].append(batch_r_error)
-
-    #         if timestamp not in sliding_errors_translation_per_frame:
-    #             sliding_errors_translation_per_frame[timestamp] = []
-    #         sliding_errors_translation_per_frame[timestamp].append(sliding_t_error)
-
-    #         if timestamp not in sliding_errors_rot_per_frame:
-    #             sliding_errors_rot_per_frame[timestamp] = []
-    #         sliding_errors_rot_per_frame[timestamp].append(sliding_r_error)
-
-    # # get average at each frame and sort
-    # def get_average(error_per_frame):
-    #     for k, v in error_per_frame.items():
-    #         error_per_frame[k] = np.mean(v)
-
-    #     keys = list(error_per_frame.keys())
-    #     values = list(error_per_frame.values())
-    #     #sort by keys (timestamp) and ensure that values remain in order with the timestamp
-    #     sorted_tuple = [(y, x) for y,x in sorted(zip(keys,values))]
-    #     sorted_timestamps, sorted_values = zip(*sorted_tuple)
-    #     return sorted_timestamps, sorted_values
-
-
-    # batch_errors_timestamp, batch_errors_t = get_average(batch_errors_translation_per_frame)
-    # batch_errors_timestamp, batch_errors_r = get_average(batch_errors_rot_per_frame)
-    # sliding_errors_timestamp, sliding_errors_t = get_average(sliding_errors_translation_per_frame)
-    # sliding_errors_timestamp, sliding_errors_r = get_average(sliding_errors_rot_per_frame)
-
-    # # order to ensure they are in order!!! (they are are not is unclear...)
-
-    # assert batch_errors_timestamp == sliding_errors_timestamp, (batch_errors_timestamp, sliding_errors_timestamp)
-
-    # # trans_fig = plt.figure(figsize=(10,4))
-    # # ax = trans_fig.gca()
-    # trans_axes.plot(batch_errors_timestamp, batch_errors_t, label="Batch")
-    # # trans_axes.set_ylabel("$E_t$(m)", fontsize=23)
-    # trans_axes.set_ylabel("$AME_t$(m)")
-
-
-    # trans_axes.plot(batch_errors_timestamp, sliding_errors_t, label="Sliding")
-    # trans_axes.patch.set_facecolor('white')
-    # trans_axes.margins(x=0)
-    # # Set the color and width of the border (spines)
-    # for spine in trans_axes.spines.values():
-    #     spine.set_edgecolor('black')  # Set the color to black
-    #     spine.set_linewidth(1)        # Set the border width (adjust as needed)
-
-
-    # # rot_axes.set_ylabel("$E_r$(\N{degree sign})", fontsize=23)
-    # rot_axes.set_ylabel("$AME_r$(\N{degree sign})")
-    # # rot_axes.set_xlabel("Frame Index [-]")
-    # # rot_axes.set_title("Batch vs. Sliding Window: AME$_r$ Error Comparison", fontweight="bold",  fontsize=23)
-    # rot_axes.plot(batch_errors_timestamp, batch_errors_r, label="Batch")
-    # rot_axes.plot(batch_errors_timestamp, sliding_errors_r, label="Sliding")
-    # rot_axes.patch.set_facecolor('white')
-    # rot_axes.margins(x=0)
-    # # Set the color and width of the border (spines)
-    # for spine in rot_axes.spines.values():
-    #     spine.set_edgecolor('black')  # Set the color to black
-    #     spine.set_linewidth(1)        # Set the border width (adjust as needed)
-
-
-    # # print average errors
-    # print(f"Batch average t: {np.mean(batch_errors_t)}")
-    # print(f"Batch average r: {np.mean(batch_errors_r)}")
-    # print(f"Sliding average t: {np.mean(sliding_errors_t)}")
-    # print(f"Sliding average r: {np.mean(sliding_errors_r)}")
-
-
-
-
-
-
-
-# batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000"
-# sliding_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0000_sliding"
-
-# batch_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0004"
-# sliding_opt_folder_path = "/root/results/Dynosam_tro2024/kitti_0004_sliding"
-
-# batch_opt_folder_path = "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained"
-# sliding_opt_folder_path = "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare"
-
-# Set global font sizes (optional)
-# plt.rcParams['axes.titlesize'] = 25    # Title font size
-# plt.rcParams['axes.labelsize'] = 24    # X/Y label font size
-# plt.rcParams['xtick.labelsize'] = 19   # X tick label font size
-# plt.rcParams['ytick.labelsize'] = 20   # Y tick label font size
-
-rot_fig = plt.figure(figsize=(16,11))
-trans_fig = plt.figure(figsize=(16,11))
-
-rot_axes_1 = rot_fig.add_subplot(211)
+rot_axes_1 = kitti_fig.add_subplot(211)
 # rot_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
-rot_axes_1.set_title(r"KITTI 00", loc="left")
+# rot_axes_1.set_title(r"Motion Error (rotation) on KITTI 00", loc="center")
 
-rot_axes_2 = rot_fig.add_subplot(212)
-# rot_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
-rot_axes_2.set_title(r"OMD (swinging 4 unconstrained)", loc="left")
+rot_axes_2 = omd_fig.add_subplot(211)
+# rot_axes_2.set_title(r"Motion Error (rotation) on OMD (S4U)", loc="center")
 
-trans_axes_1 = trans_fig.add_subplot(211)
-# trans_axes_1.set_title(r"\textit{KITTI 00}", loc="left")
-trans_axes_1.set_title(r"KITTI 00", loc="left")
+trans_axes_1 = kitti_fig.add_subplot(212)
+# trans_axes_1.set_title(r"Motion Error (translation) on KITTI 00", loc="center")
 
-trans_axes_2 = trans_fig.add_subplot(212)
-# trans_axes_2.set_title(r"\textit{OMD (swinging 4 unconstrained)}", loc="left")
-trans_axes_2.set_title(r"OMD (swinging 4 unconstrained)", loc="left")
+trans_axes_2 = omd_fig.add_subplot(212)
+# trans_axes_2.set_title(r"Motion Error (translation) on OMD (S4U)", loc="center")
 
-make_plot(trans_axes_1, rot_axes_1, "/root/results/Dynosam_tro2024/kitti_0000", "/root/results/Dynosam_tro2024/kitti_0000_sliding")
-make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_batch", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding")
-# make_plot(trans_axes_2, rot_axes_2, "/root/results/Dynosam_tro2024/omd_vo_test", "/root/results/Dynosam_tro2024/omd_swinging_4_unconstrained_sliding_compare")
+make_plot(trans_axes_1, rot_axes_1, "/root/results/TRO2025/kitti_0000", "/root/results/TRO2025/kitti_0000_sliding")
+make_plot(trans_axes_2, rot_axes_2, "/root/results/TRO2025/omd_swinging_4_unconstrained_batch", "/root/results/TRO2025/omd_swinging_4_unconstrained_sliding",
+          full_batch_colour=np.array(nice_colours["bluish_green"])/255.0,
+          sliding_window_colour=np.array(nice_colours["reddish_purple"])/255.0)
 
 # rot_fig.legend(bbox_to_anchor=(0, 1.02, 1, 0.2), loc="upper center",
             # mode="expand", borderaxespad=0, ncol=3)
-rot_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,fontsize=40,bbox_to_anchor=(0.5, 1.02))
-trans_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,fontsize=40,bbox_to_anchor=(0.5, 1.02))
+# rot_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,bbox_to_anchor=(0.5, 1.02))
+# trans_fig.legend( loc="upper center", ncol=2, labels=["Full-Batch", "Sliding"], frameon=False,bbox_to_anchor=(0.5, 1.02))
+# rot_fig.legend(loc='outside right upper')
+# trans_fig.legend(loc='outside right upper')
+# rot_fig.legend( ncol=2, labels=["Full-Batch", "Sliding-Window"], frameon=False,bbox_to_anchor=(1.0, 1.02))
+# trans_fig.legend( ncol=2, labels=["Full-Batch", "Sliding-Window"], frameon=False,bbox_to_anchor=(1.0, 1.02))
 
+#  Get the bounding boxes of all axes
+bbox = rot_axes_1.get_position()
+x_center = (bbox.x0 + bbox.x1) / 2
+kitti_fig.suptitle("Per-frame Motion Error on  KITTI $00$", x=x_center, ha='center')
 
-# rot_axes_1.legend(loc="upper right", fontsize=23)
-# rot_axes_2.legend(loc="upper right", fontsize=23)
-# trans_axes_1.legend(loc="upper right", fontsize=23)
-# trans_axes_2.legend(loc="upper right", fontsize=23)
+bbox = rot_axes_2.get_position()
+x_center = (bbox.x0 + bbox.x1) / 2
+omd_fig.suptitle("Per-frame Motion Error on OMD (S4U)",  x=x_center, ha='center')
 
 
 
 # rot_fig.suptitle("Batch vs. Sliding Window: AME$_r$ Comparison", fontweight="bold", fontsize=30)
-rot_fig.supxlabel("Frame Index [-]")
+kitti_fig.supxlabel("Frame Index [-]")
 
 # trans_fig.suptitle("Batch vs. Sliding Window: AME$_t$ Comparison",  fontweight="bold", fontsize=30)
-trans_fig.supxlabel("Frame Index [-]")
+omd_fig.supxlabel("Frame Index [-]")
 
-rot_fig.tight_layout(pad=0.1)
-trans_fig.tight_layout(pad=0.1)
+# rot_fig.tight_layout(pad=0.1)
+# trans_fig.tight_layout(pad=0.1)
+# rot_fig.tight_layout()
+# trans_fig.tight_layout()
 
-plt.show()
+# plt.show()
 
-# rot_fig.savefig("/root/results/misc/batch_vs_sliding_rot_combined.pdf", format="pdf")
-# trans_fig.savefig("/root/results/misc/batch_vs_sliding_trans_combined.pdf", format="pdf")
+kitti_fig.savefig("/root/results/misc/batch_vs_sliding_kitti_combined.pdf", format="pdf")
+omd_fig.savefig("/root/results/misc/batch_vs_sliding_omd_combined.pdf", format="pdf")

@@ -180,6 +180,205 @@ TEST(ImageType, testMotionMaskValidation) {
   // TODO:
 }
 
+TEST(ImageContainerV2, testBasicAdd) {
+  ImageContainer container;
+  EXPECT_EQ(container.size(), 0u);
+  EXPECT_TRUE(container.exists("rgb") == false);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  container.add<ImageType::RGBMono>("rgb", input);
+  EXPECT_TRUE(container.exists("rgb"));
+
+  EXPECT_EQ(container.size(), 1u);
+  ImageWrapper<ImageType::RGBMono> wrapped =
+      container.at<ImageType::RGBMono>("rgb");
+  EXPECT_TRUE(wrapped.exists());
+
+  cv::Mat retrieved_image = wrapped;
+  EXPECT_EQ(retrieved_image.data, input.data);
+}
+
+TEST(ImageContainerV2, testBasicAddWrongType) {
+  ImageContainer container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  container.add<ImageType::RGBMono>("rgb", input);
+  EXPECT_THROW({ container.at<ImageType::OpticalFlow>("rgb"); },
+               MismatchedImageWrapperTypes);
+}
+
+TEST(ImageContainerV2, testInvalidImageInput) {
+  ImageContainer container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+  // request RGBMono but give optical flow type!!
+  EXPECT_THROW({ container.add<ImageType::RGBMono>("rgb", optical_flow); },
+               InvalidImageTypeException);
+}
+
+TEST(ImageContainerV2, testMultiAdd) {
+  ImageContainer container;
+  EXPECT_EQ(container.size(), 0u);
+
+  cv::Mat input(cv::Size(50, 50), CV_8UC3);
+  cv::Mat optical_flow(cv::Size(25, 25), CV_32FC2);
+  container.add<ImageType::RGBMono>("rgb", input);
+  container.add<ImageType::OpticalFlow>("flow", optical_flow);
+  EXPECT_TRUE(container.exists("rgb"));
+  EXPECT_TRUE(container.exists("flow"));
+
+  EXPECT_EQ(container.size(), 2u);
+  {
+    ImageWrapper<ImageType::RGBMono> wrapped =
+        container.at<ImageType::RGBMono>("rgb");
+    EXPECT_TRUE(wrapped.exists());
+  }
+
+  EXPECT_EQ(container.size(), 2u);
+  {
+    ImageWrapper<ImageType::OpticalFlow> wrapped =
+        container.at<ImageType::OpticalFlow>("flow");
+    EXPECT_TRUE(wrapped.exists());
+  }
+}
+
+TEST(ImageContainerV2, CopySharesCvMatData) {
+  ImageContainer container1;
+  cv::Mat img = cv::Mat::ones(10, 10, CV_8UC1);
+  container1.rgb(img);
+
+  // Copy container
+  ImageContainer container2 = container1;
+
+  // Check they share the same underlying data pointer
+  auto& mat1 = container1.rgb();
+  auto& mat2 = container2.rgb();
+
+  // cv::Mat::data returns the underlying pixel data pointer
+  EXPECT_EQ(mat1.image.data, mat2.image.data);
+  EXPECT_EQ(container1.frameId(), container2.frameId());
+  EXPECT_EQ(container1.timestamp(), container2.timestamp());
+
+  // Modifying one should affect the other (since shared)
+  mat1.image.at<uint8_t>(0, 0) = 42;
+  EXPECT_EQ(mat2.image.at<uint8_t>(0, 0), 42);
+}
+
+TEST(ImageContainerV2, ExplicitDeepCopyCreatesNewData) {
+  ImageContainer container1;
+  cv::Mat img = cv::Mat::ones(10, 10, CV_8UC1);
+  container1.rgb(img);
+
+  // Make a deep copy of the cv::Mat inside container2
+  ImageContainer container2 = container1.clone();
+
+  EXPECT_EQ(container1.frameId(), container2.frameId());
+  EXPECT_EQ(container1.timestamp(), container2.timestamp());
+
+  auto& mat1 = container1.rgb();
+  auto& mat2 = container2.rgb();
+
+  EXPECT_NE(mat1.image.data, mat2.image.data);
+
+  // Changing one does NOT affect the other
+  mat1.image.at<uint8_t>(0, 0) = 42;
+  EXPECT_NE(mat2.image.at<uint8_t>(0, 0), 42);
+}
+
+TEST(ImageContainerV2, MoveConstructorTransfersOwnership) {
+  ImageContainer original;
+  cv::Mat img = cv::Mat::ones(5, 5, CV_8UC1);
+  original.rgb(img);
+  EXPECT_TRUE(original.hasRgb());
+  EXPECT_EQ(original.size(), 1);
+
+  ImageContainer moved_to = std::move(original);
+
+  EXPECT_TRUE(original.hasRgb());
+  EXPECT_EQ(original.size(), 1);
+
+  // Original is in valid, empty state
+  EXPECT_EQ(original.size(), 0);
+
+  cv::Mat& mat1 = moved_to.rgb();
+
+  EXPECT_THROW({ original.rgb(); }, ImageKeyDoesNotExist);
+
+  // Changing the moved image works as expected
+  mat1.at<uint8_t>(0, 0) = 99;
+  EXPECT_EQ(mat1.at<uint8_t>(0, 0), 99);
+
+  // The original container should now be empty
+  EXPECT_EQ(original.size(), 0);
+}
+
+enum class TestOptions : std::uint8_t {
+  None = 0,
+  A = 1 << 0,
+  B = 1 << 1,
+  C = 1 << 2
+};
+
+template <>
+struct internal::EnableBitMaskOperators<TestOptions> : std::true_type {};
+
+TEST(BitwiseFlags, testUnderlyingTypeSpecalization) {
+  using TestFlags = Flags<TestOptions>;
+
+  using U = std::underlying_type_t<TestFlags>;
+  static_assert(std::is_same_v<U, uint8_t>);
+}
+
+TEST(BitwiseFlags, testCombinesFlagsCorrectly) {
+  using TestFlags = Flags<TestOptions>;
+  TestOptions ab = TestOptions::A | TestOptions::B;
+  EXPECT_EQ(static_cast<uint8_t>(ab), (1 << 0) | (1 << 1));
+
+  TestOptions masked = ab & TestOptions::A;
+  EXPECT_EQ(static_cast<uint8_t>(masked), 1 << 0);
+
+  TestOptions inverted = ~TestOptions::None;
+  EXPECT_EQ(static_cast<uint8_t>(inverted), 0xFF);  // for uint8_t
+}
+
+TEST(BitwiseFlags, testCanSetAndCheckFlags) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  flags.set(TestOptions::A).set(TestOptions::C);
+
+  EXPECT_TRUE(flags.has(TestOptions::A));
+  EXPECT_TRUE(flags.has(TestOptions::C));
+  EXPECT_FALSE(flags.has(TestOptions::B));
+
+  EXPECT_TRUE(flags.hasAny(TestOptions::A | TestOptions::B));
+  EXPECT_FALSE(flags.hasAll(TestOptions::A | TestOptions::B));
+  EXPECT_TRUE(flags.hasAll(TestOptions::A | TestOptions::C));
+  EXPECT_FALSE(flags.hasAll(TestOptions::A | TestOptions::B | TestOptions::C));
+}
+
+TEST(BitwiseFlags, testEqualsOperators) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  flags.set(TestOptions::A).set(TestOptions::C);
+
+  TestFlags flags1(TestOptions::A | TestOptions::C);
+  EXPECT_TRUE(flags == flags1);
+
+  EXPECT_TRUE(flags == TestOptions::A);
+  EXPECT_TRUE(flags != TestOptions::B);
+  EXPECT_TRUE(flags == TestOptions::C);
+}
+
+TEST(BitwiseFlags, testAssignmentOperator) {
+  using TestFlags = Flags<TestOptions>;
+  TestFlags flags;
+  EXPECT_TRUE(flags != (TestOptions::A | TestOptions::B));
+  flags = TestOptions::A | TestOptions::B;
+  EXPECT_TRUE(flags == (TestOptions::A | TestOptions::B));
+}
+
 TEST(ImageContainerSubset, testBasicSubsetContainer) {
   cv::Mat depth(cv::Size(25, 25), CV_64F);
   uchar* depth_ptr = depth.data;
@@ -281,20 +480,20 @@ TEST(ImageContainerSubset, testSafeClone) {
   EXPECT_EQ(optical_flow.size(), tmp.size());
 }
 
-TEST(ImageContainer, testImageContainerIndexing) {
-  EXPECT_EQ(ImageContainer::Index<ImageType::RGBMono>(), 0u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::Depth>(), 1u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::OpticalFlow>(), 2u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::SemanticMask>(), 3u);
-  EXPECT_EQ(ImageContainer::Index<ImageType::MotionMask>(), 4u);
+TEST(ImageContainerDeprecate, testImageContainerIndexing) {
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::RGBMono>(), 0u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::Depth>(), 1u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::OpticalFlow>(), 2u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::SemanticMask>(), 3u);
+  EXPECT_EQ(ImageContainerDeprecate::Index<ImageType::MotionMask>(), 4u);
 }
 
-TEST(ImageContainer, CreateRGBDSemantic) {
+TEST(ImageContainerDeprecate, CreateRGBDSemantic) {
   cv::Mat rgb(cv::Size(50, 50), CV_8UC1);
   cv::Mat depth(cv::Size(50, 50), CV_64F);
   cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
   cv::Mat semantic_mask(cv::Size(50, 50), CV_32SC1);
-  ImageContainer::Ptr rgbd_semantic = ImageContainer::Create(
+  ImageContainerDeprecate::Ptr rgbd_semantic = ImageContainerDeprecate::Create(
       0u, 0u, ImageWrapper<ImageType::RGBMono>(rgb),
       ImageWrapper<ImageType::Depth>(depth),
       ImageWrapper<ImageType::OpticalFlow>(optical_flow),
@@ -306,14 +505,14 @@ TEST(ImageContainer, CreateRGBDSemantic) {
   EXPECT_FALSE(rgbd_semantic->isMonocular());
 }
 
-TEST(ImageContainer, CreateRGBDSemanticWithInvalidSizes) {
+TEST(ImageContainerDeprecate, CreateRGBDSemanticWithInvalidSizes) {
   cv::Mat rgb(cv::Size(25, 25), CV_8UC1);
   cv::Mat depth(cv::Size(50, 50), CV_64F);
   cv::Mat optical_flow(cv::Size(50, 50), CV_32FC2);
   cv::Mat semantic_mask(cv::Size(50, 50), CV_32SC1);
   EXPECT_THROW(
       {
-        ImageContainer::Create(
+        ImageContainerDeprecate::Create(
             0u, 0u, ImageWrapper<ImageType::RGBMono>(rgb),
             ImageWrapper<ImageType::Depth>(depth),
             ImageWrapper<ImageType::OpticalFlow>(optical_flow),
@@ -677,7 +876,7 @@ TEST(JsonIO, RGBDInstanceOutputPacket) {
 
   for (size_t i = 0; i < 10; i++) {
     auto output = scenario.getOutput(i);
-    rgbd_output.insert({i, *output});
+    rgbd_output.insert({i, *output.first});
   }
 
   using json = nlohmann::json;
@@ -749,6 +948,32 @@ TEST(JsonIO, eigenJsonIO) {
   Eigen::Matrix4d m2 = j.get<Eigen::Matrix4d>();
 
   EXPECT_TRUE(gtsam::assert_equal(m, m2));
+}
+
+TEST(JsonIO, testGenericObjectCentricMap) {
+  using Map = GenericObjectCentricMap<gtsam::Pose3>;
+
+  Map map;
+  // add two frames for object 1
+  map.insert22(1, 1, gtsam::Pose3::Identity());
+  map.insert22(1, 2, gtsam::Pose3::Identity());
+
+  // one frame for object 2
+  map.insert22(2, 1, gtsam::Pose3::Identity());
+  nlohmann::json j = map;
+  std::cout << j << std::endl;
+
+  gtsam::FastMap<FrameId, int> gtsam_map;
+  gtsam_map.insert2(1, 10);
+  gtsam_map.insert2(2, 10);
+  j = gtsam_map;
+  std::cout << "gtsam map " << j << std::endl;
+
+  std::map<std::string, int> std_map;
+  std_map["1"] = 10;
+  std_map["2"] = 10;
+  j = std_map;
+  std::cout << "std_map " << j << std::endl;
 }
 
 namespace fs = std::filesystem;

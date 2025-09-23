@@ -20,15 +20,25 @@ nice_colours={
     "vermillion": [213, 94, 0],
     "reddish_purple": [204, 121, 167]}
 
+
+def get_nice_colour(key):
+    if key in nice_colours:
+        return np.array(nice_colours[key]) / 255.0 # for plt range
+    print(f"Warning: nice colour key {key} does not exist. Colour must be one of {list(nice_colours.keys())}")
+    return None
+
 def get_nice_blue():
-    return np.array(nice_colours["blue"]) / 255.0 # for plt range
+    return get_nice_colour("blue")
 
 def get_nice_green():
-    return np.array(nice_colours["bluish_green"]) / 255.0 # for plt range
+    return get_nice_colour("bluish_green")
 
 def get_nice_red():
     # this is not super red (like a purple orange I guess?)
-    return np.array(nice_colours["vermillion"]) / 255.0 # for plt range
+    return get_nice_colour("vermillion")
+
+def get_nice_yellow():
+    return get_nice_colour("yellow")
 
 def prop_cycle() -> List[str]:
     return ["#0072B2", "#E69F00", "#009E73", "#CC79A7",
@@ -42,12 +52,13 @@ def calc_linear_average(values):
     return np.sum(np.array(values))/float(len(values))
 
 def calc_angular_average(values):
-    # angles measured in radians
-    x_sum = np.sum([math.sin(x) for x in values])
-    y_sum = np.sum([math.cos(x) for x in values])
-    # x_mean = x_sum / float(len(values))
-    # y_mean = y_sum / float(len(values))
-    return math.atan2(x_sum, y_sum)
+    return np.sum(np.array(values))/float(len(values))
+    # # angles measured in radians
+    # x_sum = np.sum([math.sin(x) for x in values])
+    # y_sum = np.sum([math.cos(x) for x in values])
+    # # x_mean = x_sum / float(len(values))
+    # # y_mean = y_sum / float(len(values))
+    # return math.atan2(x_sum, y_sum)
 
 
 def set_clean_background(ax:Axes):
@@ -81,8 +92,8 @@ class LatexTableFormatter(object):
     def add_results(self, name: str, results: Dict):
         self._results_collection[name] = results
 
-    def add_plots(self, name:str, plot_collection):
-        self._results_collection[name] = plot_collection
+    # def add_plots(self, name:str, plot_collection):
+    #     self._results_collection[name] = plot_collection
 
     def _write_results_collection_to_doc(self):
         for name, results_dict in self._results_collection.items():
@@ -123,229 +134,231 @@ class LatexTableFormatter(object):
         has_objects = "objects" in results
         has_vo = "vo" in results
 
-        if has_objects:
-            metric_object_map = results["objects"]
-
-            mean_per_column = {
-                "ape_translation":[],
-                "ape_rotation": [],
-                "rpe_translation": [],
-                "rpe_rotation": []}
-
+        if has_objects or has_vo:
             with self._doc.create(Section(f"{name} Errors")):
-                # pose errors
-                with self._doc.create(Subsection('Object Pose Errors')):
-                    with self._doc.create(Tabular('|c|cc|cc|')) as table:
-                        table.add_hline()
+                if has_objects:
+                    metric_object_map = results["objects"]
 
-                        header_row = ("", MultiColumn(2, align='c', data='APE'),MultiColumn(2, align='c|', data='RPE'))
+                    mean_per_column = {
+                        "ape_translation":[],
+                        "ape_rotation": [],
+                        "rpe_translation": [],
+                        "rpe_rotation": []}
+
+                    # with self._doc.create(Section(f"{name} Errors")):
+                    # pose errors
+                    with self._doc.create(Subsection('Object Pose Errors')):
+                        with self._doc.create(Tabular('|c|cc|cc|')) as table:
+                            table.add_hline()
+
+                            header_row = ("", MultiColumn(2, align='c', data='APE'),MultiColumn(2, align='c|', data='RPE'))
+                            table.add_row(header_row)
+                            table.add_row((
+                                "obj",
+                                NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})"),
+                                NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
+                            table.add_hline()
+                            table.add_hline()
+
+                            # populate rows with results
+                            for object_id, all_metrics in metric_object_map.items():
+                                if "poses" not in all_metrics:
+                                    print(f"Poses metrics missing from object: {object_id}")
+                                    continue
+
+                                poses_metric_map = all_metrics["poses"]
+
+                                ape_translation = format_round_4(poses_metric_map["ape_translation"]["mean"])
+                                ape_rotation = format_round_4(poses_metric_map["ape_rotation"]["mean"])
+                                rpe_translation = format_round_4(poses_metric_map["rpe_translation"]["rmse"])
+                                rpe_rotation = format_round_4(poses_metric_map["rpe_rotation"]["rmse"])
+
+
+                                # add to datastructure to post-calculate the mean
+                                mean_per_column["ape_translation"].append(ape_translation)
+                                mean_per_column["ape_rotation"].append(ape_rotation)
+                                mean_per_column["rpe_translation"].append(rpe_translation)
+                                mean_per_column["rpe_rotation"].append(rpe_rotation)
+
+                                table.add_row(
+                                    object_id, ape_translation, ape_rotation, rpe_translation, rpe_rotation
+                                )
+
+
+                            # calculate mean
+                            table.add_row(
+                                "mean",
+                                format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                                format_round_4(calc_angular_average(mean_per_column["ape_rotation"])),
+                                format_round_4(calc_linear_average(mean_per_column["rpe_translation"])),
+                                format_round_4(calc_angular_average(mean_per_column["rpe_rotation"])),
+                            )
+
+                            table.add_hline()
+
+                    mean_per_column = {
+                        "rpe_translation":[],
+                        "rpe_rotation": []}
+
+                    # reconstruction pose errors
+                    with self._doc.create(Subsection('Reconstructed Object Pose Errors')):
+                        with self._doc.create(Tabular('|c|cc|')) as table:
+                            table.add_hline()
+
+                            header_row = ("", MultiColumn(2, align='c|', data='RPE'))
+                            table.add_row(header_row)
+                            table.add_row((
+                                "obj",
+                                NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
+                            table.add_hline()
+                            table.add_hline()
+
+                            # populate rows with results
+                            for object_id, all_metrics in metric_object_map.items():
+                                if "poses" not in all_metrics:
+                                    print(f"Poses metrics missing from object: {object_id}")
+                                    continue
+
+                                poses_metric_map = all_metrics["poses"]
+
+                                rpe_translation = format_round_4(poses_metric_map["rpe_translation_reconstruction"]["mean"])
+                                rpe_rotation = format_round_4(poses_metric_map["rpe_translation_reconstruction"]["mean"])
+
+                                # add to datastructure to post-calculate the mean
+                                mean_per_column["rpe_translation"].append(rpe_translation)
+                                mean_per_column["rpe_rotation"].append(rpe_rotation)
+
+                                table.add_row(
+                                    object_id, rpe_translation, rpe_rotation
+                                )
+
+
+                            # calculate mean
+                            table.add_row(
+                                "mean",
+                                format_round_4(calc_linear_average(mean_per_column["rpe_translation"])),
+                                format_round_4(calc_angular_average(mean_per_column["rpe_rotation"]))
+                            )
+
+                            table.add_hline()
+
+
+                    mean_per_column = {
+                        "ape_translation":[],
+                        "ape_rotation": []}
+
+                    # r"AME (Absolute motion errors) $^wH$ ($E(^wH)$)"
+                    # absolute motion errors
+                    with self._doc.create(Subsection(r"AME (Absolute motion errors) ($E(^wH)$)")):
+                        with self._doc.create(Tabular('|c|cc|')) as table:
+                            table.add_hline()
+                            header_row = ("", MultiColumn(2, align='c|', data='AME'))
+                            table.add_row(header_row)
+                            table.add_row((
+                                "obj",
+                                NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
+                            table.add_hline()
+                            table.add_hline()
+
+                            # populate rows with results
+                            for object_id, all_metrics in metric_object_map.items():
+                                if "motions_W" not in all_metrics:
+                                    print(f"Motion metrics missing from object: {object_id}")
+                                    continue
+
+                                motion_metric_map = all_metrics["motions_W"]
+
+                                ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
+                                ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
+
+                                # add to datastructure to post-calculate the mean
+                                mean_per_column["ape_translation"].append(ape_translation)
+                                mean_per_column["ape_rotation"].append(ape_rotation)
+
+                                table.add_row(
+                                    object_id, ape_translation, ape_rotation
+                                )
+
+                            # calculate mean
+                            table.add_row(
+                                "mean",
+                                format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                                format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
+                            )
+
+                            table.add_hline()
+
+                    mean_per_column = {
+                        "ape_translation":[],
+                        "ape_rotation": []}
+
+                    # relative motion errors
+                    with self._doc.create(Subsection(r'RME (Relative motion errors) ($E(^LH)$)')):
+                        with self._doc.create(Tabular('|c|cc|')) as table:
+                            table.add_hline()
+                            header_row = ("", MultiColumn(2, align='c|', data='RME'))
+                            table.add_row(header_row)
+                            table.add_row((
+                                "obj",
+                                NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
+                            table.add_hline()
+                            table.add_hline()
+
+                            # populate rows with results
+                            for object_id, all_metrics in metric_object_map.items():
+                                if "motions_L" not in all_metrics:
+                                    print(f"Motion metrics missing from object: {object_id}")
+                                    continue
+
+                                motion_metric_map = all_metrics["motions_L"]
+
+                                ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
+                                ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
+
+                                # add to datastructure to post-calculate the mean
+                                mean_per_column["ape_translation"].append(ape_translation)
+                                mean_per_column["ape_rotation"].append(ape_rotation)
+
+                                table.add_row(
+                                    object_id, ape_translation, ape_rotation
+                                )
+
+                            # calculate mean
+                            table.add_row(
+                                "mean",
+                                format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
+                                format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
+                            )
+
+                            table.add_hline()
+                else:
+                    print(f"No objects in results. Skipping...")
+
+            if has_vo:
+                # vo errors
+                with self._doc.create(Subsection('Visual Odometry Errors')):
+                    with self._doc.create(Tabular('|cc|cc|')) as table:
+                        vo_map = results["vo"]
+
+                        table.add_hline()
+                        header_row = (MultiColumn(2, align='|c', data='APE'),MultiColumn(2, align='c|', data='RPE'))
                         table.add_row(header_row)
                         table.add_row((
-                            "obj",
                             NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})"),
                             NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
                         table.add_hline()
                         table.add_hline()
 
-                        # populate rows with results
-                        for object_id, all_metrics in metric_object_map.items():
-                            if "poses" not in all_metrics:
-                                print(f"Poses metrics missing from object: {object_id}")
-                                continue
+                        # use RMSE for VO APE to match error metrics
+                        ape_translation = format_round_4(vo_map["ape_translation"]["rmse"])
+                        ape_rotation = format_round_4(vo_map["ape_rotation"]["rmse"])
+                        rpe_translation = format_round_4(vo_map["rpe_translation"]["mean"])
+                        rpe_rotation = format_round_4(vo_map["rpe_rotation"]["mean"])
 
-                            poses_metric_map = all_metrics["poses"]
-
-                            ape_translation = format_round_4(poses_metric_map["ape_translation"]["mean"])
-                            ape_rotation = format_round_4(poses_metric_map["ape_rotation"]["mean"])
-                            rpe_translation = format_round_4(poses_metric_map["rpe_translation"]["rmse"])
-                            rpe_rotation = format_round_4(poses_metric_map["rpe_rotation"]["rmse"])
-
-
-                            # add to datastructure to post-calculate the mean
-                            mean_per_column["ape_translation"].append(ape_translation)
-                            mean_per_column["ape_rotation"].append(ape_rotation)
-                            mean_per_column["rpe_translation"].append(rpe_translation)
-                            mean_per_column["rpe_rotation"].append(rpe_rotation)
-
-                            table.add_row(
-                                object_id, ape_translation, ape_rotation, rpe_translation, rpe_rotation
-                            )
-
-
-                        # calculate mean
                         table.add_row(
-                            "mean",
-                            format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
-                            format_round_4(calc_angular_average(mean_per_column["ape_rotation"])),
-                            format_round_4(calc_linear_average(mean_per_column["rpe_translation"])),
-                            format_round_4(calc_angular_average(mean_per_column["rpe_rotation"])),
+                            ape_translation, ape_rotation, rpe_translation, rpe_rotation
                         )
-
                         table.add_hline()
-
-                mean_per_column = {
-                    "rpe_translation":[],
-                    "rpe_rotation": []}
-
-                # reconstruction pose errors
-                with self._doc.create(Subsection('Reconstructed Object Pose Errors')):
-                    with self._doc.create(Tabular('|c|cc|')) as table:
-                        table.add_hline()
-
-                        header_row = ("", MultiColumn(2, align='c|', data='RPE'))
-                        table.add_row(header_row)
-                        table.add_row((
-                            "obj",
-                            NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
-                        table.add_hline()
-                        table.add_hline()
-
-                        # populate rows with results
-                        for object_id, all_metrics in metric_object_map.items():
-                            if "poses" not in all_metrics:
-                                print(f"Poses metrics missing from object: {object_id}")
-                                continue
-
-                            poses_metric_map = all_metrics["poses"]
-
-                            rpe_translation = format_round_4(poses_metric_map["rpe_translation_reconstruction"]["mean"])
-                            rpe_rotation = format_round_4(poses_metric_map["rpe_translation_reconstruction"]["mean"])
-
-                            # add to datastructure to post-calculate the mean
-                            mean_per_column["rpe_translation"].append(rpe_translation)
-                            mean_per_column["rpe_rotation"].append(rpe_rotation)
-
-                            table.add_row(
-                                object_id, rpe_translation, rpe_rotation
-                            )
-
-
-                        # calculate mean
-                        table.add_row(
-                            "mean",
-                            format_round_4(calc_linear_average(mean_per_column["rpe_translation"])),
-                            format_round_4(calc_angular_average(mean_per_column["rpe_rotation"]))
-                        )
-
-                        table.add_hline()
-
-
-                mean_per_column = {
-                    "ape_translation":[],
-                    "ape_rotation": []}
-
-                # r"AME (Absolute motion errors) $^wH$ ($E(^wH)$)"
-                # absolute motion errors
-                with self._doc.create(Subsection(r"AME (Absolute motion errors) ($E(^wH)$)")):
-                    with self._doc.create(Tabular('|c|cc|')) as table:
-                        table.add_hline()
-                        header_row = ("", MultiColumn(2, align='c|', data='AME'))
-                        table.add_row(header_row)
-                        table.add_row((
-                            "obj",
-                            NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
-                        table.add_hline()
-                        table.add_hline()
-
-                        # populate rows with results
-                        for object_id, all_metrics in metric_object_map.items():
-                            if "motions_W" not in all_metrics:
-                                print(f"Motion metrics missing from object: {object_id}")
-                                continue
-
-                            motion_metric_map = all_metrics["motions_W"]
-
-                            ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
-                            ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
-
-                            # add to datastructure to post-calculate the mean
-                            mean_per_column["ape_translation"].append(ape_translation)
-                            mean_per_column["ape_rotation"].append(ape_rotation)
-
-                            table.add_row(
-                                object_id, ape_translation, ape_rotation
-                            )
-
-                        # calculate mean
-                        table.add_row(
-                            "mean",
-                            format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
-                            format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
-                        )
-
-                        table.add_hline()
-
-                mean_per_column = {
-                    "ape_translation":[],
-                    "ape_rotation": []}
-
-                # relative motion errors
-                with self._doc.create(Subsection(r'RME (Relative motion errors) ($E(^LH)$)')):
-                    with self._doc.create(Tabular('|c|cc|')) as table:
-                        table.add_hline()
-                        header_row = ("", MultiColumn(2, align='c|', data='AME'))
-                        table.add_row(header_row)
-                        table.add_row((
-                            "obj",
-                            NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
-                        table.add_hline()
-                        table.add_hline()
-
-                        # populate rows with results
-                        for object_id, all_metrics in metric_object_map.items():
-                            if "motions_L" not in all_metrics:
-                                print(f"Motion metrics missing from object: {object_id}")
-                                continue
-
-                            motion_metric_map = all_metrics["motions_L"]
-
-                            ape_translation = format_round_4(motion_metric_map["ape_translation"]["rmse"])
-                            ape_rotation = format_round_4(motion_metric_map["ape_rotation"]["rmse"])
-
-                            # add to datastructure to post-calculate the mean
-                            mean_per_column["ape_translation"].append(ape_translation)
-                            mean_per_column["ape_rotation"].append(ape_rotation)
-
-                            table.add_row(
-                                object_id, ape_translation, ape_rotation
-                            )
-
-                        # calculate mean
-                        table.add_row(
-                            "mean",
-                            format_round_4(calc_linear_average(mean_per_column["ape_translation"])),
-                            format_round_4(calc_angular_average(mean_per_column["ape_rotation"]))
-                        )
-
-                        table.add_hline()
-        else:
-            print(f"No objects in results. Skipping...")
-
-        if has_vo:
-            # vo errors
-            with self._doc.create(Subsection('Visual Odometry Errors')):
-                with self._doc.create(Tabular('|cc|cc|')) as table:
-                    vo_map = results["vo"]
-
-                    table.add_hline()
-                    header_row = (MultiColumn(2, align='|c', data='APE'),MultiColumn(2, align='c|', data='RPE'))
-                    table.add_row(header_row)
-                    table.add_row((
-                        NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})"),
-                        NoEscape(r"$E_t$(m)"),NoEscape(r"$E_r$(\si{\degree})")))
-                    table.add_hline()
-                    table.add_hline()
-
-                    # use RMSE for VO APE to match error metrics
-                    ape_translation = format_round_4(vo_map["ape_translation"]["rmse"])
-                    ape_rotation = format_round_4(vo_map["ape_rotation"]["rmse"])
-                    rpe_translation = format_round_4(vo_map["rpe_translation"]["mean"])
-                    rpe_rotation = format_round_4(vo_map["rpe_rotation"]["mean"])
-
-                    table.add_row(
-                        ape_translation, ape_rotation, rpe_translation, rpe_rotation
-                    )
-                    table.add_hline()
         else:
             print(f"No vo in results. Skipping...")
 

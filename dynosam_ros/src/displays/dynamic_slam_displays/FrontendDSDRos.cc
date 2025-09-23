@@ -35,6 +35,7 @@
 #include <dynosam/utils/SafeCast.hpp>
 
 #include "dynosam_ros/RosUtils.hpp"
+#include "rclcpp/qos.hpp"
 
 namespace dyno {
 
@@ -43,6 +44,8 @@ FrontendDSDRos::FrontendDSDRos(const DisplayParams params,
     : FrontendDisplay(), DSDRos(params, node) {
   tracking_image_pub_ =
       image_transport::create_publisher(node.get(), "tracking_image");
+
+  // const rclcpp::SensorDataQoS sensor_qos;
 
   auto ground_truth_node = node->create_sub_node("ground_truth");
   dsd_ground_truth_transport_ =
@@ -53,6 +56,10 @@ FrontendDSDRos::FrontendDSDRos(const DisplayParams params,
   vo_path_ground_truth_publisher_ =
       ground_truth_node->create_publisher<nav_msgs::msg::Path>("odometry_path",
                                                                1);
+
+  dense_dynamic_cloud_pub_ =
+      node->create_publisher<sensor_msgs::msg::PointCloud2>(
+          "dense_labelled_cloud", 1);
 }
 
 void FrontendDSDRos::spinOnce(
@@ -100,8 +107,11 @@ void FrontendDSDRos::tryPublishGroundTruth(
   if (rgb_image.empty()) return;
 
   // collect gt poses and motions
-  ObjectPoseMap poses;
-  MotionEstimateMap motions;
+  static ObjectPoseMap poses;
+  static ObjectMotionMap motions;
+  static FrameIdTimestampMap timestamp_map;
+  // hack! recreate the timestamp since it is not in the frontend base packet!!
+  timestamp_map.insert2(frame_id, timestamp);
 
   const GroundTruthInputPacket& gt_packet = frontend_output->gt_packet_.value();
 
@@ -116,16 +126,19 @@ void FrontendDSDRos::tryPublishGroundTruth(
     poses.insert22(object_pose_gt.object_id_, gt_packet.frame_id_,
                    object_pose_gt.L_world_);
 
-    ReferenceFrameValue<gtsam::Pose3> gt_motion(
-        *object_pose_gt.prev_H_current_world_, ReferenceFrame::GLOBAL);
-    motions.insert({object_pose_gt.object_id_, gt_motion});
+    // motion in world k-1 to k
+    Motion3ReferenceFrame gt_motion(
+        *object_pose_gt.prev_H_current_world_, MotionRepresentationStyle::F2F,
+        ReferenceFrame::GLOBAL, gt_packet.frame_id_ - 1u, gt_packet.frame_id_);
+    motions.insert22(object_pose_gt.object_id_, gt_packet.frame_id_, gt_motion);
   }
 
   // will this result in confusing tf's since the gt object and estimated
   // objects use the same link?
   DSDTransport::Publisher publisher =
       dsd_ground_truth_transport_->addObjectInfo(
-          motions, poses, params_.world_frame_id, frame_id, timestamp);
+          motions, poses, params_.world_frame_id, timestamp_map, frame_id,
+          timestamp);
   publisher.publishObjectOdometry();
 
   // publish ground truth odom
@@ -178,15 +191,24 @@ void FrontendDSDRos::processRGBDOutputpacket(
   CloudPerObject clouds_per_obj = this->publishDynamicPointCloud(
       rgbd_packet->dynamic_landmarks_, rgbd_packet->T_world_camera_);
 
-  const auto& object_motions = rgbd_packet->estimated_motions_;
+  const auto& object_motions = rgbd_packet->object_motions_;
   const auto& object_poses = rgbd_packet->propogated_object_poses_;
+  const auto& timestamp_map = rgbd_packet->involved_timestamps_;
 
   DSDTransport::Publisher object_poses_publisher = dsd_transport_.addObjectInfo(
-      object_motions, object_poses, params_.world_frame_id,
+      object_motions, object_poses, params_.world_frame_id, timestamp_map,
       rgbd_packet->getFrameId(), rgbd_packet->getTimestamp());
   object_poses_publisher.publishObjectOdometry();
   object_poses_publisher.publishObjectTransforms();
   object_poses_publisher.publishObjectPaths();
+
+  if (rgbd_packet->dense_labelled_cloud_) {
+    sensor_msgs::msg::PointCloud2 pc2_msg;
+    pcl::toROSMsg(*rgbd_packet->dense_labelled_cloud_, pc2_msg);
+    pc2_msg.header.frame_id = params_.camera_frame_id;
+    pc2_msg.header.stamp = utils::toRosTime(rgbd_packet->getTimestamp());
+    dense_dynamic_cloud_pub_->publish(pc2_msg);
+  }
 }
 
 }  // namespace dyno

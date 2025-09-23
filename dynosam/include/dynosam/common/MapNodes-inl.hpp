@@ -66,23 +66,11 @@ gtsam::Key FrameNode<MEASUREMENT>::makePoseKey() const {
 template <typename MEASUREMENT>
 gtsam::Key FrameNode<MEASUREMENT>::makeObjectMotionKey(
     ObjectId object_id) const {
-  // TODO: no point checking if this key exists yet as we might want it
-  // arbiratarily!!
-  //  if(!objectObserved(object_id)) {
-  //      throw DynosamException("Object motion key requested" +
-  //      std::to_string(object_id) + " at frame " +  std::to_string(frame_id) +
-  //      " but object is not observed in this frame");
-  //  }
   return ObjectMotionSymbol(object_id, this->frame_id);
 }
 
 template <typename MEASUREMENT>
 gtsam::Key FrameNode<MEASUREMENT>::makeObjectPoseKey(ObjectId object_id) const {
-  //  if(!objectObserved(object_id)) {
-  //     throw DynosamException("Object pose key requested" +
-  //     std::to_string(object_id) + " at frame " +  std::to_string(frame_id) +
-  //     " but object is not observed in this frame");
-  // }
   return ObjectPoseSymbol(object_id, this->frame_id);
 }
 
@@ -223,6 +211,11 @@ DynamicPointSymbol LandmarkNode<MEASUREMENT>::makeDynamicSymbol(
         key, "Dynamic estimate requested but landmark is static!");
   }
   return key;
+}
+
+template <typename MEASUREMENT>
+FrameIds LandmarkNode<MEASUREMENT>::getSeenFrameIds() const {
+  return getSeenFrames().template collectIds<FrameId>();
 }
 
 /// ObjectNode

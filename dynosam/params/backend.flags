@@ -2,26 +2,30 @@
 
 # good for omd
 # --constant_object_motion_rotation_sigma=1.0
-# --constant_object_motion_translation_sigma=0.2
+# --constant_object_motion_translation_sigma=0.7
 
 # good for carla
+# --constant_object_motion_rotation_sigma=0.1
+# --constant_object_motion_translation_sigma=0.01
+
 --constant_object_motion_rotation_sigma=0.01
---constant_object_motion_translation_sigma=0.01
+--constant_object_motion_translation_sigma=0.2
 
 
 
 # --motion_ternary_factor_noise_sigma=0.00000000001
---motion_ternary_factor_noise_sigma=0.00001
+--motion_ternary_factor_noise_sigma=0.001
 
-# --odometry_rotation_sigma=0.2
-# --odometry_translation_sigma=0.3
 --odometry_rotation_sigma=0.05
---odometry_translation_sigma=0.1
+--odometry_translation_sigma=0.01
+
+# --odometry_rotation_sigma=0.005
+# --odometry_translation_sigma=0.001
 
 
 
---static_point_noise_sigma=0.06
---dynamic_point_noise_sigma=0.0625
+--static_point_noise_sigma=0.01
+--dynamic_point_noise_sigma=0.01
 # --dynamic_point_noise_sigma=0.00006
 
 --opt_window_size=10
@@ -30,13 +34,32 @@
 
 --use_vo_factor=true
 --use_smoothing_factor=true
---use_full_batch_opt=false
+
+# 0: Full-batch, 1: sliding-window, 2: incremental
+--optimization_mode=0
+
+
+# for ISAM2 params using ParallelObjectSAM
+--use_marginal_covariance=false
+--use_relinearize_threshold_as_double=true
+--relinearize_threshold=0.1
+--X_trans_relinearize_threshold=20.0
+--X_rot_relinearize_threshold=20.0
+
+--H_trans_relinearize_threshold=20.0
+--H_rot_relinearize_threshold=20.0
+
+--m_relinearize_threshold=20.0
+
+--num_dynamic_optimize=3
+
+--save_per_frame_dynamic_cloud=false
 
 
 # currently only for rgbd, indicates which updater the rgbd backend should use
 # i.e which formulation is used for solving
-# MotionInWorld = 0, LLWorld=1
---backend_updater_enum=0
+# MotionInWorld = 0, LLWorld=1, Parallel-Hybrid=3
+--backend_updater_enum=3
 
 --init_H_with_identity=true
 --updater_suffix=

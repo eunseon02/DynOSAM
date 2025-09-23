@@ -94,8 +94,11 @@ ObjectBBX findAABBFromCloud(
   return aabb;
 }
 
-CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
-                                const gtsam::Pose3& T_world_camera) {
+CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<Color(ObjectId)> colour_generator,
+    std::function<void(const pcl::PointXYZRGB&, ObjectId)> point_cb) {
+  CHECK(colour_generator);
   CloudPerObject clouds_per_obj;
 
   for (const auto& status_estimate : landmarks) {
@@ -108,6 +111,7 @@ CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
           "Cannot display object point in the object reference frame");
     }
 
+    // TODO: use convert in header!!
     pcl::PointXYZRGB pt;
     if (status_estimate.isStatic()) {
       // publish static lmk's as white
@@ -117,6 +121,9 @@ CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
       pt = pcl::PointXYZRGB(lmk_world(0), lmk_world(1), lmk_world(2), colour(0),
                             colour(1), colour(2));
     }
+
+    if (point_cb) point_cb(pt, object_id);
+
     clouds_per_obj[object_id].push_back(pt);
   }
 

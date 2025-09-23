@@ -87,13 +87,15 @@ int main(int argc, char* argv[]) {
     mask_viz = ImageType::MotionMask::toRGB(motion);
     depth_viz = ImageType::Depth::toRGB(depth);
 
-    ImageContainer::Ptr container = ImageContainer::Create(
-        timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-        ImageWrapper<ImageType::Depth>(depth),
-        ImageWrapper<ImageType::OpticalFlow>(optical_flow),
-        ImageWrapper<ImageType::MotionMask>(motion));
+    ImageContainer image_container(frame_id, timestamp);
+    image_container.rgb(rgb)
+        .depth(depth)
+        .opticalFlow(optical_flow)
+        .objectMotionMask(motion);
 
-    auto frame = tracker->track(frame_id, timestamp, *container);
+    std::set<ObjectId> object_keyframes;
+    auto frame =
+        tracker->track(frame_id, timestamp, image_container, object_keyframes);
     Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
     cv::Mat tracking;

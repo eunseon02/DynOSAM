@@ -129,18 +129,39 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     }
   }
 
-  void updateSensorPoseMeasurement(FrameId frame_id, const gtsam::Pose3& X) {
+  /**
+   * @brief Updates sensor pose for the given frame.
+   *
+   * Overwrites value if already exists. Makes a new frame node in the map the
+   * frame is new!
+   *
+   * @param frame_id FrameId
+   * @param X const Pose3Measurement&
+   */
+  void updateSensorPoseMeasurement(FrameId frame_id,
+                                   const Pose3Measurement& X) {
     auto frame_node = this->getFrame(frame_id);
-    CHECK_NOTNULL(frame_node);
-    // TODO: overwrites if currently set
+    if (!frame_node) {
+      frame_node = std::make_shared<FrameNodeM>(getptr());
+      frame_node->frame_id = frame_id;
+      frames_.insert2(frame_id, frame_node);
+    }
     frame_node->X_world = X;
   }
+
+  /**
+   * @brief Updates object motion measurements for the given frame.
+   * Does not make a new frame node if it does not exist and overwrites the
+   * existing motions if already set.
+   *
+   * @param frame_id FrameId
+   * @param motions const MotionEstimateMap&
+   */
   void updateObjectMotionMeasurements(FrameId frame_id,
                                       const MotionEstimateMap& motions) {
     auto frame_node = this->getFrame(frame_id);
     CHECK_NOTNULL(frame_node);
-    // TODO: overwrites if currently set
-    frame_node->motions_world = motions;
+    frame_node->motions = motions;
   }
 
   /**
@@ -246,25 +267,25 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     return tracklet_ids;
   }
 
-  // TODO:test
-  bool hasInitialObjectMotion(FrameId frame_id, ObjectId object_id,
-                              Motion3* motion) const {
+  bool hasInitialObjectMotion(
+      FrameId frame_id, ObjectId object_id,
+      Motion3ReferenceFrame* motion_frame = nullptr) const {
     auto frame_node = this->getFrame(frame_id);
     if (!frame_node) {
       return false;
     }
 
     // motion map has not been set
-    if (frame_node->motions_world) {
-      const auto& motions_world = *frame_node->motions_world;
+    if (frame_node->motions) {
+      const auto& motions = *frame_node->motions;
 
       // no motion for this object in map
-      if (!motions_world.exists(object_id)) {
+      if (!motions.exists(object_id)) {
         return false;
       }
 
-      if (motion) {
-        *motion = motions_world.at(object_id);
+      if (motion_frame) {
+        *motion_frame = motions.at(object_id);
       }
       return true;
     } else {
@@ -272,8 +293,19 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     }
   }
 
+  bool hasInitialObjectMotion(FrameId frame_id, ObjectId object_id,
+                              Motion3* motion) const {
+    Motion3ReferenceFrame frame;
+    if (hasInitialObjectMotion(frame_id, object_id, &frame)) {
+      if (motion) *motion = frame;  // implicit cast
+      return true;
+    }
+    return false;
+  }
+
   // TODO: test
-  bool hasInitialSensorPose(FrameId frame_id, gtsam::Pose3* X = nullptr) const {
+  bool hasInitialSensorPose(FrameId frame_id,
+                            Pose3Measurement* X = nullptr) const {
     auto frame_node = this->getFrame(frame_id);
     if (!frame_node) {
       return false;
@@ -286,6 +318,15 @@ class Map : public std::enable_shared_from_this<Map<MEASUREMENT>> {
     } else {
       return false;
     }
+  }
+
+  bool hasInitialSensorPose(FrameId frame_id, gtsam::Pose3* X = nullptr) const {
+    Pose3Measurement frame;
+    if (hasInitialSensorPose(frame_id, &frame)) {
+      if (X) *X = frame;  // implicit cast
+      return true;
+    }
+    return false;
   }
 
   /**

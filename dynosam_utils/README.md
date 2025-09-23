@@ -26,3 +26,5 @@ Possibly missing rendering packages: sudo apt-get install texlive-latex-extra te
 
 Need scipy version 1.14.1
 need gtsam
+
+need pip install pymongo

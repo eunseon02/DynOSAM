@@ -96,35 +96,6 @@ void propogateObjectPoses(
       auto propgate_result = get_centroid(object_id, centroid_k_1, pose_k_1);
       if (result) result->insert22(object_id, frame_id_k_1, propgate_result);
 
-      // bool initalised_with_gt = false;
-      // gtsam::Pose3 pose_k_1;
-
-      // //if gt packet exists for this frame, use that as the rotation
-      // if(gt_packet_map) {
-      //     if(gt_packet_map->exists(frame_id_k_1)) {
-      //         const GroundTruthInputPacket& gt_packet_k_1 =
-      //         gt_packet_map->at(frame_id_k_1);
-
-      //         ObjectPoseGT object_pose_gt_k_1;
-      //         if(gt_packet_k_1.getObject(object_id, object_pose_gt_k_1)) {
-      //             pose_k_1 = object_pose_gt_k_1.L_world_;
-      //             initalised_with_gt = true;
-      //         }
-      //     }
-      // }
-
-      // if(!initalised_with_gt) {
-      //     //could not init with gt, use identity rotation and centroid
-      //     pose_k_1 = gtsam::Pose3(gtsam::Rot3::Identity(), centroid_k_1);
-
-      //     if(result) result->insert22(object_id, frame_id_k_1,
-      //     PropogateType::InitCentroid);
-      // }
-      // else {
-      //     if(result) result->insert22(object_id, frame_id_k_1,
-      //     PropogateType::InitGT);
-      // }
-
       object_poses.insert2(object_id, gtsam::FastMap<FrameId, gtsam::Pose3>{});
       object_poses.at(object_id).insert2(frame_id_k_1, pose_k_1);
     }

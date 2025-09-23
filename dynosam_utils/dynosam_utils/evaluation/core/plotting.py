@@ -40,6 +40,7 @@ import math
 def startup_plotting(font_size=14, line_width=1.5, output_dpi=600, tex_backend=True):
     """Edited from https://github.com/nackjaylor/formatting_tips-tricks/
     """
+    # plt.rcdefaults()
     if tex_backend:
         try:
             plt.rcParams.update({
@@ -400,7 +401,7 @@ def plot_ame_error(fig: Figure ,motion_est: evo_trajectory.PoseTrajectory3D, mot
     plot_per_frame_error(fig, ape_E, label)
 
 # needs to be RPE so we can check for pose
-def plot_per_frame_error(fig: Figure, errors:  dynosam_metrics.RPE , label:str):
+def plot_per_frame_error(fig: Figure, errors: dynosam_metrics.RPE , label:str, frames = None):
 
     if len(errors.E) == 0:
         print(f"Cannot plot per frame error as metric {errors} is empty!")
@@ -435,14 +436,19 @@ def plot_per_frame_error(fig: Figure, errors:  dynosam_metrics.RPE , label:str):
     trans_error_axes.margins(0.001)
     rot_error_axes.margins(0.001)
 
+    if frames is not None:
+        assert len(frames) == len(errors.E)
+    else:
+        frames = np.arange(1, len(errors.E) + 1)
 
-    rot_error_axes.plot(rot_error[:,0], label="rx", color=get_nice_red())
-    rot_error_axes.plot(rot_error[:,1], label="ry", color=get_nice_green())
-    rot_error_axes.plot(rot_error[:,2], label="rz", color=get_nice_blue())
 
-    trans_error_axes.plot(trans_error[:,0], label="tx", color=get_nice_red())
-    trans_error_axes.plot(trans_error[:,1], label="ty", color=get_nice_green())
-    trans_error_axes.plot(trans_error[:,2], label="tz", color=get_nice_blue())
+    rot_error_axes.plot(frames, rot_error[:,0], label="rx", color=get_nice_red())
+    rot_error_axes.plot(frames, rot_error[:,1], label="ry", color=get_nice_green())
+    rot_error_axes.plot(frames, rot_error[:,2], label="rz", color=get_nice_blue())
+
+    trans_error_axes.plot(frames, trans_error[:,0], label="tx", color=get_nice_red())
+    trans_error_axes.plot(frames, trans_error[:,1], label="ty", color=get_nice_green())
+    trans_error_axes.plot(frames, trans_error[:,2], label="tz", color=get_nice_blue())
 
     trans_error_axes.set_xlabel("Frame Index [-]")
     rot_error_axes.set_xlabel("Frame Index [-]")
@@ -484,15 +490,15 @@ def plot_velocities(
         # arrow = Arrow3D(xs, ys, zs, arrowstyle='-|>', color=color, mutation_scale=8, lw=1)
         ax.add_artist(arrow)
 
-    for (pose_k_1, motion_k) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
-        if pose_k_1 is None or motion_k is None:
+    for (pose_k_1, e_H_k_world) in object_trajectory.get_motion_with_pose_previous_iterator(skip=8):
+        if pose_k_1 is None or e_H_k_world is None:
             continue
         I =  evo.core.transformations.identity_matrix()
         R_motion =  evo.core.transformations.identity_matrix()
         # ensure homogenous
-        R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+        R_motion[0:3, 0:3] = e_H_k_world[0:3, 0:3]
 
-        t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+        t_motion = evo.core.transformations.translation_from_matrix(e_H_k_world)
         t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
 
         # make homogenous

@@ -2,38 +2,42 @@ from dynosam_utils.evaluation.runner import run
 import os
 import sys
 
-def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, *args):
+output_path = "/root/results/TRO2025/"
+
+def run_sequnce(path, name, data_loader_num, backend_type, run_as_frontend=True, run_as_experiment=True, run_analysis=False, *args,):
     parsed_args = {
         "dataset_path": path,
-        "output_path": "/root/results/Dynosam_tro2024/",
+        "output_path": output_path,
         "name": name,
         "run_pipeline": True,
-        "run_analysis": False,
+        "run_analysis": run_analysis,
     }
 
     additional_args = [
         "--data_provider_type={}".format(data_loader_num),
-        "--v=0"
+        "--v=20"
     ]
+
+    parsed_args["launch_file"] = "dyno_sam_launch.py"
+
     if run_as_frontend:
         additional_args.extend([
             "--use_backend=0",
             "--save_frontend_json=true"
         ])
-        parsed_args["launch_file"] = "dyno_sam_launch.py"
     else:
         additional_args.extend([
             "--backend_updater_enum={}".format(backend_type),
             "--use_backend=1"
         ])
-        parsed_args["launch_file"] = "dyno_sam_experiments_launch.py"
+        if run_as_experiment:
+            parsed_args["launch_file"] = "dyno_sam_experiments_launch.py"
 
     if len(args) > 0:
         additional_args.extend(list(args))
 
     # print(additional_args)
     run(parsed_args, additional_args)
-
 
 kitti_dataset = 0
 virtual_kitti_dataset = 1
@@ -94,7 +98,7 @@ def run_omd_sequence(path, name, backend_type, *args):
 
 
 def run_all_eval():
-    results_path = "/root/results/Dynosam_tro2024/"
+    results_path = output_path
     sub_folders = [name for name in os.listdir(results_path) if os.path.isdir(os.path.join(results_path, name))]
     for folder in sub_folders:
         run_analysis(folder)
@@ -103,7 +107,7 @@ def run_all_eval():
 def run_analysis(name):
     parsed_args = {
         "dataset_path": "",
-        "output_path": "/root/results/Dynosam_tro2024/",
+        "output_path": output_path,
         "name": name,
         "run_pipeline": False,
         "run_analysis": True,
@@ -141,16 +145,43 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
     # run_analysis(name_PO)
     # run_analysis(name_POM)
 
+def run_viodes():
+    # run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
 if __name__ == '__main__':
     # make input dictionary
     world_motion_backend = 0
     ll_backend = 1
 
-    def run_both_backend(run_sequence_func, path, name, *args):
-        run_sequence_func(path, name, world_motion_backend, *args)
-        # run_sequence_func(path, name, ll_backend, *args)
-        run_analysis(name)
+    run_viodes()
+    sys.exit(0)
 
+    # def run_both_backend(run_sequence_func, path, name, *args):
+    #     # run_sequence_func(path, name, world_motion_backend, *args)
+    #     run_sequence_func(path, name, ll_backend, *args)
+    #     run_analysis(name)
+
+    # run_sequnce("/root/data/cluster_slam/CARLA-L1/", "carla_l1_new", cluster_dataset, world_motion_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/cluster_slam/CARLA-L1/", "carla_l1_new", cluster_dataset, ll_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
+    # run_sequnce("/root/data/cluster_slam/CARLA-L2/", "carla_l2_new", cluster_dataset, world_motion_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/cluster_slam/CARLA-L2/", "carla_l2_new", cluster_dataset, ll_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
+    # run_sequnce("/root/data/cluster_slam/CARLA-S1/", "carla_s1_new", cluster_dataset, world_motion_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/cluster_slam/CARLA-S1/", "carla_s1_new", cluster_dataset, ll_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
+    # run_sequnce("/root/data/cluster_slam/CARLA-S2/", "carla_s2_new", cluster_dataset, world_motion_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/cluster_slam/CARLA-S2/", "carla_s2_new", cluster_dataset, ll_backend, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+
+    run_analysis("carla_s1_new")
+    run_analysis("carla_s2_new")
+
+    sys.exit(0)
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0004/", "kitti_0004")
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0001/", "kitti_0001")
     # run_POM_tests(prep_kitti_sequence, "/root/data/vdo_slam/kitti/kitti/0000/", "kitti_0000")
@@ -414,13 +445,49 @@ if __name__ == '__main__':
     # run_both_backend(
     #     run_cluster_sequence,
     #     "/root/data/cluster_slam/CARLA-L1/",
-    #     "carla_l1_dense",
+    #     "carla_l1_new",
     #     "--use_full_batch_opt=false",
     #     "--opt_window_size=20",
-    #     "--opt_window_overlap=5",
-    #     "--init_H_with_identity=false",
-    #     "--updater_suffix=init_frontend"
+    #     "--opt_window_overlap=5"
     # )
+
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "cluster_l2_new",
+    #     "--starting_frame=33",
+    #     "--ending_frame=385",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "cluster_l1_new",
+    #     "--starting_frame=33",
+    #     "--ending_frame=600",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-S1/",
+    #     "cluster_s1_new",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-S2/",
+    #     "cluster_s2_new",
+    #     "--init_object_pose_from_gt=true"
+    # )
+
+    # run_both_backend(
+    #     run_cluster_sequence,
+    #     "/root/data/cluster_slam/CARLA-L2/",
+    #     "cluster_l2_new",
+    #     "--use_full_batch_opt=true",
+    #     "--opt_window_size=20",
+    #     "--opt_window_overlap=5",
+    # )
+
 
     # run_both_backend(
     #     run_cluster_sequence,
@@ -584,14 +651,13 @@ if __name__ == '__main__':
 
 
     ## cluster
-    prep_cluster_sequence(
-        "/root/data/cluster_slam/CARLA-L1/",
-        "carla_l1_video",
-        "--semantic_mask_step_size=5",
-        "--use_propogate_mask=false",
-        "--use_dynamic_track=false",
-        "--ending_frame=700"
-    )
+    # prep_cluster_sequence(
+    #     "/root/data/cluster_slam/CARLA-L1/",
+    #     "carla_l1_new",
+    #     "--use_propogate_mask=false",
+    #     "--use_dynamic_track=false",
+    #     "--ending_frame=250"
+    # )
 
     # prep_cluster_sequence(
     #     "/root/data/cluster_slam/CARLA-L2/",

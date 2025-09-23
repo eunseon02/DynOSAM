@@ -1,6 +1,8 @@
 import dynosam_utils.evaluation.evaluation_lib as eval
 import dynosam_utils.evaluation.core.metrics as eval_metrics
 from dynosam_utils.evaluation.formatting_utils import * #for nice colours
+from dynosam_utils.evaluation.core.plotting import startup_plotting
+
 
 
 from evo.core import lie_algebra, trajectory, metrics, transformations
@@ -17,10 +19,10 @@ from matplotlib.axes import Axes
 
 # Reset all rcParams to their default values
 plt.rcdefaults()
-startup_plotting(50)
+startup_plotting(22)
 
 
-plt.rcParams["lines.linewidth"] = 4.0
+# plt.rcParams["lines.linewidth"] = 4.0
 # plt.rcParams.update({
 #                     "text.usetex": True,
 #                     "font.family": "serif",
@@ -79,7 +81,7 @@ def make_plot_all_objects(
 
 
         fig, (rot_error_axes, trans_error_axes) = plt.subplots(nrows=2, sharex=True, layout="constrained")
-        # fig.set_size_inches(15, 15) # for KITTI
+        fig.set_size_inches(9, 9) # for KITTI
         # fig.set_size_inches(15, 11)  # for OMD
 
         if suptitle:
@@ -139,6 +141,8 @@ def make_plot_all_objects(
         # trans_error_axes.legend()
         fig.tight_layout()
 
+        # rot_error_axes.grid(True)
+
         return fig, rot_error_axes, trans_error_axes
 
 
@@ -193,9 +197,15 @@ def make_plot(results_folder_path, plot_frontend = True, plot_backend = True, ob
 
 # these are the ones we actually used
 # omd_frontend, omd_backend = make_plot("/root/results/Dynosam_tro2024/omd_vo_test", plot_frontend=True, plot_backend=True, objects=[4], suptitle=False)
-kitti_frontend, kitti_backend = make_plot("/root/results/DynoSAM/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
+kitti_frontend, kitti_backend = make_plot("/root/results/TRO2025/test_kitti_main", plot_frontend=True, plot_backend=True, objects=[2], suptitle=False)
 
 
+# kitti_frontend[0].suptitle("Before Optimisation", y=0.98)
+# kitti_backend[0].suptitle("After Optimisation")
+
+# kitti_frontend[0].tight_layout()
+# kitti_backend[0].tight_layout()
 
 
-plt.show()
+kitti_frontend[0].savefig("/root/results/TRO2025/kitti_0000_before_opt.pdf")
+kitti_backend[0].savefig("/root/results/TRO2025/kitti_0000_after_opt.pdf")

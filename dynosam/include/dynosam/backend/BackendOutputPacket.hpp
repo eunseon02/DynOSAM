@@ -30,6 +30,7 @@
 
 #pragma once
 
+#include "dynosam/backend/BackendDefinitions.hpp"  //for TemporalObjectMetaData
 #include "dynosam/common/Types.hpp"
 
 namespace dyno {
@@ -38,22 +39,21 @@ struct BackendOutputPacket {
   DYNO_POINTER_TYPEDEFS(BackendOutputPacket)
 
   StatusLandmarkVector static_landmarks;   // all frames?
-  StatusLandmarkVector dynamic_landmarks;  // only this frame?
-  // LandmarkMap static_lmks_;
-  // StatusLandmarkEstimates dynamic_lmks_; //optimizsed
-  // StatusLandmarkEstimates initial_dynamic_lmks_;
-  // StatusLandmarkEstimates scaled_dynamic_lmk_estimate_;
+  StatusLandmarkVector dynamic_landmarks;  // all objects only this frame?
+  FrameIdTimestampMap involved_timestamp;
   gtsam::Pose3 T_world_camera;
   FrameId frame_id;
   Timestamp timestamp;
-  MotionEstimateMap optimized_object_motions;
+  ObjectMotionMap optimized_object_motions;
   ObjectPoseMap optimized_object_poses;
   gtsam::Pose3Vector optimized_camera_poses;
+  std::vector<TemporalObjectMetaData> temporal_object_data;
+  // streamline imagery with incremental visualisation tools!
+  cv::Mat debug_image;
 
   inline FrameId getFrameId() const { return frame_id; }
-  inline Timestamp getTimestamp() const { return timestamp;  }
+  inline Timestamp getTimestamp() const { return timestamp; }
   const gtsam::Pose3& pose() const { return T_world_camera; }
-
 };
 
 }  // namespace dyno

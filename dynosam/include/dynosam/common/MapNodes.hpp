@@ -274,6 +274,10 @@ using LandmarkNodePtrSet = FastMapNodeSet<LandmarkNodePtr<MEASUREMENT>>;
 template <typename MEASUREMENT>
 using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 
+/// @brief Status for a StateQuery<> type. This is defined outside the
+/// StateQuery class so that the type of status is independant of the StateQuery
+/// template.
+enum StateQueryStatus { VALID, NOT_IN_MAP, WAS_IN_MAP, INVALID_MAP };
 /**
  * @brief Represents an optional value with meta-data that is retrieved from the
  * map.
@@ -283,10 +287,17 @@ using ObjectNodePtrSet = FastMapNodeSet<ObjectNodePtr<MEASUREMENT>>;
 template <typename ValueType>
 class StateQuery : public std::optional<ValueType> {
  public:
+  //! Base type representing the existance of the query value
   using Base = std::optional<ValueType>;
-  enum Status { VALID, NOT_IN_MAP, WAS_IN_MAP, INVALID_MAP };
+  using Base::value_or;
+
+  //! Status of the state query
+  using Status = StateQueryStatus;
   gtsam::Key key_;
   Status status_;
+
+  inline gtsam::Key key() const { return key_; }
+  inline Status status() const { return status_; }
 
   StateQuery() {}
   StateQuery(gtsam::Key key, const ValueType& v) : key_(key), status_(VALID) {
@@ -294,10 +305,12 @@ class StateQuery : public std::optional<ValueType> {
   }
   StateQuery(gtsam::Key key, Status status) : key_(key), status_(status) {}
 
+  // template<typename OtherValueType, typename...Args>
+
   const ValueType& get() const {
     if (!Base::has_value())
       throw DynosamException("StateQuery has no value for query type " +
-                             type_name<ValueType>() + " with key" +
+                             type_name<ValueType>() + " with key " +
                              DynoLikeKeyFormatter(key_));
     return Base::value();
   }
@@ -313,6 +326,26 @@ class StateQuery : public std::optional<ValueType> {
   static StateQuery WasInMap(gtsam::Key key) {
     return StateQuery(key, WAS_IN_MAP);
   }
+
+ private:
+  // template<typename ValueType, typename OtherValueType, typename...Args>
+  //   struct TemplateHelper {
+  //     using ValueQuery = StateQuery<ValueType>;
+  //     using OtherValueQuery = StateQuery<OtherValueType>;
+
+  //       static OtherValueQuery create(const Args&&... args) {
+  //         ValueQuery& query_input =
+  //         std::get<ValueQuery>(std::forward_as_tuple(std::forward<T>(args)...));
+
+  //         if(!query_input) {
+  //           return OtherValueQuery(query_input.key_, query_input.status_);
+  //         }
+  //         else {
+  //           return
+  //         }
+  //       }
+
+  //   }
 };
 
 /**
@@ -385,10 +418,10 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   ObjectNodePtrSet<MEASUREMENT> objects_seen;
 
   /// @brief Optional initial camera pose in world, provided by the front-end
-  std::optional<gtsam::Pose3> X_world;
+  std::optional<Pose3Measurement> X_world;
   /// @brief Optional initial object motions in the world, provided by the
   /// front-end
-  std::optional<MotionEstimateMap> motions_world;
+  std::optional<MotionEstimateMap> motions;
 
   /**
    * @brief Returns the frame_id
@@ -399,9 +432,7 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   std::string toString() const override {
     std::stringstream ss;
     ss << "Frame Id: " << frame_id << "\n";
-    ss << "Objects seen: "
-       << container_to_string(objects_seen.template collectIds<ObjectId>())
-       << "\n";
+    ss << "Objects seen: " << container_to_string(getObservedObjects()) << "\n";
     ss << "Num dynamic measurements: " << numDynamicMeasurements() << "\n";
     ss << "Num static measurements: " << numStaticMeasurements();
     return ss.str();
@@ -495,6 +526,15 @@ class FrameNode : public MapNodeBase<MEASUREMENT> {
   inline size_t numObjects() const { return objects_seen.size(); }
 
   /**
+   * @brief Get the ids (j) of objects observed at this frame.
+   *
+   * @return ObjectIds
+   */
+  ObjectIds getObservedObjects() const {
+    return objects_seen.template collectIds<ObjectId>();
+  }
+
+  /**
    * @brief Number of dynamic measurements for this frame.
    *
    * @return size_t
@@ -529,7 +569,7 @@ class ObjectNode : public MapNodeBase<MEASUREMENT> {
   ObjectNode(const std::shared_ptr<Map<MEASUREMENT>>& map)
       : MapNodeBase<MEASUREMENT>(map) {}
 
-  /// @brief Object labek (j)
+  /// @brief Object label (j)
   ObjectId object_id;
   /// @brief All landmarks associated with the object over time
   LandmarkNodePtrSet<MEASUREMENT> dynamic_landmarks;

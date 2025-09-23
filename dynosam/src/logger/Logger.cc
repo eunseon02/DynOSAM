@@ -180,55 +180,34 @@ EstimationModuleLogger::~EstimationModuleLogger() {
                                      object_motion_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*camera_pose_csv_, camera_pose_file_name_);
   OfstreamWrapper::WriteOutCsvWriter(*map_points_csv_, map_points_file_name_);
-  OfstreamWrapper::WriteOutCsvWriter(*frame_id_timestamp_csv_,
-                                     frame_id_to_timestamp_file_name_);
+  // OfstreamWrapper::WriteOutCsvWriter(*frame_id_timestamp_csv_,
+  //                                    frame_id_to_timestamp_file_name_);
 }
 
 std::optional<size_t> EstimationModuleLogger::logObjectMotion(
     FrameId frame_id, const MotionEstimateMap& motion_estimates,
     const std::optional<GroundTruthPacketMap>& gt_packets) {
-  // if gt packet provided by no data exists at this frame
-  if (gt_packets && !gt_packets->exists(frame_id)) {
-    VLOG(100) << "No gt packet at frame id " << frame_id
-              << ". Unable to log object motion errors";
-    return {};
-  }
-
   size_t number_logged = 0;
   for (const auto& [object_id, motions] : motion_estimates) {
     // use identity motion if no ground truth so that we keep the csv file
     // format
-    gtsam::Pose3 gt_motion = gtsam::Pose3::Identity();
-    const gtsam::Pose3& estimate = motions;
+    if (logObjectMotion(*object_motion_csv_, motions, frame_id, object_id,
+                        gt_packets))
+      number_logged++;
+  }
+  return number_logged;
+}
 
-    // gt packet provided so only log if gt pose data found
-    if (gt_packets) {
-      if (gt_packets->exists(frame_id)) {
-        const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
-        // check object exists in this frame
-        ObjectPoseGT object_gt_k;
-        if (!gt_packet_k.getObject(object_id, object_gt_k)) {
-          // if no packet for this object found, continue and do not log
-          continue;
-        } else {
-          CHECK(object_gt_k.prev_H_current_world_);
-          gt_motion = *object_gt_k.prev_H_current_world_;
-        }
-      } else {
-        // gt packet has no entry for this frame id so skip
-        continue;
-      }
+std::optional<size_t> EstimationModuleLogger::logObjectMotion(
+    const ObjectMotionMap& object_motions,
+    const std::optional<GroundTruthPacketMap>& gt_packets) {
+  size_t number_logged = 0;
+  for (const auto& [object_id, motions_per_object] : object_motions) {
+    for (const auto& [frame_id, motion] : motions_per_object) {
+      if (logObjectMotion(*object_motion_csv_, motion, frame_id, object_id,
+                          gt_packets))
+        number_logged++;
     }
-
-    const auto& quat = estimate.rotation().toQuaternion();
-    const auto& gt_quat = gt_motion.rotation().toQuaternion();
-
-    *object_motion_csv_ << frame_id << object_id << estimate.x() << estimate.y()
-                        << estimate.z() << quat.x() << quat.y() << quat.z()
-                        << quat.w() << gt_motion.x() << gt_motion.y()
-                        << gt_motion.z() << gt_quat.x() << gt_quat.y()
-                        << gt_quat.z() << gt_quat.w();
-    number_logged++;
   }
   return number_logged;
 }
@@ -237,57 +216,68 @@ std::optional<size_t> EstimationModuleLogger::logObjectMotion(
 std::optional<size_t> EstimationModuleLogger::logObjectPose(
     FrameId frame_id, const ObjectPoseMap& propogated_poses,
     const std::optional<GroundTruthPacketMap>& gt_packets) {
-  // if gt packet provided by no data exists at this frame
-  if (gt_packets && !gt_packets->exists(frame_id)) {
-    VLOG(100) << "No gt packet at frame id " << frame_id
-              << ". Unable to log object pose errors";
-    return {};
-  }
-
   size_t number_logged = 0;
   // assume object poses get logged in frame order!!!
   for (const auto& [object_id, poses_map] : propogated_poses) {
     // do not draw if in current frame
     if (!poses_map.exists(frame_id)) {
-      VLOG(10) << "Cannot log object pose (id=" << object_id << ") for frame "
-               << frame_id << " as it does not exist in the map";
+      VLOG(100) << "Cannot log object pose (id=" << object_id << ") for frame "
+                << frame_id << " as it does not exist in the map";
       continue;
     }
 
+    const gtsam::Pose3& L_W_k = poses_map.at(frame_id);
+    if (logObjectPose(*object_pose_csv_, L_W_k, frame_id, object_id,
+                      gt_packets))
+      number_logged++;
     // use identity if no ground truth so that we keep the csv file format
-    gtsam::Pose3 gt_L_world_k = gtsam::Pose3::Identity();
-    const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
+    // gtsam::Pose3 gt_L_world_k = gtsam::Pose3::Identity();
+    // const gtsam::Pose3& L_world_k = poses_map.at(frame_id);
 
-    // gt packet provided so only log if gt pose data found
-    if (gt_packets) {
-      if (gt_packets->exists(frame_id)) {
-        const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
-        // check object exists in this frame
-        ObjectPoseGT object_gt_k;
-        if (!gt_packet_k.getObject(object_id, object_gt_k)) {
-          // if no packet for this object found, continue and do not log
-          continue;
-        } else {
-          gt_L_world_k = object_gt_k.L_world_;
-        }
-      } else {
-        // gt packet has no entry for this frame id so skip
-        continue;
-      }
+    // // gt packet provided so only log if gt pose data found
+    // if (gt_packets) {
+    //   if (gt_packets->exists(frame_id)) {
+    //     const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
+    //     // check object exists in this frame
+    //     ObjectPoseGT object_gt_k;
+    //     if (!gt_packet_k.getObject(object_id, object_gt_k)) {
+    //       // if no packet for this object found, continue and do not log
+    //       continue;
+    //     } else {
+    //       gt_L_world_k = object_gt_k.L_world_;
+    //     }
+    //   } else {
+    //     // gt packet has no entry for this frame id so skip
+    //     continue;
+    //   }
+    // }
+    // // we have either skipped logging (if gt provided by the object gt pose
+    // was
+    // // not found) or no gt was provided
+    // const auto& gt_R_k = gt_L_world_k.rotation().toQuaternion();
+    // // estimate
+    // const auto R_world_k = L_world_k.rotation().toQuaternion();
+    // // write out object pose with gt
+    // *object_pose_csv_ << frame_id << object_id << L_world_k.x() <<
+    // L_world_k.y()
+    //                   << L_world_k.z() << R_world_k.x() << R_world_k.y()
+    //                   << R_world_k.z() << R_world_k.w() << gt_L_world_k.x()
+    //                   << gt_L_world_k.y() << gt_L_world_k.z() << gt_R_k.x()
+    //                   << gt_R_k.y() << gt_R_k.z() << gt_R_k.w();
+  }
+  return number_logged;
+}
+
+std::optional<size_t> EstimationModuleLogger::logObjectPose(
+    const ObjectPoseMap& object_poses,
+    const std::optional<GroundTruthPacketMap>& gt_packets) {
+  size_t number_logged = 0;
+  for (const auto& [object_id, poses_per_object] : object_poses) {
+    for (const auto& [frame_id, pose] : poses_per_object) {
+      if (logObjectPose(*object_pose_csv_, pose, frame_id, object_id,
+                        gt_packets))
+        number_logged++;
     }
-    // we have either skipped logging (if gt provided by the object gt pose was
-    // not found) or no gt was provided
-    const auto& gt_R_k = gt_L_world_k.rotation().toQuaternion();
-    // estimate
-    const auto R_world_k = L_world_k.rotation().toQuaternion();
-    // write out object pose with gt
-    *object_pose_csv_ << frame_id << object_id << L_world_k.x() << L_world_k.y()
-                      << L_world_k.z() << R_world_k.x() << R_world_k.y()
-                      << R_world_k.z() << R_world_k.w() << gt_L_world_k.x()
-                      << gt_L_world_k.y() << gt_L_world_k.z() << gt_R_k.x()
-                      << gt_R_k.y() << gt_R_k.z() << gt_R_k.w();
-
-    number_logged++;
   }
   return number_logged;
 }
@@ -336,6 +326,24 @@ void EstimationModuleLogger::logPoints(FrameId frame_id,
   }
 }
 
+void EstimationModuleLogger::logMapPoints(
+    const StatusLandmarkVector& landmarks) {
+  for (const auto& status_lmks : landmarks) {
+    const TrackletId tracklet_id = status_lmks.trackletId();
+    ObjectId object_id = status_lmks.objectId();
+    Landmark lmk_world = status_lmks.value();
+    FrameId frame_id = status_lmks.frameId();
+
+    if (status_lmks.referenceFrame() != ReferenceFrame::GLOBAL) {
+      throw DynosamException(
+          "Failure in logMapPoints(): Map point is not in the GLOBAL frame");
+    }
+
+    *map_points_csv_ << frame_id << object_id << tracklet_id << lmk_world(0)
+                     << lmk_world(1) << lmk_world(2);
+  }
+}
+
 void EstimationModuleLogger::logObjectBbxes(FrameId frame_id,
                                             const BbxPerObject& object_bbxes) {
   for (const auto& [object_id, this_object_bbx] : object_bbxes) {
@@ -358,6 +366,84 @@ void EstimationModuleLogger::logFrameIdToTimestamp(FrameId frame_id,
                                                    Timestamp timestamp) {
   long int nano_seconds = timestamp * 1e+9;
   *frame_id_timestamp_csv_ << frame_id << nano_seconds;
+}
+
+bool EstimationModuleLogger::logObjectMotion(
+    CsvWriter& writer, const Motion3ReferenceFrame& motion, FrameId frame_id,
+    ObjectId object_id, const std::optional<GroundTruthPacketMap>& gt_packets) {
+  gtsam::Pose3 gt_motion = gtsam::Pose3::Identity();
+  CHECK_EQ(motion.style(), MotionRepresentationStyle::F2F)
+      << "Output evaluation expects motion in F2F representation";
+  const gtsam::Pose3& estimate = motion;
+
+  if (gt_packets) {
+    if (gt_packets->exists(frame_id)) {
+      const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
+
+      // check object exists in this frame
+      ObjectPoseGT object_gt_k;
+      if (!gt_packet_k.getObject(object_id, object_gt_k)) {
+        // if no packet for this object found, continue and do not log
+        // return false;
+      } else {
+        CHECK(object_gt_k.prev_H_current_world_);
+        gt_motion = *object_gt_k.prev_H_current_world_;
+      }
+    } else {
+      // gt packet has no entry for this frame id and the object ground truth is
+      // valid
+      // TODO: for now?
+      // return false;
+    }
+  }
+
+  const auto& quat = estimate.rotation().toQuaternion();
+  const auto& gt_quat = gt_motion.rotation().toQuaternion();
+
+  writer << frame_id << object_id << estimate.x() << estimate.y()
+         << estimate.z() << quat.x() << quat.y() << quat.z() << quat.w()
+         << gt_motion.x() << gt_motion.y() << gt_motion.z() << gt_quat.x()
+         << gt_quat.y() << gt_quat.z() << gt_quat.w();
+  return true;
+}
+
+bool EstimationModuleLogger::logObjectPose(
+    CsvWriter& writer, const gtsam::Pose3& pose, FrameId frame_id,
+    ObjectId object_id, const std::optional<GroundTruthPacketMap>& gt_packets) {
+  // use identity if no ground truth so that we keep the csv file format
+  gtsam::Pose3 gt_L_world_k = gtsam::Pose3::Identity();
+  const gtsam::Pose3& L_world_k = pose;
+
+  // gt packet provided so only log if gt pose data found
+  if (gt_packets) {
+    if (gt_packets->exists(frame_id)) {
+      const GroundTruthInputPacket& gt_packet_k = gt_packets->at(frame_id);
+      // check object exists in this frame
+      ObjectPoseGT object_gt_k;
+      if (!gt_packet_k.getObject(object_id, object_gt_k)) {
+        // if no packet for this object found, continue and do not log
+        // return false;
+      } else {
+        gt_L_world_k = object_gt_k.L_world_;
+      }
+    } else {
+      // gt packet has no entry for this frame id so skip
+      // TODO: for now?
+      // return false;
+    }
+  }
+  // we have either skipped logging (if gt provided by the object gt pose was
+  // not found) or no gt was provided
+  const auto& gt_R_k = gt_L_world_k.rotation().toQuaternion();
+  // estimate
+  const auto R_world_k = L_world_k.rotation().toQuaternion();
+  // write out object pose with gt
+  writer << frame_id << object_id << L_world_k.x() << L_world_k.y()
+         << L_world_k.z() << R_world_k.x() << R_world_k.y() << R_world_k.z()
+         << R_world_k.w() << gt_L_world_k.x() << gt_L_world_k.y()
+         << gt_L_world_k.z() << gt_R_k.x() << gt_R_k.y() << gt_R_k.z()
+         << gt_R_k.w();
+  return true;
 }
 
 }  // namespace dyno

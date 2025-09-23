@@ -75,8 +75,13 @@ typedef Eigen::Matrix<double, 3, 4> transformation_t;
 #if GTSAM_VERSION_MAJOR <= 4 && GTSAM_VERSION_MINOR < 3
 template <typename T>
 using GtsamSharedPtr = boost::shared_ptr<T>;
+using GtsamOptionalMatrixType = boost::optional<gtsam::Matrix&>;
+#define JACOBIAN_DEFAULT \
+  {}
 #else
 using GtsamSharedPtr = std::shared_ptr<T>;
+using GtsamOptionalMatrixType = gtsam::OptionalMatrixType;
+#define JACOBIAN_DEFAULT nullptr
 #endif
 
 namespace {
@@ -205,9 +210,10 @@ T perturbWithNoise(const T& t, const gtsam::Vector& sigmas, int32_t seed = 42) {
   //! memory during calls and that we actually get a random distribution
   // TODO: (jesse)yeah, but we pass different sigmas and seeds to it, so wont
   // this mean it just doesnt get updated?
-  static gtsam::Sampler sample(sigmas, seed);
-
-  gtsam::Vector delta(sample.sample());  // delta should be the tangent vector
+  // gtsam::Sampler sample(sigmas, seed);
+  static std::mt19937_64 rng(std::random_device{}());
+  gtsam::Vector delta = gtsam::Sampler::sampleDiagonal(
+      sigmas, &rng);  // delta should be the tangent vector
   return gtsam::traits<T>::Retract(t, delta);
 }
 
@@ -230,6 +236,11 @@ inline gtsam::Point2 cvPointToGtsam(const cv::Point_<T>& point) {
                        static_cast<double>(point.y));
 }
 
+inline gtsam::Point2 cvKeypointToGtsam(const cv::KeyPoint& point) {
+  return gtsam::Point2(static_cast<double>(point.pt.x),
+                       static_cast<double>(point.pt.y));
+}
+
 template <typename T = float>
 gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
   gtsam::Point2Vector gtsam_points;
@@ -242,6 +253,14 @@ gtsam::Point2Vector cvPointsToGtsam(const std::vector<cv::Point_<T>>& points) {
 template <typename T = float>
 inline cv::Point_<T> gtsamPointToCv(const gtsam::Point2& point) {
   return cv::Point_<T>(static_cast<T>(point(0)), static_cast<T>(point(1)));
+}
+
+inline cv::KeyPoint gtsamPointToKeyPoint(const gtsam::Point2& point,
+                                         float size = 1, float angle = -1,
+                                         float response = 0, int octave = 0,
+                                         int class_id = -1) {
+  return cv::KeyPoint(gtsamPointToCv<float>(point), size, angle, response,
+                      octave, class_id);
 }
 
 template <typename T = float, typename Allocator>

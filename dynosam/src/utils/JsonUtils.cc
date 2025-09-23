@@ -72,7 +72,7 @@ void adl_serializer<dyno::RGBDInstanceOutputPacket>::to_json(
   DYNO_FRONTEND_OUTPUT_PACKET_BASE_TO_JSON(j, input)
   j["static_landmarks"] = input.static_landmarks_;
   j["dynamic_landmarks"] = input.dynamic_landmarks_;
-  j["estimated_motions"] = input.estimated_motions_;
+  j["estimated_motions"] = input.object_motions_;
   j["propogated_object_poses"] = input.propogated_object_poses_;
   j["camera_poses"] = input.camera_poses_;
 }
@@ -99,8 +99,8 @@ adl_serializer<dyno::RGBDInstanceOutputPacket>::from_json(const json& j) {
   // Base is a std::map with the right custom allocation
   // we use the std::map version so that all the automagic with nlohmann::json
   // can work
-  MotionEstimateMap estimated_motions(
-      j["estimated_motions"].template get<MotionEstimateMap::Base>());
+  ObjectMotionMap estimated_motions(
+      j["estimated_motions"].template get<ObjectMotionMap>());
   ObjectPoseMap propogated_object_poses =
       j["propogated_object_poses"].template get<ObjectPoseMap>();
   gtsam::Pose3Vector camera_poses =

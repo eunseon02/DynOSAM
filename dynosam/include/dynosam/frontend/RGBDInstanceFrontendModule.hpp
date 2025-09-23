@@ -30,11 +30,15 @@
 
 #pragma once
 
+#include <gtsam/navigation/NavState.h>
+
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/frontend/FrontendModule.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
+#include "dynosam/frontend/imu/ImuFrontend.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
+#include "dynosam/frontend/vision/ObjectTracker.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 
 namespace dyno {
@@ -51,7 +55,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
  private:
   Camera::Ptr camera_;
   EgoMotionSolver motion_solver_;
-  ObjectMotionSovler object_motion_solver_;
+  //   ObjectMotionSovlerF2F object_motion_solver_;
+  ObjectMotionSolver::UniquePtr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
 
@@ -76,37 +81,39 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    * @return true
    * @return false
    */
-  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1);
-
-  bool solveObjectMotion(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-                         ObjectId object_id,
-                         MotionEstimateMap& motion_estimates);
-
-  void solveObjectMotions(Frame::Ptr frame_k, Frame::Ptr frame_k_1,
-                          MotionEstimateMap& motion_estimates);
+  bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                         std::optional<gtsam::Rot3> R_curr_ref = {});
 
   RGBDInstanceOutputPacket::Ptr constructOutput(
-      const Frame& frame, const MotionEstimateMap& estimated_motions,
-      const gtsam::Pose3& T_world_camera,
+      const Frame& frame, const ObjectMotionMap& object_motions,
+      const ObjectPoseMap& object_poses, const gtsam::Pose3& T_world_camera,
       const GroundTruthInputPacket::Optional& gt_packet = std::nullopt,
-      const DebugImagery::Optional& debug_imagery = std::nullopt);
+      const DebugImagery::Optional& debug_imagery = std::nullopt,
+      const PointCloudLabelRGB::Ptr dense_labelled_cloud = nullptr);
 
-  // updates the object_poses_ map which is then sent to the viz via the output
-  // this updates the estimated trajectory of the object from a starting pont
-  // using the object motion to propofate the object pose
-  void propogateObjectPoses(const MotionEstimateMap& motion_estimates,
-                            FrameId frame_id);
-  // updates object poses
-  void propogateObjectPose(const gtsam::Pose3& prev_H_world_curr,
-                           ObjectId object_id, FrameId frame_id);
+  cv::Mat createTrackingImage(const Frame::Ptr& frame_k,
+                              const Frame::Ptr& frame_k_1,
+                              const ObjectPoseMap& object_poses) const;
 
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag
   std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
 
-  // TODO: sort of need to depricate as not actually used anymore!
-  static TrackingInputImages constructTrackingImages(
-      const ImageContainer::Ptr image_container);
+  ImuFrontend imu_frontend_;
+  gtsam::NavState nav_state_;
+  // this is always udpated with the best X_k pose but the velocity may be wrong
+  // if no IMU...
+  gtsam::NavState previous_nav_state_;
+
+  //! Tracks when the nav state was updated using IMU, else VO
+  //! in the front-end, when updating with VO, the velocity will (currently) be
+  //! wrong!!
+  FrameId last_imu_nav_state_update_{0};
+
+  //! The relative camera pose (T_k_1_k) from the previous frame
+  //! this is used as a constant velocity model when VO tracking fails and the
+  //! IMU is not available!
+  gtsam::Pose3 vo_velocity_;
 };
 
 }  // namespace dyno

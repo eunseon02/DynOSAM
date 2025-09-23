@@ -68,6 +68,10 @@ struct functional_keypoint {
   }
 };
 
+// /// @brief adaptor struct to allow types to act like a cv::KeyPoint
+// template<typename T>
+// struct cv_keypoint_adaptor;
+
 /**
  * @brief 2D tracking and id information for a feature observation at a single
  * frame.
@@ -207,6 +211,17 @@ class Feature {
     return data_.depth;
   }
 
+  /**
+   * @brief Gets the right keypoint (uR). The value will be
+   * Feature::invalid_depth if not set.
+   *
+   * @return double
+   */
+  double rightKeypoint() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return data_.uR;
+  }
+
   static Keypoint CalculatePredictedKeypoint(const Keypoint& keypoint,
                                              const OpticalFlow& measured_flow) {
     return keypoint + measured_flow;
@@ -282,6 +297,12 @@ class Feature {
     return *this;
   }
 
+  Feature& rightKeypoint(double uR) {
+    std::lock_guard<std::mutex> lk(mutex_);
+    data_.uR = uR;
+    return *this;
+  }
+
   /**
    * @brief If the feature is valid - a combination of inlier and if the
    * tracklet Id != -1
@@ -324,6 +345,11 @@ class Feature {
     return !std::isnan(data_.depth);
   }
 
+  inline bool hasRightKeypoint() const {
+    std::lock_guard<std::mutex> lk(mutex_);
+    return !std::isnan(data_.uR);
+  }
+
   inline static bool IsUsable(const Feature::Ptr& f) { return f->usable(); }
 
   inline static bool IsNotNull(const Feature::Ptr& f) { return f != nullptr; }
@@ -346,6 +372,7 @@ class Feature {
                       //! tracked object between frames
     Depth depth{invalid_depth};  //! Depth as provided by a depth image (not Z).
                                  //! Initalised as invalid_depth (NaN)
+    double uR{invalid_depth};    //! Possible stereo keypoint in the right image
 
     bool operator==(const impl& other) const {
       // TODO: lock?
@@ -357,13 +384,21 @@ class Feature {
              tracklet_id == other.tracklet_id && frame_id == other.frame_id &&
              inlier == other.inlier && instance_label == other.instance_label &&
              tracking_label == other.tracking_label &&
-             fpEqual(depth, other.depth);
+             fpEqual(depth, other.depth) && fpEqual(uR, other.uR);
     }
   };
 
   impl data_;
   mutable std::mutex mutex_;
 };
+
+// template<>
+// struct cv_keypoint_adaptor<Feature> {
+//   static float x(const Feature& f) { return
+//   functional_keypoint::u<float>(f.keypoint()); } static float y(const
+//   Feature& f) { return functional_keypoint::v<float>(f.keypoint()); } static
+//   float response(const Feature& f) { return 0; }
+// };
 
 using FeaturePtrs = std::vector<Feature::Ptr>;
 using FeaturePair =
@@ -466,7 +501,8 @@ class FeatureContainer {
   /// iterator, pointer.... typedefs as internal::filter_iterator<> expects the
   /// type defined to have a valid iterator.
   using FilterIterator = internal::filter_iterator<FeatureContainer>;
-  using ConstFilterIterator = internal::filter_const_iterator<FeatureContainer>;
+  using ConstFilterIterator =
+      internal::filter_const_iterator<const FeatureContainer>;
 
   FeatureContainer();
   FeatureContainer(const FeaturePtrs feature_vector);
@@ -550,6 +586,14 @@ class FeatureContainer {
   size_t size() const;
 
   /**
+   * @brief Returns number of features in the container per object id.
+   *
+   * @param object_id ObjectId
+   * @return size_t
+   */
+  size_t size(ObjectId object_id) const;
+
+  /**
    * @brief Gets a feature given its tracklet id.
    * If the feature does not exist, nullptr is returned.
    *
@@ -566,6 +610,11 @@ class FeatureContainer {
    * @return false
    */
   bool exists(TrackletId tracklet_id) const;
+
+  FeatureContainer& operator+=(const FeatureContainer& other) {
+    feature_map_.insert(other.feature_map_.begin(), other.feature_map_.end());
+    return *this;
+  }
 
   // vector begin
   inline vector_iterator begin() {
@@ -595,9 +644,11 @@ class FeatureContainer {
    * associated with their tracklet id.
    *
    * @param tracklet_ids TrackletIds*. Defaults to nullptr
+   * @param only_inliers bool. Defaults to false
    * @return std::vector<cv::Point2f>
    */
-  std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr) const;
+  std::vector<cv::Point2f> toOpenCV(TrackletIds* tracklet_ids = nullptr,
+                                    bool only_inliers = false) const;
 
  private:
   TrackletToFeatureMap feature_map_;

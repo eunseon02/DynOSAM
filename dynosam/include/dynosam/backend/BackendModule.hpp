@@ -33,14 +33,18 @@
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/BackendInputPacket.hpp"
 #include "dynosam/backend/BackendOutputPacket.hpp"
-#include "dynosam/backend/Formulation.hpp"
 #include "dynosam/backend/BackendParams.hpp"
+#include "dynosam/backend/Formulation.hpp"
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/SharedModuleInfo.hpp"
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/RGBDInstance-Definitions.hpp"  //for RGBDInstanceOutputPacket
 #include "dynosam/utils/SafeCast.hpp"
-#include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"  //for ImageDisplayQueueOptional,
+
+DECLARE_string(updater_suffix);
 
 namespace dyno {
 
@@ -65,7 +69,8 @@ struct BackendModuleTraits {
  *
  */
 class BackendModule
-    : public ModuleBase<BackendInputPacket, BackendOutputPacket> {
+    : public ModuleBase<BackendInputPacket, BackendOutputPacket>,
+      public SharedModuleInterface {
  public:
   DYNO_POINTER_TYPEDEFS(BackendModule)
 
@@ -75,14 +80,12 @@ class BackendModule
   BackendModule(const BackendParams& params, ImageDisplayQueue* display_queue);
   virtual ~BackendModule() = default;
 
-  // if empty, return none
-  // TODo: also use this in the frontend!
-  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
-    if (gt_packet_map_.empty()) {
-      return {};
-    }
-    return gt_packet_map_;
-  }
+  const BackendParams& getParams() const { return base_params_; }
+  const NoiseModels& getNoiseModels() const { return noise_models_; }
+  const BackendSpinState& getSpinState() const { return spin_state_; }
+
+  // void optimize(FrameId frame_id_k, gtsam::Values& new_values,
+  // gtsam::NonlinearFactorGraph& new_factors) const;
 
  protected:
   // called in ModuleBase immediately before the spin function is called
@@ -90,6 +93,7 @@ class BackendModule
       const BackendInputPacket::ConstPtr& input) const override;
   void setFactorParams(const BackendParams& backend_params);
 
+ protected:
   // Redefine base input since these will be cast up by the BackendModuleType
   // class to a new type which we want to refer to as the input type BaseInput
   // is a ConstPtr to the type defined by BackendInputPacket
@@ -98,10 +102,6 @@ class BackendModule
 
  protected:
   const BackendParams base_params_;
-  // NOTE: this is copied directly from the frontend module.
-  GroundTruthPacketMap
-      gt_packet_map_;  //! Updated in the backend module base via InputCallback
-                       //! (see BackendModule constructor).
   ImageDisplayQueue* display_queue_{nullptr};  //! Optional display queue
 
   BackendSpinState
@@ -125,6 +125,7 @@ class BackendModuleType : public BackendModule {
   using Base = BackendModule;
 
   using MapType = Map<MeasurementType>;
+  using FormulationType = Formulation<MapType>;
 
   DYNO_POINTER_TYPEDEFS(This)
 
@@ -136,9 +137,9 @@ class BackendModuleType : public BackendModule {
   using InputConstPtr = DerivedPacketTypeConstPtr;
   using OutputConstPtr = Base::OutputConstPtr;
 
-  BackendModuleType(const BackendParams& params, typename MapType::Ptr map,
+  BackendModuleType(const BackendParams& params,
                     ImageDisplayQueue* display_queue)
-      : Base(params, display_queue), map_(CHECK_NOTNULL(map)) {}
+      : Base(params, display_queue), map_(MapType::create()) {}
 
   virtual ~BackendModuleType() {}
 
@@ -147,6 +148,10 @@ class BackendModuleType : public BackendModule {
  protected:
   virtual SpinReturn boostrapSpinImpl(InputConstPtr input) = 0;
   virtual SpinReturn nominalSpinImpl(InputConstPtr input) = 0;
+
+  void optimize(FrameId frame_id_k, FormulationType* formulation,
+                gtsam::Values& new_values,
+                gtsam::NonlinearFactorGraph& new_factors);
 
   typename MapType::Ptr map_;
 

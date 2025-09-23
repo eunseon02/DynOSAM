@@ -58,6 +58,50 @@ struct image_traits_impl {
   constexpr static int OpenCVType = IMAGETYPE::OpenCVType;
   static void validate(const cv::Mat& input) { IMAGETYPE::validate(input); }
   static std::string name() { return IMAGETYPE::name(); }
+  static cv::Mat convertTo(cv::Mat mat, bool clone = false) {
+    cv::Mat converted_mat = mat;
+    if (clone) {
+      converted_mat = mat.clone();
+    }
+    converted_mat.convertTo(converted_mat, OpenCVType);
+    return converted_mat;
+  }
+};
+
+template <typename T>
+struct ImageWrapper;
+
+struct ImageBase {
+  cv::Mat image;  //! Underlying image
+
+  ImageBase() = default;
+  ImageBase(const cv::Mat& img);
+  virtual ~ImageBase() {}
+
+  operator cv::Mat&() { return image; }
+  operator const cv::Mat&() const { return image; }
+
+  template <typename IMAGETYPE>
+  const ImageWrapper<IMAGETYPE>& cast() const;
+
+  template <typename IMAGETYPE>
+  ImageWrapper<IMAGETYPE>& cast();
+
+  bool exists() const;
+
+  virtual std::unique_ptr<ImageBase> shallowCopy() const {
+    return std::make_unique<ImageBase>(image);
+  }
+
+  virtual std::unique_ptr<ImageBase> deepCopy() const {
+    return std::make_unique<ImageBase>(image.clone());
+  }
+
+  virtual std::string toString() const {
+    std::stringstream ss;
+    ss << (exists() ? to_string(image.size()) : "Empty");
+    return ss.str();
+  }
 };
 
 /**
@@ -75,28 +119,44 @@ struct image_traits_impl {
  * @tparam IMAGETYPE
  */
 template <typename IMAGETYPE>
-struct ImageWrapper {
+struct ImageWrapper : public ImageBase {
   using Type = IMAGETYPE;
   using This = ImageWrapper<Type>;
-
-  cv::Mat image;  //! Underlying image
+  using Base = ImageBase;
 
   ImageWrapper() = default;
   ImageWrapper(const cv::Mat& img);
+  ImageWrapper(const ImageBase& image_base);
 
-  operator cv::Mat&() { return image; }
-  operator const cv::Mat&() const { return image; }
+  virtual std::unique_ptr<ImageBase> shallowCopy() const override {
+    return std::make_unique<ImageWrapper<IMAGETYPE>>(image);
+  }
 
-  /**
-   * @brief Returns an ImageWrapper with the underlying image data cloned
-   *
-   * @return ImageWrapper<Type>
-   */
-  ImageWrapper<Type> clone() const;
-  bool exists() const;
+  virtual std::unique_ptr<ImageBase> deepCopy() const override {
+    return std::make_unique<ImageWrapper<IMAGETYPE>>(image.clone());
+  }
+
+  ImageWrapper<Type> clone() const { return *(this->deepCopy()); }
 
   cv::Mat toRGB() const { return IMAGETYPE::toRGB(*this); }
+
+  virtual std::string toString() const override {
+    std::stringstream ss;
+    ss << type_name<This>() << ": " << Base::toString();
+    return ss.str();
+  }
 };
+
+// define ImageBase::cast here since now ImageWrapper has been declared
+template <typename IMAGETYPE>
+const ImageWrapper<IMAGETYPE>& ImageBase::cast() const {
+  return dynamic_cast<const ImageWrapper<IMAGETYPE>&>(*this);
+}
+
+template <typename IMAGETYPE>
+ImageWrapper<IMAGETYPE>& ImageBase::cast() {
+  return dynamic_cast<ImageWrapper<IMAGETYPE>&>(*this);
+}
 
 struct ImageType {
   /**
@@ -180,6 +240,17 @@ struct image_traits<ImageType::SemanticMask>
 template <>
 struct image_traits<ImageType::MotionMask>
     : public image_traits_impl<ImageType::MotionMask> {};
+
+//! Alias to an ImageWrapper<ImageType::RGBMono>
+typedef ImageWrapper<ImageType::RGBMono> WrappedRGBMono;
+//! Alias to an ImageWrapper<ImageType::Depth>
+typedef ImageWrapper<ImageType::Depth> WrappedDepth;
+//! Alias to an ImageWrapper<ImageType::OpticalFlow>
+typedef ImageWrapper<ImageType::OpticalFlow> WrappedOpticalFlow;
+//! Alias to an ImageWrapper<ImageType::SemanticMask>
+typedef ImageWrapper<ImageType::SemanticMask> WrappedSemanticMask;
+//! Alias to an ImageWrapper<ImageType::MotionMask>
+typedef ImageWrapper<ImageType::MotionMask> WrappedMotionMask;
 
 }  // namespace dyno
 

@@ -45,7 +45,7 @@ void OpenCVImageDisplayQueue::process() {
   bool queue_state = false;
   if (parallel_run_) {
     ImageToDisplay image_to_display;
-    queue_state = display_queue_->popBlocking(image_to_display);
+    queue_state = display_queue_->popBlockingWithTimeout(image_to_display, 5);
 
     if (queue_state) {
       // cv::namedWindow(image_to_display.name_);

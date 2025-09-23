@@ -5,7 +5,7 @@
 --init_object_pose_from_gt=false
 --use_frontend_logger=true
 
---semantic_mask_step_size=4
+# --semantic_mask_step_size=16
 
 #we turn off for cluster as there is some problem with the OF I think?
 --use_propogate_mask=false
@@ -21,6 +21,8 @@
 # kitti values
 # --shrink_row=25
 # --shrink_col=50
+# for KITTI 0000
+# --shrink_col=400
 
 --shrink_row=0
 --shrink_col=0

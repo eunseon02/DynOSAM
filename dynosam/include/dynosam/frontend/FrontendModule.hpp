@@ -32,10 +32,12 @@
 
 #include "dynosam/common/Exceptions.hpp"
 #include "dynosam/common/ModuleBase.hpp"
+#include "dynosam/common/SharedModuleInfo.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/FrontendOutputPacket.hpp"
 #include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+
 // #include "dynosam/common"
 
 #include <type_traits>
@@ -56,7 +58,8 @@ struct InvalidImageContainerException : public DynosamException {
  */
 
 class FrontendModule
-    : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase> {
+    : public ModuleBase<FrontendInputPacketBase, FrontendOutputPacketBase>,
+      public SharedModuleInterface {
  public:
   DYNO_POINTER_TYPEDEFS(FrontendModule)
 
@@ -66,6 +69,8 @@ class FrontendModule
   FrontendModule(const FrontendParams& params,
                  ImageDisplayQueue* display_queue = nullptr);
   virtual ~FrontendModule();
+
+  // virtual void mapUpdate(const Accessor& accessor) {}
 
  protected:
   /**
@@ -86,12 +91,12 @@ class FrontendModule
   };
 
  protected:
-  std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
-    if (gt_packet_map_.empty()) {
-      return {};
-    }
-    return gt_packet_map_;
-  }
+  // std::optional<GroundTruthPacketMap> getGroundTruthPackets() const {
+  //   if (gt_packet_map_.empty()) {
+  //     return {};
+  //   }
+  //   return gt_packet_map_;
+  // }
 
   void validateInput(
       const FrontendInputPacketBase::ConstPtr& input) const override;
@@ -114,18 +119,17 @@ class FrontendModule
  protected:
   const FrontendParams base_params_;
   ImageDisplayQueue* display_queue_;
-  ObjectPoseMap
-      object_poses_;  //! Keeps a track of the current object locations by
-                      //! propogating the motions. Really just (viz)
-  ObjectMotionMap object_motions_;
   gtsam::Pose3Vector
       camera_poses_;  //! Keeps track of current camera trajectory. Really just
                       //! for (viz) and drawn everytime
 
- private:
-  GroundTruthPacketMap
-      gt_packet_map_;  //! Updated in the frontend module base via InputCallback
-                       //! (see FrontendModule constructor)
+  // gtsam::FastMap<TrackletId, Landmark> map_from_backend_;
+
+  //  private:
+  //   GroundTruthPacketMap
+  //       gt_packet_map_;  //! Updated in the frontend module base via
+  //       InputCallback
+  //                        //! (see FrontendModule constructor)
 };
 
 }  // namespace dyno

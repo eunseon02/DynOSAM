@@ -32,6 +32,9 @@
 
 #include <gtsam/geometry/Pose3.h>
 
+#include <optional>
+
+#include "dynosam/common/StructuredContainers.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
@@ -157,30 +160,65 @@ class StaticPointGeneratorVisitor {
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const = 0;
 };
 
+using Range = FrameRange<int>;
+
+class RangesWithEnd : public std::vector<Range::Ptr> {
+ public:
+  using Base = std::vector<Range>;
+
+  Range::Ptr find(FrameId query) const {
+    for (const Range::Ptr& r : *this) {
+      if (r->contains(query)) {
+        return r;
+      }
+    }
+    return nullptr;
+  }
+
+  RangesWithEnd& add(FrameId start, FrameId end) {
+    this->push_back(std::make_shared<Range>(start, end, 0, false));
+    return *this;
+  }
+};
+
+struct ObjectBodyParams {
+  // FrameId enters_scenario = 0;
+  // FrameId leaves_scenario = std::numeric_limits<FrameId>::max();
+  RangesWithEnd ranges;
+
+  ObjectBodyParams(
+      FrameId enters_scenario = 0,
+      FrameId leaves_scenario = std::numeric_limits<FrameId>::max()) {
+    addRange(enters_scenario, leaves_scenario);
+  }
+
+  ObjectBodyParams& addRange(FrameId enters_scenario, FrameId leaves_scenario) {
+    ranges.add(enters_scenario, leaves_scenario);
+    return *this;
+  }
+};
+
 class ObjectBody : public ScenarioBody {
  public:
   DYNO_POINTER_TYPEDEFS(ObjectBody)
 
-  // struct Params {
-  //     double enters_scenario_ = 0.0;
-  //     double leaves_scenario_ = std::numeric_limits<double>::max();
-  // };
-
   ObjectBody(ScenarioBodyVisitor::UniquePtr body_visitor,
-             ObjectPointGeneratorVisitor::UniquePtr points_visitor)
+             ObjectPointGeneratorVisitor::UniquePtr points_visitor,
+             const ObjectBodyParams& params = ObjectBodyParams())
       : ScenarioBody(std::move(body_visitor)),
-        points_visitor_(std::move(points_visitor)) {}
+        points_visitor_(std::move(points_visitor)),
+        params_(params) {}
 
-  virtual FrameId entersScenario() const { return 0; };
-  virtual FrameId leavesScenario() const {
-    return std::numeric_limits<FrameId>::max();
-  };
+  virtual bool inFrame(FrameId frame_id) const {
+    return (bool)params_.ranges.find(frame_id);
+  }
   virtual TrackedPoints getPointsWorld(FrameId frame_id) const {
     return points_visitor_->getPointsWorld(body_visitor_, frame_id);
   };
 
  protected:
   ObjectPointGeneratorVisitor::UniquePtr points_visitor_;
+  ObjectBodyParams params_;
 };
 
 // Motion and pose visotors
@@ -207,6 +245,227 @@ class ConstantMotionBodyVisitor : public ScenarioBodyVisitor {
   const gtsam::Pose3 pose_0_;
   const gtsam::Pose3 motion_;
 };
+
+class RandomOverlapObjectPointsVisitor : public ObjectPointGeneratorVisitor {
+ public:
+  RandomOverlapObjectPointsVisitor(size_t num_points, size_t overlap)
+      : num_points_(num_points),
+        overlap_(overlap),
+        overlap_dist_(2, std::max(2, (int)overlap)) {}
+
+  TrackedPoints getPointsWorld(
+      const ScenarioBodyVisitor::UniquePtr& body_visitor,
+      FrameId frame_id) const override {
+    // minimum n_points per frame
+    // get points for frame + 1
+    // if size points < num points -> generate N = (num points - len(points))
+    // points are generated with 2 <-> O(verlap) as number of points to exist
+    std::vector<Point> points_next = getPoints(frame_id + 1);
+    // LOG(INFO) << "Points next=" <<points_next.size();
+    std::vector<Point> points_current = getPoints(frame_id);
+    // LOG(INFO) << "Points current=" <<points_current.size();
+    if (points_next.size() < num_points_) {
+      auto required_points = num_points_ - points_next.size();
+      // LOG(INFO) << "Required points=" << required_points;
+      std::vector<Point> points_new = generatePoints(frame_id, required_points);
+      points_current.insert(points_current.end(), points_new.begin(),
+                            points_new.end());
+    }
+    // LOG(INFO) << "New Points current=" <<points_current.size();
+    // CHECK_EQ(points_current.size(), num_points_);
+
+    TrackedPoints tracked_points(points_current.size());
+    std::transform(points_current.begin(), points_current.end(),
+                   tracked_points.begin(),
+                   [&body_visitor, &frame_id](const Point& p_body) {
+                     // LOG(INFO) <<
+                     CHECK_NOTNULL(body_visitor);
+                     CHECK(p_body.contains(frame_id));
+                     const gtsam::Point3 P_world =
+                         body_visitor->pose(frame_id) * p_body.P_body_.second;
+                     return std::make_pair(p_body.P_body_.first, P_world);
+                   });
+
+    return tracked_points;
+  }
+
+ private:
+  struct Point {
+    FrameId starting_frame_;
+    FrameId ending_frame_;
+    TrackedPoint P_body_;  //! Point in the object body frame
+
+    Point(FrameId starting_frame, FrameId ending_frame,
+          const TrackedPoint& P_body)
+        : starting_frame_(starting_frame),
+          ending_frame_(ending_frame),
+          P_body_(P_body) {
+      CHECK_GT(ending_frame_, starting_frame_);
+    }
+
+    bool contains(FrameId frame_id) const {
+      return frame_id >= starting_frame_ && frame_id <= ending_frame_;
+    }
+  };
+
+  Point generatePoint(FrameId frame) const {
+    auto O = overlap_dist_(gen);
+    auto ending_frame = frame + O;
+
+    auto tracked_point = PointsGenerator::generateNewPoint(
+        gtsam::Point3(0, 0, 0), 0.1, seed_dist_(gen));
+    Point p(frame, ending_frame, tracked_point);
+    all_points_.push_back(p);
+    return p;
+  }
+
+  std::vector<Point> getPoints(FrameId frame) const {
+    std::vector<Point> points;
+    for (const Point& point : all_points_) {
+      if (point.contains(frame)) {
+        points.push_back(point);
+      }
+    }
+    return points;
+  }
+
+  std::vector<Point> generatePoints(FrameId frame, size_t N) const {
+    std::vector<Point> points;
+    for (size_t i = 0; i < N; i++) {
+      points.push_back(generatePoint(frame));
+    }
+
+    return points;
+  }
+
+  const size_t num_points_;
+  const size_t overlap_;
+
+  static std::random_device rd;
+  static std::mt19937 gen;
+
+  mutable std::uniform_int_distribution<> overlap_dist_;
+  mutable std::uniform_int_distribution<int> seed_dist_{0, 100};
+
+  mutable std::vector<Point> all_points_;
+};
+inline std::random_device RandomOverlapObjectPointsVisitor::rd;
+inline std::mt19937 RandomOverlapObjectPointsVisitor::gen{rd()};
+
+// class BetterRandomOverlapObjectPointsVisitor : public
+// ObjectPointGeneratorVisitor {
+//   public:
+//    RandomOverlapObjectPointsVisitor(size_t num_points, int max_frame, size_t
+//    overlap)
+//        : num_points_(num_points), max_frames_(max_frame) overlap_(overlap) {}
+
+//    TrackedPoints getPointsWorld(
+//        const ScenarioBodyVisitor::UniquePtr& body_visitor,
+//        FrameId frame_id) const override {
+//      // minimum n_points per frame
+//      // get points for frame + 1
+//      // if size points < num points -> generate N = (num points -
+//      len(points))
+//      // points are generated with 2 <-> O(verlap) as number of points to
+//      exist std::vector<Point> points_next = getPoints(frame_id + 1);
+//      // LOG(INFO) << "Points next=" <<points_next.size();
+//      std::vector<Point> points_current = getPoints(frame_id);
+//      // LOG(INFO) << "Points current=" <<points_current.size();
+//      if (points_next.size() < num_points_) {
+//        auto required_points = num_points_ - points_next.size();
+//        // LOG(INFO) << "Required points=" << required_points;
+//        std::vector<Point> points_new = generatePoints(frame_id,
+//        required_points); points_current.insert(points_current.end(),
+//        points_new.begin(),
+//                              points_new.end());
+//      }
+//      // LOG(INFO) << "New Points current=" <<points_current.size();
+//      // CHECK_EQ(points_current.size(), num_points_);
+
+//      TrackedPoints tracked_points(points_current.size());
+//      std::transform(points_current.begin(), points_current.end(),
+//                     tracked_points.begin(),
+//                     [&body_visitor, &frame_id](const Point& p_body) {
+//                       // LOG(INFO) <<
+//                       CHECK_NOTNULL(body_visitor);
+//                       CHECK(p_body.contains(frame_id));
+//                       const gtsam::Point3 P_world =
+//                           body_visitor->pose(frame_id) *
+//                           p_body.P_body_.second;
+//                       return std::make_pair(p_body.P_body_.first, P_world);
+//                     });
+
+//      return tracked_points;
+//    }
+
+//   private:
+//    struct Point {
+//      FrameId starting_frame_;
+//      FrameId ending_frame_;
+//      TrackedPoint P_body_;  //! Point in the object body frame
+
+//      Point(FrameId starting_frame, FrameId ending_frame,
+//            const TrackedPoint& P_body)
+//          : starting_frame_(starting_frame),
+//            ending_frame_(ending_frame),
+//            P_body_(P_body) {
+//        CHECK_GT(ending_frame_, starting_frame_);
+//      }
+
+//      bool contains(FrameId frame_id) const {
+//        return frame_id >= starting_frame_ && frame_id <= ending_frame_;
+//      }
+//    };
+
+//    void generateAllInitialPoints() {
+//     for(size_t i = 0; i < num_points_; i++) {
+//       auto tracked_point = PointsGenerator::generateNewPoint(
+//           gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
+//     }
+//    }
+
+//    Point generatePoint(FrameId frame) const {
+//      std::uniform_int_distribution<> distrib(std::max(1, (int)overlap_ - 2),
+//                                              (int)overlap_ + 2);
+//      auto O = distrib(gen);
+//      auto ending_frame = frame + O;
+
+//      std::uniform_int_distribution<int> seed_dist(0, 100);
+//      auto tracked_point = PointsGenerator::generateNewPoint(
+//          gtsam::Point3(0, 0, 0), 0.1, seed_dist(gen));
+//      Point p(frame, ending_frame, tracked_point);
+//      all_points_.push_back(p);
+//      return p;
+//    }
+
+//    std::vector<Point> getPoints(FrameId frame) const {
+//      std::vector<Point> points;
+//      for (const Point& point : all_points_) {
+//        if (point.contains(frame)) {
+//          points.push_back(point);
+//        }
+//      }
+//      return points;
+//    }
+
+//    std::vector<Point> generatePoints(FrameId frame, size_t N) const {
+//      std::vector<Point> points;
+//      for (size_t i = 0; i < N; i++) {
+//        points.push_back(generatePoint(frame));
+//      }
+
+//      return points;
+//    }
+
+//    const size_t num_points_;
+//    const size_t overlap_;
+//    const int max_frames_;
+
+//    static std::random_device rd;
+//    static std::mt19937 gen;
+
+//    mutable std::vector<Point> all_points_;
+//  };
 
 // Points generator visitor
 class ConstantObjectPointsVisitor : public ObjectPointGeneratorVisitor {
@@ -348,8 +607,7 @@ class Scenario {
     if (object_bodies_.exists(object_id)) {
       const auto& object = object_bodies_.at(object_id);
 
-      return frame_id >= object->entersScenario() &&
-             frame_id < object->leavesScenario();
+      return object->inFrame(frame_id);
     }
     return false;
   }
@@ -358,52 +616,133 @@ class Scenario {
   ScenarioBody::Ptr camera_body_;
   StaticPointGeneratorVisitor::Ptr static_points_generator_;
   gtsam::FastMap<ObjectId, ObjectBody::Ptr> object_bodies_;
+
+  mutable ObjectMotionMap object_motions_;
+  mutable ObjectMotionMap noisy_object_motions_;
+  // ObjectPoseMap object_poses_;
 };
 
 class RGBDScenario : public Scenario {
  public:
-  RGBDScenario(ScenarioBody::Ptr camera_body,
-               StaticPointGeneratorVisitor::Ptr static_points_generator)
-      : Scenario(camera_body, static_points_generator) {}
+  struct NoiseParams {
+    double H_R_sigma{0.0};
+    double H_t_sigma{0.0};
 
-  RGBDInstanceOutputPacket::Ptr getOutput(FrameId frame_id) const {
-    StatusLandmarkVector static_landmarks, dynamic_landmarks;
+    //! rotation noise on relative camera motion
+    double X_R_sigma{0.0};
+    //! translation noise on relative camera motion
+    double X_t_sigma{0.0};
+
+    double dynamic_point_sigma{0.0};
+    double static_point_sigma{0.0};
+
+    NoiseParams() {}
+  };
+
+  RGBDScenario(ScenarioBody::Ptr camera_body,
+               StaticPointGeneratorVisitor::Ptr static_points_generator,
+               const NoiseParams& noise_params = NoiseParams())
+      : Scenario(camera_body, static_points_generator),
+        noise_params_(noise_params) {}
+
+  // first is gt, second is with noisy
+  using Output =
+      std::pair<RGBDInstanceOutputPacket::Ptr, RGBDInstanceOutputPacket::Ptr>;
+
+  Output getOutput(FrameId frame_id) const {
+    StatusLandmarkVector static_landmarks, dynamic_landmarks,
+        noisy_static_landmarks, noisy_dynamic_landmarks;
     StatusKeypointVector static_keypoint_measurements,
         dynamic_keypoint_measurements;
 
-    MotionEstimateMap motions;
-    const gtsam::Pose3 X_world = cameraPose(frame_id);
+    GroundTruthInputPacket gt_packet;
+    gt_packet.frame_id_ = frame_id;
+
+    MotionEstimateMap motions, noisy_motions;
+    const gtsam::Pose3 X_world_k = cameraPose(frame_id);
+    gt_packet.X_world_ = X_world_k;
+
+    gtsam::Pose3 noisy_X_world_k;
+    gtsam::Pose3 w_T_k_1_k;
+    gtsam::Pose3 noisy_w_T_k_1_k;
+    if (frame_id > 0) {
+      // add noise on relative transformation of camera pose using gt poses to
+      // calculate gt realtive pose
+      const gtsam::Pose3 X_world_k_1 = cameraPose(frame_id - 1u);
+      w_T_k_1_k = X_world_k_1.inverse() * X_world_k;
+
+      gtsam::Vector6 pose_sigmas;
+      pose_sigmas.head<3>().setConstant(noise_params_.X_R_sigma);
+      pose_sigmas.tail<3>().setConstant(noise_params_.X_t_sigma);
+      noisy_w_T_k_1_k = dyno::utils::perturbWithNoise(w_T_k_1_k, pose_sigmas);
+
+      CHECK(noisy_camera_poses_.exists(frame_id - 1u));
+      noisy_X_world_k = noisy_camera_poses_.at(frame_id - 1u) * noisy_w_T_k_1_k;
+    } else {
+      noisy_X_world_k = X_world_k;
+    }
 
     // tracklets should be uniqyue but becuase we use the DynamicPointSymbol
     // they only need to be unique per frame
     for (const auto& [object_id, object] : object_bodies_) {
       if (objectInScenario(object_id, frame_id)) {
         const gtsam::Pose3 H_world_k = object->motionWorld(frame_id);
+        const gtsam::Pose3 L_world_k = object->pose(frame_id);
         TrackedPoints points_world = object->getPointsWorld(frame_id);
 
+        ObjectPoseGT object_pose_gt;
+        object_pose_gt.frame_id_ = frame_id;
+        object_pose_gt.object_id_ = object_id;
+        object_pose_gt.L_world_ = L_world_k;
+        object_pose_gt.prev_H_current_world_ = H_world_k;
+        gt_packet.object_poses_.push_back(object_pose_gt);
+
+        FrameId previous_frame;
+        if (frame_id > 0) {
+          previous_frame = frame_id - 1u;
+        } else {
+          previous_frame = 0u;  // hack? should actually skip this case
+        }
+
         motions.insert2(object_id,
-                        dyno::ReferenceFrameValue<gtsam::Pose3>(
-                            H_world_k, dyno::ReferenceFrame::GLOBAL));
+                        Motion3ReferenceFrame(
+                            H_world_k, Motion3ReferenceFrame::Style::F2F,
+                            ReferenceFrame::GLOBAL, previous_frame, frame_id));
+
+        gtsam::Vector6 motion_sigmas;
+        motion_sigmas.head<3>().setConstant(noise_params_.H_R_sigma);
+        motion_sigmas.tail<3>().setConstant(noise_params_.H_t_sigma);
+        const gtsam::Pose3 noisy_H_world_k =
+            dyno::utils::perturbWithNoise(H_world_k, motion_sigmas);
+        noisy_motions.insert2(
+            object_id, Motion3ReferenceFrame(
+                           noisy_H_world_k, Motion3ReferenceFrame::Style::F2F,
+                           ReferenceFrame::GLOBAL, previous_frame, frame_id));
 
         // convert to status vectors
         for (const TrackedPoint& tracked_p_world : points_world) {
           auto tracklet_id = tracked_p_world.first;
           auto p_world = tracked_p_world.second;
-          const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+          const Point3Measurement p_camera(X_world_k.inverse() * p_world);
+          const Point3Measurement noisy_p_camera(dyno::utils::perturbWithNoise(
+              p_camera.measurement(), noise_params_.dynamic_point_sigma));
 
-          // TODO: covariance
-          MeasurementWithCovariance<Landmark> lmk_measurement(p_camera);
+          // LOG(INFO) << p_camera;
+          // LOG(INFO) << noisy_p_camera;
+
           auto landmark_status = dyno::LandmarkStatus::DynamicInLocal(
-              lmk_measurement, frame_id, tracklet_id, object_id);
-
+              p_camera, frame_id, tracklet_id, object_id);
           dynamic_landmarks.push_back(landmark_status);
+
+          auto noisy_landmark_status = dyno::LandmarkStatus::DynamicInLocal(
+              noisy_p_camera, frame_id, tracklet_id, object_id);
+          noisy_dynamic_landmarks.push_back(noisy_landmark_status);
 
           // the keypoint sttatus should be unused in the RGBD case but
           // we need it to fill out the data structures
-          // TODO: covariance?
-          MeasurementWithCovariance<Keypoint> kp_measurement{dyno::Keypoint()};
           auto keypoint_status = dyno::KeypointStatus::DynamicInLocal(
-              kp_measurement, frame_id, tracklet_id, object_id);
+              KeypointMeasurement(dyno::Keypoint()), frame_id, tracklet_id,
+              object_id);
           dynamic_keypoint_measurements.push_back(keypoint_status);
         }
       }
@@ -417,27 +756,54 @@ class RGBDScenario : public Scenario {
     for (const TrackedPoint& tracked_p_world : static_points_world) {
       auto tracklet_id = tracked_p_world.first;
       auto p_world = tracked_p_world.second;
-      const gtsam::Point3 p_camera = X_world.inverse() * p_world;
+      const Point3Measurement p_camera(X_world_k.inverse() * p_world);
+      const Point3Measurement noisy_p_camera(dyno::utils::perturbWithNoise(
+          p_camera.measurement(), noise_params_.static_point_sigma));
 
-      // TODO: covariance
-      MeasurementWithCovariance<Landmark> lmk_measurement(p_camera);
       auto landmark_status =
           dyno::LandmarkStatus::StaticInLocal(p_camera, frame_id, tracklet_id);
       static_landmarks.push_back(landmark_status);
 
+      auto noisy_landmark_status = dyno::LandmarkStatus::StaticInLocal(
+          noisy_p_camera, frame_id, tracklet_id);
+      noisy_static_landmarks.push_back(noisy_landmark_status);
+
       // the keypoint sttatus should be unused in the RGBD case but
       // we need it to fill out the data structures
-      MeasurementWithCovariance<Keypoint> kp_measurement{dyno::Keypoint()};
       auto keypoint_status = dyno::KeypointStatus::StaticInLocal(
-          kp_measurement, frame_id, tracklet_id);
+          KeypointMeasurement(dyno::Keypoint()), frame_id, tracklet_id);
       static_keypoint_measurements.push_back(keypoint_status);
     }
 
-    return std::make_shared<RGBDInstanceOutputPacket>(
+    ground_truths_.insert2(frame_id, gt_packet);
+    noisy_camera_poses_.insert2(frame_id, noisy_X_world_k);
+
+    object_motions_.insert2(frame_id, motions);
+    noisy_object_motions_.insert2(frame_id, noisy_motions);
+
+    auto gt_output = std::make_shared<RGBDInstanceOutputPacket>(
         static_keypoint_measurements, dynamic_keypoint_measurements,
-        static_landmarks, dynamic_landmarks, X_world, frame_id, frame_id,
-        motions);
+        static_landmarks, dynamic_landmarks, X_world_k, frame_id, frame_id,
+        object_motions_, ObjectPoseMap{}, gtsam::Pose3Vector{}, nullptr,
+        gt_packet);
+    gt_output->T_k_1_k_ = w_T_k_1_k;
+
+    auto noisy_output = std::make_shared<RGBDInstanceOutputPacket>(
+        static_keypoint_measurements, dynamic_keypoint_measurements,
+        noisy_static_landmarks, noisy_dynamic_landmarks, noisy_X_world_k,
+        frame_id, frame_id, noisy_object_motions_, ObjectPoseMap{},
+        gtsam::Pose3Vector{}, nullptr, gt_packet);
+    noisy_output->T_k_1_k_ = noisy_w_T_k_1_k;
+
+    return {gt_output, noisy_output};
   }
+
+  const GroundTruthPacketMap& getGroundTruths() const { return ground_truths_; }
+
+ private:
+  NoiseParams noise_params_;
+  mutable GroundTruthPacketMap ground_truths_;
+  mutable gtsam::FastMap<FrameId, gtsam::Pose3> noisy_camera_poses_;
 };
 
 }  // namespace dyno_testing

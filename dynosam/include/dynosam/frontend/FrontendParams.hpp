@@ -1,39 +1,46 @@
 /*
- *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris (jesse.morris@sydney.edu.au)
+ *   Copyright (c) 2023 ACFR-RPG, University of Sydney, Jesse Morris
+ (jesse.morris@sydney.edu.au)
  *   All rights reserved.
 
- *   Permission is hereby granted, free of charge, to any person obtaining a copy
- *   of this software and associated documentation files (the "Software"), to deal
- *   in the Software without restriction, including without limitation the rights
+ *   Permission is hereby granted, free of charge, to any person obtaining a
+ copy
+ *   of this software and associated documentation files (the "Software"), to
+ deal
+ *   in the Software without restriction, including without limitation the
+ rights
  *   to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
  *   copies of the Software, and to permit persons to whom the Software is
  *   furnished to do so, subject to the following conditions:
 
- *   The above copyright notice and this permission notice shall be included in all
+ *   The above copyright notice and this permission notice shall be included in
+ all
  *   copies or substantial portions of the Software.
 
  *   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  *   FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
  *   AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *   LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ FROM,
+ *   OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ THE
  *   SOFTWARE.
  */
 
 #pragma once
 
-
-#include <string>
 #include <cmath>
+#include <string>
 
-#include "dynosam/frontend/vision/TrackerParams.hpp"
+#include "dynosam/frontend/imu/ImuParams.hpp"
+#include "dynosam/frontend/vision/FeatureTrackerBase.hpp"  //for ImageTracksParams
 #include "dynosam/frontend/vision/MotionSolver.hpp"
+#include "dynosam/frontend/vision/TrackerParams.hpp"
 
 namespace dyno {
 
 struct FrontendParams {
-
   // scene flow thresholds
   double scene_flow_magnitude = 0.12;
   double scene_flow_percentage = 0.5;
@@ -42,27 +49,29 @@ struct FrontendParams {
   double max_background_depth = 40.0;
   double max_object_depth = 25.0;
 
-  //TODO: add depth cov
-  //TODO: add projection cov (should this be for back and frontend?)
+  // TODO: add depth cov
+  // TODO: add projection cov (should this be for back and frontend?)
 
-  //!When using RGBD pipeline, ego-motion will be sovled using pnp (3d2d correspondences). Else, stereo
+  //! When using RGBD pipeline, ego-motion will be sovled using pnp (3d2d
+  //! correspondences). Else, stereo
   bool use_ego_motion_pnp = true;
 
-  //! When using RGBD pipeline, object motion will be sovled using pnp (3d2d correspondences). Else, stereo
+  //! When using RGBD pipeline, object motion will be sovled using pnp (3d2d
+  //! correspondences). Else, stereo
   bool use_object_motion_pnp = true;
 
   // Refine the camera pose with oint optical flow optimisation
   bool refine_camera_pose_with_joint_of = true;
 
-  ObjectMotionSovler::Params object_motion_solver_params = ObjectMotionSovler::Params();
+  ObjectMotionSovlerF2F::Params object_motion_solver_params =
+      ObjectMotionSovlerF2F::Params();
   EgoMotionSolver::Params ego_motion_solver_params = EgoMotionSolver::Params();
 
-
   TrackerParams tracker_params = TrackerParams();
-
-
+  ImageTracksParams image_tracks_vis_params = ImageTracksParams();
+  ImuParams imu_params = ImuParams();
 };
 
 void declare_config(FrontendParams& config);
 
-} //dyno
+}  // namespace dyno

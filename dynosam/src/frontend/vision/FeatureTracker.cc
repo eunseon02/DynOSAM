@@ -31,10 +31,14 @@
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 
 #include <glog/logging.h>
+#include <tbb/concurrent_hash_map.h>
+#include <tbb/parallel_for_each.h>
 
+#include <mutex>
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "dynosam/common/Types.hpp"
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
@@ -52,12 +56,14 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
 }
 
 Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
-                                 const ImageContainer& image_container) {
+                                 const ImageContainer& image_container,
+                                 std::set<ObjectId>& object_keyframes,
+                                 const std::optional<gtsam::Rot3>& R_km1_k) {
   // take "copy" of tracking_images which is then given to the frame
   // this will mean that the tracking images (input) are not necessarily the
   // same as the ones inside the returned frame
+  utils::TimingStatsCollector tracking_timer("tracking_timer");
   ImageContainer input_images = image_container;
-  VLOG(5) << "Beginning feature track on frame " << frame_id;
 
   info_ = FeatureTrackerInfo();  // clear the info
   info_.frame_id = frame_id;
@@ -65,13 +71,15 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
   if (initial_computation_) {
     // intitial computation
-    const cv::Size& other_size = input_images.get<ImageType::RGBMono>().size();
+    const cv::Size& other_size =
+        static_cast<const cv::Mat&>(input_images.rgb()).size();
     CHECK(!previous_frame_);
     CHECK_EQ(img_size_.width, other_size.width);
     CHECK_EQ(img_size_.height, other_size.height);
     initial_computation_ = false;
   } else {
     if (params_.use_propogate_mask) {
+      utils::TimingStatsCollector timer("propogate_mask");
       propogateMask(input_images);
     }
     CHECK(previous_frame_);
@@ -79,34 +87,42 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
         << "Incoming frame id must be consequative";
   }
 
-  // TODO: figure out some better way of scaling this as it scales with the size
-  // of the image...
-  // TODO: and make parameter...
-  static constexpr auto kDetectionBoaderThickness = 10;  // in pixels
+  // from some experimental testing 10 pixles is a good boarder to add around
+  // objects when the image is 640x480 assuming we have some scaling factor r,
+  // width/height * r = 10 and for 640/480, r = (approx) 7.51 for images not
+  // this size we will try and keep the same ratio as this seemed to work well
+  double image_ratio =
+      static_cast<double>(img_size_.width * img_size_.height) / (640.0 * 480.0);
+  static constexpr double kScalingFactorR = 7.51;
+  // desired boarder thickness in pixels for a 640 x 480 image
+  const int scaled_boarder_thickness =
+      std::round(image_ratio * 640.0 / 480.0 * kScalingFactorR);
   // create detection mask around the boarder of each dynamic object with some
   // thickness this prevents static and dynamic points being detected around the
   // edge of the dynamic object as there are lots of inconsistencies here the
   // detection mask is in the opencv mask form: CV_8UC1 where white pixels (255)
   // are valid and black pixels (0) should not be detected on
-  cv::Mat boarder_detection_mask;
-  vision_tools::computeObjectMaskBoundaryMask(
-      input_images.get<ImageType::MotionMask>(), boarder_detection_mask,
-      kDetectionBoaderThickness, true);
+  static constexpr bool kUseAsFeatureDetectionMask = true;
+  vision_tools::ObjectBoundaryMaskResult boundary_mask_result;
+  vision_tools::computeObjectMaskBoundaryMask(boundary_mask_result,
+                                              input_images.objectMotionMask(),
+                                              kUseAsFeatureDetectionMask);
 
-  // VLOG(5) << "Beginning static feature track on frame " << frame_id;
   FeatureContainer static_features;
   {
+    VLOG(20) << "Starting static track";
     utils::TimingStatsCollector static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
-        previous_frame_, input_images, info_, boarder_detection_mask);
+        previous_frame_, input_images, info_,
+        boundary_mask_result.boundary_mask, R_km1_k);
   }
 
-  // VLOG(5) << "Beginning dynamic feature track on frame " << frame_id;
   FeatureContainer dynamic_features;
   {
+    VLOG(20) << "Starting dynamic track";
     utils::TimingStatsCollector dynamic_track_timer("dynamic_feature_track");
-    trackDynamic(frame_id, input_images, dynamic_features,
-                 boarder_detection_mask);
+    trackDynamic(frame_id, input_images, dynamic_features, object_keyframes,
+                 boundary_mask_result);
   }
 
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
@@ -120,39 +136,168 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   new_frame->setMaxBackgroundDepth(frontend_params_.max_background_depth);
   new_frame->setMaxObjectDepth(frontend_params_.max_object_depth);
 
-  LOG(INFO) << "Tracked on frame " << frame_id
-            << " t= " << std::setprecision(15) << timestamp << ", object ids "
-            << container_to_string(new_frame->getObjectIds());
+  VLOG(1) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15)
+          << timestamp << ", object ids "
+          << container_to_string(new_frame->getObjectIds());
   previous_frame_ = new_frame;
+  boarder_detection_mask_ = boundary_mask_result.boundary_mask;
 
   return new_frame;
 }
 
-void FeatureTracker::trackDynamic(FrameId frame_id,
-                                  const ImageContainer& image_container,
-                                  FeatureContainer& dynamic_features,
-                                  const cv::Mat& detection_mask) {
+bool FeatureTracker::stereoTrack(FeaturePtrs& stereo_features,
+                                 FeatureContainer& left_features,
+                                 const cv::Mat& left_image,
+                                 const cv::Mat& right_image,
+                                 const double& virtual_baseline) const {
+  utils::TimingStatsCollector timing("stereo_track_timer");
+  TrackletIds tracklets_ids;
+  // collect left feature points to cv::point2f
+  std::vector<cv::Point2f> left_feature_points =
+      left_features.toOpenCV(&tracklets_ids, true);
+
+  if (left_feature_points.size() < 8) {
+    LOG(WARNING) << "Not enough left feature points for stereo matching...";
+    return false;
+  }
+
+  std::vector<cv::Point2f> right_feature_points;
+  std::vector<uchar> klt_status;
+  std::vector<float> err;
+
+  const cv::Mat& left_rgb = left_image;
+  cv::Mat left_mono = ImageType::RGBMono::toMono(left_rgb);
+  CHECK(!left_mono.empty());
+  cv::Mat right_mono = ImageType::RGBMono::toMono(right_image);
+  CHECK(!right_mono.empty());
+
+  right_feature_points = left_feature_points;
+
+  cv::calcOpticalFlowPyrLK(left_mono, right_mono, left_feature_points,
+                           right_feature_points, klt_status, err,
+                           cv::Size(21, 21), 5);
+  CHECK_EQ(klt_status.size(), tracklets_ids.size());
+  TrackletIds good_stereo_tracklets;
+
+  std::vector<cv::Point2f> pts_left_tracked, pts_right_tracked;
+  for (size_t i = 0; i < klt_status.size(); ++i) {
+    auto tracklet_id = tracklets_ids.at(i);
+    // LOG(INFO) << tracklet_id;
+    if (klt_status[i]) {
+      pts_left_tracked.push_back(left_feature_points[i]);
+      pts_right_tracked.push_back(right_feature_points[i]);
+      good_stereo_tracklets.push_back(tracklet_id);
+    }
+  }
+  LOG(INFO) << "Stereo KLT tracked: " << pts_left_tracked.size() << " points";
+
+  // need more than 8 points for fundamental matrix calc with ransac
+  TrackletIds inlier_stereo_tracklets;
+  if (pts_left_tracked.size() < 8) {
+    LOG(WARNING)
+        << "Not enough stereo matches to perform fundamental matrix calc";
+    return false;
+  } else {
+    std::vector<uchar> epipolar_inliers;
+    cv::Mat F =
+        cv::findFundamentalMat(pts_left_tracked, pts_right_tracked,
+                               cv::FM_RANSAC, 1.0, 0.99, epipolar_inliers);
+    CHECK_EQ(epipolar_inliers.size(), good_stereo_tracklets.size());
+
+    std::vector<cv::Point2f> pts_left_inlier, pts_right_inlier;
+    for (size_t i = 0; i < epipolar_inliers.size(); ++i) {
+      auto tracklet_id = good_stereo_tracklets.at(i);
+      if (epipolar_inliers[i]) {
+        pts_left_inlier.push_back(pts_left_tracked[i]);
+        pts_right_inlier.push_back(pts_right_tracked[i]);
+
+        CHECK(left_features.getByTrackletId(tracklet_id))
+            << "Somehow tracklet id " << tracklet_id << " is missing!";
+        inlier_stereo_tracklets.push_back(tracklet_id);
+      }
+    }
+
+    LOG(INFO) << "After epipolar filtering: " << inlier_stereo_tracklets.size()
+              << " inliers";
+    const auto& fx = camera_->getParams().fx();
+
+    for (size_t i = 0; i < inlier_stereo_tracklets.size(); i++) {
+      auto inlier_stereo_track = inlier_stereo_tracklets.at(i);
+      Feature::Ptr feature = left_features.getByTrackletId(inlier_stereo_track);
+      CHECK(feature);
+      CHECK(feature->usable());
+
+      double uL = static_cast<double>(pts_left_inlier[i].x);
+      double vL = static_cast<double>(pts_left_inlier[i].y);
+      double uR = static_cast<double>(pts_right_inlier[i].x);
+
+      double disparity = uL - uR;
+      // Reject near-zero disparity
+      // this will also mean far away points.... multi-view triangulation
+      // across frames is needed here... fall back on depth map...
+      if (disparity <= 1.0) {
+        // feature->markOutlier();
+      }
+
+      double depth = fx * virtual_baseline / disparity;
+      // TODO: no max depth
+      feature->depth(depth);
+      feature->rightKeypoint(uR);
+
+      stereo_features.push_back(feature);
+    }
+
+    TrackletIds outlier_stereo_tracklets;
+    determineOutlierIds(inlier_stereo_tracklets, tracklets_ids,
+                        outlier_stereo_tracklets);
+
+    left_features.markOutliers(outlier_stereo_tracklets);
+    return true;
+  }
+}
+
+void FeatureTracker::trackDynamic(
+    FrameId frame_id, const ImageContainer& image_container,
+    FeatureContainer& dynamic_features, std::set<ObjectId>& object_keyframes,
+    const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result) {
   // first dectect dynamic points
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
+  const cv::Mat& rgb = image_container.rgb();
   // flow is going to take us from THIS frame to the next frame (which does not
   // make sense for a realtime system)
-  const cv::Mat& flow = image_container.get<ImageType::OpticalFlow>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
   TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
 
-  ObjectIds instance_labels;
+  std::set<ObjectId> instance_labels;
   dynamic_features.clear();
 
-  const auto step_size = params_.semantic_mask_step_size;
+  gtsam::FastMap<ObjectId, FeatureContainer> tracks_per_object;
+  const cv::Mat& detection_mask = boundary_mask_result.boundary_mask;
+  // internal detection mask that is appended with new invalid pixels
+  // this builds the static detection mask over the existing input mask
+  cv::Mat detection_mask_impl;
+  // If we are provided with an external detection/feature mask, initalise the
+  // detection mask with this and add more invalid sections to it
+  if (!detection_mask.empty()) {
+    CHECK_EQ(motion_mask.rows, detection_mask.rows);
+    CHECK_EQ(motion_mask.cols, detection_mask.cols);
+    detection_mask_impl = detection_mask.clone();
+  } else {
+    detection_mask_impl = cv::Mat(motion_mask.size(), CV_8U, cv::Scalar(255));
+  }
+  CHECK_EQ(detection_mask_impl.type(), CV_8U);
 
-  OccupandyGrid2D grid(
-      step_size, std::ceil(static_cast<double>(img_size_.width) / step_size),
-      std::ceil(static_cast<double>(img_size_.height) / step_size));
+  // creating tracking mask, pixel level indicator (1....N) of dynamic feature
+  // location this is different to the detection_mask_impl which is a binary
+  // mask (0/255) and indicates the location of all features (static and
+  // dynamic) and is used to avoid detecting features near existing ones
+  cv::Mat dynamic_tracking_mask =
+      cv::Mat(detection_mask_impl.size(), CV_8U, cv::Scalar(0));
 
   if (previous_frame_) {
     const cv::Mat& previous_motion_mask =
-        previous_frame_->image_container_.get<ImageType::MotionMask>();
+        previous_frame_->image_container_.objectMotionMask();
     utils::TimingStatsCollector tracked_dynamic_features(
         "tracked_dynamic_features");
     for (Feature::Ptr previous_dynamic_feature :
@@ -163,21 +308,16 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
       const Keypoint kp = previous_dynamic_feature->predictedKeypoint();
       const int x = functional_keypoint::u(kp);
       const int y = functional_keypoint::v(kp);
-      // ObjectId predicted_label = functional_keypoint::at<ObjectId>(kp,
-      // motion_mask);
       const ObjectId predicted_label = motion_mask.at<ObjectId>(y, x);
 
-      if (!detection_mask.empty()) {
+      if (!detection_mask_impl.empty()) {
         const unsigned char valid_detection =
-            detection_mask.at<unsigned char>(y, x);
+            detection_mask_impl.at<unsigned char>(y, x);
         if (valid_detection == 0) {
           continue;
         }
       }
 
-      // const Keypoint previous_kp = previous_dynamic_feature->keypoint();
-      // ObjectId previous_label =
-      // functional_keypoint::at<ObjectId>(previous_kp, previous_motion_mask);
       ObjectId previous_label = previous_dynamic_feature->objectId();
       CHECK_NE(previous_label, background_label);
       CHECK_GT(previous_label, 0);
@@ -224,13 +364,12 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
 
         // limit point tracking of a certain age
         TrackletId tracklet_to_use = tracklet_id;
-        if (new_age > 25u) {
+        if (new_age > params_.max_dynamic_feature_age) {
           tracklet_to_use = tracked_id_manager.getTrackletIdCount();
           tracked_id_manager.incrementTrackletIdCount();
           new_age = 0;
         }
 
-        // // save correspondences
         Feature::Ptr feature = std::make_shared<Feature>();
         (*feature)
             .objectId(predicted_label)
@@ -242,117 +381,318 @@ void FeatureTracker::trackDynamic(FrameId frame_id,
             .measuredFlow(flow)
             .predictedKeypoint(predicted_kp);
 
-        dynamic_features.add(feature);
-        instance_labels.push_back(feature->objectId());
-
+        if (!tracks_per_object.exists(feature->objectId())) {
+          tracks_per_object.insert2(feature->objectId(), FeatureContainer{});
+        }
+        tracks_per_object.at(feature->objectId()).add(feature);
+        instance_labels.insert(feature->objectId());
         object_tracking_info.num_track++;
 
-        const size_t cell_idx = grid.getCellIndex(kp);
-        grid.occupancy_[cell_idx] = true;
+        // add zero fill to detection mask to indicate the existance of a
+        // tracked point at this feature location
+        cv::circle(
+            detection_mask_impl, cv::Point2f(x, y),
+            params_.min_distance_btw_tracked_and_detected_dynamic_features,
+            cv::Scalar(0), cv::FILLED);
+
+        // fill tracking mask with tracked points, labelled with the object
+        // label (j) to indicate places on object with keypoints
+        cv::circle(
+            dynamic_tracking_mask, cv::Point2f(x, y),
+            params_.min_distance_btw_tracked_and_detected_dynamic_features,
+            cv::Scalar(predicted_label), cv::FILLED);
       }
+    }
+    // merge features
+    for (const auto& [_, features_j] : tracks_per_object) {
+      dynamic_features += features_j;
     }
   }
 
-  int step = params_.semantic_mask_step_size;
-  for (int i = 0; i < rgb.rows - step; i = i + step) {
-    for (int j = 0; j < rgb.cols - step; j = j + step) {
-      if (!detection_mask.empty()) {
-        const unsigned char valid_detection =
-            detection_mask.at<unsigned char>(i, j);
-        // //marked invalid by the detection mask
-        if (valid_detection == 0) {
-          continue;
-        }
-      }
+  requiresSampling(object_keyframes, info_, image_container, tracks_per_object,
+                   boundary_mask_result, dynamic_tracking_mask);
 
-      const ObjectId label = motion_mask.at<ObjectId>(i, j);
+  std::set<ObjectId> objects_sampled;
+  sampleDynamic(frame_id, image_container,
+                object_keyframes,  // indicates which objects to sample!!
+                dynamic_features, objects_sampled, detection_mask_impl);
+}
 
-      if (label == background_label) {
+void FeatureTracker::sampleDynamic(FrameId frame_id,
+                                   const ImageContainer& image_container,
+                                   const std::set<ObjectId>& objects_to_sample,
+                                   FeatureContainer& dynamic_features,
+                                   std::set<ObjectId>& objects_sampled,
+                                   const cv::Mat& detection_mask) {
+  struct KeypointData {
+    OpticalFlow flow;
+    Keypoint predicted_kp;
+  };
+
+  const cv::Mat& rgb = image_container.rgb();
+  // flow is going to take us from THIS frame to the next frame (which does not
+  // make sense for a realtime system)
+  const cv::Mat& flow = image_container.opticalFlow();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
+
+  TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
+
+  // container to store keypoints per object
+  tbb::concurrent_hash_map<ObjectId, KeypointsCV> sampled_keypoints;
+  const int rows = rgb.rows;
+  const int cols = rgb.cols;
+
+  std::vector<KeypointData> cached_keypoint_data;
+  cached_keypoint_data.resize(rows * cols);
+  // TODO: since we're looping over the whole image here anyway why dont we also
+  // use this to create the dense point cloud image and then pass it to the
+  // frame!!!
+  std::mutex mutex;
+  tbb::parallel_for(0, rows, [&](int i) {
+    const unsigned char* detection_ptr = detection_mask.ptr<unsigned char>(i);
+    const ObjectId* motion_ptr = motion_mask.ptr<ObjectId>(i);
+    const cv::Vec2f* flow_ptr = flow.ptr<cv::Vec2f>(i);
+
+    for (int j = 0; j < cols; j++) {
+      if (detection_ptr[j] == 0) continue;  // Skip invalid pixels
+
+      ObjectId object_id = motion_ptr[j];
+
+      // skip if this object does not need to be sampled
+      if (objects_to_sample.find(object_id) == objects_to_sample.end()) {
         continue;
       }
 
-      PerObjectStatus& object_tracking_info = info_.getObjectStatus(label);
+      if (object_id == background_label) continue;
 
-      double flow_xe = static_cast<double>(flow.at<cv::Vec2f>(i, j)[0]);
-      double flow_ye = static_cast<double>(flow.at<cv::Vec2f>(i, j)[1]);
-
-      // TODO: close to zero?
+      double flow_xe = static_cast<double>(flow_ptr[j][0]);
+      double flow_ye = static_cast<double>(flow_ptr[j][1]);
       if (flow_xe == 0 || flow_ye == 0) {
-        object_tracking_info.num_zero_flow++;
+        const std::lock_guard<std::mutex> lock(mutex);
+        info_.getObjectStatus(object_id).num_zero_flow++;
         continue;
       }
 
       OpticalFlow flow(flow_xe, flow_ye);
       Keypoint keypoint(j, i);
-      const Keypoint predicted_kp =
+      Keypoint predicted_kp =
           Feature::CalculatePredictedKeypoint(keypoint, flow);
-      const size_t cell_idx = grid.getCellIndex(keypoint);
 
-      // //TODO: this is a problem for the omd dataset?
-      // if(grid.isOccupied(cell_idx)) {continue;}
+      if (isWithinShrunkenImage(keypoint)) {
+        int cache_index = i * cols + j;
 
-      // if ((predicted_kp(0) < rgb.cols && predicted_kp(0) > 0 &&
-      // predicted_kp(1) < rgb.rows && predicted_kp(1) > 0))
-      if (isWithinShrunkenImage(keypoint) && !grid.isOccupied(cell_idx)) {
-        // save correspondences
-        auto tracklet_id = tracked_id_manager.getTrackletIdCount();
-        tracked_id_manager.incrementTrackletIdCount();
-        Feature::Ptr feature = std::make_shared<Feature>();
-        (*feature)
-            .objectId(label)
-            .frameId(frame_id)
-            .keypointType(KeyPointType::DYNAMIC)
-            .age(0)
-            .trackletId(tracklet_id)
-            .keypoint(keypoint)
-            .measuredFlow(flow)
-            .predictedKeypoint(predicted_kp);
+        // Directly assign instead of creating a new object
+        cached_keypoint_data[cache_index] = {flow, predicted_kp};
 
-        dynamic_features.add(feature);
-        instance_labels.push_back(feature->objectId());
+        KeypointCV opencv_keypoint = utils::gtsamPointToKeyPoint(keypoint);
+        opencv_keypoint.class_id = cache_index;
 
-        object_tracking_info.num_sampled++;
+        tbb::concurrent_hash_map<ObjectId, KeypointsCV>::accessor acc;
+        if (sampled_keypoints.insert(acc, object_id)) {
+          acc->second = KeypointsCV{};  // Initialize with an empty vector
+        }
+        acc->second.push_back(opencv_keypoint);  // Add keypoint safely
+
+        // is this going to be slow?
+        // need the statusObject to exit by the time we get to the next tbb loop
+        // so we can get the number of tracks
+        const std::lock_guard<std::mutex> lock(mutex);
+        info_.getObjectStatus(object_id).num_sampled++;
+        // object_tracking_info.num_sampled++;
+
       } else {
-        object_tracking_info.num_outside_shrunken_image++;
+        // const std::lock_guard<std::mutex> lock(mutex);
+        // PerObjectStatus& object_tracking_info =
+        // info_.getObjectStatus(object_id);
+        // object_tracking_info.num_outside_shrunken_image++;
       }
     }
+  });
+
+  const int& max_features_to_track = params_.max_dynamic_features_per_frame;
+  static constexpr float tolerance = 0.01;
+  Eigen::MatrixXd binning_mask;
+
+  // for(const auto& [object_id, opencv_keypoints] : sampled_keypoints) {
+  tbb::parallel_for_each(
+      sampled_keypoints.begin(), sampled_keypoints.end(), [&](auto& entry) {
+        auto& [object_id, opencv_keypoints] = entry;
+
+        const PerObjectStatus& object_tracking_info =
+            info_.getObjectStatus(object_id);
+        const int& number_tracked = object_tracking_info.num_track;
+
+        int nr_corners_needed =
+            std::max(max_features_to_track - number_tracked, 0);
+
+        std::vector<KeypointCV>& max_keypoints = opencv_keypoints;
+
+        const size_t sampled_size = max_keypoints.size();
+
+        // TODO: Ssc better but maybe bad alloc????
+        AdaptiveNonMaximumSuppression non_maximum_supression(
+            AnmsAlgorithmType::RangeTree);
+        max_keypoints = non_maximum_supression.suppressNonMax(
+            opencv_keypoints, nr_corners_needed, tolerance, img_size_.width,
+            img_size_.height, 5, 5, binning_mask);
+
+        VLOG(10) << "Kps: " << max_keypoints.size() << " for j=" << object_id
+                 << " after ANMS (originally " << sampled_size << ")";
+        {
+          const std::lock_guard<std::mutex> lock(mutex);
+          info_.getObjectStatus(object_id).num_sampled = max_keypoints.size();
+        }
+
+        for (const KeypointCV& cv_keypoint : max_keypoints) {
+          Keypoint keypoint = utils::cvKeypointToGtsam(cv_keypoint);
+          int cache_index = cv_keypoint.class_id;
+          // recover cached data
+          const KeypointData& cached_data = cached_keypoint_data[cache_index];
+
+          CHECK(isWithinShrunkenImage(keypoint));
+          TrackletId tracklet_id;
+          {
+            const std::lock_guard<std::mutex> lock(mutex);
+            tracklet_id = tracked_id_manager.getAndIncrementTrackletId();
+          }
+
+          Feature::Ptr feature = std::make_shared<Feature>();
+          (*feature)
+              .objectId(object_id)
+              .frameId(frame_id)
+              .keypointType(KeyPointType::DYNAMIC)
+              .age(0)
+              .trackletId(tracklet_id)
+              .keypoint(keypoint)
+              .measuredFlow(cached_data.flow)
+              .predictedKeypoint(cached_data.predicted_kp);
+
+          {
+            const std::lock_guard<std::mutex> lock(mutex);
+            dynamic_features.add(feature);
+            objects_sampled.insert(feature->objectId());
+          }
+        }
+      });
+}
+
+void FeatureTracker::requiresSampling(
+    std::set<ObjectId>& objects_to_sample, const FeatureTrackerInfo& info,
+    const ImageContainer& image_container,
+    const gtsam::FastMap<ObjectId, FeatureContainer>& features_per_object,
+    const vision_tools::ObjectBoundaryMaskResult& boundary_mask_result,
+    const cv::Mat& dynamic_tracking_mask) const {
+  VLOG(20) << "Starting sampling check";
+  ObjectIds detected_objects =
+      vision_tools::getObjectLabels(image_container.objectMotionMask());
+
+  {
+    // sanity check assert
+    CHECK(equals_with_abs_tol(detected_objects,
+                              boundary_mask_result.objects_detected))
+        << "Explicit detected objects " << container_to_string(detected_objects)
+        << " != boundary mask result: "
+        << container_to_string(boundary_mask_result.objects_detected)
+        << " this could happen if the object mask changes dramatically...!!";
   }
 
-  // bit of a hack -> make sure we have enough features on each object (around
-  // 100) for no reason other than there is weird behaviour when a car
-  // disappears (or is disappearing) usually becuase the depth is so bad and so
-  // the object jumps of course this number depends on the size of the frame etc
-  // etc this is just a tempory fix!!
-  //  ObjectIds objects_removed;
-  //  for(const auto& [object_id, status ]:info_.dynamic_track) {
-  //    //cannot jus use the num tracked as on the first frame this will be zero
-  //    //should track object age??
-  //    if(status.num_track + status.num_sampled < 100) {
-  //      VLOG(15) << "Removing object id " << object_id << " from tracks as not
-  //      enough features! (" << (status.num_track + status.num_sampled) << " <
-  //      100)"; dynamic_features.removeByObjectId(object_id);
-  //      objects_removed.push_back(object_id);
-  //    }
-  //  }
+  if (!previous_frame_) {
+    if (!detected_objects.empty()) {
+      VLOG(5) << "All objects sampled as first frame";
+      objects_to_sample.insert(detected_objects.begin(),
+                               detected_objects.end());
+    }
+    return;
+  }
 
-  // //remove from info?
-  // for (auto object_id : objects_removed) {
-  //   info_.dynamic_track.erase(object_id);
-  // }
+  const int& max_dynamic_point_age = params_.max_dynamic_feature_age;
+  // bascially how early we want to retrack points based on their expiry
+  // it takes a few frames for the feature to end up in the backend (ie. at
+  // least twice, to ensure a valid track) so we want to track new points
+  // earlier than that to ensure we dont have a frame with NO points
+  const auto& age_buffer = std::max(3, params_.dynamic_feature_age_buffer);
+  const auto& min_dynamic_tracks = params_.min_dynamic_tracks;
+  const auto& min_iou = params_.min_dynamic_mask_iou;
+  const size_t expiry_age =
+      static_cast<size_t>(max_dynamic_point_age - age_buffer);
+  CHECK_GT(expiry_age, 0u);
+
+  for (size_t i = 0; i < detected_objects.size(); i++) {
+    ObjectId object_id = detected_objects.at(i);
+
+    // object is tracked and therefore should exist in the previous frame!
+    if (info.dynamic_track.exists(object_id)) {
+      const auto& per_object_status = info.dynamic_track.at(object_id);
+
+      if (!features_per_object.exists(object_id)) {
+        LOG(WARNING) << "Object " << object_id
+                     << " found in mask and info at k=" << info.frame_id
+                     << " but missing tracked features. Skipping...";
+        continue;
+      }
+      const FeatureContainer& per_object_tracks =
+          features_per_object.at(object_id);
+      size_t num_tracked = per_object_status.num_track;
+      CHECK_EQ(num_tracked, per_object_tracks.size());
+      // if more than 80% of points on the object are going to expire within the
+      // next (at least 3) frames
+      size_t are_geriatric = 0u;
+      for (const auto& feature : per_object_tracks) {
+        size_t age = feature->age();
+        if (age > expiry_age) {
+          are_geriatric++;
+        }
+      }
+      const bool many_old_points =
+          (double)are_geriatric / (double)num_tracked > 0.8;
+      // if we have less than N tracks
+      const bool too_few_tracks = num_tracked < min_dynamic_tracks;
+      // eventually also area based tings
+
+      // bounding box of the whole mask, representing the object detected in the
+      // actual image
+      const cv::Rect& detection_bb =
+          boundary_mask_result.inner_boarder_object_bounding_boxes.at(i);
+
+      // bounding box of the tracked feature points on the object
+      cv::Rect tracked_bb =
+          cv::boundingRect(per_object_tracks.toOpenCV(nullptr, true));
+
+      double iou = utils::calculateIoU(detection_bb, tracked_bb);
+      const bool small_iou = iou < min_iou;
+
+      const bool needs_sampling =
+          many_old_points || too_few_tracks || small_iou;
+
+      if (needs_sampling) {
+        objects_to_sample.insert(object_id);
+
+        VLOG(5) << "Object " << info_string(info.frame_id, object_id)
+                << " requires sampling";
+
+        VLOG_IF(5, many_old_points) << "Sampling reason: too many old points";
+        VLOG_IF(5, too_few_tracks) << "Sampling reason: too few points";
+        VLOG_IF(5, small_iou) << "Sampling reason: IoU too small";
+      }
+    } else {
+      objects_to_sample.insert(object_id);
+      VLOG(5) << "Object " << info_string(info.frame_id, object_id)
+              << " requires sampling. Sampling reason: new object";
+    }
+  }
 }
 
 void FeatureTracker::propogateMask(ImageContainer& image_container) {
   if (!previous_frame_) return;
 
-  const cv::Mat& previous_rgb =
-      previous_frame_->image_container_.get<ImageType::RGBMono>();
+  const cv::Mat& previous_rgb = previous_frame_->image_container_.rgb();
   const cv::Mat& previous_mask =
-      previous_frame_->image_container_.get<ImageType::MotionMask>();
+      previous_frame_->image_container_.objectMotionMask();
   const cv::Mat& previous_flow =
-      previous_frame_->image_container_.get<ImageType::OpticalFlow>();
+      previous_frame_->image_container_.opticalFlow();
 
   // note reference
-  cv::Mat& current_mask = image_container.get<ImageType::MotionMask>();
+  cv::Mat& current_mask = image_container.objectMotionMask();
 
   ObjectIds instance_labels;
   for (const Feature::Ptr& dynamic_feature :

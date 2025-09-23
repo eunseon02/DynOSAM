@@ -32,7 +32,8 @@
 
 #include <glog/logging.h>
 
-#include "dynosam/backend/RGBDBackendModule.hpp"
+#include "dynosam/backend/ParallelHybridBackendModule.hpp"
+#include "dynosam/backend/RegularBackendModule.hpp"
 #include "dynosam/common/Map.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam/logger/Logger.hpp"
@@ -42,10 +43,10 @@ DEFINE_bool(use_backend, false, "If any backend should be initalised");
 
 namespace dyno {
 
-DynoPipelineManager::DynoPipelineManager(const DynoParams& params,
-                                         DataProvider::Ptr data_loader,
-                                         FrontendDisplay::Ptr frontend_display,
-                                         BackendDisplay::Ptr backend_display)
+DynoPipelineManager::DynoPipelineManager(
+    const DynoParams& params, DataProvider::Ptr data_loader,
+    FrontendDisplay::Ptr frontend_display, BackendDisplay::Ptr backend_display,
+    const ExternalHooks::Ptr external_hooks)
     : params_(params),
       use_offline_frontend_(FLAGS_frontend_from_file),
       data_loader_(std::move(data_loader)),
@@ -63,10 +64,34 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params,
       std::bind(&dyno::DataInterfacePipeline::fillImageContainerQueue,
                 data_interface_.get(), std::placeholders::_1));
 
+  // if an external hook exists to update the time, add callback in
+  // datainterface that will be triggered when new data is added to the output
+  // queue (from the DataInterfacePipeline) this is basically used to alert ROS
+  // to a new timestamp which we then publish to /clock
+  if (external_hooks && external_hooks->update_time) {
+    LOG(INFO) << "Added pre-queue callback to register new Timestampd data "
+                 "with an external module";
+    data_interface_->registerPreQueueContainerCallback(
+        [external_hooks](const ImageContainer::Ptr image_container) -> void {
+          external_hooks->update_time(image_container->timestamp());
+        });
+  }
+
   // ground truth
   data_loader_->registerGroundTruthPacketCallback(
       std::bind(&dyno::DataInterfacePipeline::addGroundTruthPacket,
                 data_interface_.get(), std::placeholders::_1));
+
+  // register single and multi IMU callbacks to the data loader
+  data_loader_->registerImuSingleCallback(std::bind(
+      static_cast<void (DataInterfacePipeline::*)(const ImuMeasurement&)>(
+          &dyno::DataInterfacePipeline::fillImuQueue),
+      data_interface_.get(), std::placeholders::_1));
+
+  data_loader_->registerImuMultiCallback(std::bind(
+      static_cast<void (DataInterfacePipeline::*)(const ImuMeasurements&)>(
+          &dyno::DataInterfacePipeline::fillImuQueue),
+      data_interface_.get(), std::placeholders::_1));
 
   // preprocessing
   data_interface_->registerImageContainerPreprocessor(
@@ -86,6 +111,22 @@ DynoPipelineManager::DynoPipelineManager(const DynoParams& params,
     LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
     camera_params = params_.camera_params_;
   }
+  /// NOTE: no need to update the camera params like the imu params as we parse
+  /// the camera params into the loadPipeline functions separately!
+
+  ImuParams imu_params;
+  if (params_.preferDataProviderImuParams() &&
+      data_loader_->getImuParams().has_value()) {
+    LOG(INFO) << "Using imu params from DataProvider, not the config in the "
+                 "ImuParams.yaml!";
+    imu_params = *data_loader_->getImuParams();
+  } else {
+    LOG(INFO) << "Using imu params specified in ImuParams.yaml!";
+    imu_params = params_.imu_params_;
+  }
+
+  // update the imu params that will actually get sent to the frontend
+  params_.frontend_params_.imu_params = imu_params;
 
   loadPipelines(camera_params, frontend_display, backend_display);
   launchSpinners();
@@ -123,7 +164,6 @@ void DynoPipelineManager::shutdownPipelines() {
 
   if (frontend_viz_pipeline_) frontend_viz_pipeline_->shutdown();
   if (backend_viz_pipeline_) backend_viz_pipeline_->shutdown();
-  if (backend_viz_pipeline_) backend_viz_pipeline_->shutdown();
 }
 
 bool DynoPipelineManager::spin() {
@@ -146,7 +186,8 @@ bool DynoPipelineManager::spin() {
   } else {
     // regular spinner....
     spin_func = [=]() -> bool {
-      if (data_loader_->spin() || frontend_pipeline_->isWorking()) {
+      if (data_loader_->spin() || frontend_pipeline_->isWorking() ||
+          (backend_pipeline_ && backend_pipeline_->isWorking())) {
         if (!params_.parallelRun()) {
           frontend_pipeline_->spinOnce();
           if (backend_pipeline_) backend_pipeline_->spinOnce();
@@ -218,9 +259,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
   switch (params_.frontend_type_) {
     case FrontendType::kRGBD: {
       LOG(INFO) << "Making RGBDInstance frontend";
-
-      using MapType = RGBDBackendModule::MapType;
-      typename MapType::Ptr map = MapType::create();
+      FrontendModule::Ptr frontend = nullptr;
 
       Camera::Ptr camera = std::make_shared<Camera>(camera_params);
       CHECK_NOTNULL(camera);
@@ -228,7 +267,7 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
       if (use_offline_frontend_) {
         LOG(INFO) << "Offline RGBD frontend";
         using OfflineFrontend =
-            FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
+            FrontendOfflinePipeline<RegularBackendModule::ModuleTraits>;
         const std::string file_path =
             getOutputFilePath(kRgbdFrontendOutputJsonFile);
         LOG(INFO) << "Loading RGBD frontend output packets from " << file_path;
@@ -254,9 +293,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         // convert pipeline to base type
         frontend_pipeline_ = std::move(offline_frontend);
       } else {
-        FrontendModule::Ptr frontend =
-            std::make_shared<RGBDInstanceFrontendModule>(
-                params_.frontend_params_, camera, &display_queue_);
+        frontend = std::make_shared<RGBDInstanceFrontendModule>(
+            params_.frontend_params_, camera, &display_queue_);
         LOG(INFO) << "Made RGBDInstanceFrontendModule";
         // need to make the derived pipeline so we can set parallel run etc
         // the manager takes a pointer to the base MIMO so we can have different
@@ -284,15 +322,28 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
       if (FLAGS_use_backend) {
         LOG(INFO) << "Construcing RGBD backend";
 
-        // TODO: make better params!!
-        auto updater_type = static_cast<RGBDBackendModule::UpdaterType>(
-            FLAGS_backend_updater_enum);
+        // TODO: make better params and hhow they are used in each backend!
+        // right now they affect which backend is used AND the formulation in
+        // that backend
+        auto updater_type =
+            static_cast<RGBDFormulationType>(FLAGS_backend_updater_enum);
 
-        params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
+        if (updater_type == RGBDFormulationType::PARALLEL_HYBRID) {
+          backend = std::make_shared<ParallelHybridBackendModule>(
+              params_.backend_params_, camera, &display_queue_);
+        } else {
+          params_.backend_params_.full_batch_frame = (int)get_dataset_size_();
 
-        backend = std::make_shared<RGBDBackendModule>(params_.backend_params_,
-                                                      map, camera, updater_type,
-                                                      &display_queue_);
+          backend = std::make_shared<RegularBackendModule>(
+              params_.backend_params_, camera, updater_type, &display_queue_);
+        }
+
+        // if(frontend && backend) {
+        //   backend->registerMapUpdater(std::bind(&FrontendModule::mapUpdate,
+        //   frontend.get(), std::placeholders::_1)); LOG(INFO) << "Bound map
+        //   update between frontend and backend";
+        // }
+
       } else if (use_offline_frontend_) {
         LOG(WARNING)
             << "FLAGS_use_backend is false but use_offline_frontend "
@@ -337,5 +388,13 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         "frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);
   }
 }
+
+// PipelineBase::UniquePtr DynoPipelineManager::makeFrontendPipeline(Camera::Ptr
+// camera, bool offline_frontend) {
+
+// }
+// BackendPipeline::UniquePtr DynoPipelineManager::makeBackendPipeline() {
+
+// }
 
 }  // namespace dyno

@@ -30,6 +30,7 @@
 
 #include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
 
+#include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/utils/GtsamUtils.hpp"
 #include "dynosam/utils/OpenCVUtils.hpp"
 #include "dynosam/visualizer/ColourMap.hpp"
@@ -46,30 +47,104 @@ FeatureTrackerBase::FeatureTrackerBase(const TrackerParams& params,
       camera_(camera),
       display_queue_(display_queue) {}
 
+bool FeatureTrackerBase::predictKeypointsGivenRotation(
+    std::vector<cv::Point2f>& predicted_pts_k,
+    const std::vector<cv::Point2f>& pts_km1, const gtsam::Rot3& R_km1_k) const {
+  // Handle case when rotation is small: just copy prev_kps
+  // Removed bcs even small rotations lead to huge optical flow at the borders
+  // of the image.
+  // Keep because then you save a lot of computation.
+  static constexpr double kSmallRotationTol = 1e-4;
+  if (std::abs(1.0 - std::abs(R_km1_k.toQuaternion().w())) <
+      kSmallRotationTol) {
+    predicted_pts_k = pts_km1;
+    return true;
+  }
+
+  const gtsam::Matrix K = camera_->getParams().getCameraMatrixEigen();
+  const gtsam::Matrix K_inv = K.inverse();
+
+  const cv::Matx33f K_cv = utils::gtsamMatrix3ToCvMat(K);
+  const cv::Matx33f K_inv_cv = utils::gtsamMatrix3ToCvMat(K_inv);
+  // R is a relative rotation which takes a vector from the last frame to
+  // the current frame.
+  const cv::Matx33f R = utils::gtsamMatrix3ToCvMat(R_km1_k.matrix());
+  // Get bearing vector for kpt, rotate knowing frame to frame rotation,
+  // get keypoints again
+  const cv::Matx33f H = K_cv * R * K_inv_cv;
+
+  const size_t& n_kps = pts_km1.size();
+  predicted_pts_k.reserve(n_kps);
+  for (size_t i = 0u; i < n_kps; ++i) {
+    // Create homogeneous keypoints.
+    const auto& prev_kpt = pts_km1[i];
+    cv::Vec3f p1(prev_kpt.x, prev_kpt.y, 1.0f);
+
+    cv::Vec3f p2 = H * p1;
+
+    // Project predicted bearing vectors to 2D again and re-homogenize.
+    cv::Point2f new_kpt;
+    if (p2[2] > 0.0f) {
+      new_kpt = cv::Point2f(p2[0] / p2[2], p2[1] / p2[2]);
+    } else {
+      LOG(WARNING) << "Landmark behind the camera:\n"
+                   << "- p1: " << p1 << '\n'
+                   << "- p2: " << p2;
+      new_kpt = prev_kpt;
+    }
+    // Check that keypoints remain inside the image boundaries!
+    if (isWithinShrunkenImage(new_kpt)) {
+      predicted_pts_k.push_back(new_kpt);
+    } else {
+      // Otw copy-paste previous keypoint.
+      predicted_pts_k.push_back(prev_kpt);
+    }
+  }
+
+  return true;
+}
+
+bool ImageTracksParams::showFrameInfo() const {
+  return isDebug() && show_frame_info;
+}
+
+bool ImageTracksParams::showIntermediateTracking() const {
+  return isDebug() && show_intermediate_tracking;
+}
+
+bool ImageTracksParams::drawObjectBoundingBox() const {
+  return isDebug() && draw_object_bounding_box;
+}
+bool ImageTracksParams::drawObjectMask() const {
+  return isDebug() && draw_object_mask;
+}
+
+int ImageTracksParams::bboxThickness() const {
+  return isDebug() ? bbox_thickness_debug : bbox_thickness;
+}
+int ImageTracksParams::featureThickness() const {
+  return isDebug() ? feature_thickness_debug : feature_thickness;
+}
+
 // doesnt make any sense for this function to be here?
 // Debug could be part of a global config singleton?
 cv::Mat FeatureTrackerBase::computeImageTracks(
     const Frame& previous_frame, const Frame& current_frame,
     const ImageTracksParams& config) const {
-  cv::Mat img_rgb;
+  const ImageWrapper<ImageType::RGBMono>& img_wrapper =
+      current_frame.image_container_.rgb();
+  cv::Mat img_rgb = img_wrapper.toRGB().clone();
+  const cv::Mat& object_mask =
+      current_frame.image_container_.objectMotionMask();
 
-  const cv::Mat& rgb = current_frame.image_container_.get<ImageType::RGBMono>();
-  rgb.copyTo(img_rgb);
+  const bool& debug = config.isDebug();
+  const bool& show_intermediate_tracking = config.showIntermediateTracking();
 
-  const bool debug = config.is_debug;
-  const bool show_frame_info = debug && config.show_frame_info;
-  const bool show_intermediate_tracking =
-      debug && config.show_intermediate_tracking;
+  const int static_point_thickness = config.featureThickness();
 
   static const cv::Scalar red(Color::red().bgra());
   static const cv::Scalar green(Color::green().bgra());
   static const cv::Scalar blue(Color::blue().bgra());
-
-  constexpr static int kFeatureThicknessDebug = 5;
-  constexpr static int kFeatureThickness = 4;
-  // constexpr static int kFeatureThickness = 7;
-  int static_point_thickness =
-      debug ? kFeatureThicknessDebug : kFeatureThickness;
 
   int num_static_tracks = 0;
   // Add all keypoints in cur_frame with the tracks.
@@ -123,6 +198,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     }
   }
 
+  const int bbox_thickness = config.bboxThickness();
+
   std::vector<ObjectId> objects_to_print;
   for (const auto& object_observation_pair :
        current_frame.object_observations_) {
@@ -135,10 +212,17 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     }
 
     objects_to_print.push_back(object_id);
-    const cv::Scalar colour = Color::uniqueId(object_id).bgra();
 
-    const std::string label = "object " + std::to_string(object_id);
-    utils::drawLabeledBoundingBox(img_rgb, label, colour, bb);
+    if (config.drawObjectBoundingBox()) {
+      const cv::Scalar colour = Color::uniqueId(object_id).bgra();
+      const std::string label = "object " + std::to_string(object_id);
+      utils::drawLabeledBoundingBox(img_rgb, label, colour, bb, bbox_thickness);
+    }
+  }
+
+  if (config.drawObjectMask()) {
+    constexpr static float kAlpha = 0.7;
+    utils::labelMaskToRGB(object_mask, img_rgb, img_rgb, kAlpha);
   }
 
   // draw text info
@@ -164,7 +248,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   constexpr static int kFontFace = cv::FONT_HERSHEY_SIMPLEX;
   constexpr static int kThickness = 1;
 
-  if (debug && show_frame_info) {
+  if (config.showFrameInfo()) {
     // taken from ORB-SLAM2 ;)
     int base_line;
     cv::Size text_size = cv::getTextSize(ss.str(), kFontFace, kFontScale,
@@ -196,6 +280,30 @@ bool FeatureTrackerBase::isWithinShrunkenImage(const Keypoint& kp) const {
           predicted_row < (image_rows - shrunken_row) &&
           predicted_col > shrunken_col &&
           predicted_col < (image_cols - shrunken_col));
+}
+
+bool FeatureTrackerBase::isWithinShrunkenImage(const cv::Point2f& kp) const {
+  return isWithinShrunkenImage(utils::cvPointToGtsam(kp));
+}
+
+void declare_config(ImageTracksParams& config) {
+  using namespace config;
+
+  name("ImageTracksParams");
+
+  field(config.feature_thickness_debug, "feature_thickness_debug");
+  field(config.feature_thickness, "feature_thickness");
+
+  field(config.bbox_thickness_debug, "bbox_thickness_debug");
+  field(config.bbox_thickness, "bbox_thickness");
+
+  field(config.show_frame_info, "show_frame_info");
+  field(config.show_intermediate_tracking, "show_intermediate_tracking");
+
+  field(config.draw_object_bounding_box, "draw_object_bounding_box");
+  field(config.draw_object_mask, "draw_object_mask");
+
+  field(config.is_debug, "is_debug");
 }
 
 }  // namespace dyno

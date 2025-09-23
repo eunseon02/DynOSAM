@@ -63,6 +63,7 @@ static constexpr auto NaN = std::numeric_limits<double>::quiet_NaN();
 
 using Timestamp = double;
 using Timestamps = Eigen::Matrix<Timestamp, 1, Eigen::Dynamic>;
+constexpr static Timestamp InvalidTimestamp = 0;
 
 /// @brief Discrete object id, j.
 using ObjectId = int;
@@ -95,6 +96,9 @@ using Keypoint = gtsam::Point2;
 using Keypoints = gtsam::Point2Vector;  //! Vector of 2D keypoints using gtsam's
                                         //! definition for allocation
 
+//! For RGBD/StereoCamera
+using Baseline = double;
+
 using KeypointCV = cv::KeyPoint;
 using KeypointsCV = std::vector<KeypointCV>;
 
@@ -102,6 +106,52 @@ using Motion3 = gtsam::Pose3;
 using MotionMap =
     gtsam::FastMap<TrackletId,
                    Motion3>;  //! Map of tracklet ids to Motion3 (gtsam::Pose3)
+
+/// @brief Map of FrameIds (k) to Timestamps
+using FrameIdTimestampMap = gtsam::FastMap<FrameId, Timestamp>;
+
+// T is expected to have (at least) bitwise | (OR) support
+template <typename T>
+class Flags {
+ public:
+  using Storage = std::underlying_type_t<T>;
+
+  Flags() : bits_(0) {}
+  explicit Flags(T value) : bits_(static_cast<Storage>(value)) {}
+
+  Flags& set(T value) {
+    bits_ |= static_cast<Storage>(value);
+    return *this;
+  }
+
+  bool has(T value) const { return (bits_ & static_cast<Storage>(value)) != 0; }
+
+  bool hasAll(T value) const {
+    return (bits_ & static_cast<Storage>(value)) == static_cast<Storage>(value);
+  }
+
+  bool hasAny(T value) const {
+    return has(value);  // same logic
+  }
+
+  bool operator==(const Flags& other) const { return bits_ == other.bits_; }
+
+  bool operator==(const T& value) const { return has(value); }
+
+  bool operator!=(const Flags& other) const { return !(*this == other); }
+
+  bool operator!=(const T& value) const { return !(*this == value); }
+
+  Flags& operator=(const T& value) {
+    bits_ = static_cast<Storage>(value);
+    return *this;
+  }
+
+  Storage raw() const { return bits_; }
+
+ private:
+  Storage bits_;
+};
 
 /**
  * @brief Get demangled class name
@@ -140,7 +190,6 @@ enum KeyPointType { STATIC, DYNAMIC };
 
 enum ReferenceFrame { GLOBAL, LOCAL, OBJECT };
 
-// TODO: depricate and replace with the IndexedPose thing!!!
 /**
  * @brief Estimate with a reference frame and operator casting
  *
@@ -152,6 +201,7 @@ enum ReferenceFrame { GLOBAL, LOCAL, OBJECT };
 template <typename E>
 struct ReferenceFrameValue {
   using Estimate = E;
+  using This = ReferenceFrameValue<E>;
 
   using ConstEstimate =
       std::add_const_t<Estimate>;  //!	Const qualification of M. Regardless
@@ -167,6 +217,63 @@ struct ReferenceFrameValue {
   operator Estimate&() { return estimate_; }
   operator const Estimate&() const { return estimate_; }
   operator const ReferenceFrame&() const { return frame_; }
+
+  const ReferenceFrame& frame() const { return frame_; }
+  const Estimate& estimate() const { return estimate_; }
+
+  friend std::ostream& operator<<(std::ostream& os, const This& t) {
+    os << type_name<Estimate>() << ": " << t.estimate() << "\n";
+    os << "frame: " << to_string(t.frame()) << "\n";
+    return os;
+  }
+};
+
+enum MotionRepresentationStyle {
+  F2F,  // frame-to-frame
+  KF    // keyframe representation of motion
+};
+
+template <typename E>
+struct MotionReferenceFrame : public ReferenceFrameValue<E> {
+  using This = MotionReferenceFrame<E>;
+  using Base = ReferenceFrameValue<E>;
+  using ConstEstimate = typename Base::ConstEstimate;
+  using Estimate = typename Base::Estimate;
+
+  // explicitly inherit casting operators
+  using Base::operator Estimate&;
+  using Base::operator const Estimate&;
+  using Base::operator const ReferenceFrame&;
+
+  // forward the style ;)
+  using Style = MotionRepresentationStyle;
+
+  MotionRepresentationStyle style_;
+  FrameId from_;
+  FrameId to_;
+
+  inline FrameId from() const { return from_; }
+  inline FrameId to() const { return to_; }
+  inline const MotionRepresentationStyle& style() const { return style_; }
+  inline const ReferenceFrame& origin() const { return Base::frame_; }
+
+  MotionReferenceFrame() {}
+  MotionReferenceFrame(ConstEstimate& estimate, const Style& style,
+                       ReferenceFrame frame, FrameId from, FrameId to)
+      : Base(estimate, frame), style_(style), from_(from), to_(to) {}
+
+  // really for seralization
+  MotionReferenceFrame(const Base& base, const Style& style, FrameId from,
+                       FrameId to)
+      : Base(base), style_(style), from_(from), to_(to) {}
+
+  friend std::ostream& operator<<(std::ostream& os, const This& t) {
+    os << static_cast<const Base&>(t);
+    os << "from: " << t.from() << "\n";
+    os << "to: " << t.to() << "\n";
+    os << "style : " << to_string(t.style()) << "\n";
+    return os;
+  }
 };
 
 template <typename VALUE>
@@ -384,8 +491,18 @@ class GenericTrackedStatusVector : public std::vector<DERIVEDSTATUS> {
 template <typename Key, typename Estimate>
 using EstimateMap = gtsam::FastMap<Key, ReferenceFrameValue<Estimate>>;
 
-/// @brief Map of object ids to ReferenceFrameValue's of motions
-using MotionEstimateMap = EstimateMap<ObjectId, Motion3>;
+/// @brief Map of key to a MotionReferenceFrame. Used specifically for motions.
+/// @tparam Key
+/// @tparam Estimate
+template <typename Key, typename Estimate>
+using MotionReferenceEstimateMap =
+    gtsam::FastMap<Key, MotionReferenceFrame<Estimate>>;
+
+/// @brief Map of object id's to MotionReferenceFrame with Motion3
+using MotionEstimateMap = MotionReferenceEstimateMap<ObjectId, Motion3>;
+
+/// @brief Alias of a MotionReferenceFrame using Motion3 (Pose3)
+using Motion3ReferenceFrame = MotionReferenceFrame<Motion3>;
 
 /**
  * @brief Generic mapping of Object Id to FrameId to VALUE within a nested
@@ -402,6 +519,7 @@ class GenericObjectCentricMap
  public:
   using Base = gtsam::FastMap<ObjectId, gtsam::FastMap<FrameId, VALUE>>;
   using NestedBase = gtsam::FastMap<FrameId, VALUE>;
+  using EstimateMap = gtsam::FastMap<ObjectId, VALUE>;
 
   using This = GenericObjectCentricMap<VALUE>;
   using Value = VALUE;
@@ -437,6 +555,15 @@ class GenericObjectCentricMap
     return frame_map.insert2(frame_id, value);
   }
 
+  // construct from an estimate map
+  bool insert2(FrameId frame_id, const EstimateMap& estimate_map) {
+    bool result = true;
+    for (const auto& [object_id, estimate_value] : estimate_map) {
+      result &= this->insert22(object_id, frame_id, estimate_value);
+    }
+    return result;
+  }
+
   bool exists(ObjectId object_id, FrameId frame_id) const {
     static size_t out_of_range_flag;
     return existsImpl(object_id, frame_id, out_of_range_flag);
@@ -450,6 +577,7 @@ class GenericObjectCentricMap
     return atImpl<This, Value&>(const_cast<This*>(this), object_id, frame_id);
   }
 
+  // wont update key if exists?
   This& operator+=(const This& rhs) {
     for (const auto& [key, value] : rhs) {
       this->operator[](key).insert(value.begin(), value.end());
@@ -465,13 +593,38 @@ class GenericObjectCentricMap
    * @return gtsam::FastMap<ObjectId, Value>
    */
   gtsam::FastMap<ObjectId, Value> collectByFrame(FrameId frame_id) const {
-    gtsam::FastMap<ObjectId, Value> object_map;
+    return this->toEstimateMap(frame_id);
+  }
+
+  EstimateMap toEstimateMap(FrameId frame_id) const {
+    EstimateMap object_map;
     for (const auto& [object_id, frame_map] : *this) {
       if (frame_map.exists(frame_id)) {
         object_map.insert2(object_id, frame_map.at(frame_id));
       }
     }
     return object_map;
+  }
+
+  ObjectIds gatherInvolvedObjects() const {
+    ObjectIds object_ids;
+    object_ids.reserve(this->size());
+    for (const auto& [object_id, _] : *this) {
+      object_ids.emplace_back(object_id);
+    }
+    return object_ids;
+  }
+
+  // maybe slow!!
+  // TODO: maybe remove and cache frames somewhere else if necessary!!!
+  FrameIds getInvovledFrameIds() const {
+    FrameIds frame_ids;
+    for (const auto& [_, frame_map] : *this) {
+      for (const auto& [frame_id, _] : frame_map) {
+        frame_ids.push_back(frame_id);
+      }
+    }
+    return frame_ids;
   }
 
  private:
@@ -530,7 +683,7 @@ class GenericObjectCentricMap
 /// @brief Map of object poses per object per frame
 using ObjectPoseMap = GenericObjectCentricMap<gtsam::Pose3>;
 /// @brief Map of object motions per object per frame
-using ObjectMotionMap = GenericObjectCentricMap<ReferenceFrameValue<Motion3>>;
+using ObjectMotionMap = GenericObjectCentricMap<Motion3ReferenceFrame>;
 
 // Optional string that can be modified directly (similar to old-stype
 // boost::optional) to access the mutable reference the internal string must be
@@ -542,6 +695,13 @@ using OptionalString = std::optional<std::reference_wrapper<std::string>>;
 
 template <typename T>
 std::string to_string(const T& t);
+
+// template <typename T>
+// std::string to_string(const T& t) {
+//     std::ostringstream t;
+//     oss << value;
+//     return oss.str();
+// }
 
 template <typename Input, typename Output>
 bool convert(const Input&, Output&);
@@ -555,6 +715,10 @@ inline std::string container_to_string(const Container& container,
     ss << c << delimiter;
   }
   return ss.str();
+}
+
+inline std::string info_string(FrameId frame_id, ObjectId object_id) {
+  return "j= " + std::to_string(object_id) + ", k=" + std::to_string(frame_id);
 }
 
 // template<typename T>
@@ -583,4 +747,12 @@ inline std::string container_to_string(const Container& container,
 
 }  // namespace dyno
 
+namespace std {
+template <typename T>
+struct underlying_type<dyno::Flags<T>> {
+  using type = typename dyno::Flags<T>::Storage;
+};
+}  // namespace std
+
 #include "dynosam/common/SensorModels.hpp"
+#include "dynosam/common/Types-inl.hpp"

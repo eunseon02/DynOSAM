@@ -56,7 +56,7 @@ class Accessor {
 
   DYNO_POINTER_TYPEDEFS(This)
 
-  Accessor(const gtsam::Values* theta, typename Map::Ptr map);
+  Accessor(const SharedFormulationData& shared_data, typename Map::Ptr map);
   virtual ~Accessor() {}
 
   /**
@@ -77,6 +77,22 @@ class Accessor {
    */
   virtual StateQuery<gtsam::Pose3> getObjectMotion(
       FrameId frame_id, ObjectId object_id) const = 0;
+
+  /**
+   * @brief Gets the absolute motion (_{k-1}^wH_k) from theta the requested
+   * time-step (k) and object (j) with the associated reference frame.
+   * Internally this uses getObjectMotion and constructs a Motion3ReferenceFrame
+   * using the global frame, k-1 and k. No checks are done on the underlying
+   * function call so it assumes that the virtual getObjectMotion function has
+   * been implemented correctly and returns a motion in the right
+   * representation.
+   *
+   * @param frame_id FrameId
+   * @param object_id ObjectId
+   * @return StateQuery<Motion3ReferenceFrame>
+   */
+  StateQuery<Motion3ReferenceFrame> getObjectMotionReferenceFrame(
+      FrameId frame_id, ObjectId object_id) const;
 
   /**
    * @brief Get the pose (^wL_k) of an object (j) at time-step (k).
@@ -132,15 +148,6 @@ class Accessor {
   MotionEstimateMap getObjectMotions(FrameId frame_id) const;
 
   /**
-   * @brief Virtual function that is called to indcate the associated
-   * formulation has been updated. This can be used to trigger an internal
-   * update of variables/cache if necessary.
-   *
-   * @param const BackendMetaData&
-   */
-  virtual void postUpdateCallback(const BackendMetaData&){};
-
-  /**
    * @brief Gets an estimate map of objects with their motion and and PREVIOUS
    * pose. This will find motions and poses (using the internal API) and return
    * a motion from k-1 to k and the associated pose at k-1.
@@ -163,13 +170,23 @@ class Accessor {
       FrameId frame_id) const;
 
   /**
-   * @brief Collects all object poses for frame 0 to k.
+   * @brief Collects all object poses for frame 0 to K.
    * (Non-pure )Virtual function that may be overwritten - default
    * implementation uses the pure-virtual getObjectPoses to collect all poses.
    *
    * @return ObjectPoseMap
    */
   virtual ObjectPoseMap getObjectPoses() const;
+
+  /**
+   * @brief Collects all object motions from 1 to K (with the first motion being
+   * from k-1 to k). (Non-pure) Virtual function that may be overwritten -
+   * default implementation uses the pure-virtual getObjectPoses to collect all
+   * motions.
+   *
+   * @return ObjectMotionMap
+   */
+  virtual ObjectMotionMap getObjectMotions() const;
 
   /**
    * @brief Get all dynamic landmarks for all objects (\mathcal{J}_k) at
@@ -187,8 +204,8 @@ class Accessor {
    * @param object_id ObjectId
    * @return StatusLandmarkVector
    */
-  StatusLandmarkVector getDynamicLandmarkEstimates(FrameId frame_id,
-                                                   ObjectId object_id) const;
+  virtual StatusLandmarkVector getDynamicLandmarkEstimates(
+      FrameId frame_id, ObjectId object_id) const;
 
   /**
    * @brief Get all static landmarks at time-step k.
@@ -321,6 +338,13 @@ class Accessor {
  protected:
   auto map() const { return map_; }
 
+  const gtsam::Values& values() const {
+    return *CHECK_NOTNULL(shared_data_.values);
+  }
+  const FormulationHooks& hooks() const {
+    return *CHECK_NOTNULL(shared_data_.hooks);
+  }
+
  private:
   /**
    * @brief Compute all pairs of object motions and poses at the requested
@@ -336,9 +360,11 @@ class Accessor {
                              FrameId pose_frame_id) const;
 
  private:
-  const gtsam::Values* theta_;  //! Pointer to the set of current values stored
-                                //! in the associated formulation
-  typename Map::Ptr map_;       //! Pointer to internal map structure;
+  //   const gtsam::Values* theta_;  //! Pointer to the set of current values
+  //   stored
+  //                                 //! in the associated formulation
+  const SharedFormulationData shared_data_;
+  typename Map::Ptr map_;  //! Pointer to internal map structure;
 };
 
 }  // namespace dyno

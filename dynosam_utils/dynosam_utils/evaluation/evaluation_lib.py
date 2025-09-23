@@ -3,6 +3,8 @@ import os
 import logging
 from typing import Optional, List, Tuple, Dict, TypeAlias
 from pathlib import Path
+import matplotlib.axes
+import matplotlib.figure
 import numpy as np
 from abc import ABC, abstractmethod
 import matplotlib.pyplot as plt
@@ -183,13 +185,20 @@ class MotionErrorEvaluator(Evaluator):
                                             "tx", "ty", "tz", "qx", "qy", "qz", "qw",
                                             "gt_tx", "gt_ty", "gt_tz", "gt_qx", "gt_qy", "gt_qz", "gt_qw"])
 
+        self._object_poses_traj: ObjectTrajDict = None
+        self._object_poses_traj_ref: ObjectTrajDict = None
+
+        self._object_motions_traj: ObjectTrajDict = None
+        self._object_motions_traj_ref: ObjectTrajDict = None
 
         # TODO: need to make traj's a property trajectory by using the frame id as timestamp - this allows us to synchronize
-        # {object_id: {frame_id : T}} -> T is a homogenous, and {object_id: trajectory.PosePath3D}
         self._object_poses_traj, self._object_poses_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_pose_log_file, convert_to_world_coordinates=True)
         self._object_motions_traj, self._object_motions_traj_ref = MotionErrorEvaluator._construct_object_se3_trajectories(self._object_motion_log_file, convert_to_world_coordinates=True)
 
-        # self._object_pose_error_dict: ObjectPoseErrorDict = MotionErrorEvaluator._construct_pose_error_dict( self._object_pose_error_log_file)
+        # cache of objects that exist per frame taken from the estimated _object_poses_traj
+        # dictionary of frame ids's to a list of objects in that frame
+        self._objects_at_frame = {}
+        self._calculate_objects_per_frame()
 
 
 
@@ -208,6 +217,17 @@ class MotionErrorEvaluator(Evaluator):
     @property
     def object_motion_traj_ref(self) -> ObjectTrajDict:
         return self._object_motions_traj_ref
+
+    @property
+    def frames(self):
+        return list(self._objects_at_frame.keys())
+
+    def objects_at_frame(self, frame):
+        if frame in self._objects_at_frame:
+            return self._objects_at_frame[frame]
+        return None
+
+
 
 
     def make_object_trajectory(self, object_id: int) -> Optional[tools.ObjectMotionTrajectory]:
@@ -234,7 +254,19 @@ class MotionErrorEvaluator(Evaluator):
         self._process_motion_traj(plot_collection, results)
         self._process_pose_traj(plot_collection, results)
 
-        # self._process_velocity(plot_collection, results)
+
+    def _calculate_objects_per_frame(self):
+        assert self._object_poses_traj is not None
+
+        # still asuming everything is by frame id!
+        for object_id, object_traj in self._object_poses_traj.items():
+            # for each 'timestamp
+            for idx in object_traj.timestamps:
+                idx = int(idx)
+                if idx not in self._objects_at_frame:
+                    self._objects_at_frame[idx] = []
+
+                self._objects_at_frame[idx].append(object_id)
 
 
     def _process_motion_traj(self,plot_collection: evo_plot.PlotCollection, results: Dict):
@@ -315,6 +347,9 @@ class MotionErrorEvaluator(Evaluator):
         # ape_trans = metrics.APE(metrics.PoseRelation.translation_part)
         # ape_rot = metrics.APE(metrics.PoseRelation.rotation_angle_deg)
 
+        print(object_poses_ref_traj)
+        print(object_motion_traj_est)
+
         data = (object_poses_ref_traj, object_motion_traj_est)
         rme_trans = dyno_metrics.RME(metrics.PoseRelation.translation_part)
         rme_rot = dyno_metrics.RME(metrics.PoseRelation.rotation_angle_deg)
@@ -344,7 +379,8 @@ class MotionErrorEvaluator(Evaluator):
             core.plotting.plot_per_frame_error(
                 fig,
                 rme_full,
-                f"RME Object {object_id}"
+                f"RME Object {object_id}",
+                frames=rme_full.timestamps
             )
             plots.add_figure(
                 f"Object RME {object_id}",
@@ -370,8 +406,6 @@ class MotionErrorEvaluator(Evaluator):
             data = (object_traj_ref, object_traj)
 
             object_traj.check()
-
-            # evo_plot.draw_correspondence_edges(fig_all_object_traj.gca(), object_traj, object_traj_ref, evo_plot.PlotMode.xyz)
 
             trajectory_helper.append(object_traj)
 
@@ -437,7 +471,7 @@ class MotionErrorEvaluator(Evaluator):
         # plot object poses
         plot_mode = evo_plot.PlotMode.xyz
         ax = fig_all_object_traj.add_subplot(111, projection="3d")
-        core.plotting.plot_object_trajectories(
+        ax = core.plotting.plot_object_trajectories(
             fig_all_object_traj,
             object_trajectories,
             object_trajectories_ref,
@@ -447,6 +481,7 @@ class MotionErrorEvaluator(Evaluator):
             plot_axis_ref=True,
             # axis_marker_scale=1.0,
             downscale=0.1)
+        ax.get_legend().remove()
 
 
         fig_all_object_traj.suptitle(r"Estimated \& Ground Truth Object Trajectories")
@@ -459,19 +494,19 @@ class MotionErrorEvaluator(Evaluator):
         # evo_plot.draw_coordinate_axes(ax, object_trajectories_ref[f"Ground Truth Object 2"], plot_mode=evo_plot.PlotMode.xyz, marker_scale=2.0)
 
         # plot reconsructed (calibrated) object poses
-        fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
-        core.plotting.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
-        fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
-        ax = fig_all_object_traj_calibrated.gca()
+        # fig_all_object_traj_calibrated = plt.figure(figsize=(8,8))
+        # core.plotting.plot_object_trajectories(fig_all_object_traj_calibrated, object_trajectories_calibrated, object_trajectories_ref, plot_mode=evo_plot.PlotMode.xyz, plot_start_end_markers=True)
+        # fig_all_object_traj_calibrated.suptitle("Obj Trajectories Calibrated")
+        # ax = fig_all_object_traj_calibrated.gca()
         trajectory_helper.set_ax_limits(ax, evo_plot.PlotMode.xyz)
 
         plot_collection.add_figure(
             "Obj Trajectories", fig_all_object_traj
         )
 
-        plot_collection.add_figure(
-            "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
-        )
+        # plot_collection.add_figure(
+        #     "Obj Trajectories Calibrated", fig_all_object_traj_calibrated
+        # )
 
 
 
@@ -504,7 +539,6 @@ class MotionErrorEvaluator(Evaluator):
         # must be floats if we want to align/sync
         timestamps = []
 
-        # assume frames are ordered!!!
         # used to construct the pose trajectires with evo
         object_poses_tmp_dict = {}
         object_poses_ref_tmp_dict = {}
@@ -525,6 +559,30 @@ class MotionErrorEvaluator(Evaluator):
             object_poses_tmp_dict[object_id]["timestamps"].append(frame_id)
             object_poses_ref_tmp_dict[object_id]["traj"].append(T_ref)
             object_poses_ref_tmp_dict[object_id]["timestamps"].append(frame_id)
+
+        def sort_by_frame_order(object_T_dict: Dict):
+            for object_id, data in object_T_dict.items():
+                frames = data["timestamps"]
+                traj = data["traj"]
+
+                # # Sort frames and associated values
+                sorted_indices = sorted(range(len(frames)), key=lambda i: frames[i])
+                frames = [frames[i] for i in sorted_indices]
+                traj = [traj[i] for i in sorted_indices]
+
+                # Sort traj based on the order of frames
+                # sorted_frames, sorted_traj = zip(*sorted(zip(frames, traj)))
+
+                # # Update map data
+                object_T_dict[object_id]["timestamps"] = frames
+                object_T_dict[object_id]["traj"] = traj
+
+            return object_T_dict
+
+        # frameids may not be in order.
+        object_poses_tmp_dict = sort_by_frame_order(object_poses_tmp_dict)
+        object_poses_ref_tmp_dict = sort_by_frame_order(object_poses_ref_tmp_dict)
+
 
 
         # {object_id: trajectory.PosePath3D}
@@ -567,6 +625,8 @@ class MotionErrorEvaluator(Evaluator):
             else:
                 object_poses_traj[object_id] =  trajectory.PoseTrajectory3D(poses_se3=np.array(poses_est), timestamps=timestamps)
                 object_poses_traj_ref[object_id] = trajectory.PoseTrajectory3D(poses_se3=np.array(poses_ref), timestamps=timestamps_ref)
+
+
 
         return object_poses_traj, object_poses_traj_ref
 
@@ -617,6 +677,9 @@ class CameraPoseEvaluator(Evaluator):
         traj_ref_vo = self.camera_pose_traj_ref
 
         traj_est_vo, traj_ref_vo = tools.sync_and_align_trajectories(traj_est_vo, traj_ref_vo)
+
+        # alignment_transformation = lie_algebra.sim3(
+        #     *traj_est_vo.align(traj_ref_vo, False, False, n=-1))
 
         # used to draw trajectories for plot collection
         trajectories = {}
@@ -727,14 +790,25 @@ class MapPlotter3D(Evaluator):
         print("Logging 3d points")
         self.plot_3d_map_points(plot_collection)
 
-    def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection):
+    def plot_3d_map_points(self, plot_collection: evo_plot.PlotCollection) -> Tuple[matplotlib.axes.Axes,matplotlib.figure.Figure]:
         map_fig = plt.figure(figsize=(8,14))
         # ax = evo_plot.prepare_axis(map_fig, evo_plot.PlotMode.xyz)
         ax = map_fig.add_subplot(111, projection="3d")
+        ax.set_ylabel(r"Y(m)")
+        ax.set_xlabel(r"X(m)")
+        ax.set_zlabel(r"Z(m)")
         # ax = map_fig.add_subplot(111, projection="3d")
+
+        plot_object_points = self.kwargs.get("plot_object_points", True)
+        plot_static_points = self.kwargs.get("plot_static_points", True)
+        plot_gt_objects = self.kwargs.get("plot_gt_objects", True)
+        plot_gt_camera = self.kwargs.get("plot_gt_camera", True)
+        downsample_static_cloud = self.kwargs.get("downsample_static_cloud", None)
+
 
 
         camera_traj = copy.deepcopy(self._camera_eval.camera_pose_traj)
+        camera_traj_ref = copy.deepcopy(self._camera_eval.camera_pose_traj_ref)
         object_trajs = copy.deepcopy(self._object_eval.object_poses_traj)
 
         trajectory_helper = TrajectoryHelper()
@@ -743,6 +817,7 @@ class MapPlotter3D(Evaluator):
 
         # do gross renamign
         all_traj = object_trajs
+        all_gt_traj = copy.deepcopy(self._object_eval.object_poses_traj_ref)
 
         import itertools
 
@@ -767,22 +842,24 @@ class MapPlotter3D(Evaluator):
             if object_trajectory and plot_velocities:
                 core.plotting.plot_velocities(ax, object_trajectory, color=trajectory_and_velocity_colour)
 
-        # all_traj["Camera"] = camera_traj
+        camera_ref_dict = None
+        if plot_gt_camera:
+            camera_ref_dict = {"Camera Ref": camera_traj_ref}
 
-        core.plotting.plot_object_trajectories(map_fig, {"Camera":camera_traj},
+        core.plotting.plot_object_trajectories(map_fig,
+                                       {"Camera":camera_traj},
+                                       camera_ref_dict,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=['blue'],
                                        plot_axis_est=True,
                                        plot_start_end_markers=False,
-                                       axis_marker_scale=1.0,
+                                       axis_marker_scale=0.1,
                                        downscale=0.1,
                                        traj_zorder=30,
                                        traj_linewidth=3.0)
 
 
-        x_points = []
-        y_points = []
-        z_points = []
+        static_points = []
 
         object_points = {}
 
@@ -806,14 +883,13 @@ class MapPlotter3D(Evaluator):
             transform =camera_coordinate_to_world()
             t_robot_convention = transform @ t_cam_convention
 
-            if object_id == 0:
-                x_points.append(t_robot_convention[0])
-                y_points.append(t_robot_convention[1])
-                z_points.append(t_robot_convention[2])
+            if object_id == 0 and plot_static_points:
+                static_points.append([t_robot_convention[0], t_robot_convention[1], t_robot_convention[2]])
 
                 tracklet_set.add(tracklet_id)
-            else:
+            elif plot_object_points:
                 # just draw last object
+                # cont
 
                 # # this might happen becuase we log ALL the points, even on objects we only see a few number of times
                 if object_id not in object_trajs:
@@ -823,13 +899,13 @@ class MapPlotter3D(Evaluator):
                 # if int(frame_id) % 10 != 0:
                 #     continue
 
-                object_trajectory = self._object_eval.make_object_trajectory(object_id)
-                #this worls for when the code output the frame id as the timestamp (which may change in future?)
-                object_trajectory_frames = object_trajs[object_id].timestamps
+                # object_trajectory = self._object_eval.make_object_trajectory(object_id)
+                # #this worls for when the code output the frame id as the timestamp (which may change in future?)
+                # object_trajectory_frames = object_trajs[object_id].timestamps
 
-                last_frame = object_trajectory_frames[-1]
+                # last_frame = object_trajectory_frames[-1]
 
-                print(f"frame {frame_id} last frame {last_frame}")
+                # print(f"frame {frame_id} last frame {last_frame}")
 
                 # if frame_id < last_frame:
                 #     k_H_last = lie_algebra.se3()
@@ -846,22 +922,22 @@ class MapPlotter3D(Evaluator):
                 #     t_robot_convention = k_H_last @ t_robot_convention
 
 
-                if int(frame_id) == int(last_frame):
+                # if int(frame_id) == int(last_frame):
                     # get normalised timestamp in range 0-1
                     # normalised_frame_id = (frame_id - np.min(object_trajectory_frames))/(np.max(object_trajectory_frames) - np.min(object_trajectory_frames))
                     # print(frame_id)
                     # print(normalised_frame_id)
                     # time_dependant_colour = colour_generator_map[object_id](normalised_frame_id)
 
-                    if object_id not in object_points:
-                        # x,y,z,colour
-                        object_points[object_id] = [[], [], []]
+                if object_id not in object_points:
+                    # x,y,z,colour
+                    object_points[object_id] = [[], [], []]
 
-                    object_points[object_id][0].append(t_robot_convention[0])
-                    object_points[object_id][1].append(t_robot_convention[1])
-                    object_points[object_id][2].append(t_robot_convention[2])
+                object_points[object_id][0].append(t_robot_convention[0])
+                object_points[object_id][1].append(t_robot_convention[1])
+                object_points[object_id][2].append(t_robot_convention[2])
 
-                    print(f"Adding object point {t_robot_convention}: {object_id}")
+                # print(f"Adding object point {t_robot_convention}: {object_id}")
 
 
 
@@ -869,27 +945,55 @@ class MapPlotter3D(Evaluator):
         ax.patch.set_facecolor('white')
         ax.axis('off')
 
+        static_points = np.array(static_points)
+
+        if downsample_static_cloud is not None:
+            assert type(downsample_static_cloud) == float
+
+            import open3d as o3d
+            static_pc = o3d.geometry.PointCloud()
+            static_pc.points = o3d.utility.Vector3dVector(static_points)
+
+            logger.info(f"Downsampling static cloud with voxel size {downsample_static_cloud}")
+            static_pc_down = static_pc.voxel_down_sample(voxel_size=downsample_static_cloud)
+
+            static_points = np.asarray(static_pc_down.points)
+
         # static points
         # some of these params are after handtuning on particular datasets for pretty figures ;)
-        ax.scatter(x_points, y_points, z_points, s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
-        # for (_, data), object_colour in zip(object_points.items(), colour_list):
-        #     ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
+        ax.scatter(static_points[:,0], static_points[:,1], static_points[:,2], s=2.0, c='black',alpha=1.0, zorder=0, marker=".")
+        for (_, data), object_colour in zip(object_points.items(), colour_list):
+            ax.scatter(data[0], data[1], data[2], s=3.0, alpha=0.7, c=object_colour)
 
         core.plotting.plot_object_trajectories(map_fig, all_traj,
                                        plot_mode=evo_plot.PlotMode.xyz,
                                        colours=colour_list,
-                                    #    plot_axis_est=True,
-                                       plot_start_end_markers=False,
-                                       axis_marker_scale=1.5,
+                                       plot_axis_est=True,
+                                       plot_start_end_markers=True,
+                                       axis_marker_scale=0.1,
                                        traj_zorder=30,
                                        est_name_prefix="Object",
                                        traj_linewidth=3.0)
+        if plot_gt_objects:
+            core.plotting.plot_object_trajectories(map_fig, all_gt_traj,
+                                        plot_mode=evo_plot.PlotMode.xyz,
+                                        colours=colour_list,
+                                        plot_axis_est=True,
+                                        plot_start_end_markers=True,
+                                        axis_marker_scale=0.1,
+                                        traj_zorder=30,
+                                        est_style="--",
+                                        est_name_prefix="Object GT",
+                                        traj_linewidth=3.0)
+
 
         trajectory_helper.set_ax_limits(map_fig.gca())
         map_fig.tight_layout()
         # plt.show()
+        # ax.legend().set_visible(False)
 
-        plot_collection.add_figure("Static map", map_fig)
+        plot_collection.add_figure(self.kwargs.get("title", "Map"), map_fig)
+        return ax, map_fig
 
 
 
@@ -1096,4 +1200,9 @@ class DatasetEvaluator:
 
 
         logger.debug("Constructor evaluator: {}".format(cls.__name__))
-        return cls(*args)
+
+        try:
+            return cls(*args)
+        except Exception as e:
+            logger.error(f"Failed to load class {cls.__name__}: constructor failed with {str(e)}")
+            return None

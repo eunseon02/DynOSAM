@@ -40,9 +40,54 @@
 
 namespace dyno {
 
-// Map of ObjectId's to XYZRGB Point Clouds
+/// @brief Map of ObjectId's to XYZRGB Point Clouds
 using CloudPerObject =
     gtsam::FastMap<ObjectId, pcl::PointCloud<pcl::PointXYZRGB>>;
+
+/// @brief Alias to XYZ point with label (std::uint32_t)
+using PointLabel = pcl::PointXYZL;
+/// @brief Alias to XYZ point with label (std::uint32_t) and RGB values
+using PointLabelRGB = pcl::PointXYZRGBL;
+/// @brief Alias to a PCL Point Cloud of type PointLabelRGB
+using PointCloudLabelRGB = pcl::PointCloud<PointLabelRGB>;
+
+template <>
+inline bool convert(const LandmarkStatus& status, pcl::PointXYZRGB& point) {
+  const gtsam::Point3 lmk = status.value();
+  const ObjectId object_id = status.objectId();
+  if (status.isStatic()) {
+    point =
+        pcl::PointXYZRGB(static_cast<float>(lmk(0)), static_cast<float>(lmk(1)),
+                         static_cast<float>(lmk(2)), 0, 0, 0);
+  } else {
+    // has to recalculate this every time!!
+    const Color colour = Color::uniqueId(object_id);
+    point = pcl::PointXYZRGB(
+        static_cast<float>(lmk(0)), static_cast<float>(lmk(1)),
+        static_cast<float>(lmk(2)), static_cast<std::uint8_t>(colour.r),
+        static_cast<std::uint8_t>(colour.g),
+        static_cast<std::uint8_t>(colour.b));
+  }
+  return true;
+}
+
+template <typename Value, typename Point>
+void convert_pcl(const GenericTrackedStatusVector<Value>& status_vector,
+                 pcl::PointCloud<Point>& cloud) {
+  for (const auto& value : status_vector) {
+    Point point;
+    // call the status type to the point type explicitly
+    // allows any type w
+    convert(value, point);
+    cloud.push_back(point);
+  }
+}
+
+template <typename Point>
+void convert(const StatusLandmarkVector& status_vector,
+             pcl::PointCloud<Point>& cloud) {
+  convert_pcl(status_vector, cloud);
+}
 
 /**
  * @brief Constructs a gtsam::Point3 from the x,y,z components of the PointT.
@@ -95,10 +140,45 @@ using BbxPerObject = gtsam::FastMap<ObjectId, ObjectBBX>;
  * @param landmarks const StatusLandmarkVector&
  * @param T_world_camera const gtsam::Pose3& Transform from camera to world
  * frame
+ * @param colour_generator std::function<Color(ObjectId)> functional colour
+ * generator based on the object id. Defaults to Color::uniqueId.
+ * @param point_cb std::function<void(const pcl::PointXYZRGB&, ObjectId)>
+ * callback for each created PCL point. Default is nullptr
  * @return CloudPerObject XYZRGB point cloud per obect in the world frame
  */
-CloudPerObject groupObjectCloud(const StatusLandmarkVector& landmarks,
-                                const gtsam::Pose3& T_world_camera);
+CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<Color(ObjectId)> colour_generator = Color::uniqueObjectId,
+    std::function<void(const pcl::PointXYZRGB&, ObjectId)> point_cb = nullptr);
+
+/**
+ * @brief Overload of groupObjectCloud.
+ *
+ * @param landmarks const StatusLandmarkVector&
+ * @param T_world_camera const gtsam::Pose3&
+ * @param point_cb std::function<void(const pcl::PointXYZRGB&, ObjectId)>
+ * @return CloudPerObject
+ */
+inline CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<void(const pcl::PointXYZRGB&, ObjectId)> point_cb) {
+  return groupObjectCloud(landmarks, T_world_camera, Color::uniqueObjectId,
+                          point_cb);
+}
+
+/**
+ * @brief Overload of groupObjectCloud.
+ *
+ * @param landmarks const StatusLandmarkVector&
+ * @param T_world_camera const gtsam::Pose3&
+ * @param colour_generator std::function<Color(ObjectId)>
+ * @return CloudPerObject
+ */
+inline CloudPerObject groupObjectCloud(
+    const StatusLandmarkVector& landmarks, const gtsam::Pose3& T_world_camera,
+    std::function<Color(ObjectId)> colour_generator) {
+  return groupObjectCloud(landmarks, T_world_camera, colour_generator, nullptr);
+}
 
 /**
  * @brief Compute a MomentOfInertiaEstimation using an input point cloud.

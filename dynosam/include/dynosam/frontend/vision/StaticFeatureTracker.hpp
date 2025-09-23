@@ -70,10 +70,10 @@ class StaticFeatureTracker : public FeatureTrackerBase {
    * (0) should not be detected on
    * @return FeatureContainer Contains all successsfully tracked features.
    */
-  virtual FeatureContainer trackStatic(Frame::Ptr previous_frame,
-                                       const ImageContainer& image_container,
-                                       FeatureTrackerInfo& tracker_info,
-                                       const cv::Mat& detection_mask) = 0;
+  virtual FeatureContainer trackStatic(
+      Frame::Ptr previous_frame, const ImageContainer& image_container,
+      FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      const std::optional<gtsam::Rot3>& R_km1_k) = 0;
 };
 
 // currently assumes flow that is k to k + 1 (gross!!)
@@ -81,10 +81,10 @@ class ExternalFlowFeatureTracker : public StaticFeatureTracker {
  public:
   ExternalFlowFeatureTracker(const TrackerParams& params, Camera::Ptr camera,
                              ImageDisplayQueue* display_queue);
-  FeatureContainer trackStatic(Frame::Ptr previous_frame,
-                               const ImageContainer& image_container,
-                               FeatureTrackerInfo& tracker_info,
-                               const cv::Mat& detection_mask) override;
+  FeatureContainer trackStatic(
+      Frame::Ptr previous_frame, const ImageContainer& image_container,
+      FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      const std::optional<gtsam::Rot3>& R_km1_k = {}) override;
 
  private:
   Feature::Ptr constructStaticFeature(const ImageContainer& image_container,
@@ -147,10 +147,10 @@ class KltFeatureTracker : public StaticFeatureTracker {
    * (0) should not be detected on
    * @return FeatureContainer Contains all successsfully tracked features.
    */
-  FeatureContainer trackStatic(Frame::Ptr previous_frame,
-                               const ImageContainer& image_container,
-                               FeatureTrackerInfo& tracker_info,
-                               const cv::Mat& detection_mask) override;
+  FeatureContainer trackStatic(
+      Frame::Ptr previous_frame, const ImageContainer& image_container,
+      FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      const std::optional<gtsam::Rot3>& R_km1_k = {}) override;
 
  private:
   /**
@@ -212,6 +212,7 @@ class KltFeatureTracker : public StaticFeatureTracker {
    * @param outlier_previous_features
    * @param tracker_info
    * @param detection_mask
+   * @param R_km1_k
    * @return true
    * @return false
    */
@@ -222,7 +223,8 @@ class KltFeatureTracker : public StaticFeatureTracker {
                    FeatureContainer& tracked_features,
                    TrackletIds& outlier_previous_features,
                    FeatureTrackerInfo& tracker_info,
-                   const cv::Mat& detection_mask);
+                   const cv::Mat& detection_mask,
+                   const std::optional<gtsam::Rot3>& R_km1_k);
 
   /**
    * @brief Geometric verification using homograph + RANSAC.

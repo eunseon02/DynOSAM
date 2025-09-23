@@ -37,8 +37,12 @@
 namespace dyno {
 
 template <class MAP>
-Accessor<MAP>::Accessor(const gtsam::Values* theta, typename Map::Ptr map)
-    : theta_(theta), map_(map) {}
+Accessor<MAP>::Accessor(const SharedFormulationData& shared_data,
+                        typename Map::Ptr map)
+    : shared_data_(shared_data), map_(map) {
+  CHECK_NOTNULL(shared_data.values);
+  CHECK_NOTNULL(shared_data.hooks);
+}
 
 template <class MAP>
 StateQuery<gtsam::Point3> Accessor<MAP>::getStaticLandmark(
@@ -59,15 +63,29 @@ MotionEstimateMap Accessor<MAP>::getObjectMotions(FrameId frame_id) const {
   const auto object_seen =
       frame_node->objects_seen.template collectIds<ObjectId>();
   for (ObjectId object_id : object_seen) {
-    StateQuery<Motion3> motion_query =
-        this->getObjectMotion(frame_id, object_id);
+    StateQuery<Motion3ReferenceFrame> motion_query =
+        this->getObjectMotionReferenceFrame(frame_id, object_id);
     if (motion_query) {
-      motion_estimates.insert2(
-          object_id, ReferenceFrameValue<Motion3>(motion_query.get(),
-                                                  ReferenceFrame::GLOBAL));
+      motion_estimates.insert2(object_id, motion_query.get());
     }
   }
   return motion_estimates;
+}
+
+template <class MAP>
+StateQuery<Motion3ReferenceFrame> Accessor<MAP>::getObjectMotionReferenceFrame(
+    FrameId frame_id, ObjectId object_id) const {
+  StateQuery<Motion3> motion_query = this->getObjectMotion(frame_id, object_id);
+  if (motion_query) {
+    return StateQuery<Motion3ReferenceFrame>(
+        motion_query.key_,
+        Motion3ReferenceFrame(motion_query.get(),
+                              Motion3ReferenceFrame::Style::F2F,
+                              ReferenceFrame::GLOBAL, frame_id - 1u, frame_id));
+  } else {
+    return StateQuery<Motion3ReferenceFrame>(motion_query.key_,
+                                             motion_query.status_);
+  }
 }
 
 template <class MAP>
@@ -115,6 +133,24 @@ ObjectPoseMap Accessor<MAP>::getObjectPoses() const {
 }
 
 template <class MAP>
+ObjectMotionMap Accessor<MAP>::getObjectMotions() const {
+  ObjectMotionMap object_motions;
+  for (FrameId frame_id : map()->getFrameIds()) {
+    MotionEstimateMap per_object_motions = this->getObjectMotions(frame_id);
+
+    for (const auto& [object_id, motion] : per_object_motions) {
+      if (!object_motions.exists(object_id)) {
+        object_motions.insert2(object_id, ObjectMotionMap::NestedBase{});
+      }
+
+      auto& per_frame_motion = object_motions.at(object_id);
+      per_frame_motion.insert2(frame_id, motion);
+    }
+  }
+  return object_motions;
+}
+
+template <class MAP>
 StatusLandmarkVector Accessor<MAP>::getDynamicLandmarkEstimates(
     FrameId frame_id) const {
   const auto frame_node = map()->getFrame(frame_id);
@@ -152,10 +188,10 @@ StatusLandmarkVector Accessor<MAP>::getDynamicLandmarkEstimates(
     StateQuery<gtsam::Point3> lmk_query =
         this->getDynamicLandmark(frame_id, tracklet_id);
     if (lmk_query) {
-      estimates.push_back(
-          LandmarkStatus::DynamicInGLobal(lmk_query.get(),  // estimate
-                                          frame_id, tracklet_id,
-                                          object_id)  // status
+      estimates.push_back(LandmarkStatus::DynamicInGLobal(
+          Point3Measurement(lmk_query.get()),  // estimate
+          frame_id, tracklet_id,
+          object_id)  // status
       );
     }
   }
@@ -179,7 +215,7 @@ StatusLandmarkVector Accessor<MAP>::getStaticLandmarkEstimates(
           getStaticLandmark(landmark_node->tracklet_id);
       if (lmk_query) {
         estimates.push_back(LandmarkStatus::StaticInGlobal(
-            lmk_query.get(),  // estimate
+            Point3Measurement(lmk_query.get()),  // estimate
             LandmarkStatus::MeaninglessFrame,
             landmark_node->getId()  // tracklet id
             )                       // status
@@ -203,7 +239,7 @@ StatusLandmarkVector Accessor<MAP>::getFullStaticMap() const {
           getStaticLandmark(landmark_node->tracklet_id);
       if (lmk_query) {
         estimates.push_back(LandmarkStatus::StaticInGlobal(
-            lmk_query.get(),  // estimate
+            Point3Measurement(lmk_query.get()),  // estimate
             LandmarkStatus::MeaninglessFrame,
             landmark_node->getId()  // tracklet id
             )                       // status
@@ -300,7 +336,6 @@ std::tuple<gtsam::Point3, bool> Accessor<MAP>::computeObjectCentroid(
   CloudPerObject object_clouds =
       groupObjectCloud(dynamic_lmks, this->getSensorPose(frame_id).get());
   if (object_clouds.size() == 0) {
-    // TODO: why does this happen so much!!!
     VLOG(20) << "Cannot collect object clouds from dynamic landmarks of "
              << object_id << " and frame " << frame_id << "!! "
              << " # Dynamic lmks in the map for this object at this frame was "
@@ -348,15 +383,18 @@ Accessor<MAP>::getRequestedObjectPosePair(FrameId motion_frame_id,
 
 template <class MAP>
 bool Accessor<MAP>::exists(gtsam::Key key) const {
-  return theta_->exists(key);
+  const gtsam::Values* theta = shared_data_.values;
+  CHECK_NOTNULL(theta);
+  return theta->exists(key);
 }
 
 template <class MAP>
 template <typename ValueType>
 StateQuery<ValueType> Accessor<MAP>::query(gtsam::Key key) const {
-  CHECK_NOTNULL(theta_);
-  if (theta_->exists(key)) {
-    return StateQuery<ValueType>(key, theta_->at<ValueType>(key));
+  const gtsam::Values* theta = shared_data_.values;
+  CHECK_NOTNULL(theta);
+  if (theta->exists(key)) {
+    return StateQuery<ValueType>(key, theta->at<ValueType>(key));
   } else {
     return StateQuery<ValueType>::NotInMap(key);
   }

@@ -68,14 +68,14 @@ ExternalFlowFeatureTracker::ExternalFlowFeatureTracker(
 // frames are always processed in order!
 FeatureContainer ExternalFlowFeatureTracker::trackStatic(
     Frame::Ptr previous_frame, const ImageContainer& image_container,
-    FeatureTrackerInfo& tracker_info, const cv::Mat&) {
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper =
-      image_container.getImageWrapper<ImageType::RGBMono>();
+    FeatureTrackerInfo& tracker_info, const cv::Mat&,
+    const std::optional<gtsam::Rot3>&) {
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
   CHECK(!mono.empty());
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
   CHECK(!motion_mask.empty());
 
   cv::Mat descriptors;
@@ -87,7 +87,7 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(
 
   const size_t& min_tracks =
       static_cast<size_t>(params_.max_features_per_frame);
-  const FrameId frame_k = image_container.getFrameId();
+  const FrameId frame_k = image_container.frameId();
 
   // appy tracking (ie get correspondences)
   // TODO: only track frames that have been tracked for some time?
@@ -178,9 +178,9 @@ Feature::Ptr ExternalFlowFeatureTracker::constructStaticFeature(
   const int x = functional_keypoint::u(kp);
   const int y = functional_keypoint::v(kp);
 
-  const cv::Mat& rgb = image_container.get<ImageType::RGBMono>();
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
-  const cv::Mat& optical_flow = image_container.get<ImageType::OpticalFlow>();
+  const cv::Mat& rgb = image_container.rgb();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
+  const cv::Mat& optical_flow = image_container.opticalFlow();
 
   CHECK(!optical_flow.empty());
   CHECK(!motion_mask.empty());
@@ -229,26 +229,24 @@ KltFeatureTracker::KltFeatureTracker(const TrackerParams& params,
 
 FeatureContainer KltFeatureTracker::trackStatic(
     Frame::Ptr previous_frame, const ImageContainer& image_container,
-    FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask) {
+    FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+    const std::optional<gtsam::Rot3>& R_km1_k) {
   // tracked features and new features
   FeatureContainer new_tracks_and_detections;
 
-  if (!previous_frame) {
-    cv::Mat equialized_greyscale;
-    equalizeImage(image_container, equialized_greyscale);
+  cv::Mat current_equialized_greyscale;
+  equalizeImage(image_container, current_equialized_greyscale);
 
+  if (!previous_frame) {
     FeatureContainer previous_inliers;
-    detectFeatures(equialized_greyscale, image_container, previous_inliers,
-                   new_tracks_and_detections, detection_mask);
+    detectFeatures(current_equialized_greyscale, image_container,
+                   previous_inliers, new_tracks_and_detections, detection_mask);
 
     tracker_info.static_track_detections = new_tracks_and_detections.size();
 
     return new_tracks_and_detections;
   } else {
     // we have previous tracks
-    cv::Mat current_equialized_greyscale;
-    equalizeImage(image_container, current_equialized_greyscale);
-
     // we should have already calculated the processed rgb image from the
     // previous frame
     cv::Mat previous_equialized_greyscale;
@@ -261,15 +259,27 @@ FeatureContainer KltFeatureTracker::trackStatic(
       previous_inliers.add(inlier_feature);
     }
 
+    // if we dont actually have any previous tracks
+    // this may be in cases where we have an IMU and so we have some odometry
+    // but no feature tracks from the previous frame!
+    if (previous_inliers.empty()) {
+      FeatureContainer previous_inliers;
+      detectFeatures(current_equialized_greyscale, image_container,
+                     previous_inliers, new_tracks_and_detections,
+                     detection_mask);
+      tracker_info.static_track_detections = new_tracks_and_detections.size();
+      return new_tracks_and_detections;
+    }
+
     // Tracklet ids associated with the set of previous inliers that are now
     // outliers
     TrackletIds previous_outliers;
 
     // track features from the previous frame and detect new ones if necessary
-    CHECK(trackPoints(current_equialized_greyscale,
-                      previous_equialized_greyscale, image_container,
-                      previous_inliers, new_tracks_and_detections,
-                      previous_outliers, tracker_info, detection_mask));
+    CHECK(trackPoints(
+        current_equialized_greyscale, previous_equialized_greyscale,
+        image_container, previous_inliers, new_tracks_and_detections,
+        previous_outliers, tracker_info, detection_mask, R_km1_k));
 
     // after tracking, mark features in the older frame as outliers
     // TODO: (jesse) actually not sure we HAVE to do this, but better to keep
@@ -282,8 +292,7 @@ FeatureContainer KltFeatureTracker::trackStatic(
 
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
                                       cv::Mat& equialized_greyscale) const {
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper =
-      image_container.getImageWrapper<ImageType::RGBMono>();
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
   CHECK(!mono.empty());
@@ -299,8 +308,6 @@ std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(
   KeypointsCV keypoints;
   detector_->detect(processed_img, keypoints, number_tracked, mask);
 
-  LOG(INFO) << keypoints.size();
-
   std::vector<cv::Point2f> points;
   cv::KeyPoint::convert(keypoints, points);
   return points;
@@ -311,9 +318,9 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
                                        const FeatureContainer& current_features,
                                        FeatureContainer& new_features,
                                        const cv::Mat& detection_mask) {
-  const FrameId frame_k = image_container.getFrameId();
+  const FrameId frame_k = image_container.frameId();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
   // internal detection mask that is appended with new invalid pixels
   // this builds the static detection mask over the existing input mask
   cv::Mat detection_mask_impl;
@@ -335,9 +342,10 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
       const ObjectId label = motion_mask.at<ObjectId>(i, j);
 
       if (label != background_label) {
-        cv::circle(detection_mask_impl, cv::Point2f(j, i),
-                   params_.min_distance_btw_tracked_and_detected_features,
-                   cv::Scalar(0), cv::FILLED);
+        cv::circle(
+            detection_mask_impl, cv::Point2f(j, i),
+            params_.min_distance_btw_tracked_and_detected_static_features,
+            cv::Scalar(0), cv::FILLED);
       }
     }
   }
@@ -347,7 +355,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     const Keypoint kp = feature->keypoint();
     CHECK(feature->usable());
     cv::circle(detection_mask_impl, cv::Point2f(kp(0), kp(1)),
-               params_.min_distance_btw_tracked_and_detected_features,
+               params_.min_distance_btw_tracked_and_detected_static_features,
                cv::Scalar(0), cv::FILLED);
   }
 
@@ -385,7 +393,8 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
                                     FeatureContainer& tracked_features,
                                     TrackletIds& outlier_previous_features,
                                     FeatureTrackerInfo& tracker_info,
-                                    const cv::Mat& detection_mask) {
+                                    const cv::Mat& detection_mask,
+                                    const std::optional<gtsam::Rot3>& R_km1_k) {
   if (current_processed_img.empty() || previous_processed_img.empty() ||
       previous_features.empty()) {
     return false;
@@ -393,12 +402,11 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
 
   outlier_previous_features.clear();
 
-  const cv::Mat& motion_mask = image_container.get<ImageType::MotionMask>();
-  const FrameId frame_k = image_container.getFrameId();
+  const cv::Mat& motion_mask = image_container.objectMotionMask();
+  const FrameId frame_k = image_container.frameId();
 
   std::vector<uchar> status;
   std::vector<float> err;
-  std::vector<cv::Point2f> current_points;
   // All tracklet ids from the set of previous features to track
   TrackletIds tracklet_ids;
 
@@ -407,16 +415,45 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
   CHECK_EQ(previous_pts.size(), previous_features.size());
   CHECK_EQ(previous_pts.size(), tracklet_ids.size());
 
-  // as per documentation the vector must have the same size as the input
-  current_points.resize(previous_pts.size());
-  const cv::Size klt_window_size(21, 21);  // Window size for KLT
-  const int klt_max_level = 3;             // Max pyramid levels for KLT
-  const cv::TermCriteria klt_criteria = cv::TermCriteria(
+  static const cv::Size klt_window_size(21, 21);  // Window size for KLT
+  static const int klt_max_level = 3;             // Max pyramid levels for KLT
+  static const cv::TermCriteria klt_criteria = cv::TermCriteria(
       cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 30, 0.03);
+
+  // used as flags argument for calcOpticalFlowPyrLK - initially starts as
+  // default (0) flag
+  int klt_flags = 0;
+
+  std::vector<cv::Point2f> current_points;
+  if (R_km1_k) {
+    predictKeypointsGivenRotation(current_points, previous_pts, *R_km1_k);
+    klt_flags = cv::OPTFLOW_USE_INITIAL_FLOW;
+  } else {
+    // as per documentation the vector must have the same size as the input
+    current_points.resize(previous_pts.size());
+  }
+  CHECK_EQ(current_points.size(), previous_pts.size());
 
   cv::calcOpticalFlowPyrLK(previous_processed_img, current_processed_img,
                            previous_pts, current_points, status, err,
-                           klt_window_size, klt_max_level, klt_criteria);
+                           klt_window_size, klt_max_level, klt_criteria,
+                           klt_flags);
+
+  // if we used OPTFLOW_USE_INITIAL_FLOW check that we actually got good flow
+  if (klt_flags == cv::OPTFLOW_USE_INITIAL_FLOW) {
+    static constexpr int kMinSuccessTracks = 10;
+    int succ_num = 0;
+    for (size_t i = 0; i < status.size(); i++) {
+      if (status[i]) succ_num++;
+    }
+    if (succ_num < kMinSuccessTracks) {
+      LOG(WARNING) << "Using initial flow for KLT tracking failed: only "
+                   << succ_num << " tracked!";
+      cv::calcOpticalFlowPyrLK(previous_processed_img, current_processed_img,
+                               previous_pts, current_points, status, err,
+                               klt_window_size, klt_max_level, klt_criteria);
+    }
+  }
 
   CHECK_EQ(previous_pts.size(), current_points.size());
   CHECK_EQ(status.size(), current_points.size());
@@ -529,10 +566,11 @@ Feature::Ptr KltFeatureTracker::constructStaticFeatureFromPrevious(
   TrackletId tracklet_to_use = tracklet_id;
   // if age is too large, or age is zero, retrieve new tracklet id
   if (age > params_.max_feature_track_age) {
-    TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
-    tracklet_to_use = tracked_id_manager.getTrackletIdCount();
-    tracked_id_manager.incrementTrackletIdCount();
-    age = 0u;
+    // TrackletIdManager& tracked_id_manager = TrackletIdManager::instance();
+    // tracklet_to_use = tracked_id_manager.getTrackletIdCount();
+    // tracked_id_manager.incrementTrackletIdCount();
+    // age = 0u;
+    return nullptr;
   }
 
   // update previous keypoint

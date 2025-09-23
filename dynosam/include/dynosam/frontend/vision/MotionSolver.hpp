@@ -30,6 +30,7 @@
 #pragma once
 
 #include <glog/logging.h>
+#include <gtsam/nonlinear/ISAM2Params.h>
 
 #include <opengv/absolute_pose/CentralAbsoluteAdapter.hpp>
 #include <opengv/absolute_pose/methods.hpp>
@@ -44,6 +45,7 @@
 #include <opengv/sac_problems/relative_pose/TranslationOnlySacProblem.hpp>
 #include <optional>
 
+#include "dynosam/backend/BackendDefinitions.hpp"  //for formulation hooks
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/Frontend-Definitions.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
@@ -110,6 +112,7 @@ struct SolverResult {
 };
 
 using Pose3SolverResult = SolverResult<gtsam::Pose3>;
+using Motion3SolverResult = SolverResult<Motion3ReferenceFrame>;
 
 /**
  * @brief Joinly refines optical flow with with the given pose
@@ -333,11 +336,36 @@ class EgoMotionSolver {
   const CameraParams camera_params_;
 };
 
-class ObjectMotionSovler : protected EgoMotionSolver {
+class ObjectMotionSolver {
  public:
+  DYNO_POINTER_TYPEDEFS(ObjectMotionSolver)
+
+  ObjectMotionSolver() = default;
+  virtual ~ObjectMotionSolver() = default;
+
+  using Result = std::pair<ObjectMotionMap, ObjectPoseMap>;
+
+  virtual Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) = 0;
+
+ protected:
+};
+
+class ObjectMotionSovlerF2F : public ObjectMotionSolver,
+                              protected EgoMotionSolver {
+ public:
+  DYNO_POINTER_TYPEDEFS(ObjectMotionSovlerF2F)
+
+  //! Result from solve including the object motions and poses
+  using ObjectMotionSolver::Result;
+
   struct Params : public EgoMotionSolver::Params {
     bool refine_motion_with_joint_of = true;
     bool refine_motion_with_3d = true;
+
+    //! Hook to get the ground truth packet. Used when collecting the object
+    //! poses (on conditional) to ensure the first pose matches with the gt when
+    //! evaluation
+    FormulationHooks::GroundTruthPacketsRequest ground_truth_packets_request;
 
     OpticalFlowAndPoseOptimizer::Params joint_of_params =
         OpticalFlowAndPoseOptimizer::Params();
@@ -345,32 +373,46 @@ class ObjectMotionSovler : protected EgoMotionSolver {
         MotionOnlyRefinementOptimizer::Params();
   };
 
-  ObjectMotionSovler(const Params& params, const CameraParams& camera_params);
+  ObjectMotionSovlerF2F(const Params& params,
+                        const CameraParams& camera_params);
 
-  Pose3SolverResult geometricOutlierRejection3d2d(Frame::Ptr frame_k_1,
-                                                  Frame::Ptr frame_k,
-                                                  const gtsam::Pose3& T_world_k,
-                                                  ObjectId object_id);
+  Result solve(Frame::Ptr frame_k, Frame::Ptr frame_k_1) override;
 
-  Pose3SolverResult geometricOutlierRejection3d3d(Frame::Ptr frame_k_1,
-                                                  Frame::Ptr frame_k,
-                                                  const gtsam::Pose3& T_world_k,
-                                                  ObjectId object_id);
-
-  Pose3SolverResult motionModelOutlierRejection3d2d(
-      const AbsolutePoseCorrespondences& dynamic_correspondences,
+  Motion3SolverResult geometricOutlierRejection3d2d(
       Frame::Ptr frame_k_1, Frame::Ptr frame_k, const gtsam::Pose3& T_world_k,
       ObjectId object_id);
 
+  const ObjectMotionSovlerF2F::Params& objectMotionParams() const {
+    return object_motion_params;
+  }
+
+ private:
+  bool solveImpl(Frame::Ptr frame_k, Frame::Ptr frame_k_1, ObjectId object_id,
+                 MotionEstimateMap& motion_estimates);
+  const ObjectPoseMap& updatePoses(MotionEstimateMap& motion_estimates,
+                                   Frame::Ptr frame_k, Frame::Ptr frame_k_1);
+
+  const ObjectMotionMap& updateMotions(MotionEstimateMap& motion_estimates,
+                                       Frame::Ptr frame_k,
+                                       Frame::Ptr frame_k_1);
+
+ private:
+  //! All object poses (from k to K) and updated by updatePoses at each
+  //! iteration of sovle
+  ObjectPoseMap object_poses_;
+  //! All object motions (from k to K) and updated by updatedMotions at each
+  //! iteration of sovle
+  ObjectMotionMap object_motions_;
+
  protected:
-  const Params object_motion_params;
+  const ObjectMotionSovlerF2F::Params object_motion_params;
 };
 
 void declare_config(OpticalFlowAndPoseOptimizer::Params& config);
 void declare_config(MotionOnlyRefinementOptimizer::Params& config);
 
 void declare_config(EgoMotionSolver::Params& config);
-void declare_config(ObjectMotionSovler::Params& config);
+void declare_config(ObjectMotionSovlerF2F::Params& config);
 
 }  // namespace dyno
 

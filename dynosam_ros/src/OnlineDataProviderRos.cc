@@ -112,24 +112,16 @@ void OnlineDataProviderRos::imageSyncCallback(
   const FrameId frame_id = frame_id_;
   frame_id_++;
 
-  ImageContainer::Ptr image_container = ImageContainer::Create(
-      timestamp, frame_id, ImageWrapper<ImageType::RGBMono>(rgb),
-      ImageWrapper<ImageType::Depth>(depth),
-      ImageWrapper<ImageType::OpticalFlow>(flow),
-      ImageWrapper<ImageType::MotionMask>(mask));
-  CHECK(image_container);
-
-  cv::Mat of_viz, motion_viz, depth_viz;
-  of_viz = ImageType::OpticalFlow::toRGB(flow);
-  motion_viz = ImageType::MotionMask::toRGB(mask);
-  depth_viz = ImageType::Depth::toRGB(depth);
+  ImageContainer image_container(frame_id, timestamp);
+  image_container.rgb(rgb).depth(depth).opticalFlow(flow).objectMotionMask(
+      mask);
 
   // cv::imshow("Optical Flow", of_viz);
   // cv::imshow("Motion mask", motion_viz);
   // cv::imshow("Depth", depth_viz);
   // cv::waitKey(1);
   // trigger callback to send data to the DataInterface!
-  image_container_callback_(image_container);
+  image_container_callback_(std::make_shared<ImageContainer>(image_container));
 }
 
 }  // namespace dyno

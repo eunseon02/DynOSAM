@@ -1,0 +1,9 @@
+digraph G{
+0[label="x2, h2, m4, m3"];
+0->1
+1[label="m2 : h2, x2"];
+1->2
+2[label="x1, h1 : m2"];
+2->3
+3[label="m1 : h1, x1"];
+}

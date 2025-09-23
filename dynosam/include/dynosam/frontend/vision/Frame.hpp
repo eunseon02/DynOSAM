@@ -34,6 +34,7 @@
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/DynamicObjects.hpp"
 #include "dynosam/common/ImageContainer.hpp"
+#include "dynosam/common/PointCloudProcess.hpp"
 #include "dynosam/common/StructuredContainers.hpp"
 #include "dynosam/common/Types.hpp"
 #include "dynosam/frontend/vision/Feature.hpp"
@@ -112,6 +113,8 @@ class Frame {
    */
   inline size_t numStaticFeatures() const { return static_features_.size(); }
 
+  // NOTE: this is not the number of tracked features, just the ones that are
+  // outliers and therefore include all the newly detected ones!!
   /**
    * @brief Gets the total number of static inlier features
    *
@@ -226,6 +229,9 @@ class Frame {
     }
     return object_ids;
   }
+
+  PointCloudLabelRGB::Ptr projectToDenseCloud(
+      const cv::Mat* detection_mask = nullptr) const;
 
   /**
    * @brief Update the depth values on all contained features.

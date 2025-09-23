@@ -30,10 +30,12 @@
 
 #pragma once
 
+#include <config_utilities/config_utilities.h>
+
 #include "dynosam/common/Camera.hpp"
 #include "dynosam/common/Types.hpp"
-#include "dynosam/frontend/FrontendParams.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/vision/TrackerParams.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 
 namespace dyno {
@@ -54,47 +56,96 @@ class TrackletIdManager {
     return *instance_;
   }
 
-  inline TrackletId getTrackletIdCount() const { return tracklet_count_; }
-  inline void incrementTrackletIdCount() { tracklet_count_++; }
+  inline TrackletId getTrackletIdCount() const {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    return tracklet_count_;
+  }
+  inline void incrementTrackletIdCount() {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    tracklet_count_++;
+  }
+
+  inline TrackletId getAndIncrementTrackletId() {
+    // tbb::mutex::scoped_lock lock(mutex_);
+    auto tracklet = tracklet_count_;
+    tracklet_count_++;
+    return tracklet;
+  }
 
  private:
   TrackletIdManager() = default;
   TrackletId tracklet_count_{0};  //! Global TrackletId
+  std::mutex mutex_;
 
   static std::unique_ptr<TrackletIdManager> instance_;
 };
 
+/**
+ * @brief Parameter struct to control the visualisation for
+ * FeatureTrackerBase::computeImageTracks
+ *
+ */
+class ImageTracksParams {
+ public:
+  constexpr static int kFeatureThicknessDebug = 5;
+  constexpr static int kFeatureThickness = 4;
+
+  constexpr static int kBBoxThicknessDebug = 4;
+  constexpr static int kBBoxThickness = 2;
+
+  ImageTracksParams(bool debug) : is_debug(debug) {}
+  ImageTracksParams() {}
+
+  friend void declare_config(ImageTracksParams& config);
+
+  inline bool isDebug() const { return is_debug; }
+  bool showFrameInfo() const;
+  bool showIntermediateTracking() const;
+  bool drawObjectBoundingBox() const;
+  bool drawObjectMask() const;
+  int bboxThickness() const;
+  int featureThickness() const;
+
+ private:
+  //! High-level control over viz. If is_debug is set to false, no debug level
+  //! viz will be used, otherwise, the fine-grained control
+  // flags will be used to determine what to show.
+  //! No debug (ie. is_debug == false) means only feature inlier feature
+  //! tracks and object bounding boxes will be shown
+  bool is_debug{false};
+
+  int feature_thickness_debug{kFeatureThicknessDebug};
+  int feature_thickness{kFeatureThickness};
+
+  int bbox_thickness_debug{kBBoxThicknessDebug};
+  int bbox_thickness{kBBoxThickness};
+
+  //! Fine-grained control
+  //! To show current frame info as text
+  bool show_frame_info{true};
+  //! To show outliers and new feature tracks (red and blue)
+  bool show_intermediate_tracking{false};
+  //! Draw bbox over each object and the object id label
+  bool draw_object_bounding_box{true};
+  //! Draw the detection mask of the whole object
+  bool draw_object_mask{false};
+};
+
 class FeatureTrackerBase {
  public:
-  /**
-   * @brief Parameter struct to control the visualisation for
-   * FeatureTrackerBase::computeImageTracks
-   *
-   */
-  struct ImageTracksParams {
-    //! High-level control over viz. If is_debug is set to false, no debug level
-    //! viz will be used, otherwise, the fine-grained control
-    // flags will be used to determine what to show.
-    //! No debug (ie. is_debug == false) means only feature inlier feature
-    //! tracks and object bounding boxes will be shown
-    bool is_debug;
-
-    //! Fine-grained control
-
-    //! To show current frame info as text
-    bool show_frame_info = true;
-    //! To show outliers and new feature tracks (red and blue)
-    bool show_intermediate_tracking = false;
-
-    ImageTracksParams(bool debug) : is_debug(debug) {}
-  };
-
   FeatureTrackerBase(const TrackerParams& params, Camera::Ptr camera,
                      ImageDisplayQueue* display_queue);
 
   cv::Mat computeImageTracks(const Frame& previous_frame,
                              const Frame& current_frame,
                              const ImageTracksParams& config = false) const;
+
+  bool predictKeypointsGivenRotation(std::vector<cv::Point2f>& predicted_pts_k,
+                                     const std::vector<cv::Point2f>& pts_km1,
+                                     const gtsam::Rot3& R_km1_k) const;
+
+  // bool predictSparseFlow(std::vector<cv::Point2f>& predicted_pts_k, const
+  // std::vector<cv::Point2f>& pts_km1, const gtsam::Rot3& R_km1_k )
 
  protected:
   /**
@@ -103,11 +154,13 @@ class FeatureTrackerBase {
    * checks that the keypoint is within the image size, as given by the camera
    * parameters.
    *
-   * @param kp
+   * @param kp const Keypoint&
    * @return true
    * @return false
    */
   bool isWithinShrunkenImage(const Keypoint& kp) const;
+
+  bool isWithinShrunkenImage(const cv::Point2f& kp) const;
 
  protected:
   const TrackerParams params_;

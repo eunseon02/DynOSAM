@@ -68,251 +68,14 @@ void getCorrespondences(FeaturePairs& correspondences,
 
 ObjectIds getObjectLabels(const cv::Mat& image) {
   CHECK(!image.empty());
-  // TODO: this could be optimised by mapping the data directly to a std::set?
   std::set<ObjectId> unique_labels;
-  for (int i = 0; i < image.rows; i++) {
-    for (int j = 0; j < image.cols; j++) {
-      const ObjectId label = image.at<ObjectId>(i, j);
-
-      if (label != background_label) {
-        unique_labels.insert(label);
-      }
+  for (auto it = image.begin<ObjectId>(); it != image.end<ObjectId>(); ++it) {
+    if (*it != background_label) {
+      unique_labels.insert(*it);
     }
   }
-
   return ObjectIds(unique_labels.begin(), unique_labels.end());
 }
-
-// TODO: depricate!!
-//  std::vector<std::vector<int> > trackDynamic(const FrontendParams& params,
-//  const Frame& previous_frame, Frame::Ptr current_frame) {
-//    auto& objects_by_instance_label = current_frame->object_observations_;
-
-//   auto& previous_dynamic_feature_container =
-//   previous_frame.dynamic_features_; auto& current_dynamic_feature_container =
-//   current_frame->dynamic_features_;
-
-//   ObjectIds instance_labels_to_remove;
-
-//   //TODO: shrink object boundary?
-//   for(auto& [instance_label, object_observation] : objects_by_instance_label)
-//   {
-//     double obj_center_depth = 0, sf_min=100, sf_max=0, sf_mean=0, sf_count=0;
-//     std::vector<int> sf_range(10,0);
-
-//     const size_t num_object_features =
-//     object_observation.object_features_.size();
-//     // LOG(INFO) << "tracking object observation with instance label " <<
-//     instance_label << " and " << num_object_features << " features";
-
-//     int feature_pairs_valid = 0;
-//     int num_found = 0;
-//     for(const TrackletId tracklet_id : object_observation.object_features_) {
-//       if(previous_dynamic_feature_container.exists(tracklet_id)) {
-//         num_found++;
-//         CHECK(current_dynamic_feature_container.exists(tracklet_id));
-
-//         Feature::Ptr current_feature =
-//         current_dynamic_feature_container.getByTrackletId(tracklet_id);
-//         Feature::Ptr previous_feature =
-//         previous_dynamic_feature_container.getByTrackletId(tracklet_id);
-
-//         if(!previous_feature->usable()) {
-//           current_feature->markInvalid();
-//           continue;
-//         }
-
-//         //this can happen in situations such as the updateDepths when depths
-//         > thresh are marked invalud if(!current_feature->usable()) {
-//         continue;}
-
-//         CHECK(!previous_feature->isStatic());
-//         CHECK(!current_feature->isStatic());
-
-//         Landmark lmk_previous =
-//         previous_frame.backProjectToWorld(tracklet_id); Landmark lmk_current
-//         = current_frame->backProjectToWorld(tracklet_id);
-
-//         Landmark flow_world = lmk_current - lmk_previous ;
-//         double sf_norm = flow_world.norm();
-
-//         feature_pairs_valid++;
-
-//         if (sf_norm<params.scene_flow_magnitude)
-//             sf_count = sf_count+1;
-//         if(sf_norm<sf_min)
-//             sf_min = sf_norm;
-//         if(sf_norm>sf_max)
-//             sf_max = sf_norm;
-//         sf_mean = sf_mean + sf_norm;
-
-//         {
-//           if (0.0<=sf_norm && sf_norm<0.05)
-//               sf_range[0] = sf_range[0] + 1;
-//           else if (0.05<=sf_norm && sf_norm<0.1)
-//               sf_range[1] = sf_range[1] + 1;
-//           else if (0.1<=sf_norm && sf_norm<0.2)
-//               sf_range[2] = sf_range[2] + 1;
-//           else if (0.2<=sf_norm && sf_norm<0.4)
-//               sf_range[3] = sf_range[3] + 1;
-//           else if (0.4<=sf_norm && sf_norm<0.8)
-//               sf_range[4] = sf_range[4] + 1;
-//           else if (0.8<=sf_norm && sf_norm<1.6)
-//               sf_range[5] = sf_range[5] + 1;
-//           else if (1.6<=sf_norm && sf_norm<3.2)
-//               sf_range[6] = sf_range[6] + 1;
-//           else if (3.2<=sf_norm && sf_norm<6.4)
-//               sf_range[7] = sf_range[7] + 1;
-//           else if (6.4<=sf_norm && sf_norm<12.8)
-//               sf_range[8] = sf_range[8] + 1;
-//           else if (12.8<=sf_norm && sf_norm<25.6)
-//               sf_range[9] = sf_range[9] + 1;
-//         }
-
-//       }
-
-//     }
-
-//     VLOG(10) << "Number feature pairs valid " << feature_pairs_valid << " out
-//     of " << num_object_features << " for instance  " << instance_label << "
-//     num found " << num_found;
-
-//     //if no points found (i.e tracked)
-//     //dont do anything as this is a new object so we cannot say if its
-//     dynamic or not if(num_found == 0) {
-//       //TODO: i guess?
-// object_observation.marked_as_moving_ = true;
-//     }
-//     if (sf_count/num_object_features>params.scene_flow_percentage ||
-//     num_object_features < 150u)
-//     // else if (sf_count/num_object_features>params.scene_flow_percentage ||
-//     num_object_features < 15)
-//     {
-//       // label this object as static background
-//       // LOG(INFO) << "Instance object " << instance_label << " to static for
-//       frame " << current_frame->frame_id_;
-//       instance_labels_to_remove.push_back(instance_label);
-//     }
-//     else {
-//       // LOG(INFO) << "Instance object " << instance_label << " marked as
-//       dynamic"; object_observation.marked_as_moving_ = true;
-//     }
-//   }
-
-//   //we do the removal after the iteration so as not to mess up the loop
-//   for(const auto label : instance_labels_to_remove) {
-//     VLOG(30) << "Removing label " << label;
-//     //TODO: this is really really slow!!
-//     current_frame->moveObjectToStatic(label);
-//     // LOG(INFO) << "Done Removing label " << label;
-//   }
-
-//   // Relabel the objects that associate with the objects in last frame
-//   objects_by_instance_label = current_frame->object_observations_; //get
-//   iterator gain as the observations have changed
-
-//   // per object iteration
-//   for(auto& [instance_label, object_observation] : objects_by_instance_label)
-//   {
-//     CHECK(object_observation.marked_as_moving_) << "Object with instance
-//     label "
-//       << instance_label << " is not marked as moving, but should be";
-//     // LOG(INFO) << "Assigning tracking label for instance " <<
-//     instance_label;
-
-//     const size_t num_object_features =
-//     object_observation.object_features_.size();
-//     // save semantic labels in last frame
-//     ObjectIds instance_labels_prev;
-//     //feature in each object iteration
-//     for(const TrackletId tracklet_id : object_observation.object_features_) {
-//       if(previous_dynamic_feature_container.exists(tracklet_id)) {
-//         CHECK(current_dynamic_feature_container.exists(tracklet_id));
-
-//         //TODO: inliers outliers!@!
-
-//         Feature::Ptr previous_feature =
-//         previous_dynamic_feature_container.getByTrackletId(tracklet_id);
-//         instance_labels_prev.push_back(previous_feature->objectId());
-//       }
-//     }
-
-//     const bool tracked_in_previous_frame = instance_labels_prev.size() > 0u;
-//     //since we only call this function after boostrapping (frame > 1) this
-//     condition only works when an object appears from frame 2 onwards
-//     if(!tracked_in_previous_frame) {
-//       // LOG(INFO) << "New object with instance label " << instance_label <<
-//       " assigned tracking label " << Frame::global_object_id;
-//       current_frame->updateObjectTrackingLabel(object_observation,
-//       Frame::global_object_id); Frame::global_object_id++; continue;
-//      }
-
-//     // find label that appears most in instance_labels_prev()
-//     // (1) count duplicates
-//     std::map<int, int> dups;
-//     for(int k : instance_labels_prev) ++dups[k];
-//     // (2) and sort them by descending order
-//     std::vector<std::pair<int, int> > sorted;
-//     for (auto k : dups)
-//         sorted.push_back(std::make_pair(k.first,k.second));
-
-//     //copied from FeatureTracker.cc
-//     auto sort_pair_int = [](const std::pair<int, int>& a, const
-//     std::pair<int, int>& b) -> bool {
-//       return (a.second > b.second);
-//     };
-//     std::sort(sorted.begin(), sorted.end(), sort_pair_int);
-
-//     // label the (instance) object in current frame
-//     ObjectId new_label = sorted[0].first;
-
-//     //TODO: make global_object_id access a function?
-//     if(Frame::global_object_id == 1) {
-//       current_frame->updateObjectTrackingLabel(object_observation,
-//       Frame::global_object_id); Frame::global_object_id++;
-//     }
-//     else {
-//       //here we need to propogate the tracking label (if exists) from the
-//       previous frame
-//       //this means we expect all the features in the previous frame to have
-//       the same tracking label
-//       //(can this even not happen?)
-
-//       //find previous observation to see if one has the same instance label
-//       auto& previous_object_observations =
-//       previous_frame.object_observations_; auto it = std::find_if(
-//         previous_object_observations.begin(),
-//         previous_object_observations.end(),
-//         /*pair = <ObjectId, DynamicObjectObservation>*/
-//         [&](const auto& pair) { return pair.second.instance_label_ ==
-//         new_label; });
-
-//       //object tracking label was in the previous frame
-//       //tracking label has not been updated from previous frame? will still
-//       be -1? if(it != previous_object_observations.end() &&
-//       it->second.tracking_label_ != -1) {
-//         ObjectId propogated_tracking_label = it->second.tracking_label_;
-//         // LOG(INFO) << "Propogating tracking label " <<
-//         propogated_tracking_label << " from frames " <<
-//         previous_frame.frame_id_ << " -> " << current_frame->frame_id_;
-//         current_frame->updateObjectTrackingLabel(object_observation,
-//         propogated_tracking_label);
-//       }
-//       else {
-//         // new object (or at least not tracked)
-//         // LOG(INFO) << "New object with instance label " << instance_label
-//         << " assigned tracking label " << Frame::global_object_id;
-
-//         current_frame->updateObjectTrackingLabel(object_observation,
-//         Frame::global_object_id); Frame::global_object_id++;
-//       }
-
-//     }
-
-//     VLOG(20) << "Done tracking for instance label " << instance_label;
-//   }
-//   return std::vector<std::vector<int> >();
-// }
 
 std::vector<std::vector<int>> trackDynamic(const FrontendParams& params,
                                            const Frame& previous_frame,
@@ -324,7 +87,6 @@ std::vector<std::vector<int>> trackDynamic(const FrontendParams& params,
 
   ObjectIds instance_labels_to_remove;
 
-  // TODO: shrink object boundary?
   for (auto& [instance_label, object_observation] : objects_by_instance_label) {
     double obj_center_depth = 0, sf_min = 100, sf_max = 0, sf_mean = 0,
            sf_count = 0;
@@ -512,37 +274,91 @@ void shrinkMask(const cv::Mat& mask, cv::Mat& shrunk_mask, int erosion_size) {
   }
 }
 
-void computeObjectMaskBoundaryMask(const cv::Mat& mask, cv::Mat& boundary_mask,
-                                   int thickness,
+void computeObjectMaskBoundaryMask(ObjectBoundaryMaskResult& result,
+                                   const cv::Mat& mask, int thickness,
                                    bool use_as_feature_detection_mask) {
   cv::Mat thicc_boarder;  // god im so funny
   cv::Scalar fill_colour;
 
+  thicc_boarder = cv::Mat::zeros(mask.size(), CV_8UC1);
+  const int outer_thickness = thickness;
+
   // background should be 255 as we're can detect in this region and boarder
   // region should be zero
   if (use_as_feature_detection_mask) {
-    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(255));
+    result.boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(255));
     fill_colour = cv::Scalar(0);
   } else {
-    thicc_boarder = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
+    result.boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
     fill_colour = cv::Scalar(255);
   }
 
-  const ObjectIds instance_labels = vision_tools::getObjectLabels(mask);
-  for (const auto object_id : instance_labels) {
+  result.objects_detected = vision_tools::getObjectLabels(mask);
+  // this basically just creates a full mask over the existing masks using the
+  // detected contours
+  for (const auto object_id : result.objects_detected) {
     std::vector<std::vector<cv::Point>> detected_contours;
-    vision_tools::findObjectBoundingBox(mask, object_id, detected_contours);
+    cv::Rect detected_rect;
+    vision_tools::findObjectBoundingBox(mask, object_id, detected_rect,
+                                        detected_contours);
 
-    cv::drawContours(thicc_boarder, detected_contours, -1, fill_colour,
-                     thickness);
+    // cv::drawContours(thicc_boarder, detected_contours, -1, 255, cv::FILLED);
+    CHECK_LE(object_id, 255);  // works only with uint8 types...
+    cv::drawContours(thicc_boarder, detected_contours, -1, object_id,
+                     cv::FILLED);
+    result.object_bounding_boxes.push_back(detected_rect);
+  }
+  // cv::Mat thicc_boarder_8u; //viz
+  // cv::threshold(thicc_boarder, thicc_boarder_8u, 0, 255, cv::THRESH_BINARY);
+  // cv::imshow("Thicc boarder", thicc_boarder_8u);
+  // cv::waitKey(1);
+
+  // Dilate the mask to expand outwards by 'thickness' pixels
+  cv::Mat dilated_mask;
+  cv::dilate(thicc_boarder, dilated_mask,
+             cv::getStructuringElement(
+                 cv::MORPH_ELLIPSE,
+                 cv::Size(2 * outer_thickness + 1, 2 * outer_thickness + 1)));
+  // Compute the outer border mask
+  cv::Mat thicc_outer_boarder_mask = dilated_mask - thicc_boarder;
+
+  // Additionally erode a little but on the inner-side of the mask
+  // This helps get rid of pixels directly on the boarder which often have poor
+  // depth
+  static constexpr int inner_thickness = 10;
+  // Generate the inner border
+  cv::Mat eroded_mask;
+  cv::erode(thicc_boarder, eroded_mask,
+            cv::getStructuringElement(
+                cv::MORPH_ELLIPSE,
+                cv::Size(2 * inner_thickness + 1, 2 * inner_thickness + 1)));
+  cv::Mat thicc_inner_boarder_mask = thicc_boarder - eroded_mask;
+
+  // iterate over the objects in the eroded mask again to calculate their
+  // bounding box's this will be 'very approximate' area which features can be
+  // detected for object j it is approximate because it may not well be
+  // approximated by a bounding box
+  for (const auto object_id : result.objects_detected) {
+    cv::Rect detected_rect;
+    vision_tools::findObjectBoundingBox(eroded_mask, object_id, detected_rect);
+    result.inner_boarder_object_bounding_boxes.push_back(detected_rect);
   }
 
-  boundary_mask = thicc_boarder;
+  // set boarder pixels to fill colour (e.g. zero if to be used as feature
+  // detection mask)
+  result.boundary_mask.setTo(fill_colour, thicc_outer_boarder_mask);
+  result.boundary_mask.setTo(fill_colour, thicc_inner_boarder_mask);
+
+  result.labelled_boundary_mask = cv::Mat(mask.size(), CV_8U, cv::Scalar(0));
+  cv::bitwise_or(thicc_outer_boarder_mask, thicc_inner_boarder_mask,
+                 result.labelled_boundary_mask);
+
+  result.is_feature_detection_mask = use_as_feature_detection_mask;
 }
 
 void relabelMasks(const cv::Mat& mask, cv::Mat& relabelled_mask,
                   const ObjectIds& old_labels, const ObjectIds& new_labels) {
-  if (old_labels.size() != old_labels.size()) {
+  if (old_labels.size() != new_labels.size()) {
     throw std::invalid_argument(
         "Old labels and new labels must have the same size");
   }

@@ -30,7 +30,8 @@
 
 #include <glog/logging.h>
 
-#include <dynosam/backend/RGBDBackendModule.hpp>
+#include <dynosam/backend/ParallelHybridBackendModule.hpp>
+#include <dynosam/backend/RegularBackendModule.hpp>
 #include <dynosam/common/Map.hpp>
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
 #include <dynosam/logger/Logger.hpp>
@@ -66,18 +67,14 @@ class BackendExperimentsNode : public DynoNode {
 
     Camera::Ptr camera = std::make_shared<Camera>(camera_params);
 
-    using BackendModuleTraits = RGBDBackendModule::ModuleTraits;
-    using MapType = RGBDBackendModule::MapType;
-    using MeasurementType = RGBDBackendModule::MeasurementType;
-
-    typename MapType::Ptr map = MapType::create();
+    using BackendModuleTraits = RegularBackendModule::ModuleTraits;
 
     LOG(INFO) << "Offline RGBD frontend";
     const std::string file_path =
         getOutputFilePath(kRgbdFrontendOutputJsonFile);
 
     using OfflineFrontend =
-        FrontendOfflinePipeline<RGBDBackendModule::ModuleTraits>;
+        FrontendOfflinePipeline<RegularBackendModule::ModuleTraits>;
 
     OfflineFrontend::UniquePtr offline_frontend =
         std::make_unique<OfflineFrontend>("offline-rgbdfrontend", file_path,
@@ -88,13 +85,27 @@ class BackendExperimentsNode : public DynoNode {
     OfflineFrontend* offline_frontend_ptr = offline_frontend.get();
 
     // TODO: make better params!!
-    auto updater_type =
-        static_cast<RGBDBackendModule::UpdaterType>(FLAGS_backend_updater_enum);
+    auto updater_type = static_cast<RegularBackendModule::UpdaterType>(
+        FLAGS_backend_updater_enum);
 
-    params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
+    BackendModuleType<RGBDBackendModuleTraits>::Ptr backend = nullptr;
 
-    auto backend = std::make_shared<RGBDBackendModule>(
-        params.backend_params_, map, camera, updater_type);
+    if (updater_type == RGBDFormulationType::PARALLEL_HYBRID) {
+      backend = std::make_shared<ParallelHybridBackendModule>(
+          params.backend_params_, camera);
+    } else {
+      params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
+
+      backend = std::make_shared<RegularBackendModule>(params.backend_params_,
+                                                       camera, updater_type);
+    }
+
+    // params.backend_params_.full_batch_frame =
+    // offline_frontend->endingFrame();
+
+    // auto backend =
+    // std::make_shared<RegularBackendModule>(params.backend_params_,
+    //                                                    camera, updater_type);
 
     backend_pipeline_ = std::make_unique<BackendPipeline>(
         "backend-pipeline", &backend_input_queue_, backend);

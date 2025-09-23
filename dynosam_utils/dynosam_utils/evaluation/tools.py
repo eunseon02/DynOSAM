@@ -93,15 +93,15 @@ def load_pose_from_row(row) -> Tuple[np.ndarray, np.ndarray]:
 
     return T_est, T_ref
 
+# opencv coordiante frame to robotic convention
 def camera_coordinate_to_world() -> np.ndarray:
     # we construct the transform that takes somethign in the robot convention
     # to the opencv convention and then apply the inverse
-    return evo_lie_algebra.se3_inverse(se3(
-        np.array([[1.0, 0.0, 0.0],
-                  [0.0, 0.0, -1.0],
-                  [0.0, 1.0, 0.0]]),
+    return se3(
+        np.array([[0.0, 0.0, 1.0],
+                  [-1.0, 0.0, 0.0],
+                  [0.0, -1.0, 0.0]]),
         np.array([0.0, 0.0, 0.0]))
-    )
 
 def transform_camera_trajectory_to_world(traj):
     from copy import deepcopy
@@ -318,15 +318,15 @@ class ObjectMotionTrajectory(object):
 
     def calculate_velocity(self) -> np.ndarray:
         velocities = []
-        for (pose_k_1, motion_k) in self.get_motion_with_pose_previous_iterator():
-            if pose_k_1 is None or motion_k is None:
+        for (pose_k_1, e_H_k_world) in self.get_motion_with_pose_previous_iterator():
+            if pose_k_1 is None or e_H_k_world is None:
                 continue
             I =  evo.core.transformations.identity_matrix()
             R_motion =  evo.core.transformations.identity_matrix()
             # ensure homogenous
-            R_motion[0:3, 0:3] = motion_k[0:3, 0:3]
+            R_motion[0:3, 0:3] = e_H_k_world[0:3, 0:3]
 
-            t_motion = evo.core.transformations.translation_from_matrix(motion_k)
+            t_motion = evo.core.transformations.translation_from_matrix(e_H_k_world)
             t_pose = evo.core.transformations.translation_from_matrix(pose_k_1)
 
             # make homogenous
