@@ -15,7 +15,14 @@ DynoSAM current provides full-batch and sliding-window optimisation procedures a
 The offical code used for our paper:
 - [Jesse Morris](https://jessemorris.github.io/), Yiduo Wang, Mikolaj Kliniewski, Viorela Ila, [*DynoSAM: Open-Source Smoothing and Mapping Framework for Dynamic SLAM*](https://arxiv.org/pdf/2501.11893), Arxiv.  Submitted Transactions on Robotics (T-RO) Visual SLAM Special Issue (2025).
 
-We kindly ask to cite our paper if you find this work useful:
+
+#### ** Update September 2025 **
+This code now also contains the code for our new work
+- J.Morris, Y. Wang, V. Ila. [*Online Dynamic SLAM with Incremental Smoothing and Mapping*](https://www.arxiv.org/abs/2509.08197), Arxiv. Submitted RA-L (2025)
+
+
+We kindly ask to cite our papers if you find these works useful:
+
 
 ```bibtex
 
@@ -29,7 +36,14 @@ We kindly ask to cite our paper if you find this work useful:
       url={https://arxiv.org/abs/2501.11893},
 }
 
+@article{morris2025online,
+  title={Online Dynamic SLAM with Incremental Smoothing and Mapping},
+  author={Morris, Jesse and Wang, Yiduo and Ila, Viorela},
+  journal={arXiv preprint arXiv:2509.08197},
+  year={2025}
+}
 ```
+
 ## Related Publications
 
 DynoSAM was build as a culmination of several works:
@@ -146,6 +160,18 @@ This script will also construct the corresponding output folder (e.g. ouput_path
 ### Running programtically
 All the cmdline functionality can be replicated programtically using python in order to run experiments and evaluations.
 See [run_experiments_tro.py](./dynosam_utils/src/run_experiments_tro.py) for examples.
+
+
+## Running different backends
+Most of the research here is associated with different backend formulations.
+To run the different backends set `--backend_updater_enum`
+
+> NOTE: this enum value is mapped to the enum [RGBDFormulationType](./dynosam/include/dynosam/backend/RGBDBackendDefinitions.hpp)
+
+- WCME (`backend_updater_enum=0`) and WCPE(`backend_updater_enum=1`) are from TRO-2025, ICRA 2024 and previous works
+- HYBRID (`backend_updater_enum=2`) and PARALLEL_HYBRID (`backend_updater_enum=3`) are from RA-L 2025
+
+All others are internal/experimental.
 
 
 ## Tests
@@ -293,6 +319,19 @@ If the param `prefer_data_provider_camera_params` is set to True, the parameters
 This allows each data-loader to specfy/loaded the camera params from the dataset itself, without having to additionally specify the intrinsics in another file.
 
 # 4. Evaluation
+
+## Replicating results from papers
+This code base contains implementations for many papers (as noted in Related Publications).
+The `main` or `devel` branches should be able to run each method as described in the papers, however their may be discrepencies as new updates are added to different parts of the system.
+
+Additionally, I try to maintain backwards compatability as new code gets pushed to main but cannot ensure this.
+
+See different package releases associated with a paper.
+
+When running evaluations for each paper there usually is an associated python script that includes all the experiments.
+- [TRO 2025 experiments](./dynosam_utils/src/run_experiments_tro.py)
+- [RAL 2025 experiments](./dynosam_utils/src/run_experiments_ecmr.py)
+
 
 ## Output logs
 When the DynoSAM pipeline is run it will output log files in the given output directory. The log files record the output of the state-estimation as well as various interal data.
