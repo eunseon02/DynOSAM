@@ -100,8 +100,8 @@ class DynoPipelineManagerRos : public DynoNode {
   void initalisePipeline();
 
   bool spinOnce() override {
-    RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-                                getStats());
+    // RCLCPP_INFO_STREAM_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+    //                             getStats());
 
     return CHECK_NOTNULL(pipeline_)->spin();
   }

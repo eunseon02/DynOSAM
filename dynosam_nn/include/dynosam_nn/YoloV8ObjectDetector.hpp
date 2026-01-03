@@ -12,7 +12,7 @@ struct YoloConfig {
   //! Minimum confidence needed to consider a bounding box and compared against
   //! the detection confidence Used in both considering a bounding box, nms and
   //! in tracking
-  float conf_threshold = 0.5;
+  float conf_threshold = 0.3;
   //! IoU threshold for NMS
   float nms_threshold = 0.4;
 

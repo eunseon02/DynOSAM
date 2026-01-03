@@ -30,8 +30,13 @@ int main(int argc, char** argv) {
   fp.tracker_params.prefer_provided_optical_flow = false;
   fp.tracker_params.prefer_provided_object_detection = false;
 
-  const CameraParams original_camera_params =
-      waitAndSetCameraParams(node, "camera_info");
+  auto original_camera_params_opt = waitAndSetCameraParams(node, "camera_info");
+  if (!original_camera_params_opt.has_value()) {
+    RCLCPP_ERROR(node->get_logger(),
+                 "Failed to receive camera info. Cannot proceed.");
+    return 1;
+  }
+  const CameraParams& original_camera_params = *original_camera_params_opt;
 
   const auto original_size = original_camera_params.imageSize();
   cv::Size rescale_size = original_size;

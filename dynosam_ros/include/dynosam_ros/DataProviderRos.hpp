@@ -59,10 +59,10 @@ namespace dyno {
  * @tparam Period std::milli
  * @param time_to_wait const std::chrono::duration<Rep, Period>&
  * @param topic const std::string&. Defaults to "image/camera_info"
- * @return const CameraParams&
+ * @return CameraParams::Optional Returns std::nullopt if camera info is not available
  */
 template <class Rep = int64_t, class Period = std::milli>
-CameraParams waitAndSetCameraParams(
+CameraParams::Optional waitAndSetCameraParams(
     std::shared_ptr<rclcpp::Node> node, const std::string& topic,
     const std::chrono::duration<Rep, Period>& time_to_wait =
         std::chrono::duration<Rep, Period>(-1)) {
@@ -82,9 +82,11 @@ CameraParams waitAndSetCameraParams(
   } else {
     const auto milliseconds =
         std::chrono::duration_cast<std::chrono::milliseconds>(time_to_wait);
-    throw DynosamException("Failed to receive camera params on topic " + topic +
-                           " (waited with timeout " +
-                           std::to_string(milliseconds.count()) + " ms).");
+    RCLCPP_WARN_STREAM(node->get_logger(),
+                       "Failed to receive camera params on topic " << topic
+                       << " (waited " << milliseconds.count() << " ms). "
+                       << "Will use CameraParams.yaml instead.");
+    return std::nullopt;
   }
 }
 
