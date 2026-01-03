@@ -32,6 +32,7 @@
 
 #include "dynosam_common/Types.hpp"
 #include "dynosam_ros/RosUtils.hpp"
+#include <config_utilities/parsing/yaml.h>
 
 namespace dyno {
 
@@ -82,10 +83,12 @@ void OnlineDataProviderRos::shutdown() {
 }
 
 void OnlineDataProviderRos::setupSubscribers() {
+  RCLCPP_INFO(node_->get_logger(), "Setting up subscribers...");
   subscribeImages();
   subscribeImu();
   shutdown_ = false;
   is_connected = true;
+  RCLCPP_INFO(node_->get_logger(), "Subscribers setup complete. is_connected = true");
 }
 
 void OnlineDataProviderRos::subscribeImu() {
@@ -116,20 +119,66 @@ RGBDTypeCalibrationHelper::RGBDTypeCalibrationHelper(
     rclcpp::Node::SharedPtr node, const OnlineDataProviderRosParams& params)
     : node_(node) {
   if (params.wait_for_camera_params) {
-    const CameraParams original_camera_params = waitAndSetCameraParams(
+    auto original_camera_params_opt = waitAndSetCameraParams(
         node, "camera/camera_info",
         std::chrono::milliseconds(params.camera_params_timeout));
 
-    int rescale_width, rescale_height;
-    getParamsFromRos(original_camera_params, rescale_width, rescale_height,
-                     depth_scale_);
+    if (original_camera_params_opt.has_value()) {
+      const CameraParams& original_camera_params = *original_camera_params_opt;
 
-    CameraParams camera_params;
-    setupNewCameraParams(original_camera_params, camera_params, rescale_width,
-                         rescale_height);
+      int rescale_width, rescale_height;
+      getParamsFromRos(original_camera_params, rescale_width, rescale_height,
+                       depth_scale_);
 
-    original_camera_params_ = original_camera_params;
-    camera_params_ = camera_params;
+      CameraParams camera_params;
+      setupNewCameraParams(original_camera_params, camera_params, rescale_width,
+                           rescale_height);
+
+      original_camera_params_ = original_camera_params;
+      camera_params_ = camera_params;
+    } else {
+      // Camera info not available, will use CameraParams.yaml from PipelineManager
+      RCLCPP_WARN_STREAM(node->get_logger(),
+                         "Camera info not available. Will use CameraParams.yaml.");
+      // camera_params_ remains as std::nullopt
+    }
+  } else {
+    // When wait_for_camera_params is false, load camera params from yaml file
+    try {
+      std::string params_folder_path = ParameterConstructor(node.get(), "params_folder_path", std::string(""))
+                                          .description("Path to params folder")
+                                          .finish()
+                                          .get<std::string>();
+      
+      if (!params_folder_path.empty()) {
+        // Ensure path ends with /
+        if (params_folder_path.back() != '/') {
+          params_folder_path += "/";
+        }
+        
+        CameraParams original_camera_params = config::fromYamlFile<CameraParams>(
+            params_folder_path + "CameraParams.yaml");
+        
+        int rescale_width, rescale_height;
+        getParamsFromRos(original_camera_params, rescale_width, rescale_height,
+                         depth_scale_);
+        
+        CameraParams camera_params;
+        setupNewCameraParams(original_camera_params, camera_params, rescale_width,
+                             rescale_height);
+        
+        original_camera_params_ = original_camera_params;
+        camera_params_ = camera_params;
+        
+        RCLCPP_INFO_STREAM(node->get_logger(),
+                           "Loaded camera params from CameraParams.yaml. Resolution: " 
+                           << camera_params.ImageWidth() << "x" << camera_params.ImageHeight());
+      }
+    } catch (const std::exception& e) {
+      RCLCPP_WARN_STREAM(node->get_logger(),
+                         "Failed to load camera params from yaml: " << e.what()
+                         << ". Images will be processed without undistortion.");
+    }
   }
 }
 
@@ -326,6 +375,10 @@ void RGBDOnlineProviderRos::subscribeImages() {
   static const std::array<std::string, 2>& topics = {"image/rgb",
                                                      "image/depth"};
 
+  RCLCPP_INFO_STREAM(node_->get_logger(),
+                     "Subscribing to RGBD image topics: " << topics[0]
+                     << ", " << topics[1]);
+
   MultiSyncConfig config;
   config.queue_size = 20;
   // config.subscriber_options.callback_group =
@@ -336,6 +389,22 @@ void RGBDOnlineProviderRos::subscribeImages() {
   multi_image_sync->registerCallback(
       [this](const sensor_msgs::msg::Image::ConstSharedPtr& rgb_msg,
              const sensor_msgs::msg::Image::ConstSharedPtr& depth_msg) {
+        static bool first_image_received = false;
+        if (!first_image_received) {
+          RCLCPP_INFO_STREAM(node_->get_logger(),
+                             "\033[1;32m[RGBD] Received first image pair!\033[0m "
+                             "RGB: " << rgb_msg->width << "x" << rgb_msg->height
+                             << ", Depth: " << depth_msg->width << "x"
+                             << depth_msg->height);
+          first_image_received = true;
+        }
+        
+        RCLCPP_DEBUG_STREAM(node_->get_logger(),
+                            "Image callback triggered. RGB: " << rgb_msg->width
+                            << "x" << rgb_msg->height
+                            << ", Depth: " << depth_msg->width << "x"
+                            << depth_msg->height);
+        
         if (!image_container_callback_) {
           RCLCPP_ERROR_THROTTLE(node_->get_logger(), *node_->get_clock(), 1000,
                                 "Image Sync callback triggered but "
@@ -346,8 +415,14 @@ void RGBDOnlineProviderRos::subscribeImages() {
         cv::Mat rgb = readRgbRosImage(rgb_msg);
         cv::Mat depth = readDepthRosImage(depth_msg);
 
-        calibration_helper_->processRGB(rgb, rgb);
-        calibration_helper_->processDepth(depth, depth);
+        if (calibration_helper_->getCameraParams().has_value()) {
+          calibration_helper_->processRGB(rgb, rgb);
+          calibration_helper_->processDepth(depth, depth);
+        } else {
+          RCLCPP_WARN_THROTTLE(node_->get_logger(), *node_->get_clock(), 5000,
+                               "No camera parameters available for undistortion. "
+                               "Images will be processed without undistortion.");
+        }
 
         const Timestamp timestamp = utils::fromRosTime(rgb_msg->header.stamp);
         const FrameId frame_id = frame_id_;
@@ -356,10 +431,20 @@ void RGBDOnlineProviderRos::subscribeImages() {
         ImageContainer image_container(frame_id, timestamp);
         image_container.rgb(rgb).depth(depth);
 
+        RCLCPP_DEBUG_STREAM(node_->get_logger(),
+                            "Calling image_container_callback_ for frame_id: "
+                            << frame_id << ", timestamp: " << timestamp);
         image_container_callback_(
             std::make_shared<ImageContainer>(image_container));
       });
-  CHECK(multi_image_sync->connect());
+  if (!multi_image_sync->connect()) {
+    RCLCPP_ERROR(node_->get_logger(),
+                 "Failed to connect MultiImageSync2 subscribers!");
+  } else {
+    RCLCPP_INFO_STREAM(node_->get_logger(),
+                       "Successfully connected to image topics: "
+                       << topics[0] << ", " << topics[1]);
+  }
   image_subscriber_ = multi_image_sync;
 }
 

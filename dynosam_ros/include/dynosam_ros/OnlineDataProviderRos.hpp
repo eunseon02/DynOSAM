@@ -51,7 +51,7 @@ enum InputImageMode : int {
 
 struct OnlineDataProviderRosParams {
   bool subscribe_imu{true};
-  bool wait_for_camera_params{true};
+  bool wait_for_camera_params{false};
   int32_t camera_params_timeout{-1};
 };
 

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.17 FATAL_ERROR)
 
-project(dynosam_nn LANGUAGES CXX CUDA)
+project(dynosam_nn LANGUAGES C CXX CUDA)
 
 set(CMAKE_C_FLAGS "-Wall -Wextra  -O3")
 

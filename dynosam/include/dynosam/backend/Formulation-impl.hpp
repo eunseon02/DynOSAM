@@ -841,6 +841,12 @@ UpdateObservationResult Formulation<MAP>::updateDynamicObservations(
              << object_id;
 
     auto object_node = map->getObject(object_id);
+    // Object may have disappeared from the map (e.g., frontend no longer tracks it)
+    if (!object_node) {
+      VLOG(5) << "Skipping object " << object_id
+              << " as it no longer exists in the map";
+      continue;
+    }
 
     std::vector<FrameId> frames_affected_vector(frames_affected.begin(),
                                                 frames_affected.end());
