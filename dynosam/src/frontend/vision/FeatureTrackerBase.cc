@@ -31,6 +31,7 @@
 #include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
 
 #include "dynosam/frontend/anms/NonMaximumSuppression.h"
+#include "dynosam_common/Edge.hpp"
 #include "dynosam_common/utils/GtsamUtils.hpp"
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/viz/Colour.hpp"
@@ -125,6 +126,7 @@ int ImageTracksParams::bboxThickness() const {
 int ImageTracksParams::featureThickness() const {
   return isDebug() ? feature_thickness_debug : feature_thickness;
 }
+
 
 // doesnt make any sense for this function to be here?
 // Debug could be part of a global config singleton?
@@ -224,6 +226,12 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   if (config.drawObjectMask()) {
     constexpr static float kAlpha = 0.7;
     utils::labelMaskToRGB(object_mask, img_rgb, img_rgb, kAlpha);
+  }
+
+  // Visualize static edges (on top of existing features)
+  if (!current_frame.static_edges_.empty()) {
+    cv::Mat edges_viz = utils::drawOrganizedEdge(img_rgb, current_frame.static_edges_);
+    img_rgb = edges_viz;
   }
 
   // draw text info

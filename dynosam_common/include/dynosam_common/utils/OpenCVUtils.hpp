@@ -32,6 +32,7 @@
 #include <opencv4/opencv2/core/types.hpp>
 #include <opencv4/opencv2/opencv.hpp>
 
+#include "dynosam_common/Edge.hpp"
 #include "dynosam_common/Types.hpp"
 
 #define CHECK_MAT_TYPES(mat1, mat2)                                            \
@@ -226,6 +227,20 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
                             const cv::Scalar& colour,
                             const cv::Rect& bounding_box,
                             const int& bb_thickness = 2);
+
+/**
+ * @brief Draws organized edges on an image using a color map.
+ * Each edge is drawn with colors from the PARULA colormap based on the
+ * position along the edge (proportion from start to end).
+ * The function preserves existing visualizations on the image and only
+ * adds edges on top.
+ *
+ * @param img_background const cv::Mat& Background image to draw edges on
+ * @param edges const std::vector<Edge>& Vector of edges to visualize
+ * @return cv::Mat Image with edges drawn on top
+ */
+cv::Mat drawOrganizedEdge(const cv::Mat& img_background,
+                          const std::vector<Edge>& edges);
 
 /**
  * @brief Projects SE(3) poses onto the image as an RGB axes.

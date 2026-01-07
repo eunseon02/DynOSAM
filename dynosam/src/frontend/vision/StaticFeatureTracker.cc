@@ -304,6 +304,10 @@ FeatureContainer KltFeatureTracker::trackStatic(
   }
 }
 
+std::vector<Edge> KltFeatureTracker::getDetectedEdges() const {
+  return detected_edges_;
+}
+
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
                                       cv::Mat& equialized_greyscale) const {
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
@@ -326,6 +330,14 @@ std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(
   cv::KeyPoint::convert(keypoints, points);
   return points;
 }
+
+std::vector<Edge> KltFeatureTracker::detectEdgeFeatures(
+  const cv::Mat& processed_img, int number_tracked, const cv::Mat& mask) {
+  std::vector<Edge> edges;
+  detector_->detectEdge(processed_img, edges, mask);
+  return edges;
+}
+
 
 bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
                                        const ImageContainer& image_container,
@@ -387,9 +399,15 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
   }
 
   std::vector<cv::Point2f> detected_points;
+  std::vector<Edge> detected_edges;
   {
     utils::ChronoTimingStats timer("static_feature_track.detect_raw");
     detected_points = detectRawFeatures(processed_img, current_features.size(),
+                                        detection_mask_impl);
+  }
+  {
+    utils::ChronoTimingStats timer("static_feature_track.detect_edges");
+    detected_edges = detectEdgeFeatures(processed_img, current_features.size(),
                                         detection_mask_impl);
   }
 
@@ -413,6 +431,9 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
       new_features.add(feature);
     }
   }
+
+  // temporary store detected edges for visualization
+  detected_edges_ = detected_edges;
 
   return true;
 }

@@ -38,6 +38,8 @@
 #include "dynosam_common/Types.hpp"
 #include "dynosam_common/utils/Macros.hpp"
 #include "dynosam_common/utils/OpenCVUtils.hpp"
+#include "dynosam_common/EdgeCluster.hpp"
+#include "dynosam_common/Edge.hpp"
 
 namespace dyno {
 
@@ -53,6 +55,7 @@ class FeatureDetector {
   virtual ~FeatureDetector() = default;
   virtual void detect(const cv::Mat& image, KeypointsCV& keypoints,
                       const cv::Mat& detection_mask) = 0;
+
 };
 
 class FunctionalDetector : public FeatureDetector {
@@ -70,6 +73,7 @@ class FunctionalDetector : public FeatureDetector {
   inline void detect(const cv::Mat& image, KeypointsCV& keypoints,
                      const cv::Mat& detection_mask = cv::Mat()) override {
     detection_func_(image, keypoints, detection_mask);
+    
   }
 
   /**
@@ -119,12 +123,57 @@ class SparseFeatureDetector {
    */
   void detect(const cv::Mat& image, KeypointsCV& keypoints, int number_tracked,
               const cv::Mat& detection_mask = cv::Mat());
+  void detectEdge(const cv::Mat& image, std::vector<Edge>& edges, const cv::Mat& detection_mask);
+
+  // Get detected edges
+  const std::vector<Edge>& getEdges() const { return mvEdges; }
+
+  float calcAngleBias(float angle_1, float angle_2);
+  void regionGrowthClusteringOCanny(float angle_Thres, const cv::Mat& detection_mask);
+  void cvt2OrderedEdgesParallel();
+  void preprocessCannyMat();
 
  private:
   const TrackerParams tracker_params_;
   FeatureDetector::Ptr feature_detector_;
   cv::Ptr<cv::CLAHE> clahe_;
   NonMaximumSuppression::UniquePtr non_maximum_supression_;
+  
+  // Edge detection related 
+
+  //-- Original image data
+  cv::Mat mMatRGB;
+  cv::Mat mMatGray;
+  int mWidth;
+  int mHeight;
+
+  //-- Image gradient computation results
+  cv::Mat mMatGradMagnitude;
+  cv::Mat mMatGradAngle;
+  //-- Canny edge detection result
+  cv::Mat mMatCanny;
+  // bool mbUseFixedThreshold = true;
+  // int mpCanny_lower_bound = 20;
+  // int mpCanny_higher_bound = 40;
+  // float mpAngle_bias = 30.0f;
+  // std::vector<EdgeCluster> mvEdgeClusters;
+  // std::vector<Edge> mvEdges;
+
+  //-- Canny operator threshold parameters
+  bool mbUseFixedThreshold; //-- true: use fixed threshold, false: use adaptive threshold
+  //-- Fixed threshold parameters
+  int mpCanny_lower_bound;
+  int mpCanny_higher_bound;
+
+  //-- Angle threshold for points belonging to the same edge (in degrees)
+  float mpAngle_bias;
+
+  //-- Edge point clusters obtained by region growth
+  std::vector<EdgeCluster> mvEdgeClusters;
+
+  //-- Ordered edge list constructed from scattered points
+  std::vector<Edge> mvEdges;
+  
 };
 
 }  // namespace dyno

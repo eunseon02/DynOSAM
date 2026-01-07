@@ -317,6 +317,39 @@ void getDisparityVis(cv::InputArray src, cv::OutputArray dst,
   dstMat &= (srcMat != unknown_disparity);
 }
 
+cv::Mat drawOrganizedEdge(const cv::Mat& img_background,
+                          const std::vector<Edge>& edges) {
+  cv::Mat valueTabel(256, 1, CV_8UC1);
+  cv::Mat ColorTabel;
+  for (int i = 0; i < 256; i++) {
+    valueTabel.at<uint8_t>(i, 0) = i;
+  }
+  cv::applyColorMap(valueTabel, ColorTabel, cv::COLORMAP_PARULA);
+  // Clone the image to preserve existing features/visualizations
+  cv::Mat image_viz = img_background.clone();
+  // Ensure image is BGR (don't convert to grayscale to preserve existing features)
+  if (image_viz.channels() == 1) {
+    cv::cvtColor(image_viz, image_viz, cv::COLOR_GRAY2BGR);
+  }
+  // Draw edges on top of existing image (don't darken background)
+  for (int i = 0; i < edges.size(); ++i) {
+    // if(mvEdgeClusters[i].mvPoints.size()<15) continue;
+    for (int j = 0; j < edges[i].mvPoints.size(); ++j) {
+      float proportion = float(j) / float(edges[i].mvPoints.size());
+      int idx = cvRound(proportion * 255);
+      orderedEdgePoint curr = edges[i].mvPoints[j];
+      cv::Vec3b color = ColorTabel.at<cv::Vec3b>(idx, 0);
+      int y = static_cast<int>(curr.y);
+      int x = static_cast<int>(curr.x);
+      if (y >= 0 && y < image_viz.rows && x >= 0 && x < image_viz.cols) {
+        image_viz.at<cv::Vec3b>(y, x) = color;
+        cv::circle(image_viz, cv::Point(x, y), 1, color, 1, cv::LINE_AA);
+      }
+    }
+  }
+  return image_viz;
+}
+
 void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
                             const cv::Scalar& colour,
                             const cv::Rect& bounding_box,

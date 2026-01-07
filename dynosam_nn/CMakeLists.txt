@@ -21,6 +21,15 @@ find_package(pybind11 REQUIRED)
 find_package(Python3 3.10 COMPONENTS Interpreter Development REQUIRED)
 find_package(Boost REQUIRED python3 numpy3)
 
+# Ensure PYTHON_INSTALL_DIR is set (required for installing pybind11 modules)
+# ament_cmake_python should set this, but provide a fallback if it doesn't
+if(NOT DEFINED PYTHON_INSTALL_DIR)
+  set(PYTHON_INSTALL_DIR "lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+  message(STATUS "PYTHON_INSTALL_DIR not set, using default: ${PYTHON_INSTALL_DIR}")
+else()
+  message(STATUS "PYTHON_INSTALL_DIR: ${PYTHON_INSTALL_DIR}")
+endif()
+
 find_package(cv_bridge REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(rclcpp REQUIRED)

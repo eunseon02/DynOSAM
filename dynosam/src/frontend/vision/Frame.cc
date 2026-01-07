@@ -44,6 +44,7 @@ Frame::Frame(
     const ImageContainer& image_container,
     const FeatureContainer& static_features,
     const FeatureContainer& dynamic_features,
+    const std::vector<Edge>& static_edges,
     const std::map<ObjectId, SingleDetectionResult>& object_observations,
     std::optional<FeatureTrackerInfo> tracking_info)
     : frame_id_(frame_id),
@@ -52,6 +53,7 @@ Frame::Frame(
       image_container_(image_container),
       static_features_(static_features),
       dynamic_features_(dynamic_features),
+      static_edges_(static_edges),
       object_observations_(object_observations),
       tracking_info_(tracking_info) {
   // NOTE: no rectification, use camera matrix as P for cv::undistortPoints
@@ -68,9 +70,10 @@ Frame::Frame(FrameId frame_id, Timestamp timestamp, Camera::Ptr camera,
              const ImageContainer& image_container,
              const FeatureContainer& static_features,
              const FeatureContainer& dynamic_features,
+             const std::vector<Edge>& static_edges,
              std::optional<FeatureTrackerInfo> tracking_info)
     : Frame(frame_id, timestamp, camera, image_container, static_features,
-            dynamic_features, {}, tracking_info) {
+            dynamic_features, static_edges, {}, tracking_info) {
   // dynamic info is not pre-calculated so calculate it here! SLOW!
   constructDynamicObservations();
 }

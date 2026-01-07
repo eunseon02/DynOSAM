@@ -33,6 +33,7 @@
 
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam_common/DynamicObjects.hpp"
+#include "dynosam_common/Edge.hpp"
 #include "dynosam_common/PointCloudProcess.hpp"
 #include "dynosam_common/StructuredContainers.hpp"
 #include "dynosam_common/Types.hpp"
@@ -56,6 +57,7 @@ class Frame {
 
   FeatureContainer static_features_;
   FeatureContainer dynamic_features_;
+  std::vector<Edge> static_edges_;
 
   //! Objects that required new detection/sampling this frame.
   ObjectIds retracked_objects_;
@@ -76,6 +78,7 @@ class Frame {
         const ImageContainer& image_container,
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features,
+        const std::vector<Edge>& static_edges,
         const std::map<ObjectId, SingleDetectionResult>& object_observations,
         std::optional<FeatureTrackerInfo> tracking_info = {});
 
@@ -83,6 +86,7 @@ class Frame {
         const ImageContainer& image_container,
         const FeatureContainer& static_features,
         const FeatureContainer& dynamic_features,
+        const std::vector<Edge>& static_edges = {},
         std::optional<FeatureTrackerInfo> tracking_info = {});
 
   inline FrameId getFrameId() const { return frame_id_; }
