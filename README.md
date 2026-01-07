@@ -266,6 +266,8 @@ In `RGBD` mode, only camera intrinsics, rgb and depth images are required and al
 
 To run from data provided by an RGB-D camera use
 ```
+PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+cd /home/user/dev_ws && colcon build --cmake-args -DENABLE_DYNAMIC_SLAM_INTERFACES=ON
 ros2 launch dynosam_ros dyno_sam_online_rgbd_launch.py
 ```
 and remap the topics accordingly.

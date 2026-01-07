@@ -52,7 +52,7 @@
 --static_formulation_type=2
 
 # if true, only run as Static SLAM (mostly for debug/testing)
---regular_backend_static_only=false
+--regular_backend_static_only=true
 
 --min_static_observations=2
 --min_dynamic_observations=0

@@ -91,6 +91,34 @@ struct TrackerParams {
     int min_threshold_fast = 7;
   };
 
+  //! Edge detection parameters
+  struct EdgeCoarseParams {
+    int width = 739;
+    int height = 458;
+    double kf_trans_thres = 0.01;
+    double kf_rot_thres = 4.0;
+    int sample_bias = 5;
+    int maximum_point = 2000;
+    int cannyHigh = 40;
+    int cannyLow = 20;
+  };
+
+  struct EdgeFineParams {
+    double kf_trans_thres = 0.05;
+    double kf_rot_thres = 7.0;
+    double geo_photo_ratio = 0.01;
+    int sample_bias = 4;
+    int cannyHigh = 40;
+    int cannyLow = 15;
+  };
+
+  struct EdgeWinParams {
+    double kf_trans_thres = 0.05;
+    double kf_rot_thres = 7.0;
+    int window_size = 10;
+    int window_step = 7;
+  };
+
   FeatureDetectorType feature_detector_type = FeatureDetectorType::GFTT;
 
   //! To use adaptvie non-maximum supression in the feature detector
@@ -129,6 +157,11 @@ struct TrackerParams {
   GFFTParams gfft_params = GFFTParams();
   OrbParams orb_params = OrbParams();
 
+  //! Edge detection parameters
+  EdgeCoarseParams edge_coarse = EdgeCoarseParams();
+  EdgeFineParams edge_fine = EdgeFineParams();
+  EdgeWinParams edge_win = EdgeWinParams();
+
   // Dynamic tracking specific
   size_t max_dynamic_features_per_frame = 50u;
   size_t max_dynamic_feature_age = 25u;
@@ -149,6 +182,9 @@ void declare_config(TrackerParams::AnmsParams& config);
 void declare_config(TrackerParams::SubPixelCornerRefinementParams& config);
 void declare_config(TrackerParams::GFFTParams& config);
 void declare_config(TrackerParams::OrbParams& config);
+void declare_config(TrackerParams::EdgeCoarseParams& config);
+void declare_config(TrackerParams::EdgeFineParams& config);
+void declare_config(TrackerParams::EdgeWinParams& config);
 void declare_config(TrackerParams& config);
 
 }  // namespace dyno

@@ -65,6 +65,7 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
     dyno::YoloConfig yolo_config;
     dyno::ModelConfig model_config;
     model_config.model_file = "yolov8n-seg.pt";
+    // model_config.model_file = "yoloe-v8s-seg.onnx";
     object_detection_ =
         std::make_shared<dyno::YoloV8ObjectDetector>(model_config, yolo_config);
   }
@@ -112,12 +113,13 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // data-structure to handle which objects required re-tracking/sampling
   std::set<ObjectId> object_keyframes;
 
-  auto static_track = [&](FeatureContainer& static_features) {
+  auto static_track = [&](FeatureContainer& static_features, std::vector<Edge>& static_edges) {
     VLOG(20) << "Starting static track";
     utils::ChronoTimingStats static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
         previous_frame_, input_images, info_,
         boundary_mask_result.boundary_mask, R_km1_k);
+    static_edges = static_feature_tracker_->getDetectedEdges();
   };
 
   auto dynamic_track = [&](FeatureContainer& dynamic_features) {
@@ -142,7 +144,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
   // start tracking threads since we can do this independantly
   FeatureContainer static_features, dynamic_features;
-  std::thread static_track_thread(static_track, std::ref(static_features));
+  std::vector<Edge> static_edges;
+  std::thread static_track_thread(static_track, std::ref(static_features), std::ref(static_edges));
   std::thread dynamic_track_thread(dynamic_track, std::ref(dynamic_features));
 
   static_track_thread.join();
@@ -172,7 +175,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
   auto new_frame = std::make_shared<Frame>(
       frame_id, timestamp, camera_, input_images, static_features,
-      dynamic_features, object_observations, info_);
+      dynamic_features, static_edges, object_observations, info_);
 
   // update tracking/sampling information for dynamic obejcts
   new_frame->retracked_objects_ =

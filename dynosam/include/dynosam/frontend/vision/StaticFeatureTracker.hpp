@@ -38,6 +38,8 @@
 #include "dynosam/frontend/vision/ORBextractor.hpp"
 #include "dynosam/frontend/vision/OccupancyGrid2D.hpp"
 #include "dynosam_common/Types.hpp"
+#include "dynosam_common/Edge.hpp"
+#include "dynosam_common/EdgeCluster.hpp"
 #include "dynosam_cv/Camera.hpp"
 
 namespace dyno {
@@ -75,6 +77,11 @@ class StaticFeatureTracker : public FeatureTrackerBase {
       Frame::Ptr previous_frame, const ImageContainer& image_container,
       FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
       const std::optional<gtsam::Rot3>& R_km1_k) = 0;
+
+  virtual std::vector<Edge> getDetectedEdges() const = 0;
+
+ protected:
+  std::vector<Edge> detected_edges_;
 };
 
 // currently assumes flow that is k to k + 1 (gross!!)
@@ -182,6 +189,12 @@ class KltFeatureTracker : public StaticFeatureTracker {
   std::vector<cv::Point2f> detectRawFeatures(const cv::Mat& processed_img,
                                              int number_tracked,
                                              const cv::Mat& mask = cv::Mat());
+
+  std::vector<Edge> detectEdgeFeatures(const cv::Mat& processed_img,
+                                       int number_tracked,
+                                       const cv::Mat& mask = cv::Mat());
+
+  std::vector<Edge> getDetectedEdges() const override;
 
   // image container associated with the processed image
   bool detectFeatures(const cv::Mat& processed_img,

@@ -96,6 +96,9 @@ add_library(${PROJECT_NAME} SHARED
     src/utils/Histogram.cc
     src/utils/FileSystem.cc
 
+    src/Edge.cc
+    src/EdgeCluster.cc
+
     src/logger/Logger.cc
 
     src/viz/Colour.cc

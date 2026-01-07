@@ -85,6 +85,39 @@ void declare_config(TrackerParams::OrbParams& config) {
   field(config.min_threshold_fast, "min_threshold_fast");
 }
 
+void declare_config(TrackerParams::EdgeCoarseParams& config) {
+  using namespace config;
+  name("EdgeCoarseParams");
+  field(config.width, "coarse.width");
+  field(config.height, "coarse.height");
+  field(config.kf_trans_thres, "coarse.kf_trans_thres");
+  field(config.kf_rot_thres, "coarse.kf_rot_thres");
+  field(config.sample_bias, "coarse.sample_bias");
+  field(config.maximum_point, "coarse.maximum_point");
+  field(config.cannyHigh, "coarse.cannyHigh");
+  field(config.cannyLow, "coarse.cannyLow");
+}
+
+void declare_config(TrackerParams::EdgeFineParams& config) {
+  using namespace config;
+  name("EdgeFineParams");
+  field(config.kf_trans_thres, "fine.kf_trans_thres");
+  field(config.kf_rot_thres, "fine.kf_rot_thres");
+  field(config.geo_photo_ratio, "fine.geo_photo_ratio");
+  field(config.sample_bias, "fine.sample_bias");
+  field(config.cannyHigh, "fine.cannyHigh");
+  field(config.cannyLow, "fine.cannyLow");
+}
+
+void declare_config(TrackerParams::EdgeWinParams& config) {
+  using namespace config;
+  name("EdgeWinParams");
+  field(config.kf_trans_thres, "win.kf_trans_thres");
+  field(config.kf_rot_thres, "win.kf_rot_thres");
+  field(config.window_size, "win.window_size");
+  field(config.window_step, "win.window_step");
+}
+
 void declare_config(TrackerParams& config) {
   using namespace config;
   name("TrackerParams");
@@ -117,6 +150,9 @@ void declare_config(TrackerParams& config) {
         "subpixel_corner_refinement_params");
   field(config.gfft_params, "gfft_params");
   field(config.orb_params, "orb_params");
+  field(config.edge_coarse, "coarse");
+  field(config.edge_fine, "fine");
+  field(config.edge_win, "win");
 
   field(config.max_dynamic_features_per_frame,
         "max_dynamic_features_per_frame");
