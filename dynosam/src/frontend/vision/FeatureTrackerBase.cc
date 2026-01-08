@@ -228,7 +228,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     utils::labelMaskToRGB(object_mask, img_rgb, img_rgb, kAlpha);
   }
 
-  // Visualize static edges (on top of existing features)
+  // Visualize organized edges
   if (!current_frame.static_edges_.empty()) {
     cv::Mat edges_viz = utils::drawOrganizedEdge(img_rgb, current_frame.static_edges_);
     img_rgb = edges_viz;

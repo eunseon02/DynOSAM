@@ -290,8 +290,11 @@ RegularBackendModule::getActiveOptimisation() const {
     const auto graph = formulation_->getGraph();
     return {theta, graph};
   } else if (optimization_mode == RegularOptimizationType::SLIDING_WINDOW) {
-    LOG(FATAL) << "Not implemented!";
-
+    // Sliding window updates Formulation's theta after optimization,
+    // so we can get the active graph/values from Formulation
+    const auto theta = formulation_->getTheta();
+    const auto graph = formulation_->getGraph();
+    return {theta, graph};
   } else if (optimization_mode == RegularOptimizationType::INCREMENTAL) {
     using SmootherInterface = IncrementalInterface<dyno::ISAM2>;
     SmootherInterface smoother_interface(smoother_.get());
