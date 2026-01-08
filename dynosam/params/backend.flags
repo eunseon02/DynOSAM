@@ -46,7 +46,7 @@
 --use_smoothing_factor=true
 
 # 0: Full-batch, 1: sliding-window, 2: incremental
---optimization_mode=2
+--optimization_mode=1
 
 # 0: PTP, 1: Generic Projection, 2: Stereo Projection
 --static_formulation_type=2
