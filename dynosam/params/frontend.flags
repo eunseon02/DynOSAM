@@ -10,6 +10,8 @@
 #we turn off for cluster as there is some problem with the OF I think?
 --use_propogate_mask=false
 
+--use_edge_feature=true
+
 # we turn off for OMD as there is some problem
 --use_dynamic_track=false
 

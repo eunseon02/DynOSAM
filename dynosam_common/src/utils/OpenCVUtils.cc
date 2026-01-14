@@ -332,12 +332,20 @@ cv::Mat drawOrganizedEdge(const cv::Mat& img_background,
     cv::cvtColor(image_viz, image_viz, cv::COLOR_GRAY2BGR);
   }
   // Draw edges on top of existing image (don't darken background)
+  // Only visualize edges that passed depth continuity check
   for (int i = 0; i < edges.size(); ++i) {
     // if(mvEdgeClusters[i].mvPoints.size()<15) continue;
     for (int j = 0; j < edges[i].mvPoints.size(); ++j) {
+      orderedEdgePoint curr = edges[i].mvPoints[j];
+      
+      // Only draw edge points that passed depth continuity check
+      // Depth continuity check passes when: depth > 0.2 and score_depth > 0
+      if (curr.depth <= 0.2f || curr.score_depth <= 0.0f) {
+        continue;  // Skip edge points that failed depth continuity check
+      }
+      
       float proportion = float(j) / float(edges[i].mvPoints.size());
       int idx = cvRound(proportion * 255);
-      orderedEdgePoint curr = edges[i].mvPoints[j];
       cv::Vec3b color = ColorTabel.at<cv::Vec3b>(idx, 0);
       int y = static_cast<int>(curr.y);
       int x = static_cast<int>(curr.x);

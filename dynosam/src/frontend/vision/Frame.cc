@@ -250,6 +250,16 @@ bool Frame::updateDepths() {
   updateDepthsFeatureContainer(static_features_, depth,
                                max_background_threshold_);
   updateDepthsFeatureContainer(dynamic_features_, depth, max_object_threshold_);
+
+  // Update depths for edge features
+  const cv::Mat& matDepth = depth;
+  tbb::parallel_for(0, (int)static_edges_.size(), [&](int i) {
+    // Inner loop remains serial
+    for(int j = 0; j < static_edges_[i].mvPoints.size(); ++j) {
+        assignProperty3DEach(static_edges_[i].mvPoints[j], matDepth);
+    }
+  });
+
   return true;
 }
 
@@ -509,6 +519,120 @@ void Frame::constructDynamicObservations() {
     vision_tools::findObjectBoundingBox(mask, object_id, obs.bounding_box);
   }
 }
+
+
+// Edge feature assignment
+// void Frame::assignProperty3D(const cv::Mat& matDepth)
+// {
+//     // Parallel process outer loop
+//     tbb::parallel_for(0, (int)static_features_.size(), [&](int i) {
+//         // Inner loop remains serial
+//         for(int j = 0; j < static_features_[i].mvPoints.size(); ++j) {
+//             assignProperty3DEach(static_features_[i].mvPoints[j], matDepth);
+//         }
+//     });
+
+//     // for(int i = 0; i < static_features_.size(); ++i)
+//     // {
+//     //     for(int j = 0; j < static_features_[i].mvPoints.size(); ++j)
+//     //     {
+//     //         assignProperty3DEach(static_features_[i].mvPoints[j], matDepth);
+//     //     }
+//     // }
+// }
+
+void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
+{
+    int x_idx = pt.x;
+    int y_idx = pt.y;
+
+    //-- Original point's true depth
+    float depth_orig = matDepth.at<float>(y_idx, x_idx);
+
+    //-- Calculate adjusted depth and visibility score in 5x5 patch
+    std::vector<float> validDepthList; //-- List of depths for all points with non-zero depth
+    int patch_total = 0;               //-- Total number of pixels in current patch
+    for(int x_bias = -2; x_bias <= 2; ++x_bias){
+        for(int y_bias = -2; y_bias <= 2; ++y_bias){
+            int curr_x_idx = x_idx + x_bias;
+            int curr_y_idx = y_idx + y_bias;
+            
+            //-- Check if this position is within image bounds
+            if(curr_x_idx < 0 || curr_x_idx >= mWidth ||
+               curr_y_idx < 0 || curr_y_idx >= mHeight) continue;
+
+            patch_total += 1; //-- Accumulate total pixels
+            //-- If within image bounds, check if depth value is valid
+            float depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
+            if(depth > 0.2) validDepthList.push_back(depth);
+
+        }
+    }
+    std::sort(validDepthList.begin(), validDepthList.end());//-- Sort from small to large
+    int size = validDepthList.size();
+    float adjusted_depth = 0;     //-- Adjusted depth
+
+    //-- Calculate foreground depth
+    if(size >= 8){
+        //-- Check for jumps and return first set of continuous data
+        std::vector<size_t> jump_indices;
+        float rel_thres = 0.05;
+        for (size_t i = 1; i < validDepthList.size(); ++i){
+            float dx = validDepthList[i] - validDepthList[i-1];
+            float x = validDepthList[i-1];
+            float relative_change = dx/x; // All values in validDepthList are greater than 0, no division by zero concern
+
+            if (std::fabs(relative_change) > rel_thres) {
+                jump_indices.push_back(i); // Record jump position
+                break;
+            }
+        }
+        
+        //-- If depth values are discontinuous within a patch, extract the smallest region
+        std::vector<float> adjustDepthList;
+        if(jump_indices.empty())
+        {
+            adjustDepthList = validDepthList;
+        }else{
+            size_t first_jump = jump_indices[0];
+            adjustDepthList = std::vector<float>(validDepthList.begin(), validDepthList.begin() + first_jump);
+        }
+
+        int partitionSize = adjustDepthList.size();
+        //-- Take median depth of smallest part as depth value
+        float medianValue = (partitionSize%2==0) ? 
+                            (adjustDepthList[partitionSize/2-1] + adjustDepthList[partitionSize/2])/2.0 : 
+                            adjustDepthList[partitionSize/2];
+        if(depth_orig >= adjustDepthList.front() && depth_orig <= adjustDepthList.back()){
+            //-- If true depth is within this range, use true depth (true depth itself is foreground)
+            adjusted_depth = depth_orig;
+        }else{
+            //-- If true depth is not in foreground range, adjust depth to foreground range
+            adjusted_depth = medianValue;
+        }
+    }
+
+    pt.depth = adjusted_depth; //-- Assign depth to point feature
+
+    //-- Calculate distance score
+    if(pt.depth > 0.2){
+        Eigen::Vector3d pt_3d;
+        pt_3d.x() = (pt.x - mCx)/mFx * pt.depth;
+        pt_3d.y() = (pt.y - mCy)/mFy * pt.depth;
+        pt_3d.z() = pt.depth;
+        double range = pt_3d.norm();
+        //-- Calculate distance score using inverse sigmoid function
+        pt.score_depth = 1.0 / (std::exp((range - 2.5) * 1.0) + 1);
+        //-- Update 3D points in class
+        pt.x_3d = pt_3d.x();
+        pt.y_3d = pt_3d.y();
+        pt.z_3d = pt_3d.z();
+    }else{
+        pt.score_depth = 0;
+    }
+    
+}
+
 
 // void Frame::moveObjectToStatic(ObjectId instance_label) {
 //   auto it = object_observations_.find(instance_label);

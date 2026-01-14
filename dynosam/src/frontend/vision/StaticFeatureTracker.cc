@@ -30,6 +30,7 @@
 
 #include "dynosam/frontend/vision/StaticFeatureTracker.hpp"
 
+#include <gflags/gflags.h>
 #include <opencv2/features2d.hpp>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/opencv.hpp>
@@ -38,6 +39,8 @@
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam_common/Types.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
+
+DECLARE_bool(use_edge_feature);
 
 namespace dyno {
 
@@ -407,8 +410,12 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
   }
   {
     utils::ChronoTimingStats timer("static_feature_track.detect_edges");
-    detected_edges = detectEdgeFeatures(processed_img, current_features.size(),
-                                        detection_mask_impl);
+    if (FLAGS_use_edge_feature) {
+      // Use empty mask to detect edges on all pixels (static + dynamic regions)
+      cv::Mat empty_mask;
+      detected_edges = detectEdgeFeatures(processed_img, current_features.size(),
+                                          empty_mask);
+    }
   }
 
   for (const cv::Point2f& detected_point : detected_points) {

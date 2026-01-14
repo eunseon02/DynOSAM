@@ -46,6 +46,10 @@
 
 DEFINE_bool(use_frontend_logger, false,
             "If true, the frontend logger will be used");
+
+DEFINE_bool(use_edge_feature, true,
+            "If true, the edge detection will be used");
+
 DEFINE_bool(use_dynamic_track, true,
             "If true, the dynamic tracking will be used");
 
