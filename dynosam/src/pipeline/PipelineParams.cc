@@ -44,6 +44,10 @@ DEFINE_int32(backend_updater_enum, 0,
              "Which BackendType the backend should use and should match an "
              "enum in whatever backend module type is loaded");
 
+DEFINE_string(camera_params_file, "CameraParams.yaml",
+              "Name of the camera parameters YAML file. Default is CameraParams.yaml. "
+              "Can be set to different files for different datasets (e.g., Dataset1CameraParams.yaml)");
+
 namespace dyno {
 
 void declare_config(DynoParams::PipelineParams& config) {
@@ -63,7 +67,7 @@ DynoParams::DynoParams(const std::string& params_folder_path) {
   pipeline_params_ = config::fromYamlFile<PipelineParams>(
       params_folder_path + "PipelineParams.yaml");
   camera_params_ = config::fromYamlFile<CameraParams>(params_folder_path +
-                                                      "CameraParams.yaml");
+                                                      FLAGS_camera_params_file);
   frontend_params_ = config::fromYamlFile<FrontendParams>(
       params_folder_path + "FrontendParams.yaml");
   imu_params_ =

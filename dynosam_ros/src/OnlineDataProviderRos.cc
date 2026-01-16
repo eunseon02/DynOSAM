@@ -381,6 +381,8 @@ void RGBDOnlineProviderRos::subscribeImages() {
 
   MultiSyncConfig config;
   config.queue_size = 20;
+  config.use_approximate_time = true;  // Use ApproximateTime for datasets with timestamp mismatches
+  config.time_slop = 0.1;  // 100ms tolerance for timestamp matching
   // config.subscriber_options.callback_group =
   //     node_ref.create_callback_group(rclcpp::CallbackGroupType::Reentrant);
 

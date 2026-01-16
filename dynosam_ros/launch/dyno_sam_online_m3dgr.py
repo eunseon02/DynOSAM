@@ -28,6 +28,8 @@ def generate_launch_description():
         DeclareLaunchArgument("params_path", default_value=get_default_dynosam_params_path()),
         DeclareLaunchArgument("v", default_value="30"),
         DeclareLaunchArgument("output_path", default_value="/root/results/DynoSAM/"),
+        DeclareLaunchArgument("camera_params_file", default_value="CameraParams.yaml", 
+                             description="Name of the camera parameters YAML file "),
         # DeclareLaunchArgument("camera_info_topic", default_value="/camera/color/camera_info"),
         DeclareLaunchArgument("rgb_cam_topic", default_value="/camera/color/image_raw"),
         DeclareLaunchArgument("depth_cam_topic", default_value="/camera/aligned_depth_to_color/image_raw"),

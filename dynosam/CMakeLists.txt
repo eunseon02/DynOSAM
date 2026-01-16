@@ -257,6 +257,10 @@ target_link_libraries(dyno_sam
   ${PROJECT_NAME}
 )
 
+# add_executable(dyno_sam_tum example/dyno_sam_tum.cc)
+# target_link_libraries(dyno_sam
+#   ${PROJECT_NAME}
+# )
 
 
 install(TARGETS

@@ -1,12 +1,15 @@
 #pragma once
 
 #include <type_traits>
+#include <tuple>
+#include <variant>
 
 #include "dynosam/dataprovider/DataProvider.hpp"  // for ImageContainerCallback
 #include "dynosam_common/Types.hpp"
 #include "dynosam_common/utils/Tuple.hpp"
 #include "message_filters/subscriber.hpp"
 #include "message_filters/sync_policies/exact_time.hpp"
+#include "message_filters/sync_policies/approximate_time.hpp"
 #include "message_filters/synchronizer.hpp"
 #include "rclcpp/node.hpp"
 #include "rclcpp/node_interfaces/node_interfaces.hpp"
@@ -63,6 +66,20 @@ template <typename Msg, std::size_t N>
 using exact_time_policy_helper =
     typename ExactTimePolicyHelperImpl<Msg, N>::Type;
 
+template <typename Msg, std::size_t N>
+struct ApproximateTimePolicyHelperImpl {
+  template <std::size_t... Is>
+  static auto get_policy(std::index_sequence<Is...>)
+      -> message_filters::sync_policies::ApproximateTime<std::remove_reference_t<
+          decltype((void(Is), std::declval<Msg>()))>...>;
+
+  using Type = decltype(get_policy(std::make_index_sequence<N>{}));
+};
+
+template <typename Msg, std::size_t N>
+using approximate_time_policy_helper =
+    typename ApproximateTimePolicyHelperImpl<Msg, N>::Type;
+
 template <typename Msg, std::size_t... Is>
 auto callback_type_helper_impl(std::index_sequence<Is...>)
     -> CallbackTypeHelpers<
@@ -90,6 +107,10 @@ struct MultiSyncConfig {
   rclcpp::QoS subscriber_qos = rclcpp::QoS(
       rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data));
   rclcpp::SubscriptionOptions subscriber_options{};
+  //! Use ApproximateTime synchronization instead of ExactTime
+  bool use_approximate_time = false;
+  //! Time slop (in seconds) for ApproximateTime synchronization
+  double time_slop = 0.1;
 
   MultiSyncConfig() = default;
   MultiSyncConfig(uint32_t _queue_size) : queue_size(_queue_size) {}
@@ -99,9 +120,8 @@ struct MultiSyncConfig {
  * @brief Wrapper for a message_filters::Synchronizer that encapsualtes
  * subscribing to N topics of type Msg.
  *
- * Some limitations:
- *  - only supports ExactTime sync policy
- *  - only supports one message type for all N subscribers
+ * Supports both ExactTime and ApproximateTime sync policies.
+ * Only supports one message type for all N subscribers.
  *
  * @tparam Msg
  * @tparam N
@@ -115,6 +135,10 @@ class MultiSync : public MultiSyncBase {
     rclcpp::QoS subscriber_qos = rclcpp::QoS(
         rclcpp::QoSInitialization::from_rmw(rmw_qos_profile_sensor_data));
     rclcpp::SubscriptionOptions subscriber_options{};
+    //! Use ApproximateTime synchronization instead of ExactTime
+    bool use_approximate_time = false;
+    //! Time slop (in seconds) for ApproximateTime synchronization
+    double time_slop = 0.1;
 
     Config() = default;
     Config(uint32_t _queue_size) : queue_size(_queue_size) {}
@@ -135,8 +159,13 @@ class MultiSync : public MultiSyncBase {
 #endif
   using MessageType = Msg;
 
-  using SyncPolicy = exact_time_policy_helper<MessageType, N>;
-  using SyncType = message_filters::Synchronizer<SyncPolicy>;
+  // Select sync policy based on config
+  using ExactTimePolicy = exact_time_policy_helper<MessageType, N>;
+  using ApproximateTimePolicy = approximate_time_policy_helper<MessageType, N>;
+  // Note: We can't use Config::use_approximate_time in std::conditional_t
+  // because it's a non-static member. We'll handle the selection at runtime.
+  using ExactTimeSyncType = message_filters::Synchronizer<ExactTimePolicy>;
+  using ApproximateTimeSyncType = message_filters::Synchronizer<ApproximateTimePolicy>;
 
   ///! Callback in the form sensor::msg::Image.... repeatead N times
   using Callback = typename callback_type_helper<MessageType, N>::Callback;
@@ -144,17 +173,21 @@ class MultiSync : public MultiSyncBase {
   // tuple of pointers must be explicitly initalised
   MultiSync(rclcpp::Node& node, const std::array<std::string, N>& topics,
             const MultiSyncConfig& config = MultiSyncConfig())
-      : node_(node), topics_(topics), config_(config) {}
+      : node_(node), topics_(topics), config_(config) {
+    // Convert MultiSyncConfig to Config
+    config_.use_approximate_time = config.use_approximate_time;
+    config_.time_slop = config.time_slop;
+  }
 
   bool connect() override {
-    if (sync_) sync_.reset();
+    sync_ = std::monostate{};
 
     subscribe();
     return createSync();
   }
 
   void shutdown() override {
-    if (sync_) sync_.reset();
+    sync_ = std::monostate{};
     unsubscribe();
   }
 
@@ -217,22 +250,54 @@ class MultiSync : public MultiSyncBase {
   template <size_t... Is>
   bool createSyncImpl(std::index_sequence<Is...>) {
     if (callback_) {
-      // Create synchronizer with N subscribers
-      sync_ = std::make_unique<SyncType>(SyncPolicy(config_.queue_size),
-                                         *std::get<Is>(subs_)...);
+      // Create synchronizer with N subscribers based on runtime config
+      if (config_.use_approximate_time) {
+        // ApproximateTime in ROS2 Kilted only takes queue_size in constructor
+        // Construct synchronizer with policy first, then connect subscribers
+        ApproximateTimePolicy policy(config_.queue_size);
+        auto sync_ptr = std::make_shared<ApproximateTimeSyncType>(policy);
+        // Set max_interval_duration using time_slop config (convert seconds to Duration)
+        if (auto* policy_ptr = sync_ptr->getPolicy()) {
+          policy_ptr->setMaxIntervalDuration(rclcpp::Duration::from_seconds(config_.time_slop));
+        }
+        // Connect subscribers using connectInput
+        sync_ptr->connectInput(*std::get<Is>(subs_)...);
+        sync_ = sync_ptr;
+      } else {
+        // ExactTime only needs queue size
+        // Construct synchronizer with policy first, then connect subscribers
+        ExactTimePolicy policy(config_.queue_size);
+        auto sync_ptr = std::make_shared<ExactTimeSyncType>(policy);
+        // Connect subscribers using connectInput
+        sync_ptr->connectInput(*std::get<Is>(subs_)...);
+        sync_ = sync_ptr;
+      }
 
       // Use lambda to forward messages to callDerived
 #if MESSAGE_FILTERS_USES_NODE_INTERFACE
-      sync_->registerCallback(callback_);
+      std::visit([this](auto& sync_ptr) {
+        if constexpr (!std::is_same_v<std::decay_t<decltype(sync_ptr)>, std::monostate>) {
+          if (sync_ptr) {
+            sync_ptr->registerCallback(callback_);
+          }
+        }
+      }, sync_);
 #else
       // 1. Lambda accepts all 9 arguments (as auto).
       // 2. The arguments are passed to the slice_and_call helper, along with
       //    the compile-time index sequence (Is...), which dictates how many to
       //    keep (N).
-      sync_->registerCallback([this](const auto&... args) {
+      auto callback_wrapper = [this](const auto&... args) {
         // Is... is visible here as a compile-time constant parameter pack
         this->slice_and_call(std::index_sequence<Is...>(), args...);
-      });
+      };
+      std::visit([this, &callback_wrapper](auto& sync_ptr) {
+        if constexpr (!std::is_same_v<std::decay_t<decltype(sync_ptr)>, std::monostate>) {
+          if (sync_ptr) {
+            sync_ptr->registerCallback(callback_wrapper);
+          }
+        }
+      }, sync_);
 #endif
       RCLCPP_INFO_STREAM(node_.get_logger(),
                          "MultiSync connected and subscribed");
@@ -281,7 +346,9 @@ class MultiSync : public MultiSyncBase {
   MultiSyncConfig config_;
   SubscriberTuple subs_{};
 
-  std::shared_ptr<SyncType> sync_;
+  std::variant<std::monostate, 
+               std::shared_ptr<ExactTimeSyncType>,
+               std::shared_ptr<ApproximateTimeSyncType>> sync_;
   Callback callback_;
 };
 

@@ -163,6 +163,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // this will mark some points as invalid if they are out of depth range
     utils::ChronoTimingStats update_depths_timer("depth_updater");
     frame->updateDepths();
+    
+    // Also update depths for previous frame if it doesn't have them
+    // This is important when using ApproximateTime sync where timestamps may differ
+    // updateDepths() internally checks if depth is available, so we can call it safely
+    if (previous_frame) {
+      previous_frame->updateDepths();
+    }
   }
 
   bool stereo_result = false;
@@ -223,8 +230,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       object_motion_solver_->solve(frame, previous_frame);
 
   const FeatureTrackerInfo& tracker_info = *frame->getTrackingInfo();
-  const FeatureTrackerInfo& tracker_info_prev =
-      *previous_frame->getTrackingInfo();
   VLOG(1) << to_string(tracker_info);
 
   VisionImuPacket::Ptr vision_imu_packet = std::make_shared<VisionImuPacket>();

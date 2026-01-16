@@ -58,7 +58,17 @@ bool Frame::getCorrespondences(
     CHECK_EQ(prev_feature->frameId(), previous_frame.getFrameId());
     CHECK_EQ(curr_feature->frameId(), getFrameId());
 
-    correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    // Skip features without depth when using landmark-based correspondences
+    // This can happen with ApproximateTime sync where timestamps may differ
+    try {
+      correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    } catch (const std::runtime_error& e) {
+      // Log warning but continue processing other correspondences
+      VLOG(1) << "Skipping correspondence for tracklet " 
+              << prev_feature->trackletId() 
+              << ": " << e.what();
+      continue;
+    }
   }
   return true;
 }
@@ -89,7 +99,17 @@ bool Frame::getDynamicCorrespondences(
     CHECK_EQ(feature_pairs.second->trackletId(),
              feature_pairs.first->trackletId());
 
-    correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    // Skip features without depth when using landmark-based correspondences
+    // This can happen with ApproximateTime sync where timestamps may differ
+    try {
+      correspondences.push_back(func(previous_frame, prev_feature, curr_feature));
+    } catch (const std::runtime_error& e) {
+      // Log warning but continue processing other correspondences
+      VLOG(1) << "Skipping dynamic correspondence for tracklet " 
+              << prev_feature->trackletId() 
+              << ": " << e.what();
+      continue;
+    }
   }
   return true;
 }

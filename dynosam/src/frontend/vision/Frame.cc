@@ -546,6 +546,17 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
     int x_idx = pt.x;
     int y_idx = pt.y;
 
+    // Get image dimensions from depth mat
+    const int mWidth = matDepth.cols;
+    const int mHeight = matDepth.rows;
+    
+    // Get camera calibration parameters
+    const CameraParams& camera_params = camera_->getParams();
+    const double mFx = camera_params.fx();
+    const double mFy = camera_params.fy();
+    const double mCx = camera_params.cu();  // cu is the principal point x
+    const double mCy = camera_params.cv();  // cv is the principal point y
+
     //-- Original point's true depth
     float depth_orig = matDepth.at<float>(y_idx, x_idx);
 
@@ -603,13 +614,23 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
         float medianValue = (partitionSize%2==0) ? 
                             (adjustDepthList[partitionSize/2-1] + adjustDepthList[partitionSize/2])/2.0 : 
                             adjustDepthList[partitionSize/2];
-        if(depth_orig >= adjustDepthList.front() && depth_orig <= adjustDepthList.back()){
-            //-- If true depth is within this range, use true depth (true depth itself is foreground)
+        
+        // If depth is discontinuous (jump detected), check if the original depth matches
+        // the continuous region. If not, it means the edge point is at the boundary
+        // (e.g., person's edge) and should be rejected.
+        if(jump_indices.empty())
+        {
+            // No jump: all depths are continuous, use original depth
             adjusted_depth = depth_orig;
         }else{
-            //-- If true depth is not in foreground range, adjust depth to foreground range
-            adjusted_depth = medianValue;
+            // Jump detected: depth is discontinuous in the patch
+            // This typically indicates the edge point is at a boundary (e.g., person's edge)
+            // Reject all edge points where jump is detected to avoid visualizing boundary edges
+            adjusted_depth = 0.0f;
         }
+    } else {
+        // Not enough valid depth values in patch - likely invalid or at boundary
+        adjusted_depth = 0.0f;
     }
 
     pt.depth = adjusted_depth; //-- Assign depth to point feature

@@ -412,10 +412,7 @@ class Frame {
       FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth,
       double max_depth);
   
-  void updateDepthsEdges(const ImageWrapper<ImageType::Depth>& depth);
-  static void updateDepthsEdgePoint(orderedEdgePoint& pt, const cv::Mat& matDepth,
-                                    int mWidth, int mHeight, 
-                                    double mFx, double mFy, double mCx, double mCy);
+  void assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth);
 
   // based on the current set of dynamic features
   //  populates object_observations_

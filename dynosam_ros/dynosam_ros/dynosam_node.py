@@ -27,6 +27,13 @@ class DynosamNode(Node):
         params_path = LaunchConfiguration("params_path").perform(context)
         verbose = LaunchConfiguration("v").perform(context)
         output_path = LaunchConfiguration("output_path").perform(context)
+        
+        # Get camera_params_file from launch argument if available
+        camera_params_file = LaunchConfiguration("camera_params_file").perform(context)
+        if camera_params_file:
+            camera_params_flag = f"--camera_params_file={camera_params_file}"
+        else:
+            camera_params_flag = None
 
         flagfiles = [
             f"--flagfile={os.path.join(params_path, f)}"
@@ -35,6 +42,10 @@ class DynosamNode(Node):
         ]
 
         args = flagfiles + [f"--v={verbose}", f"--output_path={output_path}"]
+        
+        # Add camera_params_file flag if specified
+        if camera_params_flag:
+            args.append(camera_params_flag)
 
         # add non-ROS args from CLI
         # should come from the LaunchContext
