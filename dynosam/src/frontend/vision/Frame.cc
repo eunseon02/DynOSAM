@@ -834,11 +834,6 @@ std::vector<int> Frame::edgeWiseCorrespondenceReproject(Edge& query_edge, const 
     }
 
     if (result.empty()) {
-        VLOG(10) << "edgeWiseCorrespondenceReproject: no edges matched. "
-                 << "Query edge has " << num_points << " points, "
-                 << "threshold=" << threshold_value << ", "
-                 << "max_votes=" << max_votes << ", "
-                 << "edgeVoteMapTotal.size()=" << edgeVoteMapTotal.size();
         return result;
     }
 
