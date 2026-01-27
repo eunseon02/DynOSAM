@@ -68,6 +68,7 @@ add_library(${PROJECT_NAME} SHARED
   src/dataprovider/ProjectAriaDataProvider.cc
   src/dataprovider/TartanAirShibuya.cc
   src/dataprovider/ViodeDataProvider.cc
+  src/dataprovider/TUMDataProvider.cc
 
   src/frontend/imu/ThreadSafeImuBuffer.cc
   src/frontend/imu/ImuFrontend.cc
@@ -125,6 +126,7 @@ add_library(${PROJECT_NAME} SHARED
 
   src/visualizer/VisualizerPipelines.cc
   src/visualizer/OpenCVFrontendDisplay.cc
+  src/visualizer/TrajectoryLoggerDisplay.cc
   src/visualizer/Visualizer-Definitions.cc
 )
 

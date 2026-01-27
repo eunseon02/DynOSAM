@@ -198,6 +198,16 @@ install(TARGETS
   dynosam_tracking_demo_node
   DESTINATION lib/${PROJECT_NAME})
 
+add_executable(dynosam_experiments_node nodes/backend_experiments_node.cc)
+target_link_libraries(dynosam_experiments_node
+  ${PROJECT_NAME}
+  ${PCL_LIBRARIES}
+
+)
+install(TARGETS
+  dynosam_experiments_node
+  DESTINATION lib/${PROJECT_NAME})
+
 
 
 

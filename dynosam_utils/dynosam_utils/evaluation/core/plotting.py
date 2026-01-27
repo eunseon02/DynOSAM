@@ -9,7 +9,10 @@ import numpy as np
 from matplotlib.figure import Figure
 from evo.core.lie_algebra import se3
 from matplotlib.axes import Axes
-import gtsam
+try:
+    import gtsam
+except ImportError:
+    gtsam = None
 
 from dynosam_utils.evaluation.formatting_utils import *
 from dynosam_utils.evaluation.tools import ObjectMotionTrajectory

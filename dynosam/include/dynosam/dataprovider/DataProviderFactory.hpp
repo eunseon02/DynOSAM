@@ -41,7 +41,8 @@ enum DatasetType {
   OMD,  // oxford multi-motion dataset,
   ARIA,
   TARTAN_AIR_SHIBUYA,
-  VIODE
+  VIODE,
+  TUM_RGBD  // TUM RGBD dataset
 };
 
 struct DataProviderFactory {

@@ -440,6 +440,17 @@ We also provide a `.clang-format` file with the style rules that the repo uses, 
 
 ```
 
+```
+
+./install/dynosam/lib/dynosam/dyno_sam --use_tum \
+  --path_to_tum=/root/data/tum-rgbd/rgbd_dataset_freiburg2_desk/ \
+  --tum_association=/root/data/tum-rgbd/fr2_desk/rgbd_dataset_freiburg2_large_with_loop_associated.txt \
+  --use_pipeline=true \
+  --output_trajectory=/root/results/trajectory_tum.txt \
+  --use_dynamic_track=false
+  ```
+
+
 # 8. BSD License
 
 The DynoSAM framework is open-sourced under the BSD License, see [LICENSE](./LICENSE).

@@ -31,7 +31,9 @@
 #include <glog/logging.h>
 
 #include <dynosam/backend/BackendFactory.hpp>
-#include <dynosam/common/Map.hpp>
+#include <dynosam/backend/BackendModuleFactory.hpp>
+#include <dynosam/backend/RegularBackendModule.hpp>
+#include <dynosam_opt/Map.hpp>
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
 #include <dynosam_common/logger/Logger.hpp>
 
@@ -66,8 +68,6 @@ class BackendExperimentsNode : public DynoNode {
 
     Camera::Ptr camera = std::make_shared<Camera>(camera_params);
 
-    using BackendModuleTraits = RegularBackendModule::ModuleTraits;
-
     LOG(INFO) << "Offline RGBD frontend";
     const std::string file_path =
         getOutputFilePath(kRgbdFrontendOutputJsonFile);
@@ -87,8 +87,20 @@ class BackendExperimentsNode : public DynoNode {
     params.backend_params_.full_batch_frame = offline_frontend->endingFrame();
 
     const auto& backend_type = params.backend_type;
-    backend = BackendFactory::createModule(backend_type, params.backend_params_,
-                                           camera);
+    
+    using BackendFactoryType = DefaultBackendFactory<RegularBackendModuleTraits::MapType>;
+    auto factory = BackendFactoryType::Create(backend_type);
+    
+    Sensors sensors;
+    sensors.camera = camera;
+    
+    ModuleParams module_params;
+    module_params.backend_params = params.backend_params_;
+    module_params.sensors = sensors;
+    module_params.display_queue = nullptr;
+    
+    BackendWrapper backend_wrapper = factory->createModule(module_params);
+    backend = backend_wrapper.backend;
     CHECK(backend);
 
     backend_pipeline_ = std::make_unique<BackendPipeline>(

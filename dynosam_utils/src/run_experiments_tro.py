@@ -43,6 +43,7 @@ kitti_dataset = 0
 virtual_kitti_dataset = 1
 cluster_dataset = 2
 omd_dataset = 3
+tum_rgbd_dataset = 7  # TUM_RGBD enum value
 
 def prep_dataset(path, name, data_loader_num, *args):
     backend_type = 0
@@ -94,6 +95,19 @@ def prep_omd_sequence(path, name, *args):
 
 def run_omd_sequence(path, name, backend_type, *args):
     run_saved_sequence(path, name, omd_dataset, backend_type, *args)
+
+# TUM RGBD
+def prep_tum_sequence(path, association_file, name, *args):
+    args_list = list(args)
+    args_list.append("--tum_association_file={}".format(association_file))
+    args_list.append("--shrink_row=0")
+    args_list.append("--shrink_col=0")
+    prep_dataset(path, name, tum_rgbd_dataset, *args_list)
+
+def run_tum_sequence(path, association_file, name, backend_type, *args):
+    args_list = list(args)
+    args_list.append("--tum_association_file={}".format(association_file))
+    run_saved_sequence(path, name, tum_rgbd_dataset, backend_type, *args_list)
 
 
 
@@ -158,7 +172,13 @@ if __name__ == '__main__':
     world_motion_backend = 0
     ll_backend = 1
 
-    run_viodes()
+    # run_viodes()
+    run_tum_sequence(
+        "/root/data/tum-rgbd/rgbd_dataset_freiburg2_desk/",
+        "/root/data/tum-rgbd/fr2_desk/rgbd_dataset_freiburg2_large_with_loop_associated.txt",
+        "tum_fr2_desk",
+        backend_type=0  # 또는 1
+    )
     sys.exit(0)
 
     # def run_both_backend(run_sequence_func, path, name, *args):

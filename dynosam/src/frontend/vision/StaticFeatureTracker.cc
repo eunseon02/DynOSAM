@@ -419,6 +419,10 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
       // Use empty mask to detect edges on all pixels (static + dynamic regions)
       cv::Mat empty_mask;
       detected_edges = detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
+      LOG(INFO) << "detectFeatures: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
+                << FLAGS_use_edge_feature << ")";
+    } else {
+      LOG(INFO) << "detectFeatures: FLAGS_use_edge_feature is false, skipping edge detection";
     }
   }
 
@@ -671,6 +675,8 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
         utils::ChronoTimingStats edge_timer("static_feature_track.detect_edges_only");
         cv::Mat empty_mask;
         detected_edges = detectEdgeFeatures(current_processed_img, tracked_features.size(), empty_mask);
+        LOG(INFO) << "Edge detection: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
+                  << FLAGS_use_edge_feature << ")";
       }
       // Store detected edges
       for (const Edge& edge : detected_edges) {

@@ -37,32 +37,51 @@
 #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/TartanAirShibuya.hpp"
+#include "dynosam/dataprovider/TUMDataProvider.hpp"
 #include "dynosam/dataprovider/ViodeDataProvider.hpp"
 #include "dynosam/dataprovider/VirtualKittiDataProvider.hpp"
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/vision/MotionSolver.hpp"
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
+#include "dynosam/visualizer/TrajectoryLoggerDisplay.hpp"
+#include "dynosam/backend/BackendFactory.hpp"
+#include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam_common/viz/Colour.hpp"
 #include "dynosam_cv/Camera.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_nn/PyObjectDetector.hpp"
 
+// ROS2 includes for DynoPipelineManagerRos (optional)
+#ifdef HAVE_DYNOSAM_ROS
+#include "dynosam_ros/PipelineRos.hpp"
+#include "dynosam_ros/Utils.hpp"
+#include "rclcpp/executor.hpp"
+#include "rclcpp/rclcpp.hpp"
+#endif
+
 DEFINE_string(path_to_kitti, "/root/data/kitti", "Path to KITTI dataset");
 DEFINE_string(path_to_tum, "/root/data/TUM", "Path to TUM RGBD dataset");
 DEFINE_string(tum_association, "", "Path to TUM association file (e.g., rgb.txt or depth.txt association)");
 DEFINE_bool(use_tum, false, "Use TUM RGBD dataset instead of KITTI");
+DEFINE_string(output_trajectory, "", "Output file path for TUM format trajectory (e.g., trajectory.txt)");
+DEFINE_bool(use_pipeline, false, "Use full PipelineManager with backend (instead of tracker only)");
 // TODO: (jesse) many better ways to do this with ros - just for now
 DEFINE_string(
-    params_folder_path, "dynosam/params",
-    "Path to the folder containing the yaml files with the VIO parameters.");
+    params_folder_path, "",
+    "Path to the folder containing the yaml files with the VIO parameters. "
+    "If empty, tries to find params in install/share/dynosam/params or src/core/dynosam/params");
 
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include <fstream>
 #include <sstream>
+#include <iomanip>
+#include <filesystem>
+#include <vector>
 
 // Load TUM RGBD dataset from association file
 void LoadTUMImages(const std::string& strAssociationFilename,
@@ -97,12 +116,81 @@ void LoadTUMImages(const std::string& strAssociationFilename,
 
 int main(int argc, char* argv[]) {
   using namespace dyno;
-  google::ParseCommandLineFlags(&argc, &argv, true);
+  
+  // Build argument list with flag files first, then command line args
+  // This ensures flag files are loaded before parsing command line arguments
+  std::vector<std::string> argv_vec;
+  argv_vec.push_back(argv[0]);  // program name
+  
+  // Try to find params folder to load flag files
+  std::string params_path;
+  
+  // First, check if params_folder_path is provided in command line
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+    if (arg.find("--params_folder_path=") == 0) {
+      params_path = arg.substr(20);  // Extract path after "="
+      break;
+    }
+  }
+  
+  // If not found, try to find params folder automatically
+  if (params_path.empty()) {
+    std::vector<std::string> candidate_paths = {
+      "/home/user/dev_ws/install/dynosam/share/dynosam/params",
+      "/home/user/dev_ws/src/core/dynosam/params"
+    };
+    for (const auto& candidate : candidate_paths) {
+      std::ifstream test_file(candidate + "/PipelineParams.yaml");
+      if (test_file.good()) {
+        params_path = candidate;
+        test_file.close();
+        break;
+      }
+    }
+  }
+  
+  // Ensure params_path ends with '/'
+  if (!params_path.empty() && params_path.back() != '/') {
+    params_path += "/";
+  }
+  
+  // Load flag files if params folder found
+  if (!params_path.empty() && std::filesystem::exists(params_path)) {
+    LOG(INFO) << "Loading flag files from: " << params_path;
+    for (const auto& entry : std::filesystem::directory_iterator(params_path)) {
+      if (entry.is_regular_file() && entry.path().extension() == ".flags") {
+        std::string flagfile_arg = "--flagfile=" + entry.path().string();
+        argv_vec.push_back(flagfile_arg);
+        LOG(INFO) << "  Added flag file: " << entry.path().filename();
+      }
+    }
+  }
+  
+  // Add original command line arguments (they will override flag file settings)
+  for (int i = 1; i < argc; ++i) {
+    argv_vec.push_back(argv[i]);
+  }
+  
+  // Convert to char** for ParseCommandLineFlags
+  std::vector<char*> new_argv;
+  for (auto& str : argv_vec) {
+    new_argv.push_back(const_cast<char*>(str.c_str()));
+  }
+  new_argv.push_back(nullptr);
+  
+  int new_argc = new_argv.size() - 1;
+  char** new_argv_ptr = new_argv.data();
+  google::ParseCommandLineFlags(&new_argc, &new_argv_ptr, true);
+  
   google::InitGoogleLogging(argv[0]);
   FLAGS_logtostderr = 1;
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
   FLAGS_v = 30;
+  
+  // Log loaded flags for debugging (these are declared in RGBDInstanceFrontendModule.cc)
+  // Note: We can't access them here directly, but they will be loaded from flag files
 
   FrontendParams fp;
   fp.tracker_params.feature_detector_type =
@@ -122,6 +210,85 @@ int main(int argc, char* argv[]) {
       LOG(FATAL) << "TUM association file not specified! Use --tum_association=path/to/association.txt";
     }
 
+    // Load camera parameters (TUM uses standard camera params)
+    CameraParams::IntrinsicsCoeffs intrinsics({525.0, 525.0, 319.5, 239.5});
+    CameraParams::DistortionCoeffs distortion({0.0, 0.0, 0.0, 0.0});
+    cv::Size image_size(640, 480);
+    auto distortion_model = CameraParams::stringToDistortion("radtan", "pinhole");
+    CameraParams camera_params(intrinsics, distortion, image_size, distortion_model);
+
+    // Use full pipeline with backend if requested
+    if (FLAGS_use_pipeline) {
+#ifdef HAVE_DYNOSAM_ROS
+      LOG(INFO) << "Using full PipelineManagerRos with backend";
+      
+      // Initialize ROS2
+      auto non_ros_args = dyno::initRosAndLogging(argc, argv);
+      
+      rclcpp::NodeOptions options;
+      options.arguments(non_ros_args);
+      options.use_intra_process_comms(true);
+      
+      // Create custom DynoNode that uses TUMDataProvider
+      class TUMDynoPipelineManagerRos : public dyno::DynoPipelineManagerRos {
+       public:
+        TUMDynoPipelineManagerRos(const rclcpp::NodeOptions& options,
+                                   const std::string& tum_path,
+                                   const std::string& tum_association,
+                                   const CameraParams& camera_params)
+            : dyno::DynoPipelineManagerRos(options),
+              tum_path_(tum_path),
+              tum_association_(tum_association),
+              camera_params_(camera_params) {}
+        
+       protected:
+        dyno::DataProvider::Ptr createDataProvider() override {
+          // Override to use TUMDataProvider instead of default
+          return std::make_shared<TUMDataProvider>(
+              tum_path_, tum_association_, camera_params_);
+        }
+        
+       private:
+        std::string tum_path_;
+        std::string tum_association_;
+        CameraParams camera_params_;
+      };
+      
+      // Create ROS pipeline with TUM dataset
+      rclcpp::executors::MultiThreadedExecutor exec;
+      auto ros_pipeline = std::make_shared<TUMDynoPipelineManagerRos>(
+          options, FLAGS_path_to_tum, FLAGS_tum_association, camera_params);
+      
+      // Set params_folder_path parameter if not empty
+      if (!FLAGS_params_folder_path.empty()) {
+        ros_pipeline->declare_parameter("params_folder_path", FLAGS_params_folder_path);
+      }
+      
+      // Initialize pipeline
+      ros_pipeline->initalisePipeline();
+      
+      // Run pipeline
+      exec.add_node(ros_pipeline);
+      LOG(INFO) << "Starting ROS pipeline...";
+      while (rclcpp::ok()) {
+        if (!ros_pipeline->spinOnce()) {
+          break;
+        }
+        exec.spin_some();
+      }
+      
+      ros_pipeline.reset();
+      rclcpp::shutdown();
+      
+      return 0;
+#else
+      LOG(FATAL) << "DynoPipelineManagerRos requires dynosam_ros package. "
+                 << "Please build with dynosam_ros available or use non-ROS pipeline.";
+      return 1;
+#endif
+    }
+
+    // Original tracker-only code
     // Load TUM images
     std::vector<std::string> vstrImageFilenamesRGB;
     std::vector<std::string> vstrImageFilenamesD;
@@ -134,21 +301,28 @@ int main(int argc, char* argv[]) {
     } else if (vstrImageFilenamesD.size() != vstrImageFilenamesRGB.size()) {
       LOG(FATAL) << "Different number of images for rgb and depth in TUM dataset!";
     }
-
-    // Load camera parameters (TUM uses standard camera params)
-    // You may need to adjust this based on your camera configuration
-    // Default TUM camera parameters - adjust these based on your dataset
-    // Format: [fx, fy, cx, cy]
-    CameraParams::IntrinsicsCoeffs intrinsics({525.0, 525.0, 319.5, 239.5});
-    CameraParams::DistortionCoeffs distortion({0.0, 0.0, 0.0, 0.0});  // TUM typically has minimal distortion
-    cv::Size image_size(640, 480);  // Adjust based on your TUM dataset
-    auto distortion_model = CameraParams::stringToDistortion("radtan", "pinhole");
     
-    CameraParams camera_params(intrinsics, distortion, image_size, distortion_model);
     camera = std::make_shared<Camera>(camera_params);
     tracker = std::make_shared<FeatureTracker>(fp, camera);
+    
+    // Create motion solver for pose estimation
+    EgoMotionSolver::Params motion_solver_params;
+    EgoMotionSolver motion_solver(motion_solver_params, camera_params);
 
     LOG(INFO) << "Starting TUM RGBD dataset processing with " << nImages << " images";
+
+    // Storage for trajectory output
+    std::vector<gtsam::Pose3> camera_poses;
+    std::vector<double> pose_timestamps;
+    std::ofstream trajectory_file;
+    if (!FLAGS_output_trajectory.empty()) {
+      trajectory_file.open(FLAGS_output_trajectory);
+      if (!trajectory_file.is_open()) {
+        LOG(WARNING) << "Failed to open trajectory output file: " << FLAGS_output_trajectory;
+      } else {
+        LOG(INFO) << "Saving trajectory to: " << FLAGS_output_trajectory;
+      }
+    }
 
     // Process TUM images
     for (int ni = 0; ni < nImages; ++ni) {
@@ -196,6 +370,36 @@ int main(int argc, char* argv[]) {
       auto frame = tracker->track(frame_id, timestamp, image_container);
       Frame::Ptr previous_frame = tracker->getPreviousFrame();
 
+      // Estimate camera pose
+      if (frame) {
+        if (ni == 0) {
+          // First frame: set to identity
+          frame->T_world_camera_ = gtsam::Pose3::Identity();
+        } else if (previous_frame) {
+          // Estimate relative pose between frames
+          Pose3SolverResult result = motion_solver.geometricOutlierRejection3d2d(
+              previous_frame, frame, std::nullopt);
+          
+          if (result.status == TrackingStatus::VALID) {
+            // Update pose: T_world_k = T_world_k_1 * T_k_1_k
+            // result.best_result is T_k_1_k (relative pose from k-1 to k)
+            frame->T_world_camera_ = previous_frame->T_world_camera_ * result.best_result;
+          } else {
+            // If pose estimation fails, use previous pose (or identity)
+            LOG(WARNING) << "Failed to estimate pose at frame " << frame_id 
+                         << ", using previous pose";
+            frame->T_world_camera_ = previous_frame->T_world_camera_;
+          }
+        }
+      }
+
+      // Store camera pose for trajectory output
+      if (frame && !FLAGS_output_trajectory.empty() && trajectory_file.is_open()) {
+        const gtsam::Pose3& T_world_camera = frame->T_world_camera_;
+        camera_poses.push_back(T_world_camera);
+        pose_timestamps.push_back(timestamp);
+      }
+
       cv::Mat tracking;
       if (previous_frame) {
         ImageTracksParams track_viz_params(true);
@@ -206,6 +410,25 @@ int main(int argc, char* argv[]) {
 
       LOG(INFO) << to_string(tracker->getTrackerInfo());
       cv::waitKey(1);
+    }
+
+    // Save trajectory in TUM format
+    if (!FLAGS_output_trajectory.empty() && trajectory_file.is_open()) {
+      LOG(INFO) << "Saving " << camera_poses.size() << " poses to TUM format trajectory file";
+      for (size_t i = 0; i < camera_poses.size(); ++i) {
+        const gtsam::Pose3& pose = camera_poses[i];
+        const gtsam::Point3& t = pose.translation();
+        const gtsam::Rot3& R = pose.rotation();
+        const gtsam::Quaternion q = R.toQuaternion();
+        
+        // TUM format: timestamp tx ty tz qx qy qz qw
+        trajectory_file << std::fixed << std::setprecision(6) 
+                       << pose_timestamps[i] << " "
+                       << t.x() << " " << t.y() << " " << t.z() << " "
+                       << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+      }
+      trajectory_file.close();
+      LOG(INFO) << "Trajectory saved to: " << FLAGS_output_trajectory;
     }
 
     return 0;
