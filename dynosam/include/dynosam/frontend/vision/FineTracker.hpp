@@ -19,7 +19,7 @@
 
 #include <mutex>
 
-#include "dynosam/frontend/vision/EdgeSelector.hpp"
+#include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam/frontend/vision/Frame.hpp"
 #include "dynosam/frontend/vision/RobustWeight.hpp"
 #include "dynosam/frontend/vision/DisjointSet.hpp"

@@ -118,13 +118,24 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // data-structure to handle which objects required re-tracking/sampling
   std::set<ObjectId> object_keyframes;
 
-  auto static_track = [&](FeatureContainer& static_features, std::vector<Edge>& static_edges) {
+  // Make a deep copy of boundary_mask for thread safety
+  // cv::Mat uses reference counting, so we need to clone it before passing to another thread
+  cv::Mat boundary_mask_copy;
+  if (!boundary_mask_result.boundary_mask.empty()) {
+    boundary_mask_copy = boundary_mask_result.boundary_mask.clone();
+  }
+  // Also make copies of other captured variables for thread safety
+  Frame::Ptr previous_frame_copy = previous_frame_;
+  ImageContainer input_images_copy = input_images;
+  FeatureTrackerInfo info_copy = info_;
+
+  auto static_track = [this, boundary_mask_copy, previous_frame_copy, input_images_copy, R_km1_k](FeatureContainer& static_features, std::vector<Edge>& static_edges, FeatureTrackerInfo& tracker_info) {
     VLOG(20) << "Starting static track";
     utils::ChronoTimingStats static_track_timer("static_feature_track");
     static_features = static_feature_tracker_->trackStatic(
-        previous_frame_, input_images, info_,
-        boundary_mask_result.boundary_mask, R_km1_k);
-    // static_edges = static_feature_tracker_->getDetectedEdges();
+        previous_frame_copy, input_images_copy, tracker_info,
+        boundary_mask_copy, R_km1_k);
+    static_edges = static_feature_tracker_->getDetectedEdges();
   };
 
   auto dynamic_track = [&](FeatureContainer& dynamic_features) {
@@ -150,7 +161,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // start tracking threads since we can do this independantly
   FeatureContainer static_features, dynamic_features;
   std::vector<Edge> static_edges;
-  std::thread static_track_thread(static_track, std::ref(static_features), std::ref(static_edges));
+  FeatureTrackerInfo static_tracker_info = info_copy;
+  std::thread static_track_thread(static_track, std::ref(static_features), std::ref(static_edges), std::ref(static_tracker_info));
   
   std::optional<std::thread> dynamic_track_thread;
   if (FLAGS_use_dynamic_track) {
@@ -161,6 +173,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   if (dynamic_track_thread.has_value()) {
     dynamic_track_thread->join();
   }
+
+  // Update info_ with the results from static tracking thread
+  info_ = static_tracker_info;
 
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
                                               // to the newly created frame)
@@ -1084,6 +1099,15 @@ void FeatureTracker::requiresSampling(
       static_cast<size_t>(max_dynamic_point_age - age_buffer);
   CHECK_GT(expiry_age, 0u);
 
+  // Safety check: ensure bounding boxes vector size matches detected objects
+  if (boundary_mask_result.inner_boarder_object_bounding_boxes.size() != detected_objects.size()) {
+    LOG(ERROR) << "Mismatch between detected objects (" << detected_objects.size()
+               << ") and bounding boxes (" 
+               << boundary_mask_result.inner_boarder_object_bounding_boxes.size()
+               << ") at frame " << info.frame_id << ". Skipping sampling check.";
+    return;
+  }
+
   for (size_t i = 0; i < detected_objects.size(); i++) {
     const ObjectId object_id = detected_objects.at(i);
 
@@ -1118,6 +1142,13 @@ void FeatureTracker::requiresSampling(
 
       // bounding box of the whole mask, representing the object detected in the
       // actual image
+      // Safety check: ensure index is valid
+      if (i >= boundary_mask_result.inner_boarder_object_bounding_boxes.size()) {
+        LOG(ERROR) << "Index " << i << " out of bounds for bounding boxes (size: "
+                   << boundary_mask_result.inner_boarder_object_bounding_boxes.size()
+                   << ") at frame " << info.frame_id << ". Skipping object " << object_id;
+        continue;
+      }
       const cv::Rect& detection_bb =
           boundary_mask_result.inner_boarder_object_bounding_boxes.at(i);
 
@@ -1126,8 +1157,24 @@ void FeatureTracker::requiresSampling(
       {
         utils::ChronoTimingStats timing(
             "dynamic_feature_track_klt.tracking_BB");
-        tracked_bb =
-            cv::boundingRect(per_object_tracks.toOpenCV(nullptr, true));
+        // Safety check: ensure we have points before computing bounding rect
+        if (per_object_tracks.empty()) {
+          LOG(WARNING) << "Object " << object_id << " has no tracked features. "
+                       << "Skipping IoU calculation.";
+          // Treat as needing sampling if no tracks
+          objects_to_sample.insert(object_id);
+          per_object_status.object_resampled = true;
+          continue;
+        }
+        std::vector<cv::Point2f> tracked_points = per_object_tracks.toOpenCV(nullptr, true);
+        if (tracked_points.empty()) {
+          LOG(WARNING) << "Object " << object_id << " has empty tracked points. "
+                       << "Skipping IoU calculation.";
+          objects_to_sample.insert(object_id);
+          per_object_status.object_resampled = true;
+          continue;
+        }
+        tracked_bb = cv::boundingRect(tracked_points);
       }
       double iou;
       {

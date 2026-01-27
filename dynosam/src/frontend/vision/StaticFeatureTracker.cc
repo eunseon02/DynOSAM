@@ -311,8 +311,8 @@ FeatureContainer KltFeatureTracker::trackStatic(
 }
 
 std::vector<Edge> KltFeatureTracker::getDetectedEdges() const {
-  // KltFeatureTracker doesn't detect edges, return empty vector
-  return std::vector<Edge>();
+  // Return detected edges stored during detectFeatures()
+  return detected_edges_;
 }
 
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
@@ -646,17 +646,38 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
   const auto& n_tracked = tracked_features.size();
   tracker_info.static_track_optical_flow = n_tracked;
 
-  if (tracked_features.size() <
-      static_cast<size_t>(params_.min_features_per_frame)) {
-    utils::ChronoTimingStats timer("static_feature_track.detect");
-    // if we do not have enough features, detect more on the current image
-    EdgeContainer new_edges;
-    detectFeatures(current_processed_img, image_container, tracked_features,
-                   tracked_features, new_edges, detection_mask);
-    tracker_info.new_static_detections = true;
+  // Always detect edges if edge features are enabled, even if we have enough point features
+  // FineTracker needs edge features every frame for pose refinement
+  bool need_feature_detection = tracked_features.size() <
+      static_cast<size_t>(params_.min_features_per_frame);
+  bool need_edge_detection = FLAGS_use_edge_feature;
 
-    const auto n_detected = tracked_features.size() - n_tracked;
-    tracker_info.static_track_detections += n_detected;
+  if (need_feature_detection || need_edge_detection) {
+    utils::ChronoTimingStats timer("static_feature_track.detect");
+    EdgeContainer new_edges;
+    
+    if (need_feature_detection) {
+      // if we do not have enough features, detect more on the current image
+      detectFeatures(current_processed_img, image_container, tracked_features,
+                     tracked_features, new_edges, detection_mask);
+      tracker_info.new_static_detections = true;
+      const auto n_detected = tracked_features.size() - n_tracked;
+      tracker_info.static_track_detections += n_detected;
+    } else {
+      // Only detect edges without detecting new point features
+      // This ensures edges are detected every frame for FineTracker
+      std::vector<Edge> detected_edges;
+      {
+        utils::ChronoTimingStats edge_timer("static_feature_track.detect_edges_only");
+        cv::Mat empty_mask;
+        detected_edges = detectEdgeFeatures(current_processed_img, tracked_features.size(), empty_mask);
+      }
+      // Store detected edges
+      for (const Edge& edge : detected_edges) {
+        new_edges.add(edge);
+      }
+      detected_edges_ = detected_edges;
+    }
   }
 
   return true;

@@ -211,6 +211,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   } else {
     // Update frame pose with refined result from FineTrack
     frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+  
   }
 
 
@@ -420,6 +421,40 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
                                            const gtsam::Pose3& T_k_1_k_initial, 
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.fine_track");
+  // LOG(INFO) << "\033[1;32m[RGBD] FineTrack called!\033[0m";
+
+  // Check if we have sufficient edge features in both frames
+  const size_t min_edges_required = 1;
+  if (frame_k_1->static_edges_.empty() || frame_k->static_edges_.empty()) {
+    VLOG(5) << "FineTrack: insufficient edge features (ref: " 
+             << frame_k_1->static_edges_.size() 
+             << ", cur: " << frame_k->static_edges_.size() << "), skipping";
+    return false;
+  }
+
+  // Check if edges have points
+  size_t ref_edge_points = 0;
+  size_t ref_sampled_points = 0;
+  for (const auto& edge : frame_k_1->static_edges_) {
+    ref_edge_points += edge.mvPoints.size();
+    ref_sampled_points += edge.mvSampledEdgeIndex.size();
+  }
+  size_t cur_edge_points = 0;
+  for (const auto& edge : frame_k->static_edges_) {
+    cur_edge_points += edge.mvPoints.size();
+  }
+
+  if (ref_edge_points == 0 || cur_edge_points == 0) {
+    VLOG(5) << "FineTrack: edges have no points (ref: " << ref_edge_points
+             << ", cur: " << cur_edge_points << "), skipping";
+    return false;
+  }
+
+  VLOG(5) << "FineTrack: edge features available (ref edges: " 
+           << frame_k_1->static_edges_.size() << " with " << ref_edge_points 
+           << " points (" << ref_sampled_points << " sampled), cur edges: " 
+           << frame_k->static_edges_.size() << " with " << cur_edge_points 
+           << " points)";
   
   // Convert gtsam::Pose3 to Sophus::SE3d for FineTracker
   // FineTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
@@ -428,18 +463,29 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
   Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
                    T_matrix.topRightCorner<3, 1>());
   
-  // Run FineTracker estimation
-  fine_tracker_->estimate(frame_k_1, frame_k, T21);
+  // Run FineTracker estimation with exception handling
+  try {
+    fine_tracker_->estimate(frame_k_1, frame_k, T21);
+  } catch (const std::runtime_error& e) {
+    LOG(WARNING) << "FineTracker failed with error: " << e.what() 
+                 << ". Falling back to initial pose.";
+    return false;
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "FineTracker failed with exception: " << e.what() 
+                 << ". Falling back to initial pose.";
+    return false;
+  }
   
   // Check if tracking was successful
   if (!T21.matrix().allFinite()) {
+    LOG(WARNING) << "FineTracker returned invalid pose matrix";
     return false;
   }
   
   // Convert Sophus::SE3d result back to gtsam::Pose3
-  // T21 is T_k_k_1 (current to reference), so T_k_1_k = T21^-1
-  const Sophus::SE3d T_k_1_k_sophus = T21.inverse();
-  const Eigen::Matrix4d T_result = T_k_1_k_sophus.matrix();
+  // FineTracker returns T_ref_cur (T_k_1_k) after inverting T_cur_ref internally
+  // So T21 is already T_k_1_k, no need to invert again
+  const Eigen::Matrix4d T_result = T21.matrix();
   T_k_1_k_refined = gtsam::Pose3(T_result);
   
   return true;

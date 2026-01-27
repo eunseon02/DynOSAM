@@ -34,6 +34,8 @@
 #include "dynosam/frontend/vision/Vision-Definitions.hpp"
 #include "dynosam_common/DynamicObjects.hpp"
 #include "dynosam_common/Edge.hpp"
+#include "dynosam_common/EdgeSelector.hpp"
+#include "dynosam_common/DisjointSet.h"
 #include "dynosam_common/PointCloudProcess.hpp"
 #include "dynosam_common/StructuredContainers.hpp"
 #include "dynosam_common/Types.hpp"
@@ -57,6 +59,14 @@ class Frame {
   const Timestamp timestamp_;
   Camera::Ptr camera_;
   const ImageContainer image_container_;
+
+  int img_width_;
+  int img_height_;
+  
+  double cam_fx_;
+  double cam_fy_;
+  double cam_cx_;
+  double cam_cy_;
 
   gtsam::Pose3 T_world_camera_ = gtsam::Pose3::Identity();
 
@@ -431,7 +441,6 @@ class Frame {
       FeatureContainer& container, const ImageWrapper<ImageType::Depth>& depth,
       double max_depth);
   
-  void assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth);
 
   // based on the current set of dynamic features
   //  populates object_observations_
@@ -439,6 +448,35 @@ class Frame {
 
   Landmark getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature,
                                 const gtsam::Pose3& X_world) const;
+
+  //-- Edge-related preprocessing   
+
+  //-- After organizing edges, traverse edge points in edges and update index relationships
+  void assignPropertyIdx();
+  
+  //-- Create 2D search array based on edge information for radius neighborhood search
+  void constructSearchPlain();
+
+  //-- Create 2D search array in parallel
+  void constructSearchPlainParallel();
+
+  //-- Visualize the edge point lookup map
+  cv::Mat visualizeSearchPlain();
+
+  //-- Traverse each point in edges to calculate: far-near confidence score, observation confidence score, and depth completion
+  void assignProperty3D(const cv::Mat& depth_image);
+
+  //-- Calculate far-near confidence score, observation confidence score, and depth completion for a single point of an edge
+  void assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& depth_image);
+
+
+  //-- Adjust edges, remove edges with invalid depth, and remove overall invalid edges
+  void edgeCullingDepth();
+  void edgeCullingDepthParallel();
+
+  //-- Adjust edges, cut and reorganize edges with inconsistent depth, and remove edges with strong overall inconsistency
+  void edgeCullingContinuity();
+
 
  private:
   UndistorterRectifier::Ptr undistorter_;

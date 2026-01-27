@@ -1,5 +1,8 @@
 #include "dynosam/frontend/vision/FineTracker.hpp"
 
+#include <atomic>
+#include <glog/logging.h>
+
 using namespace dyno;
 
 FineTracker::FineTracker(double fx, double fy, double cx, double cy, float ratio): 
@@ -148,8 +151,11 @@ void FineTracker::associationRef2CurParallel()
 
     // 使用并发容器存储结果
     tbb::concurrent_vector<orderedEdgePoint> concurrent_geometry_points;
+    std::atomic<int> matched_edges_count(0);
+    std::atomic<int> total_edges_checked(0);
     
     tbb::parallel_for(0, (int)mpF_ref->static_edges_.size(), [&](int i) {
+        total_edges_checked++;
         Edge& query_edge = mpF_ref->static_edges_[i];
 
         //-- 关联前要先清空之前的关联点
@@ -166,6 +172,8 @@ void FineTracker::associationRef2CurParallel()
         
         if(associated_edges.empty())
             return;
+        
+        matched_edges_count++;
 
         //-- 此时 query_edge 与当前帧存在关联，确定 query_edge 参与优化的采样点
         Edge& edge = mpF_ref->static_edges_[i];
@@ -189,6 +197,21 @@ void FineTracker::associationRef2CurParallel()
     mvGeometryPoints.insert(mvGeometryPoints.end(), 
                           concurrent_geometry_points.begin(), 
                           concurrent_geometry_points.end());
+
+    // Count total associated edge points in previous frame for debugging
+    int total_associated_points = 0;
+    for (const auto& edge : mpF_ref->static_edges_) {
+        for (const auto& pt : edge.mvPoints) {
+            if (pt.mbAssociated) {
+                total_associated_points++;
+            }
+        }
+    }
+    VLOG(5) << "FineTracker::associationRef2CurParallel: matched " 
+            << total_associated_points << " edge points out of " 
+            << mvGeometryPoints.size() << " sampled points, "
+            << "from " << matched_edges_count << " matched edges out of " 
+            << total_edges_checked << " checked edges (total: " << ref_edge_num << ")";
 
     //-- 构造完 mvGeometryPoints 后即构造 mvAssociatedLines 以获得对应的点线关联
     getAssociationLines2D();
@@ -831,6 +854,13 @@ void FineTracker::estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_
     T_cur_ref = T21;
 
     associationRef2CurParallel();
+
+    // Check if we have matched geometry points after association
+    // If empty, cannot proceed with registration (will cause "Input vector is empty" error)
+    if (mvGeometryPoints.empty()) {
+        // Keep the initial pose T21 unchanged
+        return;
+    }
 
     if(geo_photo_ratio > 0)
     {

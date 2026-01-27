@@ -1,4 +1,4 @@
-#include "dynosam/frontend/vision/EdgeSelector.hpp"
+#include "dynosam_common/EdgeSelector.hpp"
 
 float edgeSelector::calcAngleBias(float angle_1, float angle_2)
 {

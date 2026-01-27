@@ -30,11 +30,16 @@
 
 #include "dynosam/frontend/vision/FeatureTrackerBase.hpp"
 
+#include <gflags/gflags.h>
+
 #include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam_common/Edge.hpp"
 #include "dynosam_common/utils/GtsamUtils.hpp"
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/viz/Colour.hpp"
+
+DECLARE_bool(use_dynamic_track);
+DECLARE_bool(use_edge_feature);
 
 namespace dyno {
 
@@ -234,23 +239,63 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     img_rgb = edges_viz;
   }
 
+
+
   // draw text info
   std::stringstream ss;
   ss << "Frame ID: " << current_frame.getFrameId() << " | ";
   ss << "VO tracks: " << num_static_tracks << " | ";
-  ss << "Objects: ";
 
-  if (objects_to_print.empty()) {
-    ss << "None";
-  } else {
-    ss << "[";
-    for (size_t i = 0; i < objects_to_print.size(); ++i) {
-      ss << objects_to_print[i];
-      if (i != objects_to_print.size() - 1) {
-        ss << ", ";  // Add comma between elements
+  if (FLAGS_use_edge_feature) {
+    // Count edge tracks (matched edge points between frames)
+    // Note: FineTracker sets mbAssociated on previous_frame's edge points after matching
+    // So we need to check previous_frame's edges for mbAssociated flag
+    int num_edge_tracks = 0;
+    int num_edge_points = 0;
+    
+    // Count current frame's total edge points for display
+    if (!current_frame.static_edges_.empty()) {
+      for (const auto& edge : current_frame.static_edges_) {
+        num_edge_points += edge.mvPoints.size();
       }
     }
-    ss << "]";
+    
+    // Count matched edge tracks from previous frame (mbAssociated is set by FineTracker)
+    int total_prev_edge_points = 0;
+    if (!previous_frame.static_edges_.empty()) {
+      for (const auto& edge : previous_frame.static_edges_) {
+        for (const auto& pt : edge.mvPoints) {
+          total_prev_edge_points++;
+          if (pt.mbAssociated) {
+            num_edge_tracks++;
+          }
+        }
+      }
+    }
+      
+    if (num_edge_points > 0) {
+      ss << "Edge tracks: " << num_edge_tracks << " (" << num_edge_points << " points) | ";
+      VLOG(5) << "Edge tracks debug: " << num_edge_tracks << " matched out of " 
+              << total_prev_edge_points << " previous frame edge points, "
+              << "current frame has " << num_edge_points << " edge points";
+    }
+}
+  
+  // Only show objects if dynamic tracking is enabled
+  if (FLAGS_use_dynamic_track) {
+    ss << "Objects: ";
+    if (objects_to_print.empty()) {
+      ss << "None";
+    } else {
+      ss << "[";
+      for (size_t i = 0; i < objects_to_print.size(); ++i) {
+        ss << objects_to_print[i];
+        if (i != objects_to_print.size() - 1) {
+          ss << ", ";  // Add comma between elements
+        }
+      }
+      ss << "]";
+    }
   }
 
   constexpr static double kFontScale = 0.6;

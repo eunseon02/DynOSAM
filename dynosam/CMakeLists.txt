@@ -85,7 +85,6 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
   src/frontend/vision/StaticFeatureTracker.cc
-  src/frontend/vision/EdgeSelector.cc
   src/frontend/vision/RobustWeight.cc
   src/frontend/vision/TrackerParams.cc
   src/frontend/vision/FeatureTrackerBase.cc

@@ -98,6 +98,8 @@ add_library(${PROJECT_NAME} SHARED
 
     src/Edge.cc
     src/EdgeCluster.cc
+    src/EdgeSelector.cc
+    # src/DisjointSet.cc
 
     src/Ellipse.cc
     src/Ellipsoid.cc
