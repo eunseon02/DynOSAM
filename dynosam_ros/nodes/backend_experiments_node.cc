@@ -31,8 +31,7 @@
 #include <glog/logging.h>
 
 #include <dynosam/backend/BackendFactory.hpp>
-#include <dynosam/backend/BackendModuleFactory.hpp>
-#include <dynosam/backend/RegularBackendModule.hpp>
+#include <dynosam/backend/RegularBackendDefinitions.hpp>
 #include <dynosam_opt/Map.hpp>
 #include <dynosam/frontend/RGBDInstanceFrontendModule.hpp>
 #include <dynosam_common/logger/Logger.hpp>
@@ -64,6 +63,12 @@ class BackendExperimentsNode : public DynoNode {
     } else {
       LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
       camera_params = params.camera_params_;
+    }
+
+    // Ensure depth params are set for RGBD frontend
+    if (!camera_params.hasDepthParams()) {
+      LOG(INFO) << "Updating camera params: converting to Fake Stereo camera";
+      camera_params.setDepthParams(0.1);
     }
 
     Camera::Ptr camera = std::make_shared<Camera>(camera_params);

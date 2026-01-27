@@ -201,36 +201,6 @@ def load_dynosam_node(context, *args, **kwargs):
     if not is_online:
         parameters.append({"use_sim_time": True})
 
-    # Set up LD_LIBRARY_PATH to include install directories
-    # Find workspace root by looking for install directory relative to package share
-    dynosam_share_dir = get_package_share_directory('dynosam')
-    # dynosam_share_dir is typically: .../install/dynosam/share/dynosam
-    # So workspace root is: .../install/dynosam/../../
-    import pathlib
-    install_dir = pathlib.Path(dynosam_share_dir).parent.parent  # install/dynosam/share -> install
-    workspace_root = install_dir.parent  # install -> workspace root
-    
-    install_lib_paths = [
-        str(workspace_root / "install" / "dynosam_ros" / "lib"),
-        str(workspace_root / "install" / "dynosam" / "lib"),
-        str(workspace_root / "install" / "dynosam_opt" / "lib"),
-        str(workspace_root / "install" / "dynosam_cv" / "lib"),
-        str(workspace_root / "install" / "dynosam_common" / "lib"),
-        str(workspace_root / "install" / "dynosam_nn" / "lib"),
-        str(workspace_root / "install" / "dynamic_slam_interfaces" / "lib"),
-    ]
-    
-    # Filter out paths that don't exist
-    install_lib_paths = [p for p in install_lib_paths if os.path.exists(p)]
-    
-    # Get existing LD_LIBRARY_PATH or empty string
-    existing_ld_path = os.environ.get("LD_LIBRARY_PATH", "")
-    
-    # Combine paths
-    ld_library_path = ":".join(install_lib_paths)
-    if existing_ld_path:
-        ld_library_path = ld_library_path + ":" + existing_ld_path
-    
     program_node = Node(
         package='dynosam_ros',
         executable=executable,
@@ -250,7 +220,6 @@ def load_dynosam_node(context, *args, **kwargs):
         ],
         # prefix='valgrind --tool=massif --massif-out-file=/tmp/massif.out',
         arguments=arguments,
-        environment={'LD_LIBRARY_PATH': ld_library_path},
         **node_kwargs
     )
     nodes.append(program_node)

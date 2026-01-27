@@ -47,24 +47,27 @@ tum_rgbd_dataset = 7  # TUM_RGBD enum value
 
 def prep_dataset(path, name, data_loader_num, *args):
     backend_type = 0
-    run_as_frontend=True
+    # Pass positional args first, then *args, keyword args cannot be used before *args
     run_sequnce(
         path,
         name,
         data_loader_num,
         backend_type,
-        run_as_frontend,
+        True,   # run_as_frontend
+        True,   # run_as_experiment
+        False,  # run_analysis
         *args)
 
 # from saved data
 def run_saved_sequence(path, name, data_loader_num, backend_type, *args):
-    run_as_frontend=False
     run_sequnce(
         path,
         name,
         data_loader_num,
         backend_type,
-        run_as_frontend,
+        False,  # run_as_frontend
+        True,   # run_as_experiment (default, can be overridden)
+        False,  # run_analysis
         *args)
 
 
@@ -98,7 +101,8 @@ def run_omd_sequence(path, name, backend_type, *args):
 
 # TUM RGBD
 def prep_tum_sequence(path, association_file, name, *args):
-    args_list = list(args)
+    # Filter out any non-string arguments (like backend_type that might be passed incorrectly)
+    args_list = [arg for arg in args if isinstance(arg, str)]
     args_list.append("--tum_association_file={}".format(association_file))
     args_list.append("--shrink_row=0")
     args_list.append("--shrink_col=0")
@@ -162,10 +166,11 @@ def run_POM_tests(run_prep_sequence_func, path, base_name, *args):
 def run_viodes():
     # run_sequnce("/root/data/VIODE/city_day/mid", "viode_city_day_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
     # run_sequnce("/root/data/VIODE/city_day/high", "viode_city_day_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
-    run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
-    run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/city_night/mid", "viode_city_night_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    # run_sequnce("/root/data/VIODE/city_night/high", "viode_city_night_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
     # run_sequnce("/root/data/VIODE/parking_lot/mid", "viode_parking_lot_mid", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
     # run_sequnce("/root/data/VIODE/parking_lot/high", "viode_parking_lot_high", 6, 3, run_as_frontend=False, run_as_experiment=False, run_analysis=True)
+    pass
 
 if __name__ == '__main__':
     # make input dictionary
@@ -173,11 +178,11 @@ if __name__ == '__main__':
     ll_backend = 1
 
     # run_viodes()
-    run_tum_sequence(
+    prep_tum_sequence(
         "/root/data/tum-rgbd/rgbd_dataset_freiburg2_desk/",
         "/root/data/tum-rgbd/fr2_desk/rgbd_dataset_freiburg2_large_with_loop_associated.txt",
         "tum_fr2_desk",
-        backend_type=0  # 또는 1
+        0  # backend_type (positional argument, not keyword)
     )
     sys.exit(0)
 
