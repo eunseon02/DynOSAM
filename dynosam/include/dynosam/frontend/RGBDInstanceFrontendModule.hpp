@@ -40,6 +40,9 @@
 #include "dynosam/frontend/vision/VisionTools.hpp"
 #include "dynosam_cv/Camera.hpp"
 
+
+#include "dynosam/frontend/vision/FineTracker.hpp"
+
 namespace dyno {
 
 class RGBDInstanceFrontendModule : public FrontendModule {
@@ -56,6 +59,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   // TODO: shared pointer for now during debig phase!
   ObjectMotionSolver::Ptr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
+  FineTracker::UniquePtr fine_tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
 
  private:
@@ -81,6 +85,9 @@ class RGBDInstanceFrontendModule : public FrontendModule {
    */
   bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                          std::optional<gtsam::Rot3> R_curr_ref = {});
+
+  bool FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                 const gtsam::Pose3& T_k_1_k_initial, gtsam::Pose3& T_k_1_k_refined);
 
   void fillOutputPacketWithTracks(VisionImuPacket::Ptr vision_imu_packet,
                                   const Frame& frame,

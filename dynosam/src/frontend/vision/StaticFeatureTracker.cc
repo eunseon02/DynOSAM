@@ -250,6 +250,7 @@ FeatureContainer KltFeatureTracker::trackStatic(
     const std::optional<gtsam::Rot3>& R_km1_k) {
   // tracked features and new features
   FeatureContainer new_tracks_and_detections;
+  EdgeContainer new_edges;
 
   cv::Mat current_equialized_greyscale;
   equalizeImage(image_container, current_equialized_greyscale);
@@ -257,7 +258,8 @@ FeatureContainer KltFeatureTracker::trackStatic(
   if (!previous_frame) {
     FeatureContainer previous_inliers;
     detectFeatures(current_equialized_greyscale, image_container,
-                   previous_inliers, new_tracks_and_detections, detection_mask);
+                   previous_inliers, new_tracks_and_detections, new_edges,
+                   detection_mask);
 
     tracker_info.static_track_detections = new_tracks_and_detections.size();
 
@@ -282,7 +284,7 @@ FeatureContainer KltFeatureTracker::trackStatic(
     if (previous_inliers.empty()) {
       FeatureContainer previous_inliers;
       detectFeatures(current_equialized_greyscale, image_container,
-                     previous_inliers, new_tracks_and_detections,
+                     previous_inliers, new_tracks_and_detections, new_edges,
                      detection_mask);
       tracker_info.static_track_detections = new_tracks_and_detections.size();
       return new_tracks_and_detections;
@@ -297,6 +299,7 @@ FeatureContainer KltFeatureTracker::trackStatic(
         current_equialized_greyscale, previous_equialized_greyscale,
         image_container, previous_inliers, new_tracks_and_detections,
         previous_outliers, tracker_info, detection_mask, R_km1_k));
+    // CHECK(trackEdges(current_equialized_greyscale, previous_equialized_greyscale, image_container, previous_inliers, new_tracks_and_detections, previous_outliers, tracker_info, detection_mask, R_km1_k));
 
     // after tracking, mark features in the older frame as outliers
     // TODO: (jesse) actually not sure we HAVE to do this, but better to keep
@@ -308,7 +311,8 @@ FeatureContainer KltFeatureTracker::trackStatic(
 }
 
 std::vector<Edge> KltFeatureTracker::getDetectedEdges() const {
-  return detected_edges_;
+  // KltFeatureTracker doesn't detect edges, return empty vector
+  return std::vector<Edge>();
 }
 
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
@@ -346,6 +350,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
                                        const ImageContainer& image_container,
                                        const FeatureContainer& current_features,
                                        FeatureContainer& new_features,
+                                       EdgeContainer& new_edges,
                                        const cv::Mat& detection_mask) {
   const FrameId frame_k = image_container.frameId();
   const cv::Mat& motion_mask = image_container.objectMotionMask();
@@ -413,8 +418,7 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     if (FLAGS_use_edge_feature) {
       // Use empty mask to detect edges on all pixels (static + dynamic regions)
       cv::Mat empty_mask;
-      detected_edges = detectEdgeFeatures(processed_img, current_features.size(),
-                                          empty_mask);
+      detected_edges = detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
     }
   }
 
@@ -437,6 +441,11 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     if (feature) {
       new_features.add(feature);
     }
+  }
+
+  // Add detected edges to new_edges container
+  for (const Edge& edge : detected_edges) {
+    new_edges.add(edge);
   }
 
   // temporary store detected edges for visualization
@@ -641,8 +650,9 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       static_cast<size_t>(params_.min_features_per_frame)) {
     utils::ChronoTimingStats timer("static_feature_track.detect");
     // if we do not have enough features, detect more on the current image
+    EdgeContainer new_edges;
     detectFeatures(current_processed_img, image_container, tracked_features,
-                   tracked_features, detection_mask);
+                   tracked_features, new_edges, detection_mask);
     tracker_info.new_static_detections = true;
 
     const auto n_detected = tracked_features.size() - n_tracked;
@@ -722,5 +732,129 @@ Feature::Ptr KltFeatureTracker::constructNewStaticFeature(
       .keypoint(kp_current);
   return feature;
 }
+
+// EdgeFeatureTracker class is currently commented out in the header
+// Uncomment the following code when EdgeFeatureTracker is re-enabled
+/*
+EdgeFeatureTracker::EdgeFeatureTracker(const TrackerParams& params,
+                                         Camera::Ptr camera,
+                                         ImageDisplayQueue* display_queue)
+    : StaticFeatureTracker(params, camera, display_queue) {
+  detector_ = std::make_shared<SparseFeatureDetector>(
+      params, FunctionalDetector::FactoryCreate(params));
+
+  // Initialize FineTracker with camera parameters
+  const auto& cam_params = camera->getParams();
+
+  CHECK_NOTNULL(detector_);
+  CHECK_NOTNULL(fine_tracker_);
+}
+
+
+
+std::vector<Edge> EdgeFeatureTracker::getDetectedEdges() const {
+  return detected_edges_;
+}
+
+void EdgeFeatureTracker::equalizeImage(const ImageContainer& image_container,
+                                       cv::Mat& equialized_greyscale) const {
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
+  const cv::Mat& rgb = rgb_wrapper.toRGB();
+  cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
+  CHECK(!mono.empty());
+
+  mono.copyTo(equialized_greyscale);
+}
+
+std::vector<Edge> EdgeFeatureTracker::detectEdgeFeatures(
+    const cv::Mat& processed_img, int number_tracked, const cv::Mat& mask) {
+  std::vector<Edge> edges;
+  detector_->detectEdge(processed_img, edges, mask);
+  return edges;
+}
+*/
+
+// bool EdgeFeatureTracker::trackEdges(
+//     const cv::Mat& current_processed_img,
+//     const cv::Mat& previous_processed_img, const ImageContainer& image_container,
+//     const EdgeContainer& previous_edges, EdgeContainer& tracked_edges,
+//     // TrackletIds& outlier_previous_features, FeatureTrackerInfo& tracker_info,
+//     const cv::Mat& detection_mask, const std::optional<gtsam::Rot3>& inital_pose) {
+//   if (current_processed_img.empty() || previous_processed_img.empty() ||
+//       previous_edges.empty()) {
+//     return false;
+//   }
+
+//   outlier_previous_features.clear();
+
+//   const cv::Mat& motion_mask = image_container.objectMotionMask();
+//   const FrameId frame_k = image_container.frameId();
+//   const Timestamp timestamp = image_container.timestamp();
+  
+  
+//   getFineSampledPoints(previous_edges, params_.fine.geo_photo_ratio);
+//   // Get edges from previous frame 
+//   std::vector<Edge> prev_edges;
+//   prev_edges.reserve(previous_edges.size());
+//   for (const Edge& edge : previous_edges) {
+//     prev_edges.push_back(edge);
+//   }
+//   CHECK_EQ(prev_edges.size(), previous_edges.size());
+
+
+
+//   // FineTracker::estimate implementation
+//   // This replaces the estimate() function call with its logic directly in trackEdges
+//   if (fine_tracker_ && !prev_edges.empty() && !current_edges.empty()) {
+//     // Create temporary Frame objects for FineTracker
+//     // Note: FineTracker requires FramePtr, so we need to create minimal Frame objects
+//     // with edges and images
+    
+//     // Create reference frame (previous frame) with edges
+//     FeatureContainer empty_features_ref, empty_features_curr;
+//     std::map<ObjectId, SingleDetectionResult> empty_observations;
+    
+//     // Convert edges to Frame-compatible format
+//     // Note: FineTracker expects Frame objects with mvEdges and mMatGray
+//     // We need to create Frame objects that contain the edges
+    
+//     // For now, we'll use FineTracker's estimate logic directly
+//     // Set reference and current frames if we have previous frame info
+//     // This is a simplified version - full implementation would require
+//     // proper Frame object creation with edges
+    
+//     // FineTracker::estimate logic (from FineTracker::estimate):
+//     //   1. assert(mpF_ref != nullptr && mpF_cur != nullptr);
+//     //   2. associationRef2CurParallel();
+//     //   3. if(geo_photo_ratio > 0) {
+//     //          RegistrationCombinedParallel();
+//     //      } else {
+//     //          RegistrationGeometricParallel();
+//     //      }
+//     //   4. T21 = T_cur_ref.inverse();
+    
+//     // Since FineTracker requires FramePtr, we need to create Frame objects
+//     // with edges and images. For now, we'll call FineTracker::estimate
+//     // if we have the necessary frame information.
+    
+//     // TODO: Create proper Frame objects with edges for FineTracker
+//     // Once Frame objects are created, we can call:
+//     //   fine_tracker_->setReference(frame_ref);
+//     //   fine_tracker_->setCurrent(frame_curr);
+//     //   Sophus::SE3d T_ref_cur;
+//     //   fine_tracker_->estimate(T_ref_cur, true);
+    
+//     // For now, this is a placeholder that shows where estimate() logic would go
+//     // The actual implementation would require creating Frame objects with edges
+//   }
+
+//   // Update tracked edges based on edge associations
+//   // This would use the results from FineTracker's estimate
+  
+//   tracker_info.static_track_optical_flow = tracked_edges.size();
+
+
+//   return true;
+// }
 
 }  // namespace dyno

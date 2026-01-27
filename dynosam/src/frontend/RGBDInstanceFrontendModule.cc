@@ -44,6 +44,8 @@
 #include "dynosam_common/utils/TimingStats.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
 
+
+
 DEFINE_bool(use_frontend_logger, false,
             "If true, the frontend logger will be used");
 
@@ -74,6 +76,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   CHECK_NOTNULL(camera_);
   tracker_ = std::make_unique<FeatureTracker>(getFrontendParams(), camera_,
                                               display_queue);
+  fine_tracker_ = std::make_unique<FineTracker>(camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv(), getFrontendParams().tracker_params.edge_fine.geo_photo_ratio);
 
   if (FLAGS_use_frontend_logger) {
     LOG(INFO) << "Using front-end logger!";
@@ -150,6 +153,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         nav_state_prev_.attitude().inverse() * nav_state_curr_.attitude();
   }
 
+
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container, R_curr_ref);
 
@@ -195,6 +199,21 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
     LOG(ERROR) << "Could not solve for camera";
   }
+  
+  // Calculate relative pose from solveCameraMotion result for FineTrack
+  // T_k_1_k = T_world_k_1^-1 * T_world_k (relative pose from k-1 to k in k-1 frame)
+  const gtsam::Pose3 T_k_1_k_initial = 
+      previous_frame->T_world_camera_.inverse() * frame->T_world_camera_;
+  
+  gtsam::Pose3 T_k_1_k_refined;
+  if (!FineTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
+    LOG(ERROR) << "Could not fine track";
+  } else {
+    // Update frame pose with refined result from FineTrack
+    frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+  }
+
+
 
   if (has_stereo && stereo_result) {
     // need to match aagain after optical flow used to update the keypoints
@@ -396,6 +415,36 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
     return true;
   }
 }
+
+bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                                           const gtsam::Pose3& T_k_1_k_initial, 
+                                           gtsam::Pose3& T_k_1_k_refined) {
+  utils::ChronoTimingStats timer("frontend.fine_track");
+  
+  // Convert gtsam::Pose3 to Sophus::SE3d for FineTracker
+  // FineTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
+  const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
+  const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+  Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+                   T_matrix.topRightCorner<3, 1>());
+  
+  // Run FineTracker estimation
+  fine_tracker_->estimate(frame_k_1, frame_k, T21);
+  
+  // Check if tracking was successful
+  if (!T21.matrix().allFinite()) {
+    return false;
+  }
+  
+  // Convert Sophus::SE3d result back to gtsam::Pose3
+  // T21 is T_k_k_1 (current to reference), so T_k_1_k = T21^-1
+  const Sophus::SE3d T_k_1_k_sophus = T21.inverse();
+  const Eigen::Matrix4d T_result = T_k_1_k_sophus.matrix();
+  T_k_1_k_refined = gtsam::Pose3(T_result);
+  
+  return true;
+}
+
 
 void RGBDInstanceFrontendModule::fillOutputPacketWithTracks(
     VisionImuPacket::Ptr vision_imu_packet, const Frame& frame,

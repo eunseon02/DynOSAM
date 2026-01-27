@@ -30,12 +30,17 @@
 
 #include "dynosam/frontend/vision/FeatureTracker.hpp"
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <tbb/concurrent_hash_map.h>
 #include <tbb/parallel_for_each.h>
 
 #include <mutex>
+#include <optional>
 #include <opencv4/opencv2/opencv.hpp>
+
+// Declare the flag defined in RGBDInstanceFrontendModule.cc
+DECLARE_bool(use_dynamic_track);
 
 #include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/vision/VisionTools.hpp"
@@ -119,7 +124,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
     static_features = static_feature_tracker_->trackStatic(
         previous_frame_, input_images, info_,
         boundary_mask_result.boundary_mask, R_km1_k);
-    static_edges = static_feature_tracker_->getDetectedEdges();
+    // static_edges = static_feature_tracker_->getDetectedEdges();
   };
 
   auto dynamic_track = [&](FeatureContainer& dynamic_features) {
@@ -146,10 +151,16 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   FeatureContainer static_features, dynamic_features;
   std::vector<Edge> static_edges;
   std::thread static_track_thread(static_track, std::ref(static_features), std::ref(static_edges));
-  std::thread dynamic_track_thread(dynamic_track, std::ref(dynamic_features));
+  
+  std::optional<std::thread> dynamic_track_thread;
+  if (FLAGS_use_dynamic_track) {
+    dynamic_track_thread = std::thread(dynamic_track, std::ref(dynamic_features));
+  }
 
   static_track_thread.join();
-  dynamic_track_thread.join();
+  if (dynamic_track_thread.has_value()) {
+    dynamic_track_thread->join();
+  }
 
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
                                               // to the newly created frame)

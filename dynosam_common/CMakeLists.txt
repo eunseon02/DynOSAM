@@ -99,6 +99,9 @@ add_library(${PROJECT_NAME} SHARED
     src/Edge.cc
     src/EdgeCluster.cc
 
+    src/Ellipse.cc
+    src/Ellipsoid.cc
+    
     src/logger/Logger.cc
 
     src/viz/Colour.cc

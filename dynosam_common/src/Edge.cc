@@ -1,4 +1,5 @@
 #include "dynosam_common/Edge.hpp"
+#include <stdexcept>
 
 Edge::Edge(int ID, std::vector<orderedEdgePoint> list){
     edge_ID = ID;
@@ -48,4 +49,99 @@ void Edge::calcEdgeScoreViz()
     //-- mVisScore = total_score / mvPoints.size();
     //-- 中位值作为score
     mVisScore = medianValue;
+}
+
+// EdgeContainer implementation
+EdgeContainer::EdgeContainer() : edge_map_() {}
+
+EdgeContainer::EdgeContainer(const std::vector<Edge>& edges) {
+  for (const auto& edge : edges) {
+    add(edge);
+  }
+}
+
+void EdgeContainer::add(const Edge& edge) {
+  if (exists(edge.edge_ID)) {
+    throw std::runtime_error("Edge with ID " + std::to_string(edge.edge_ID) +
+                             " already exists in container");
+  }
+  edge_map_[edge.edge_ID] = edge;
+}
+
+void EdgeContainer::remove(EdgeId edge_id) {
+  if (!exists(edge_id)) {
+    throw std::runtime_error("Cannot remove edge with ID " +
+                             std::to_string(edge_id) +
+                             " as edge does not exist!");
+  }
+  edge_map_.erase(edge_id);
+}
+
+void EdgeContainer::clear() {
+  edge_map_.clear();
+}
+
+size_t EdgeContainer::size() const {
+  return edge_map_.size();
+}
+
+Edge* EdgeContainer::getByEdgeId(EdgeId edge_id) {
+  auto it = edge_map_.find(edge_id);
+  if (it == edge_map_.end()) {
+    return nullptr;
+  }
+  return &(it->second);
+}
+
+const Edge* EdgeContainer::getByEdgeId(EdgeId edge_id) const {
+  auto it = edge_map_.find(edge_id);
+  if (it == edge_map_.end()) {
+    return nullptr;
+  }
+  return &(it->second);
+}
+
+bool EdgeContainer::exists(EdgeId edge_id) const {
+  return edge_map_.find(edge_id) != edge_map_.end();
+}
+
+EdgeIds EdgeContainer::collectEdgeIds() const {
+  EdgeIds edge_ids;
+  edge_ids.reserve(edge_map_.size());
+  for (const auto& [edge_id, edge] : edge_map_) {
+    edge_ids.push_back(edge_id);
+  }
+  return edge_ids;
+}
+
+std::vector<cv::Point2f> EdgeContainer::toOpenCV(EdgeIds* edge_ids) const {
+  if (edge_ids) edge_ids->clear();
+
+  std::vector<cv::Point2f> points;
+  for (const auto& [edge_id, edge] : edge_map_) {
+    for (const auto& pt : edge.mvPoints) {
+      points.push_back(cv::Point2f(static_cast<float>(pt.x),
+                                   static_cast<float>(pt.y)));
+      if (edge_ids) {
+        edge_ids->push_back(edge_id);
+      }
+    }
+  }
+  return points;
+}
+
+std::vector<std::vector<cv::Point2f>> EdgeContainer::toOpenCVByEdge() const {
+  std::vector<std::vector<cv::Point2f>> edges_points;
+  edges_points.reserve(edge_map_.size());
+
+  for (const auto& [edge_id, edge] : edge_map_) {
+    std::vector<cv::Point2f> edge_points;
+    edge_points.reserve(edge.mvPoints.size());
+    for (const auto& pt : edge.mvPoints) {
+      edge_points.push_back(cv::Point2f(static_cast<float>(pt.x),
+                                        static_cast<float>(pt.y)));
+    }
+    edges_points.push_back(edge_points);
+  }
+  return edges_points;
 }

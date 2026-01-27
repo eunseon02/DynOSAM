@@ -41,6 +41,11 @@
 #include "dynosam_cv/Feature.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_cv/UndistortRectifier.hpp"
+// #include "dynosam/frontend/Graph.hpp"
+#include "dynosam_common/Ellipsoid.hpp"
+
+#include <sophus/se3.hpp>
+
 
 namespace dyno {
 
@@ -58,6 +63,11 @@ class Frame {
   FeatureContainer static_features_;
   FeatureContainer dynamic_features_;
   std::vector<Edge> static_edges_;
+  //! Maps edge ID to index in static_edges_ vector
+  std::map<int, int> edge_id_to_index_map_;
+  //! 2D lookup map: pixel (y, x) -> [edge_id, point_index] for fast radius search
+  cv::Mat edge_point_lookup_map_;
+
 
   //! Objects that required new detection/sampling this frame.
   ObjectIds retracked_objects_;
@@ -73,6 +83,11 @@ class Frame {
       motion_estimates_;  // map of object ids to object motions that take the
                           // object from k-1 to k in W. Updated in the frontend
                           // and will not initially have a value
+
+  // Object
+  std::vector<Ellipsoid, Eigen::aligned_allocator<Ellipsoid>> ellipsoids; //FOR VISUALIZATION
+  // Graph* graph;
+                      
 
   Frame(FrameId frame_id, Timestamp timestamp, Camera::Ptr camera,
         const ImageContainer& image_container,
@@ -399,6 +414,10 @@ class Frame {
 
   FeatureFilterIterator usableDynamicFeaturesBegin();
   FeatureFilterIterator usableDynamicFeaturesBegin() const;
+
+  void searchRadius(float x, float y, double radius, std::vector<orderedEdgePoint>& result);
+  //-- Reproject the edge points to the current frame
+  std::vector<int> edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr);
 
  protected:
   // these do not do distortion or projection along the ray

@@ -547,15 +547,9 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
     int y_idx = pt.y;
 
     // Get image dimensions from depth mat
-    const int mWidth = matDepth.cols;
-    const int mHeight = matDepth.rows;
-    
-    // Get camera calibration parameters
-    const CameraParams& camera_params = camera_->getParams();
-    const double mFx = camera_params.fx();
-    const double mFy = camera_params.fy();
-    const double mCx = camera_params.cu();  // cu is the principal point x
-    const double mCy = camera_params.cv();  // cv is the principal point y
+    const cv::Mat& rgb_mat = static_cast<const cv::Mat&>(image_container_.rgb());
+    const int mWidth = rgb_mat.cols;
+    const int mHeight = rgb_mat.rows;
 
     //-- Original point's true depth
     float depth_orig = matDepth.at<float>(y_idx, x_idx);
@@ -611,9 +605,10 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
 
         int partitionSize = adjustDepthList.size();
         //-- Take median depth of smallest part as depth value
-        float medianValue = (partitionSize%2==0) ? 
-                            (adjustDepthList[partitionSize/2-1] + adjustDepthList[partitionSize/2])/2.0 : 
-                            adjustDepthList[partitionSize/2];
+        // Note: medianValue is calculated but not used, kept for potential future use
+        // float medianValue = (partitionSize%2==0) ? 
+        //                     (adjustDepthList[partitionSize/2-1] + adjustDepthList[partitionSize/2])/2.0 : 
+        //                     adjustDepthList[partitionSize/2];
         
         // If depth is discontinuous (jump detected), check if the original depth matches
         // the continuous region. If not, it means the edge point is at the boundary
@@ -638,8 +633,12 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
     //-- Calculate distance score
     if(pt.depth > 0.2){
         Eigen::Vector3d pt_3d;
-        pt_3d.x() = (pt.x - mCx)/mFx * pt.depth;
-        pt_3d.y() = (pt.y - mCy)/mFy * pt.depth;
+        const double fx = camera_->getParams().fx();
+        const double fy = camera_->getParams().fy();
+        const double cx = camera_->getParams().cu();
+        const double cy = camera_->getParams().cv();
+        pt_3d.x() = (pt.x - cx)/fx * pt.depth;
+        pt_3d.y() = (pt.y - cy)/fy * pt.depth;
         pt_3d.z() = pt.depth;
         double range = pt_3d.norm();
         //-- Calculate distance score using inverse sigmoid function
@@ -723,7 +722,7 @@ FeatureFilterIterator Frame::usableDynamicFeaturesBegin() const {
   return dynamic_features_.beginUsable();
 }
 
-Landmark Frame::getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature,
+Landmark Frame::getLandmarkFromCache(LandmarkMap& /* cache */, Feature::Ptr feature,
                                      const gtsam::Pose3& X_world) const {
   // TODO: dont cache as we now update the optical flow and the depth in the
   // frontend and cacheing it will not use the right values!!!
@@ -746,5 +745,203 @@ Landmark Frame::getLandmarkFromCache(LandmarkMap& cache, Feature::Ptr feature,
 //         }
 //     );
 // }
+
+void Frame::searchRadius(float x, float y, double radius, std::vector<orderedEdgePoint>& result)
+{
+    result.clear();
+
+    //-- 定义搜索区域的矩形边界（整数像素坐标）
+    int minX = static_cast<int>(std::max(0.0, x - radius));
+    int maxX = static_cast<int>(std::min(edge_point_lookup_map_.cols - 1.0, x + radius));
+    int minY = static_cast<int>(std::max(0.0, y - radius));
+    int maxY = static_cast<int>(std::min(edge_point_lookup_map_.rows - 1.0, y + radius));
+
+    //-- 搜索到的点距 (x,y) 的距离
+    std::vector<float> list_distance;
+
+    //-- 遍历搜索区域内的所有像素, 寻找半径内的非（-1，-1）的边缘点
+    for(int py = minY; py <= maxY; ++py)
+    {
+        for(int px = minX; px <= maxX; ++px)
+        {
+            const cv::Vec2i& pixel = edge_point_lookup_map_.at<cv::Vec2i>(py, px);
+            int edgeID = pixel[0];     //-- frame_edge_ID
+            int pointIdx = pixel[1];   //-- frame_point_index
+
+            //-- 跳过无效点
+            if (edgeID == -1 || pointIdx == -1) continue;
+
+            //-- 计算距离（欧几里得距离）
+            float dx = px - x;
+            float dy = py - y;
+            float distance = std::sqrt(dx * dx + dy * dy);
+
+            //-- 如果距离在半径内，添加到结果
+            if (distance <= radius)
+            {
+                //-- 获取原始点数据
+                const auto& edge = static_edges_[edge_id_to_index_map_.at(edgeID)];
+                orderedEdgePoint point = edge.mvPoints[pointIdx];
+
+                //-- 确保原始点数据的frame_edge_ID 和 frame_point_index 确实是搜到的结果
+                assert(point.frame_edge_ID == edgeID && point.frame_point_index == pointIdx);
+
+                result.push_back(point);
+                float distance = sqrt((point.x-x)*(point.x-x) + (point.y-y)*(point.y-y));
+                list_distance.push_back(distance);
+            }
+        }
+    }
+
+    assert(list_distance.size() == result.size());
+
+    // 创建索引数组
+    std::vector<size_t> indices(result.size());
+    std::iota(indices.begin(), indices.end(), 0);
+
+    // 根据相邻点相对(x,y)的距离对索引数组排序
+    std::sort(indices.begin(), indices.end(), 
+              [&list_distance](size_t i, size_t j) { return list_distance[i] < list_distance[j]; });
+
+    // 根据排序后的索引重新排列 result
+    std::vector<orderedEdgePoint> sorted_result;
+    sorted_result.reserve(result.size()); 
+    for (size_t i : indices) {
+        sorted_result.push_back(result[i]);
+    }
+    result = std::move(sorted_result);
+}
+
+bool isPointsAssociated(const orderedEdgePoint& pt1, const orderedEdgePoint& pt2)
+{
+    float res = fabs(pt1.imgGradAngle-pt2.imgGradAngle);
+    if(res > 180) res = 360 - res;
+    //-- 梯度方向一致性关联
+    if(res<10.0){
+        return true;
+    }else{
+        return false;
+    }
+}
+
+std::vector<int> Frame::edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr)
+{
+
+    // * STEP 1. 得到参考帧边缘重投影到当前帧的坐标
+    std::vector<orderedEdgePoint>& queryList = query_edge.mvPoints;
+    std::vector<cv::Point> warped_queryList;
+    const size_t num_points = queryList.size();
+    warped_queryList.reserve(num_points);
+
+    // 预计算相机内参（减少重复调用）
+    const double fx = camera_->getParams().fx();
+    const double fy = camera_->getParams().fy();
+    const double cx = camera_->getParams().cu();  // cu is the principal point x
+    const double cy = camera_->getParams().cv();  // cv is the principal point y
+    const float inv_fx = 1.0f / static_cast<float>(fx);
+    const float inv_fy = 1.0f / static_cast<float>(fy);
+
+    for(size_t i = 0; i < num_points; ++i)
+    {
+        //-- 由像素与深度值恢复的3D点
+        const auto& pt = queryList[i];
+        float z = pt.depth;
+        float x = (static_cast<float>(pt.x) - static_cast<float>(cx)) * inv_fx * z;
+        float y = (static_cast<float>(pt.y) - static_cast<float>(cy)) * inv_fy * z;
+        
+        //-- 重投影得到新的投影点
+        Eigen::Vector3d point = T2curr * Eigen::Vector3d(x, y, z);
+        warped_queryList.emplace_back(
+            static_cast<int>(fx * point.x() / point.z() + cx),
+            static_cast<int>(fy * point.y() / point.z() + cy)
+        );
+    }
+
+    // * STEP 2. 半径邻域搜索，并投票得到 query edge 的每个点最想关联的边缘
+
+    //-- first:当前帧的边的ID   second: 该条当前帧边有几个query edge的点意愿关联
+    std::map<int, int> edgeVoteMapTotal;
+    const float radius = 6.0f;
+    const int threshold_value = std::min(static_cast<int>(num_points * 0.3f), 5);
+
+    for(size_t i = 0; i < num_points; ++i)
+    {
+        orderedEdgePoint& pt = queryList[i];
+        float x = warped_queryList[i].x;
+        float y = warped_queryList[i].y;
+        std::vector<orderedEdgePoint> neighbors_points;
+        searchRadius(x, y, radius, neighbors_points);
+
+        //-- 预存该点的近邻匹配关系
+        pt.mvAssoFrameEdgeIDs.clear();
+        pt.mvAssoFramePointIndices.clear();
+        pt.mvAssoFrameEdgeIDs.reserve(neighbors_points.size());
+        pt.mvAssoFramePointIndices.reserve(neighbors_points.size());
+
+        //-- 对于一个点，建立一个投票，得到这个点最倾向关联的边
+        std::unordered_map<int, int> edgeVoteMap;
+        for (const auto& neighbor : neighbors_points) 
+        {
+            if (isPointsAssociated(pt, neighbor)) 
+            {
+                //-- 直接递增，避免find检查
+                edgeVoteMap[neighbor.frame_edge_ID]++;
+                //-- 确认可以关联后，更新关联的缓存
+                pt.mvAssoFrameEdgeIDs.push_back(neighbor.frame_edge_ID);
+                pt.mvAssoFramePointIndices.push_back(neighbor.frame_point_index);
+            }
+        }
+
+        if (!edgeVoteMap.empty()) 
+        {
+            // 找出票数最多的边，此时max_pair.first 就是当前 query point 最想关联的边缘
+            const auto max_pair = *std::max_element(
+                edgeVoteMap.begin(), edgeVoteMap.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; }
+            );
+            // 每个点只有一个最想关联的边缘
+            edgeVoteMapTotal[max_pair.first] += 1;
+        }
+    }
+
+    // * STEP 3. 整理投票，确认当前query edge 能与哪些 current edges 关联
+    //-- 现在得到的edgeVoteMapTotal包含了query edge与 candidate edge关联的投票关系
+    
+    std::vector<int> result;
+    result.reserve(edgeVoteMapTotal.size());  // 预分配内存
+    
+    //-- 找出满足阈值要求的当前帧可关联边缘
+    for (const auto& [edge_id, votes] : edgeVoteMapTotal) 
+    {
+        if(votes > threshold_value) result.push_back(edge_id);
+    }
+
+    if (result.empty()) {
+        return result;
+    }
+
+    // * STEP 4: 更新关联关系（使用哈希表加速查找）
+    const std::unordered_set<int> validAssociation(result.begin(), result.end());
+    for(auto& pt : query_edge.mvPoints) 
+    {
+        // 直接修改原数据，避免拷贝
+        for(size_t j = 0; j < pt.mvAssoFrameEdgeIDs.size(); ++j) 
+        {
+            if(validAssociation.count(pt.mvAssoFrameEdgeIDs[j])) 
+            {
+                pt.asso_edge_ID = pt.mvAssoFrameEdgeIDs[j];
+                pt.asso_point_index = pt.mvAssoFramePointIndices[j];
+                pt.mbAssociated = true;
+                break;
+            }
+        }
+        // 清空内存（使用swap确保内存释放）
+        std::vector<int>().swap(pt.mvAssoFrameEdgeIDs);
+        std::vector<int>().swap(pt.mvAssoFramePointIndices);
+    }
+    
+    return result;
+}
+
 
 }  // namespace dyno

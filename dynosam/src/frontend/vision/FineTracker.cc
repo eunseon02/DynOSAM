@@ -1,6 +1,6 @@
-#include "dynosam/frontend/vision/EdgeTracker.hpp"
+#include "dynosam/frontend/vision/FineTracker.hpp"
 
-using namespace fine;
+using namespace dyno;
 
 FineTracker::FineTracker(double fx, double fy, double cx, double cy, float ratio): 
 mFx(fx), mFy(fy), mCx(cx), mCy(cy), geo_photo_ratio(ratio)
@@ -9,7 +9,7 @@ mFx(fx), mFy(fy), mCx(cx), mCy(cy), geo_photo_ratio(ratio)
     mpF_cur = nullptr;
 }
 
-void FineTracker::setReference(const FramePtr kf_ref)
+void FineTracker::setReference(const Frame::Ptr kf_ref)
 {
     if(kf_ref)
     {
@@ -17,7 +17,7 @@ void FineTracker::setReference(const FramePtr kf_ref)
     }
 }
 
-void FineTracker::setCurrent(const FramePtr f_curr)
+void FineTracker::setCurrent(const Frame::Ptr f_curr)
 {
     if(f_curr)
     {
@@ -54,8 +54,8 @@ void FineTracker::getAssociationLines2D()
             continue; // Already initialized to NaN
         }
 
-        const auto it = mpF_cur->mmIndexMap.find(pt.asso_edge_ID);
-        if(it == mpF_cur->mmIndexMap.end())
+        const auto it = mpF_cur->edge_id_to_index_map_.find(pt.asso_edge_ID);
+        if(it == mpF_cur->edge_id_to_index_map_.end())
         {
             std::cout<<pt.asso_edge_ID<<std::endl;
             std::cout<<"\033[31m [INDEX ERROR] \033[0m"
@@ -64,7 +64,7 @@ void FineTracker::getAssociationLines2D()
         }
 
         const int edge_index = it->second;
-        const auto& edge_points = mpF_cur->mvEdges[edge_index].mvPoints;
+        const auto& edge_points = mpF_cur->static_edges_[edge_index].mvPoints;
         const size_t num_edge_points = edge_points.size();
 
         // Clamp indices to valid range
@@ -85,16 +85,16 @@ void FineTracker::getAssociationLines2D()
 void FineTracker::associationRef2Cur()
 {
     //-- 为当前帧边缘创建一个bool列表，记录这些边缘是否与参考帧构成关联
-    int ref_edge_num = mpF_ref->mvEdges.size();
+    int ref_edge_num = mpF_ref->static_edges_.size();
 
     //-- 清空几何残差点集
     mvGeometryPoints.clear();
 
     //-- 用参考帧的有效边缘去当前帧中关当前帧的边缘，记录是否存在关联
-    for(int i = 0; i < mpF_ref->mvEdges.size(); ++i)
+    for(int i = 0; i < mpF_ref->static_edges_.size(); ++i)
     {
 
-        Edge& query_edge = mpF_ref->mvEdges[i];
+        Edge& query_edge = mpF_ref->static_edges_[i];
 
         //-- 关联前要先清空之前的关联点，因为参考帧会多次关联多个当前帧
         for (auto& pt : query_edge.mvPoints)
@@ -115,7 +115,7 @@ void FineTracker::associationRef2Cur()
 
         //-- 此时 query_edge 与当前帧存在关联，确定 query_edge 参与优化的采样点
         std::vector<orderedEdgePoint> tmp_pts;
-        Edge& edge = mpF_ref->mvEdges[i];
+        Edge& edge = mpF_ref->static_edges_[i];
         if(edge.mvSampledEdgeIndex.empty())
         {
             edge.samplingEdgeUniform(4);
@@ -141,7 +141,7 @@ void FineTracker::associationRef2Cur()
 void FineTracker::associationRef2CurParallel()
 {
     //-- 为当前帧边缘创建一个bool列表，记录这些边缘是否与参考帧构成关联
-    int ref_edge_num = mpF_ref->mvEdges.size();
+    int ref_edge_num = mpF_ref->static_edges_.size();
 
     //-- 清空几何残差点集
     mvGeometryPoints.clear();
@@ -149,8 +149,8 @@ void FineTracker::associationRef2CurParallel()
     // 使用并发容器存储结果
     tbb::concurrent_vector<orderedEdgePoint> concurrent_geometry_points;
     
-    tbb::parallel_for(0, (int)mpF_ref->mvEdges.size(), [&](int i) {
-        Edge& query_edge = mpF_ref->mvEdges[i];
+    tbb::parallel_for(0, (int)mpF_ref->static_edges_.size(), [&](int i) {
+        Edge& query_edge = mpF_ref->static_edges_[i];
 
         //-- 关联前要先清空之前的关联点
         for (auto& pt : query_edge.mvPoints) {
@@ -168,7 +168,7 @@ void FineTracker::associationRef2CurParallel()
             return;
 
         //-- 此时 query_edge 与当前帧存在关联，确定 query_edge 参与优化的采样点
-        Edge& edge = mpF_ref->mvEdges[i];
+        Edge& edge = mpF_ref->static_edges_[i];
         
         if(edge.mvSampledEdgeIndex.empty()) {
             edge.samplingEdgeUniform(4);
@@ -390,8 +390,8 @@ void FineTracker::calculateJacobiPhotometric(const cv::Mat& image_ref, const cv:
 
 void FineTracker::RegistrationCombined()
 {
-    const cv::Mat& img_ref_gray = mpF_ref->mMatGray;
-    const cv::Mat& img_cur_gray = mpF_cur->mMatGray;
+    const cv::Mat& img_ref_gray = ImageType::RGBMono::toMono(mpF_ref->image_container_.rgb());;
+    const cv::Mat& img_cur_gray = ImageType::RGBMono::toMono(mpF_cur->image_container_.rgb());;
 
     const int iterations = 100;
     int N_1 = mvGeometryPoints.size();
@@ -406,13 +406,13 @@ void FineTracker::RegistrationCombined()
         current_cost_pho = 0;
 
         //-- 统计几何残差与光度残差的增量方程以及残差，以便进行基于分布的鲁棒优化
-        std::vector<fine::Mat66d> H_geo_list;
-        std::vector<fine::Vec6d>  g_geo_list;
+        std::vector<Mat66d> H_geo_list;
+        std::vector<Vec6d>  g_geo_list;
         std::vector<Eigen::Vector2d> residual_geo_list;
         std::vector<float> weight_geo_list; //-- 每个几何残差的分布权重
 
-        std::vector<fine::Mat66d> H_pho_list;
-        std::vector<fine::Vec6d>  g_pho_list;
+        std::vector<Mat66d> H_pho_list;
+        std::vector<Vec6d>  g_pho_list;
         std::vector<double> cost_pho_list;
         std::vector<double> weight_pho_list; //-- 每个光度残差的分布权重
         
@@ -515,8 +515,8 @@ void FineTracker::RegistrationCombined()
 
 void FineTracker::RegistrationCombinedParallel()
 {
-    const cv::Mat& img_ref_gray = mpF_ref->mMatGray;
-    const cv::Mat& img_cur_gray = mpF_cur->mMatGray;
+    const cv::Mat& img_ref_gray = ImageType::RGBMono::toMono(mpF_ref->image_container_.rgb());;
+    const cv::Mat& img_cur_gray = ImageType::RGBMono::toMono(mpF_cur->image_container_.rgb());;
 
     const int iterations = 100;
     int N_1 = mvGeometryPoints.size();
@@ -531,13 +531,13 @@ void FineTracker::RegistrationCombinedParallel()
         current_cost_pho = 0;
 
         //-- 统计几何残差与光度残差的增量方程以及残差，以便进行基于分布的鲁棒优化
-        std::vector<fine::Mat66d> H_geo_list;
-        std::vector<fine::Vec6d>  g_geo_list;
+        std::vector<Mat66d> H_geo_list;
+        std::vector<Vec6d>  g_geo_list;
         std::vector<Eigen::Vector2d> residual_geo_list;
         std::vector<float> weight_geo_list; //-- 每个几何残差的分布权重
 
-        std::vector<fine::Mat66d> H_pho_list;
-        std::vector<fine::Vec6d>  g_pho_list;
+        std::vector<Mat66d> H_pho_list;
+        std::vector<Vec6d>  g_pho_list;
         std::vector<double> cost_pho_list;
         std::vector<double> weight_pho_list; //-- 每个光度残差的分布权重
         
@@ -706,8 +706,8 @@ void FineTracker::RegistrationCombinedParallel()
 
 void FineTracker::RegistrationGeometricParallel()
 {
-    const cv::Mat& img_ref_gray = mpF_ref->mMatGray;
-    const cv::Mat& img_cur_gray = mpF_cur->mMatGray;
+    const cv::Mat& img_ref_gray = ImageType::RGBMono::toMono(mpF_ref->image_container_.rgb());;
+    const cv::Mat& img_cur_gray = ImageType::RGBMono::toMono(mpF_cur->image_container_.rgb());;
 
     const int iterations = 100;
     int N_1 = mvGeometryPoints.size();
@@ -722,15 +722,10 @@ void FineTracker::RegistrationGeometricParallel()
         current_cost_pho = 0;
 
         //-- 统计几何残差与光度残差的增量方程以及残差，以便进行基于分布的鲁棒优化
-        std::vector<fine::Mat66d> H_geo_list;
-        std::vector<fine::Vec6d>  g_geo_list;
+        std::vector<Mat66d> H_geo_list;
+        std::vector<Vec6d>  g_geo_list;
         std::vector<Eigen::Vector2d> residual_geo_list;
         std::vector<float> weight_geo_list; //-- 每个几何残差的分布权重
-
-        std::vector<fine::Mat66d> H_pho_list;
-        std::vector<fine::Vec6d>  g_pho_list;
-        std::vector<double> cost_pho_list;
-        std::vector<double> weight_pho_list; //-- 每个光度残差的分布权重
         
         // //-- 更新几何残差的雅克比矩阵
         current_cost_geo = tbb::parallel_reduce(
@@ -827,9 +822,13 @@ void FineTracker::RegistrationGeometricParallel()
     }
 }
 
-void FineTracker::estimate(Sophus::SE3d &T21, bool use_parallel)
+void FineTracker::estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, Sophus::SE3d &T21, bool use_parallel)
 {
-    assert(mpF_ref != nullptr && mpF_cur != nullptr);
+    assert(frame_ref != nullptr && frame_cur != nullptr);
+
+    mpF_cur = frame_cur;
+    mpF_ref = frame_ref;
+    T_cur_ref = T21;
 
     associationRef2CurParallel();
 

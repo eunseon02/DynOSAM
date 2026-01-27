@@ -19,14 +19,15 @@
 
 #include <mutex>
 
-#include "edgeSelector.h"
-#include "Frame.h"
-#include "robustWeight.h"
-#include "disjointSet.h"
+#include "dynosam/frontend/vision/EdgeSelector.hpp"
+#include "dynosam/frontend/vision/Frame.hpp"
+#include "dynosam/frontend/vision/RobustWeight.hpp"
+#include "dynosam/frontend/vision/DisjointSet.hpp"
+#include "dynosam_common/utils/Macros.hpp"
 
 #include <chrono> //-- 计时函数
 
-namespace fine{
+namespace dyno {
 
 typedef Eigen::Matrix<float,  6, 6> Mat66f;
 typedef Eigen::Matrix<double, 6, 6> Mat66d;
@@ -35,6 +36,8 @@ typedef Eigen::Matrix<double, 6, 1> Vec6d;
 
 class FineTracker {
     public:
+        DYNO_POINTER_TYPEDEFS(FineTracker)
+        
         //-- 当类中包含固定大小的 Eigen 对象（如 Eigen::Vector2d、Eigen::Matrix4f 等）
         //-- 作为成员变量，并且类会通过 new 动态分配时，必须使用此宏
         EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
@@ -42,16 +45,16 @@ class FineTracker {
         FineTracker(double fx, double fy, double cx, double cy, float ratio);
     
         //-- 设置参考帧，参考帧就是关键帧指针
-        void setReference(const FramePtr kf_ref);
+        void setReference(const Frame::Ptr kf_ref);
         //-- 设置当前帧，当前帧就是普通帧指针
-        void setCurrent(const FramePtr f_curr);
+        void setCurrent(const Frame::Ptr f_curr);
         //-- 设置参考帧到当前帧的位姿先验
         void setPosePriorRef2Cur(const Sophus::SE3d& T);
         //-- 设置当前帧到参考帧的位姿先验
         void setPosePriorCur2Ref(const Sophus::SE3d& T);
 
         //-- 在给定参考帧与当前帧的情况下估计 ref->curr的位姿变换
-        void estimate(Sophus::SE3d &T21, bool use_parallel = true);
+        void estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, Sophus::SE3d &T21, bool use_parallel = true);
 
         std::vector<orderedEdgePoint> getGeoPoints()
         {
@@ -60,8 +63,8 @@ class FineTracker {
     
     private:
         
-        FramePtr mpF_ref;
-        FramePtr mpF_cur;
+        Frame::Ptr mpF_ref;
+        Frame::Ptr mpF_cur;
 
         //-- 当前帧到参考帧的位姿变换，用 coarse tracking 的结果初始化，持续更新
         //-- 因为估计的是将参考帧的3D特征投影到当前帧，所以用 T_cur_ref, 最终要变成 T_ref_cur
@@ -101,7 +104,7 @@ class FineTracker {
     };
 
 
-}//namespace fine
+}//namespace dyno
 
 
 #endif

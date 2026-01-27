@@ -41,6 +41,7 @@
 #include "dynosam_common/Edge.hpp"
 #include "dynosam_common/EdgeCluster.hpp"
 #include "dynosam_cv/Camera.hpp"
+#include "dynosam/frontend/vision/FineTracker.hpp"
 
 namespace dyno {
 
@@ -201,6 +202,7 @@ class KltFeatureTracker : public StaticFeatureTracker {
                       const ImageContainer& image_container,
                       const FeatureContainer& current_features,
                       FeatureContainer& new_features,
+                      EdgeContainer& new_edges,
                       const cv::Mat& detection_mask);
 
   /**
@@ -296,5 +298,106 @@ class KltFeatureTracker : public StaticFeatureTracker {
   // for now!
   cv::Ptr<cv::cuda::SparsePyrLKOpticalFlow> lk_cuda_tracker_;
 };
+
+
+/**
+ * @brief Edge feature tracking that tracks edge features using edge-wise
+ * correspondence and fine tracking (FineTracker).
+ *
+ * Similar to KltFeatureTracker but specialized for edge features.
+ * Integrates FineTracker functionality for edge-based pose estimation.
+ */
+// class EdgeFeatureTracker : public StaticFeatureTracker {
+//  public:
+//   EdgeFeatureTracker(const TrackerParams& params, Camera::Ptr camera,
+//                      ImageDisplayQueue* display_queue);
+
+//   /**
+//    * @brief Track edge features between frames k-1 and the current set of images
+//    * (at k).
+//    *
+//    * General algorithm is:
+//    * If not previous frame (ie. is null)
+//    *  - preprocess input images (equalizeImage)
+//    *  - detect edge features (detectEdgeFeatures)
+//    * Else
+//    *  - preprocess input images (equalizeImage)
+//    *  - Collect edges from the previous frame
+//    *  - Track edges (trackEdges)
+//    *      - apply edge-wise correspondence
+//    *      - use FineTracker for pose refinement
+//    *      - add tracked edges and check all edges are valid
+//    *      - if number of edges < threshold
+//    *          - reapply edge detection
+//    *
+//    * @param previous_frame Frame::Ptr. Previous frame (k-1) with filled-out
+//    * edges to be tracked.
+//    * @param image_container const ImageContainer&. Contains current (k) images
+//    * which will be tracked from the previous frame.
+//    * @param tracker_info FeatureTrackerInfo&. Tracking metadata to be filled
+//    * out.
+//    * @param detection_mask const cv::Mat& A detection mask in the opencv feature
+//    * tracking form: CV_8UC1 where white pixels (255) are valid and black pixels
+//    * (0) should not be detected on
+//    * @return FeatureContainer Contains all successfully tracked features.
+//    */
+
+
+//   std::vector<Edge> getDetectedEdges() const override;
+
+//  private:
+//   /**
+//    * @brief Outputs a CLAHE equalized greyscale image from the input RGB, which
+//    * will be used to detect and track edge features
+//    *
+//    * @param image_container
+//    * @param equialized_greyscale
+//    */
+//   void equalizeImage(const ImageContainer& image_container,
+//                      cv::Mat& equialized_greyscale) const;
+
+//   /**
+//    * @brief Detects edge features on the input image using the feature detector.
+//    *
+//    * @param processed_img
+//    * @param number_tracked
+//    * @param mask
+//    * @return std::vector<Edge>
+//    */
+//   std::vector<Edge> detectEdgeFeatures(const cv::Mat& processed_img,
+//                                        int number_tracked,
+//                                        const cv::Mat& mask = cv::Mat());
+
+//   /**
+//    * @brief Tracks edges using edge-wise correspondence between the previous
+//    * frame and the current one.
+//    *
+//    * Uses FineTracker for pose refinement and edge association.
+//    *
+//    * @param current_processed_img
+//    * @param previous_processed_img
+//    * @param image_container
+//    * @param previous_features FeatureContainer from previous frame (for
+//    * compatibility)
+//    * @param tracked_features FeatureContainer to add tracked features
+//    * @param outlier_previous_features TrackletIds of outliers
+//    * @param tracker_info
+//    * @param detection_mask
+//    * @param R_km1_k Optional rotation prior
+//    * @return true if successful
+//    */
+//   bool trackEdges(const cv::Mat& current_processed_img,
+//                   const cv::Mat& previous_processed_img,
+//                   const ImageContainer& image_container,
+//                   const FeatureContainer& previous_features,
+//                   FeatureContainer& tracked_features,
+//                   TrackletIds& outlier_previous_features,
+//                   FeatureTrackerInfo& tracker_info,
+//                   const cv::Mat& detection_mask,
+//                   const std::optional<gtsam::Rot3>& R_km1_k);
+
+//  private:
+
+// };
 
 }  // namespace dyno
