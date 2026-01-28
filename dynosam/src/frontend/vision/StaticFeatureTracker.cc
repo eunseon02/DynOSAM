@@ -73,7 +73,11 @@ ExternalFlowFeatureTracker::ExternalFlowFeatureTracker(
 FeatureContainer ExternalFlowFeatureTracker::trackStatic(
     Frame::Ptr previous_frame, const ImageContainer& image_container,
     FeatureTrackerInfo& tracker_info, const cv::Mat&,
+    std::vector<Edge>& detected_edges,
     const std::optional<gtsam::Rot3>&) {
+  LOG(INFO) << "ExternalFlowFeatureTracker::trackStatic";
+  // ExternalFlowFeatureTracker doesn't detect edges, so clear output
+  detected_edges.clear();
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
   const cv::Mat& rgb = rgb_wrapper.toRGB();
   cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
@@ -247,19 +251,39 @@ KltFeatureTracker::KltFeatureTracker(const TrackerParams& params,
 FeatureContainer KltFeatureTracker::trackStatic(
     Frame::Ptr previous_frame, const ImageContainer& image_container,
     FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+    std::vector<Edge>& detected_edges,
     const std::optional<gtsam::Rot3>& R_km1_k) {
   // tracked features and new features
   FeatureContainer new_tracks_and_detections;
   EdgeContainer new_edges;
+  
+  // Clear output detected_edges
+  detected_edges.clear();
+
+  // Validate image_container before processing
+  if (!image_container.hasRgb()) {
+    LOG(ERROR) << "image_container has no RGB, cannot track static features";
+    return new_tracks_and_detections;
+  }
 
   cv::Mat current_equialized_greyscale;
   equalizeImage(image_container, current_equialized_greyscale);
+  
+  if (current_equialized_greyscale.empty()) {
+    LOG(ERROR) << "current_equialized_greyscale is empty after equalizeImage, cannot track static features";
+    return new_tracks_and_detections;
+  }
 
   if (!previous_frame) {
     FeatureContainer previous_inliers;
     detectFeatures(current_equialized_greyscale, image_container,
                    previous_inliers, new_tracks_and_detections, new_edges,
                    detection_mask);
+    
+    // Copy detected edges from new_edges to output parameter
+    for (const Edge& edge : new_edges) {
+      detected_edges.push_back(edge);
+    }
 
     tracker_info.static_track_detections = new_tracks_and_detections.size();
 
@@ -271,6 +295,11 @@ FeatureContainer KltFeatureTracker::trackStatic(
     cv::Mat previous_equialized_greyscale;
     equalizeImage(previous_frame->image_container_,
                   previous_equialized_greyscale);
+    
+    if (previous_equialized_greyscale.empty()) {
+      LOG(ERROR) << "previous_equialized_greyscale is empty after equalizeImage, cannot track static features";
+      return new_tracks_and_detections;
+    }
 
     FeatureContainer previous_inliers;
     auto iter = previous_frame->static_features_.beginUsable();
@@ -286,6 +315,12 @@ FeatureContainer KltFeatureTracker::trackStatic(
       detectFeatures(current_equialized_greyscale, image_container,
                      previous_inliers, new_tracks_and_detections, new_edges,
                      detection_mask);
+      
+      // Copy detected edges from new_edges to output parameter
+      for (const Edge& edge : new_edges) {
+        detected_edges.push_back(edge);
+      }
+      
       tracker_info.static_track_detections = new_tracks_and_detections.size();
       return new_tracks_and_detections;
     }
@@ -298,8 +333,13 @@ FeatureContainer KltFeatureTracker::trackStatic(
     CHECK(trackPoints(
         current_equialized_greyscale, previous_equialized_greyscale,
         image_container, previous_inliers, new_tracks_and_detections,
-        previous_outliers, tracker_info, detection_mask, R_km1_k));
+        previous_outliers, tracker_info, detection_mask, R_km1_k, new_edges));
     // CHECK(trackEdges(current_equialized_greyscale, previous_equialized_greyscale, image_container, previous_inliers, new_tracks_and_detections, previous_outliers, tracker_info, detection_mask, R_km1_k));
+
+    // Copy detected edges from new_edges to output parameter
+    for (const Edge& edge : new_edges) {
+      detected_edges.push_back(edge);
+    }
 
     // after tracking, mark features in the older frame as outliers
     // TODO: (jesse) actually not sure we HAVE to do this, but better to keep
@@ -317,15 +357,46 @@ std::vector<Edge> KltFeatureTracker::getDetectedEdges() const {
 
 void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
                                       cv::Mat& equialized_greyscale) const {
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
-  const cv::Mat& rgb = rgb_wrapper.toRGB();
-  cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
-  CHECK(!mono.empty());
+  try {
+    if (!image_container.hasRgb()) {
+      LOG(ERROR) << "image_container has no RGB in equalizeImage";
+      equialized_greyscale = cv::Mat();
+      return;
+    }
+    
+    const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
+    
+    if (!rgb_wrapper.exists()) {
+      LOG(ERROR) << "rgb_wrapper does not exist in equalizeImage";
+      equialized_greyscale = cv::Mat();
+      return;
+    }
+    
+    const cv::Mat& rgb = rgb_wrapper.toRGB();
+    if (rgb.empty()) {
+      LOG(ERROR) << "rgb image is empty in equalizeImage";
+      equialized_greyscale = cv::Mat();
+      return;
+    }
+    
+    cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
+    if (mono.empty()) {
+      LOG(ERROR) << "mono image is empty in equalizeImage";
+      equialized_greyscale = cv::Mat();
+      return;
+    }
 
-  mono.copyTo(equialized_greyscale);
-  // CHECK(clahe_);
+    mono.copyTo(equialized_greyscale);
+    // CHECK(clahe_);
 
-  // clahe_->apply(mono, equialized_greyscale);
+    // clahe_->apply(mono, equialized_greyscale);
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "Exception in equalizeImage: " << e.what();
+    equialized_greyscale = cv::Mat();
+  } catch (...) {
+    LOG(ERROR) << "Unknown exception in equalizeImage";
+    equialized_greyscale = cv::Mat();
+  }
 }
 
 std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(
@@ -345,6 +416,84 @@ std::vector<Edge> KltFeatureTracker::detectEdgeFeatures(
   return edges;
 }
 
+std::vector<Edge> KltFeatureTracker::detectEdges(const cv::Mat& processed_img, int number_tracked) {
+  std::vector<Edge> detected_edges;
+  
+  // Validate input image
+  if (processed_img.empty()) {
+    LOG(WARNING) << "processed_img is empty, skipping edge detection";
+    detected_edges_.clear();
+    return detected_edges;
+  }
+  
+  {
+    utils::ChronoTimingStats edge_timer("static_feature_track.detect_edges");
+    cv::Mat empty_mask;  // Use empty mask to detect edges on all pixels (static + dynamic regions)
+    try {
+      detected_edges = detectEdgeFeatures(processed_img, number_tracked, empty_mask);
+      LOG(INFO) << "Edge detection: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
+                << FLAGS_use_edge_feature << ")";
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Exception in detectEdgeFeatures: " << e.what();
+      detected_edges.clear();
+    } catch (...) {
+      LOG(ERROR) << "Unknown exception in detectEdgeFeatures";
+      detected_edges.clear();
+    }
+  }
+  
+  // Validate and store detected edges
+  // Always update detected_edges_ even if empty
+  // This ensures that if edge detection fails in one frame, we can retry in the next frame
+  try {
+    std::vector<Edge> valid_edges;  // Store only valid edges
+    if (!detected_edges.empty()) {
+      for (const Edge& edge : detected_edges) {
+        // Validate edge before adding
+        if (edge.mvPoints.empty()) {
+          VLOG(5) << "Skipping edge with empty mvPoints";
+          continue;
+        }
+        
+        // Validate edge points for invalid values
+        bool edge_valid = true;
+        for (const auto& pt : edge.mvPoints) {
+          // Check for NaN or invalid coordinates
+          if (std::isnan(pt.x) || std::isnan(pt.y) || 
+              std::isinf(pt.x) || std::isinf(pt.y) ||
+              pt.x < 0 || pt.y < 0) {
+            VLOG(5) << "Skipping edge with invalid point coordinates (x=" << pt.x << ", y=" << pt.y << ")";
+            edge_valid = false;
+            break;
+          }
+          // Check for invalid gradient angle
+          if (std::isnan(pt.imgGradAngle) || std::isinf(pt.imgGradAngle)) {
+            VLOG(5) << "Skipping edge with invalid gradient angle (angle=" << pt.imgGradAngle << ")";
+            edge_valid = false;
+            break;
+          }
+        }
+        
+        if (!edge_valid) {
+          continue;
+        }
+        
+        valid_edges.push_back(edge);  // Store valid edge
+      }
+    }
+    // Always update detected_edges_ with only valid edges
+    // If empty, it means edge detection failed or all edges were invalid
+    detected_edges_ = valid_edges;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "Exception while storing detected edges: " << e.what();
+    detected_edges_.clear();
+  } catch (...) {
+    LOG(ERROR) << "Unknown exception while storing detected edges";
+    detected_edges_.clear();
+  }
+  
+  return detected_edges_;
+}
 
 bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
                                        const ImageContainer& image_container,
@@ -407,7 +556,6 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
   }
 
   std::vector<cv::Point2f> detected_points;
-  std::vector<Edge> detected_edges;
   {
     utils::ChronoTimingStats timer("static_feature_track.detect_raw");
     detected_points = detectRawFeatures(processed_img, current_features.size(),
@@ -418,11 +566,13 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     if (FLAGS_use_edge_feature) {
       // Use empty mask to detect edges on all pixels (static + dynamic regions)
       cv::Mat empty_mask;
-      detected_edges = detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
-      LOG(INFO) << "detectFeatures: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
-                << FLAGS_use_edge_feature << ")";
-    } else {
-      LOG(INFO) << "detectFeatures: FLAGS_use_edge_feature is false, skipping edge detection";
+      std::vector<Edge> edges =
+          detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
+      // Add detected edges to output container and internal storage
+      for (const Edge& edge : edges) {
+        new_edges.add(edge);
+      }
+      detected_edges_ = edges;
     }
   }
 
@@ -447,14 +597,6 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
     }
   }
 
-  // Add detected edges to new_edges container
-  for (const Edge& edge : detected_edges) {
-    new_edges.add(edge);
-  }
-
-  // temporary store detected edges for visualization
-  detected_edges_ = detected_edges;
-
   return true;
 }
 
@@ -466,7 +608,8 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
                                     TrackletIds& outlier_previous_features,
                                     FeatureTrackerInfo& tracker_info,
                                     const cv::Mat& detection_mask,
-                                    const std::optional<gtsam::Rot3>& R_km1_k) {
+                                    const std::optional<gtsam::Rot3>& R_km1_k,
+                                    EdgeContainer& new_edges) {
   if (current_processed_img.empty() || previous_processed_img.empty() ||
       previous_features.empty()) {
     return false;
@@ -658,7 +801,6 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
 
   if (need_feature_detection || need_edge_detection) {
     utils::ChronoTimingStats timer("static_feature_track.detect");
-    EdgeContainer new_edges;
     
     if (need_feature_detection) {
       // if we do not have enough features, detect more on the current image
@@ -670,19 +812,11 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     } else {
       // Only detect edges without detecting new point features
       // This ensures edges are detected every frame for FineTracker
-      std::vector<Edge> detected_edges;
-      {
-        utils::ChronoTimingStats edge_timer("static_feature_track.detect_edges_only");
-        cv::Mat empty_mask;
-        detected_edges = detectEdgeFeatures(current_processed_img, tracked_features.size(), empty_mask);
-        LOG(INFO) << "Edge detection: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
-                  << FLAGS_use_edge_feature << ")";
-      }
-      // Store detected edges
+      std::vector<Edge> detected_edges = detectEdges(current_processed_img, tracked_features.size());
+      // Add detected edges to new_edges container
       for (const Edge& edge : detected_edges) {
         new_edges.add(edge);
       }
-      detected_edges_ = detected_edges;
     }
   }
 

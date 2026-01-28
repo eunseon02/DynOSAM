@@ -12,7 +12,6 @@
 
 --use_edge_feature=true
 
-# we turn off for OMD as there is some problem
 --use_dynamic_track=false
 
 --log_projected_masks=false

@@ -247,11 +247,21 @@ void SparseFeatureDetector::detect(const cv::Mat& image, KeypointsCV& keypoints,
 
 void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& edges,
   const cv::Mat& detection_mask) {
+    // Clear previous results to ensure clean state
+    mvEdges.clear();
+    mvEdgeClusters.clear();
+    edges.clear();
 
+    // Validate input image
+    if (image.empty()) {
+        LOG(ERROR) << "Input image is empty in detectEdge";
+        return;
+    }
 
-    cv::Mat grad_x, grad_y;
-    cv::Scharr(image, grad_x, CV_32F, 1, 0);
-    cv::Scharr(image, grad_y, CV_32F, 0, 1);
+    try {
+        cv::Mat grad_x, grad_y;
+        cv::Scharr(image, grad_x, CV_32F, 1, 0);
+        cv::Scharr(image, grad_y, CV_32F, 0, 1);
 
     mMatGradMagnitude.create(image.size(), CV_32F);
     mMatGradAngle.create(image.size(), CV_32F);
@@ -276,12 +286,21 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
       cv::bitwise_and(mMatCanny, detection_mask, mMatCanny);
     }
     
-    preprocessCannyMat();
-    regionGrowthClusteringOCanny(mpAngle_bias, detection_mask);
-    // cvt2OrderedEdges();
-    cvt2OrderedEdgesParallel();
+        preprocessCannyMat();
+        regionGrowthClusteringOCanny(mpAngle_bias, detection_mask);
+        // cvt2OrderedEdges();
+        cvt2OrderedEdgesParallel();
 
-    edges = mvEdges;
+        edges = mvEdges;
+    } catch (const std::exception& e) {
+        LOG(ERROR) << "Exception in detectEdge: " << e.what();
+        mvEdges.clear();
+        edges.clear();
+    } catch (...) {
+        LOG(ERROR) << "Unknown exception in detectEdge";
+        mvEdges.clear();
+        edges.clear();
+    }
 }
 
 float SparseFeatureDetector::calcAngleBias(float angle_1, float angle_2)

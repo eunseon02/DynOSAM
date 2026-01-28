@@ -51,7 +51,7 @@ Frame::Frame(
     : frame_id_(frame_id),
       timestamp_(timestamp),
       camera_(camera),
-      image_container_(image_container),
+      image_container_(image_container.clone()),  // Deep copy for thread safety
       static_features_(static_features),
       dynamic_features_(dynamic_features),
       static_edges_(static_edges),
@@ -77,17 +77,53 @@ Frame::Frame(
 
 
   //-- Depth-related preprocessing: remove inconsistent edge features
-  assignProperty3D(image_container_.depth()); //-- Assign depth to edges
-  // edgeCullingDepth();         //-- Remove all edges with invalid depth and invalid edge points within valid edges
-  edgeCullingDepthParallel();
-  //-- Now all edge points in the remaining edges have valid depth
-  edgeCullingContinuity();    //-- Ensure 3D point depth continuity for each ordered edge
+  // Validate image_container_ and static_edges_ before processing
+  if (!image_container_.hasDepth()) {
+    LOG(WARNING) << "image_container_ has no depth, skipping edge depth processing";
+    // Still need to initialize edge_point_lookup_map_ even without depth
+    if (!static_edges_.empty()) {
+      assignPropertyIdx();
+      constructSearchPlainParallel();
+    }
+  } else if (static_edges_.empty()) {
+    LOG(WARNING) << "static_edges_ is empty, skipping edge processing";
+  } else {
+    try {
+      assignProperty3D(image_container_.depth()); //-- Assign depth to edges
+      // edgeCullingDepth();         //-- Remove all edges with invalid depth and invalid edge points within valid edges
+      edgeCullingDepthParallel();
+      //-- Now all edge points in the remaining edges have valid depth
+      edgeCullingContinuity();    //-- Ensure 3D point depth continuity for each ordered edge
 
-  //-- Update frame_edge_ID and frame_point_index for each edge point in this frame
-  assignPropertyIdx();
-  
-  //constructSearchPlain();
-  constructSearchPlainParallel();
+      //-- Update frame_edge_ID and frame_point_index for each edge point in this frame
+      assignPropertyIdx();
+      
+      //constructSearchPlain();
+      constructSearchPlainParallel();
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "Exception in edge processing: " << e.what();
+      // Try to at least initialize edge_point_lookup_map_ even if processing failed
+      if (!static_edges_.empty()) {
+        try {
+          assignPropertyIdx();
+          constructSearchPlainParallel();
+        } catch (...) {
+          LOG(ERROR) << "Failed to initialize edge_point_lookup_map_";
+        }
+      }
+    } catch (...) {
+      LOG(ERROR) << "Unknown exception in edge processing";
+      // Try to at least initialize edge_point_lookup_map_ even if processing failed
+      if (!static_edges_.empty()) {
+        try {
+          assignPropertyIdx();
+          constructSearchPlainParallel();
+        } catch (...) {
+          LOG(ERROR) << "Failed to initialize edge_point_lookup_map_";
+        }
+      }
+    }
+  }
   
 }
 
@@ -665,6 +701,12 @@ void Frame::searchRadius(float x, float y, double radius, std::vector<orderedEdg
 {
     result.clear();
 
+    // Validate edge_point_lookup_map_ before accessing
+    if (edge_point_lookup_map_.empty()) {
+        LOG(WARNING) << "edge_point_lookup_map_ is empty in searchRadius";
+        return;
+    }
+
     //-- 定义搜索区域的矩形边界（整数像素坐标）
     int minX = static_cast<int>(std::max(0.0, x - radius));
     int maxX = static_cast<int>(std::min(edge_point_lookup_map_.cols - 1.0, x + radius));
@@ -695,7 +737,12 @@ void Frame::searchRadius(float x, float y, double radius, std::vector<orderedEdg
             if (distance <= radius)
             {
                 //-- 获取原始点数据
-                const auto& edge = static_edges_[edge_id_to_index_map_.at(edgeID)];
+                // Validate edge_id_to_index_map_ before accessing
+                auto it = edge_id_to_index_map_.find(edgeID);
+                if (it == edge_id_to_index_map_.end()) {
+                    continue;  // Skip if edgeID not found in map
+                }
+                const auto& edge = static_edges_[it->second];
                 orderedEdgePoint point = edge.mvPoints[pointIdx];
 
                 //-- 确保原始点数据的frame_edge_ID 和 frame_point_index 确实是搜到的结果
@@ -741,6 +788,11 @@ bool isPointsAssociated(const orderedEdgePoint& pt1, const orderedEdgePoint& pt2
 
 std::vector<int> Frame::edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr)
 {
+    // Validate edge_point_lookup_map_ before processing
+    if (edge_point_lookup_map_.empty()) {
+        LOG(WARNING) << "edge_point_lookup_map_ is empty in edgeWiseCorrespondenceReproject, cannot process";
+        return std::vector<int>();
+    }
 
     // * STEP 1. 得到参考帧边缘重投影到当前帧的坐标
     std::vector<orderedEdgePoint>& queryList = query_edge.mvPoints;
@@ -925,11 +977,23 @@ void Frame::constructSearchPlainParallel()
     //-- 创建并初始化矩阵
     edge_point_lookup_map_ = cv::Mat(img_height_, img_width_, CV_32SC2, cv::Scalar(-1, -1));
     
+    // Validate image dimensions before processing
+    if (img_height_ <= 0 || img_width_ <= 0) {
+        LOG(ERROR) << "Invalid image dimensions in constructSearchPlainParallel: " 
+                   << img_height_ << "x" << img_width_;
+        return;
+    }
+    
     // 使用 parallel_for_each 并行处理所有边
     tbb::parallel_for_each(static_edges_.begin(), static_edges_.end(),
         [&](const auto& edge) {
             // 遍历当前边的所有点
             for (const auto& point : edge.mvPoints) {
+                // Validate point coordinates before accessing
+                if (point.x < 0 || point.x >= img_width_ || 
+                    point.y < 0 || point.y >= img_height_) {
+                    continue;  // Skip invalid points
+                }
                 // 直接写入矩阵
                 auto& pixel = edge_point_lookup_map_.at<cv::Vec2i>(point.y, point.x);
                 pixel[0] = point.frame_edge_ID;      // 存储 edge ID

@@ -77,6 +77,7 @@ class StaticFeatureTracker : public FeatureTrackerBase {
   virtual FeatureContainer trackStatic(
       Frame::Ptr previous_frame, const ImageContainer& image_container,
       FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      std::vector<Edge>& detected_edges,
       const std::optional<gtsam::Rot3>& R_km1_k) = 0;
 
   virtual std::vector<Edge> getDetectedEdges() const = 0;
@@ -93,6 +94,7 @@ class ExternalFlowFeatureTracker : public StaticFeatureTracker {
   FeatureContainer trackStatic(
       Frame::Ptr previous_frame, const ImageContainer& image_container,
       FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      std::vector<Edge>& detected_edges,
       const std::optional<gtsam::Rot3>& R_km1_k = {}) override;
 
  private:
@@ -159,6 +161,7 @@ class KltFeatureTracker : public StaticFeatureTracker {
   FeatureContainer trackStatic(
       Frame::Ptr previous_frame, const ImageContainer& image_container,
       FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
+      std::vector<Edge>& detected_edges,
       const std::optional<gtsam::Rot3>& R_km1_k = {}) override;
 
  private:
@@ -194,6 +197,18 @@ class KltFeatureTracker : public StaticFeatureTracker {
   std::vector<Edge> detectEdgeFeatures(const cv::Mat& processed_img,
                                        int number_tracked,
                                        const cv::Mat& mask = cv::Mat());
+
+  /**
+   * @brief Detects and validates edges from the processed image.
+   * 
+   * This function handles edge detection, validation, and storage of detected edges.
+   * It is separate from detectFeatures to allow independent edge detection.
+   * 
+   * @param processed_img The processed grayscale image
+   * @param number_tracked Number of currently tracked features (for logging)
+   * @return std::vector<Edge> Validated detected edges
+   */
+  std::vector<Edge> detectEdges(const cv::Mat& processed_img, int number_tracked);
 
   std::vector<Edge> getDetectedEdges() const override;
 
@@ -240,7 +255,8 @@ class KltFeatureTracker : public StaticFeatureTracker {
                    TrackletIds& outlier_previous_features,
                    FeatureTrackerInfo& tracker_info,
                    const cv::Mat& detection_mask,
-                   const std::optional<gtsam::Rot3>& R_km1_k);
+                   const std::optional<gtsam::Rot3>& R_km1_k,
+                   EdgeContainer& new_edges);
 
   /**
    * @brief Geometric verification using homograph + RANSAC.

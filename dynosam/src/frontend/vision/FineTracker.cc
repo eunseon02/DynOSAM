@@ -43,6 +43,13 @@ void FineTracker::setPosePriorRef2Cur(const Sophus::SE3d& T)
 
 void FineTracker::getAssociationLines2D()
 {
+    // Validate frames before processing
+    if (!mpF_cur) {
+        LOG(ERROR) << "FineTracker::getAssociationLines2D: mpF_cur is null";
+        mvAssociatedLines.clear();
+        return;
+    }
+    
     const size_t num_points = mvGeometryPoints.size();
     //-- mvAssociatedLines 初始化成全 NaN, 且与mvGeometryPoints同大小
     mvAssociatedLines.clear();
@@ -60,13 +67,19 @@ void FineTracker::getAssociationLines2D()
         const auto it = mpF_cur->edge_id_to_index_map_.find(pt.asso_edge_ID);
         if(it == mpF_cur->edge_id_to_index_map_.end())
         {
-            std::cout<<pt.asso_edge_ID<<std::endl;
-            std::cout<<"\033[31m [INDEX ERROR] \033[0m"
-                    <<": Encounter an edge id that doesn't exist!"<< std::endl;
+            VLOG(5) << "FineTracker::getAssociationLines2D: edge id " << pt.asso_edge_ID << " doesn't exist in edge_id_to_index_map_";
             continue; // Already initialized to NaN
         }
 
         const int edge_index = it->second;
+        
+        // Validate edge_index
+        if (edge_index < 0 || edge_index >= (int)mpF_cur->static_edges_.size()) {
+            LOG(ERROR) << "FineTracker::getAssociationLines2D: invalid edge_index " << edge_index 
+                       << " (static_edges_.size()=" << mpF_cur->static_edges_.size() << ")";
+            continue;
+        }
+        
         const auto& edge_points = mpF_cur->static_edges_[edge_index].mvPoints;
         const size_t num_edge_points = edge_points.size();
 
@@ -143,8 +156,28 @@ void FineTracker::associationRef2Cur()
 
 void FineTracker::associationRef2CurParallel()
 {
+    // Validate frames and their edge data before processing
+    if (!mpF_ref || !mpF_cur) {
+        LOG(ERROR) << "FineTracker: frame pointers are null";
+        mvGeometryPoints.clear();
+        return;
+    }
+    
+    // Validate edge_point_lookup_map_ for current frame
+    if (mpF_cur->edge_point_lookup_map_.empty()) {
+        LOG(WARNING) << "FineTracker: mpF_cur->edge_point_lookup_map_ is empty, cannot perform association";
+        mvGeometryPoints.clear();
+        return;
+    }
+    
     //-- 为当前帧边缘创建一个bool列表，记录这些边缘是否与参考帧构成关联
     int ref_edge_num = mpF_ref->static_edges_.size();
+    
+    if (ref_edge_num == 0) {
+        LOG(WARNING) << "FineTracker: mpF_ref->static_edges_ is empty";
+        mvGeometryPoints.clear();
+        return;
+    }
 
     //-- 清空几何残差点集
     mvGeometryPoints.clear();
@@ -156,7 +189,18 @@ void FineTracker::associationRef2CurParallel()
     
     tbb::parallel_for(0, (int)mpF_ref->static_edges_.size(), [&](int i) {
         total_edges_checked++;
+        
+        // Validate edge index
+        if (i < 0 || i >= (int)mpF_ref->static_edges_.size()) {
+            return;
+        }
+        
         Edge& query_edge = mpF_ref->static_edges_[i];
+        
+        // Validate edge has points
+        if (query_edge.mvPoints.empty()) {
+            return;
+        }
 
         //-- 关联前要先清空之前的关联点
         for (auto& pt : query_edge.mvPoints) {
@@ -168,7 +212,17 @@ void FineTracker::associationRef2CurParallel()
         }
         
         //-- 将参考帧的边缘投影到当前帧
-        std::vector<int> associated_edges = mpF_cur->edgeWiseCorrespondenceReproject(query_edge, T_cur_ref);
+        //std::vector<int> associated_edges = mpF_cur->edgeWiseCorrespondenceReproject(query_edge, T_cur_ref);
+        std::vector<int> associated_edges;
+        try {
+            associated_edges = mpF_cur->edgeWiseCorrespondenceReproject(query_edge, T_cur_ref);
+        } catch (const std::exception& e) {
+            LOG(ERROR) << "Exception in edgeWiseCorrespondenceReproject: " << e.what();
+            return;
+        } catch (...) {
+            LOG(ERROR) << "Unknown exception in edgeWiseCorrespondenceReproject";
+            return;
+        }
         
         if(associated_edges.empty())
             return;
@@ -184,6 +238,10 @@ void FineTracker::associationRef2CurParallel()
         
         const auto& index_sampled = edge.mvSampledEdgeIndex;
         for(int j = 0; j < index_sampled.size(); ++j) {
+            // Validate sampled index
+            if (index_sampled[j] < 0 || index_sampled[j] >= (int)edge.mvPoints.size()) {
+                continue;
+            }
             orderedEdgePoint& pt = edge.mvPoints[index_sampled[j]];
             if (pt.mbAssociated) {
                 // 改用push_back逐个添加

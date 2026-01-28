@@ -202,16 +202,18 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   
   // Calculate relative pose from solveCameraMotion result for FineTrack
   // T_k_1_k = T_world_k_1^-1 * T_world_k (relative pose from k-1 to k in k-1 frame)
-  const gtsam::Pose3 T_k_1_k_initial = 
-      previous_frame->T_world_camera_.inverse() * frame->T_world_camera_;
-  
-  gtsam::Pose3 T_k_1_k_refined;
-  if (!FineTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
-    LOG(ERROR) << "Could not fine track";
-  } else {
-    // Update frame pose with refined result from FineTrack
-    frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
-  
+  if (FLAGS_use_edge_feature) {
+    const gtsam::Pose3 T_k_1_k_initial = 
+        previous_frame->T_world_camera_.inverse() * frame->T_world_camera_;
+    
+    gtsam::Pose3 T_k_1_k_refined;
+    if (!FineTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
+      LOG(ERROR) << "Could not fine track";
+    } else {
+      // Update frame pose with refined result from FineTrack
+      frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+    
+    }
   }
 
 
@@ -456,6 +458,12 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
            << frame_k->static_edges_.size() << " with " << cur_edge_points 
            << " points)";
   
+  // Validate frame image containers before FineTracker estimation
+  if (!frame_k_1->image_container_.hasRgb() || !frame_k->image_container_.hasRgb()) {
+    LOG(WARNING) << "FineTrack: frame image containers missing RGB, skipping";
+    return false;
+  }
+  
   // Convert gtsam::Pose3 to Sophus::SE3d for FineTracker
   // FineTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
   const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
@@ -473,6 +481,9 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
   } catch (const std::exception& e) {
     LOG(WARNING) << "FineTracker failed with exception: " << e.what() 
                  << ". Falling back to initial pose.";
+    return false;
+  } catch (...) {
+    LOG(WARNING) << "FineTracker failed with unknown exception. Falling back to initial pose.";
     return false;
   }
   

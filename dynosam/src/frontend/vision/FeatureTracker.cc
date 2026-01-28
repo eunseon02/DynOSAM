@@ -83,7 +83,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // this will mean that the tracking images (input) are not necessarily the
   // same as the ones inside the returned frame
   utils::ChronoTimingStats tracking_timer("tracking_timer");
-  ImageContainer input_images = image_container;
+  ImageContainer input_images = image_container.clone();  // Deep copy for thread safety
 
   info_ = FeatureTrackerInfo();  // clear the info
   info_.frame_id = frame_id;
@@ -126,19 +126,31 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   }
   // Also make copies of other captured variables for thread safety
   Frame::Ptr previous_frame_copy = previous_frame_;
-  ImageContainer input_images_copy = input_images;
+  ImageContainer input_images_copy = input_images.clone();  // Deep copy for thread safety
   FeatureTrackerInfo info_copy = info_;
 
-  auto static_track = [this, boundary_mask_copy, previous_frame_copy, input_images_copy, R_km1_k](FeatureContainer& static_features, std::vector<Edge>& static_edges, FeatureTrackerInfo& tracker_info) {
-    VLOG(20) << "Starting static track";
-    utils::ChronoTimingStats static_track_timer("static_feature_track");
-    static_features = static_feature_tracker_->trackStatic(
-        previous_frame_copy, input_images_copy, tracker_info,
-        boundary_mask_copy, R_km1_k);
-    static_edges = static_feature_tracker_->getDetectedEdges();
-  };
+  // Perform static and dynamic tracking sequentially to avoid thread safety issues
+  FeatureContainer static_features, dynamic_features;
+  std::vector<Edge> static_edges;
+  FeatureTrackerInfo static_tracker_info = info_copy;
 
-  auto dynamic_track = [&](FeatureContainer& dynamic_features) {
+  // Static tracking
+  VLOG(20) << "Starting static track";
+  utils::ChronoTimingStats static_track_timer("static_feature_track");
+  
+  // Validate input_images_copy before tracking
+  if (!input_images_copy.hasRgb()) {
+    LOG(ERROR) << "input_images_copy has no RGB, cannot track static features";
+    static_features = FeatureContainer();
+  } else {
+    static_features = static_feature_tracker_->trackStatic(
+        previous_frame_copy, input_images_copy, static_tracker_info,
+        boundary_mask_copy, static_edges, R_km1_k);
+  }
+  VLOG(20) << "Static edges: " << static_edges.size();
+
+  // Dynamic tracking (if enabled)
+  if (FLAGS_use_dynamic_track) {
     VLOG(30) << "Starting dynamic track";
     if (params_.prefer_provided_optical_flow && input_images.hasOpticalFlow()) {
       VLOG(30) << "Starting dense object feature tracking";
@@ -156,25 +168,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
       trackDynamicKLT(frame_id, input_images, dynamic_features,
                       object_keyframes, boundary_mask_result);
     }
-  };
-
-  // start tracking threads since we can do this independantly
-  FeatureContainer static_features, dynamic_features;
-  std::vector<Edge> static_edges;
-  FeatureTrackerInfo static_tracker_info = info_copy;
-  std::thread static_track_thread(static_track, std::ref(static_features), std::ref(static_edges), std::ref(static_tracker_info));
-  
-  std::optional<std::thread> dynamic_track_thread;
-  if (FLAGS_use_dynamic_track) {
-    dynamic_track_thread = std::thread(dynamic_track, std::ref(dynamic_features));
   }
 
-  static_track_thread.join();
-  if (dynamic_track_thread.has_value()) {
-    dynamic_track_thread->join();
-  }
-
-  // Update info_ with the results from static tracking thread
+  // Update info_ with the results from static tracking
   info_ = static_tracker_info;
 
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
