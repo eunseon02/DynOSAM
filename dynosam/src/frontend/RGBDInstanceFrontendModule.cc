@@ -77,7 +77,7 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   tracker_ = std::make_unique<FeatureTracker>(getFrontendParams(), camera_,
                                               display_queue);
   fine_tracker_ = std::make_unique<FineTracker>(camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv(), getFrontendParams().tracker_params.edge_fine.geo_photo_ratio);
-  direct_tracker_ = std::make_unique<DirectTracker>(camera->getParams().width(), camera->getParams().height(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
+  direct_tracker_ = std::make_unique<DirectTracker>(camera->getParams().ImageWidth(), camera->getParams().ImageHeight(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
   
   if (FLAGS_use_frontend_logger) {
     LOG(INFO) << "Using front-end logger!";
@@ -193,27 +193,49 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         tracker_->stereoTrack(stereo_features_1, frame->static_features_,
                               left_rgb, right_rgb, rgbd_camera->baseline());
   }
+  //  // this includes the refine correspondances with joint optical flow
+  // // TODO: lots of internal logic around how the actual pose gets predicted.
+  // // should streamline this and tell backend how pose was selected!!
+  // if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
+  //   LOG(ERROR) << "Could not solve for camera";
+  // }
 
-  // this includes the refine correspondances with joint optical flow
-  // TODO: lots of internal logic around how the actual pose gets predicted.
-  // should streamline this and tell backend how pose was selected!!
-  if (!solveCameraMotion(frame, previous_frame, R_curr_ref)) {
-    LOG(ERROR) << "Could not solve for camera";
+  // Use DirectTrack instead of solveCameraMotion
+  // Calculate initial relative pose estimate (can use IMU prediction or constant velocity)
+  LOG(INFO) << "RGBDInstanceFrontendModule::nominalSpin: about to call DirectTrack";
+  gtsam::Pose3 T_k_1_k_initial;
+  if (last_imu_k_ == frame->getFrameId() && has_imu) {
+    // Use IMU prediction if available
+    const gtsam::Pose3 T_world_k_1 = nav_state_prev_.pose();
+    const gtsam::Pose3 T_world_k = nav_state_curr_.pose();
+    T_k_1_k_initial = T_world_k_1.inverse() * T_world_k;
+    LOG(INFO) << "RGBDInstanceFrontendModule::nominalSpin: using IMU prediction for initial pose";
+  } else {
+    // Use constant velocity model
+    T_k_1_k_initial = vo_velocity_;
+    LOG(INFO) << "RGBDInstanceFrontendModule::nominalSpin: using constant velocity model for initial pose";
   }
   
-  // Calculate relative pose from solveCameraMotion result for FineTrack
-  // T_k_1_k = T_world_k_1^-1 * T_world_k (relative pose from k-1 to k in k-1 frame)
+  // Perform DirectTrack
+  LOG(INFO) << "RGBDInstanceFrontendModule::nominalSpin: calling DirectTrack";
+  gtsam::Pose3 T_k_1_k_refined;
+  if (!DirectTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
+    LOG(WARNING) << "DirectTrack failed, using initial pose estimate";
+    T_k_1_k_refined = T_k_1_k_initial;
+  }
+  LOG(INFO) << "RGBDInstanceFrontendModule::nominalSpin: DirectTrack completed";
+  
+  // Update frame pose with DirectTrack result
+  frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+  
+  // Calculate relative pose from DirectTrack result for FineTrack (if edge features enabled)
   if (FLAGS_use_edge_feature) {
-    const gtsam::Pose3 T_k_1_k_initial = 
-        previous_frame->T_world_camera_.inverse() * frame->T_world_camera_;
-    
-    gtsam::Pose3 T_k_1_k_refined;
-    if (!FineTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
-      LOG(ERROR) << "Could not fine track";
+    gtsam::Pose3 T_k_1_k_fine_refined;
+    if (!FineTrack(frame, previous_frame, T_k_1_k_refined, T_k_1_k_fine_refined)) {
+      LOG(WARNING) << "Could not fine track";
     } else {
       // Update frame pose with refined result from FineTrack
-      frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
-    
+      frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_fine_refined;
     }
   }
 
@@ -423,9 +445,136 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
                                            const gtsam::Pose3& T_k_1_k_initial, 
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.direct_track");
-  // LOG(INFO) << "\033[1;32m[RGBD] DirectTrack called!\033[0m";
-  direct_tracker_->estimatePyramid(T_k_1_k_refined);
-
+  LOG(INFO) << "DirectTrack: entered function";
+  
+  // Check if direct_tracker_ is initialized
+  if (!direct_tracker_) {
+    LOG(ERROR) << "DirectTrack: direct_tracker_ is null!";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  
+  // Validate frame image containers
+  LOG(INFO) << "DirectTrack: validating frame image containers";
+  if (!frame_k_1->image_container_.hasRgb() || !frame_k->image_container_.hasRgb()) {
+    LOG(WARNING) << "DirectTrack: frame image containers missing RGB, skipping";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  
+  // Get grayscale images
+  LOG(INFO) << "DirectTrack: converting RGB to mono";
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_cur = frame_k->image_container_.rgb();
+  cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
+  cv::Mat mono_cur = ImageType::RGBMono::toMono(rgb_wrapper_cur);
+  
+  if (mono_ref.empty() || mono_cur.empty()) {
+    LOG(WARNING) << "DirectTrack: failed to convert RGB to mono";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  LOG(INFO) << "DirectTrack: mono images converted, ref.size()=" << mono_ref.size() << ", cur.size()=" << mono_cur.size();
+  
+  // Collect static features with depth from previous frame
+  LOG(INFO) << "DirectTrack: collecting tracklets";
+  TrackletIds tracklets = frame_k_1->static_features_.collectTracklets();
+  if (tracklets.empty()) {
+    LOG(WARNING) << "DirectTrack: no tracklets available";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  LOG(INFO) << "DirectTrack: collected " << tracklets.size() << " tracklets";
+  
+  std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+  LOG(INFO) << "DirectTrack: filtering features with depth";
+  for (const auto& tracklet_id : tracklets) {
+    Feature::Ptr feature = frame_k_1->static_features_.getByTrackletId(tracklet_id);
+    if (!feature || !feature->usable() || !feature->hasDepth()) {
+      continue;
+    }
+    
+    const Keypoint& kp = feature->keypoint();
+    x_list.push_back(kp(0));
+    y_list.push_back(kp(1));
+    depth_list.push_back(feature->depth());
+    weight_list.push_back(1.0f);  // Default weight
+    theta_list.push_back(0.0f);  // Default theta (gradient angle)
+  }
+  
+  if (x_list.empty()) {
+    LOG(WARNING) << "DirectTrack: no valid features with depth";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  LOG(INFO) << "DirectTrack: found " << x_list.size() << " features with depth";
+  
+  // Set reference frame
+  LOG(INFO) << "DirectTrack: calling setReference";
+  try {
+    direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "DirectTrack: setReference failed with exception: " << e.what();
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  LOG(INFO) << "DirectTrack: setReference completed";
+  
+  // Set current frame
+  LOG(INFO) << "DirectTrack: calling setCurrent";
+  try {
+    direct_tracker_->setCurrent(mono_cur);
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "DirectTrack: setCurrent failed with exception: " << e.what();
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  LOG(INFO) << "DirectTrack: setCurrent completed";
+  
+  // Convert gtsam::Pose3 to Sophus::SE3d for DirectTracker
+  // DirectTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
+  LOG(INFO) << "DirectTrack: converting pose to Sophus::SE3d";
+  const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
+  const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+  Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+                   T_matrix.topRightCorner<3, 1>());
+  LOG(INFO) << "DirectTrack: pose conversion completed";
+  
+  // Run DirectTracker estimation
+  LOG(INFO) << "DirectTrack: calling estimatePyramid";
+  try {
+    direct_tracker_->estimatePyramid(T21, true);
+    LOG(INFO) << "DirectTrack: estimatePyramid completed";
+  } catch (const std::runtime_error& e) {
+    LOG(WARNING) << "DirectTracker failed with error: " << e.what() 
+                 << ". Falling back to initial pose.";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "DirectTracker failed with exception: " << e.what() 
+                 << ". Falling back to initial pose.";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  } catch (...) {
+    LOG(WARNING) << "DirectTracker failed with unknown exception. Falling back to initial pose.";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  
+  // Check if tracking was successful
+  if (!T21.matrix().allFinite()) {
+    LOG(WARNING) << "DirectTracker returned invalid pose matrix";
+    T_k_1_k_refined = T_k_1_k_initial;
+    return false;
+  }
+  
+  // Convert Sophus::SE3d result back to gtsam::Pose3
+  // DirectTracker returns T_cur_ref, so we need to invert to get T_k_1_k
+  LOG(INFO) << "DirectTrack: converting result back to gtsam::Pose3";
+  const Eigen::Matrix4d T_result = T21.inverse().matrix();
+  T_k_1_k_refined = gtsam::Pose3(T_result);
+  LOG(INFO) << "DirectTrack: completed successfully";
+  
   return true;
 }
 
@@ -433,12 +582,21 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
                                            const gtsam::Pose3& T_k_1_k_initial, 
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.fine_track");
-  // LOG(INFO) << "\033[1;32m[RGBD] FineTrack called!\033[0m";
-
-  direct_tracker_->estimatePyramid(T_k_1_k_refined);
-  return true;
-}
-
+  
+  // Count edge points
+  size_t ref_edge_points = 0;
+  size_t cur_edge_points = 0;
+  size_t ref_sampled_points = 0;
+  
+  for (const auto& edge : frame_k_1->static_edges_) {
+    ref_edge_points += edge.mvPoints.size();
+    ref_sampled_points += edge.mvSampledEdgeIndex.size();
+  }
+  
+  for (const auto& edge : frame_k->static_edges_) {
+    cur_edge_points += edge.mvPoints.size();
+  }
+  
   if (ref_edge_points == 0 || cur_edge_points == 0) {
     VLOG(5) << "FineTrack: edges have no points (ref: " << ref_edge_points
              << ", cur: " << cur_edge_points << "), skipping";

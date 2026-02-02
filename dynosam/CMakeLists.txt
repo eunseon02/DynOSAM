@@ -90,6 +90,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/TrackerParams.cc
   src/frontend/vision/FeatureTrackerBase.cc
   src/frontend/vision/FineTracker.cc
+  src/frontend/vision/DirectTracker.cc
   src/frontend/vision/FeatureDetector.cc
   src/frontend/RGBDInstance-Definitions.cc
   src/frontend/Frontend-Definitions.cc

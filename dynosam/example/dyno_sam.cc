@@ -282,9 +282,66 @@ int main(int argc, char* argv[]) {
       
       return 0;
 #else
-      LOG(FATAL) << "DynoPipelineManagerRos requires dynosam_ros package. "
-                 << "Please build with dynosam_ros available or use non-ROS pipeline.";
-      return 1;
+      // Use non-ROS DynoPipelineManager
+      LOG(INFO) << "Using non-ROS DynoPipelineManager with backend";
+      
+      // Load parameters (reuse params_path found earlier in the code)
+      // params_path should already be set from the code above (lines 130-168)
+      if (params_path.empty()) {
+        LOG(FATAL) << "Could not find params folder. Please specify --params_folder_path";
+      }
+      // Ensure params_path ends with '/'
+      if (params_path.back() != '/') {
+        params_path += "/";
+      }
+      LOG(INFO) << "Loading DynoParams from: " << params_path;
+      DynoParams params(params_path);
+      
+      // Create TUM data provider
+      auto data_provider = std::make_shared<TUMDataProvider>(
+          FLAGS_path_to_tum, FLAGS_tum_association, camera_params);
+      
+      // Create displays
+      auto frontend_display = std::make_shared<OpenCVFrontendDisplay>();
+      std::string output_file = FLAGS_output_trajectory.empty() ? "/tmp/trajectory.txt" : FLAGS_output_trajectory;
+      auto trajectory_logger = std::make_shared<TrajectoryLoggerDisplay>(output_file, true);
+      
+      // Create a BackendDisplay adapter that wraps TrajectoryLoggerDisplay
+      class TrajectoryBackendDisplayAdapter : public BackendDisplay {
+       public:
+        TrajectoryBackendDisplayAdapter(TrajectoryLoggerDisplay::Ptr logger)
+            : logger_(logger) {}
+        
+       protected:
+        void spinOnceImpl(const BackendOutputPacket::ConstPtr& input) override {
+          if (logger_) {
+            logger_->spin(input);
+          }
+        }
+        
+       private:
+        TrajectoryLoggerDisplay::Ptr logger_;
+      };
+      
+      auto backend_display = std::make_shared<TrajectoryBackendDisplayAdapter>(trajectory_logger);
+      
+      // Create backend factory
+      // Use DefaultRegularBackendModuleFactory which is BackendFactory<NoVizPolicy, RegularBackendModuleTraits::MapType>
+      BackendModuleFactory::Ptr backend_factory = DefaultRegularBackendModuleFactory::Create(params.backend_type);
+      
+      // Create pipeline manager
+      // Note: make_shared uses perfect forwarding, so we need to ensure const reference
+      auto pipeline = std::make_shared<DynoPipelineManager>(
+          static_cast<const DynoParams&>(params), data_provider, frontend_display, backend_display, backend_factory);
+      
+      // Run pipeline
+      LOG(INFO) << "Starting non-ROS pipeline...";
+      while (pipeline->spin()) {
+        // Continue spinning until data provider is finished
+      }
+      
+      LOG(INFO) << "Pipeline finished";
+      return 0;
 #endif
     }
 

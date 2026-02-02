@@ -17,14 +17,16 @@
 #include <tbb/tbb.h>
 #include <tbb/parallel_for.h>
 //least square solver
-#include "Least_squares.h"
-#include "robustWeight.h"
+#include "LeastSquares.hpp"
+#include "RobustWeight.hpp"
+#include "dynosam_common/utils/Macros.hpp"
 
 #define PYR_LEVELS 5
 #define PYR_SCALE 0.5
 #define NAN FLT_MAX
 
-namespace direct{
+namespace dyno{
+    
 
 typedef Eigen::Matrix<float,  6, 6> Mat66f;
 typedef Eigen::Matrix<double, 6, 6> Mat66d;
@@ -59,6 +61,7 @@ public:
 
 class DirectTracker {
 public:
+	DYNO_POINTER_TYPEDEFS(DirectTracker)
 	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
 
 	DirectTracker(int w, int h, double fx, double fy, double cx, double cy);
@@ -111,7 +114,7 @@ private:
 	void estimateSingleLayer(int lvl, Sophus::SE3d& T21, bool use_parallel, bool use_rotational_invariant = false);
 };
 
-}//namespace dierct
+} // namespace dyno
 
 
 #endif

@@ -888,7 +888,14 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     LOG(INFO) << "KltFeatureTracker::trackPoints: x=" << x << ", y=" << y;
 
     LOG(INFO) << "KltFeatureTracker::trackPoints: checking motion_mask, size=" << motion_mask.size();
-    if (motion_mask.at<int>(y, x) != background_label) {
+    // Bounds check before accessing motion_mask
+    if (y < 0 || y >= motion_mask.rows || x < 0 || x >= motion_mask.cols) {
+      LOG(WARNING) << "KltFeatureTracker::trackPoints: keypoint out of bounds (x=" << x << ", y=" << y 
+                   << "), motion_mask size=" << motion_mask.size() << ", skipping";
+      continue;
+    }
+    const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
+    if (instance_label != background_label) {
       LOG(INFO) << "KltFeatureTracker::trackPoints: motion_mask label is not background, skipping";
       continue;
     }

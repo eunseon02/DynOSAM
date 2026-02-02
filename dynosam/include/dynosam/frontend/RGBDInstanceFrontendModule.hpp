@@ -42,6 +42,7 @@
 
 
 #include "dynosam/frontend/vision/FineTracker.hpp"
+#include "dynosam/frontend/vision/DirectTracker.hpp"
 
 namespace dyno {
 
@@ -60,6 +61,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   ObjectMotionSolver::Ptr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
   FineTracker::UniquePtr fine_tracker_;
+  DirectTracker::UniquePtr direct_tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
 
  private:
@@ -86,6 +88,9 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   bool solveCameraMotion(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                          std::optional<gtsam::Rot3> R_curr_ref = {});
 
+  bool DirectTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                   const gtsam::Pose3& T_k_1_k_initial, gtsam::Pose3& T_k_1_k_refined);
+  
   bool FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                  const gtsam::Pose3& T_k_1_k_initial, gtsam::Pose3& T_k_1_k_refined);
 

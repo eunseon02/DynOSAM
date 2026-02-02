@@ -1,4 +1,4 @@
-#include "directTracker.h"
+#include "dynosam/frontend/vision/DirectTracker.hpp"
 #include <chrono>
 #include <cstdlib>
 #include <opencv2/opencv.hpp>
@@ -7,7 +7,7 @@
 
 // #define __VISUALIZE_PHOTOMETRIC__
 
-using namespace direct;
+namespace dyno {
 
 int patternNum = 12;
 int pattern[12][2] = {{0,-2}, {0,2}, {-2,0}, {2,0}, {0,1}, {1,1}, {1,0},{1,-1},{0,-1}, {-1,-1},{-1,0},{-1,1}};
@@ -643,6 +643,8 @@ void DirectTracker::estimatePyramid(Sophus::SE3d &T21, bool use_parallel)
     estimateSingleLayer(0, T21, use_parallel, true);
 
 }
+
+} // namespace dyno
 
 
 
