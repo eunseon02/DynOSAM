@@ -77,7 +77,8 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   tracker_ = std::make_unique<FeatureTracker>(getFrontendParams(), camera_,
                                               display_queue);
   fine_tracker_ = std::make_unique<FineTracker>(camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv(), getFrontendParams().tracker_params.edge_fine.geo_photo_ratio);
-
+  direct_tracker_ = std::make_unique<DirectTracker>(camera->getParams().width(), camera->getParams().height(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
+  
   if (FLAGS_use_frontend_logger) {
     LOG(INFO) << "Using front-end logger!";
     logger_ = std::make_unique<RGBDFrontendLogger>();
@@ -418,6 +419,15 @@ bool RGBDInstanceFrontendModule::solveCameraMotion(
     return true;
   }
 }
+bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+                                           const gtsam::Pose3& T_k_1_k_initial, 
+                                           gtsam::Pose3& T_k_1_k_refined) {
+  utils::ChronoTimingStats timer("frontend.direct_track");
+  // LOG(INFO) << "\033[1;32m[RGBD] DirectTrack called!\033[0m";
+  direct_tracker_->estimatePyramid(T_k_1_k_refined);
+
+  return true;
+}
 
 bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                                            const gtsam::Pose3& T_k_1_k_initial, 
@@ -425,26 +435,9 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr&
   utils::ChronoTimingStats timer("frontend.fine_track");
   // LOG(INFO) << "\033[1;32m[RGBD] FineTrack called!\033[0m";
 
-  // Check if we have sufficient edge features in both frames
-  const size_t min_edges_required = 1;
-  if (frame_k_1->static_edges_.empty() || frame_k->static_edges_.empty()) {
-    VLOG(5) << "FineTrack: insufficient edge features (ref: " 
-             << frame_k_1->static_edges_.size() 
-             << ", cur: " << frame_k->static_edges_.size() << "), skipping";
-    return false;
-  }
-
-  // Check if edges have points
-  size_t ref_edge_points = 0;
-  size_t ref_sampled_points = 0;
-  for (const auto& edge : frame_k_1->static_edges_) {
-    ref_edge_points += edge.mvPoints.size();
-    ref_sampled_points += edge.mvSampledEdgeIndex.size();
-  }
-  size_t cur_edge_points = 0;
-  for (const auto& edge : frame_k->static_edges_) {
-    cur_edge_points += edge.mvPoints.size();
-  }
+  direct_tracker_->estimatePyramid(T_k_1_k_refined);
+  return true;
+}
 
   if (ref_edge_points == 0 || cur_edge_points == 0) {
     VLOG(5) << "FineTrack: edges have no points (ref: " << ref_edge_points

@@ -257,6 +257,16 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
         LOG(ERROR) << "Input image is empty in detectEdge";
         return;
     }
+    
+    // Initialize width and height
+    mWidth = image.cols;
+    mHeight = image.rows;
+    
+    LOG(INFO) << "SparseFeatureDetector::detectEdge: image size=" << image.size() 
+              << ", type=" << image.type() << ", mask.empty()=" << detection_mask.empty()
+              << ", mbUseFixedThreshold=" << mbUseFixedThreshold
+              << ", canny_low=" << mpCanny_lower_bound << ", canny_high=" << mpCanny_higher_bound
+              << ", mWidth=" << mWidth << ", mHeight=" << mHeight;
 
     try {
         cv::Mat grad_x, grad_y;
@@ -265,10 +275,13 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
 
     mMatGradMagnitude.create(image.size(), CV_32F);
     mMatGradAngle.create(image.size(), CV_32F);
+    
+    LOG(INFO) << "SparseFeatureDetector::detectEdge: created gradient matrices, size=" << mMatGradAngle.size();
 
     //-- 计算梯度幅值和方向, magnitude是大小，angle是方向，取值是0~360度
     //-- 最后一个值是false就是L1范数的梯度模值，true就是L2范数的梯度模值
     cv::cartToPolar(grad_x, grad_y, mMatGradMagnitude, mMatGradAngle, true);
+    LOG(INFO) << "SparseFeatureDetector::detectEdge: cartToPolar completed";
 
     if(mbUseFixedThreshold)
     {
@@ -279,17 +292,29 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
         cv::Canny(image, mMatCanny, 0.5*otsu_thresh, otsu_thresh, 3, true);
     }
     
+    // Count Canny edge pixels before mask
+    int canny_pixels_before = cv::countNonZero(mMatCanny);
+    LOG(INFO) << "SparseFeatureDetector::detectEdge: Canny detected " << canny_pixels_before << " edge pixels";
+    
     // Apply detection_mask to Canny result: only detect edges where mask != 0
     if (!detection_mask.empty()) {
       CHECK_EQ(detection_mask.type(), CV_8U);
       CHECK_EQ(mMatCanny.size(), detection_mask.size());
       cv::bitwise_and(mMatCanny, detection_mask, mMatCanny);
+      int canny_pixels_after = cv::countNonZero(mMatCanny);
+      LOG(INFO) << "SparseFeatureDetector::detectEdge: After mask, " << canny_pixels_after << " edge pixels remain";
     }
     
         preprocessCannyMat();
+        int canny_pixels_after_preprocess = cv::countNonZero(mMatCanny);
+        LOG(INFO) << "SparseFeatureDetector::detectEdge: After preprocessCannyMat, " << canny_pixels_after_preprocess << " edge pixels remain";
+        
         regionGrowthClusteringOCanny(mpAngle_bias, detection_mask);
+        LOG(INFO) << "SparseFeatureDetector::detectEdge: After regionGrowthClusteringOCanny, " << mvEdgeClusters.size() << " edge clusters found";
+        
         // cvt2OrderedEdges();
         cvt2OrderedEdgesParallel();
+        LOG(INFO) << "SparseFeatureDetector::detectEdge: After cvt2OrderedEdgesParallel, " << mvEdges.size() << " edges created";
 
         edges = mvEdges;
     } catch (const std::exception& e) {
@@ -352,20 +377,35 @@ void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, cons
     mvEdgeClusters.clear();
     
     //-- 预定义图像的指针
+    if (mMatGradAngle.empty() || mMatCanny.empty()) {
+        LOG(ERROR) << "SparseFeatureDetector::regionGrowthClusteringOCanny: mMatGradAngle or mMatCanny is empty!";
+        return;
+    }
+    
     uint8_t* canny_ptr = mMatCanny.data;
     uint16_t* label_ptr = (uint16_t*)labelMatTmp.data;
     uint8_t* visited_ptr = visitedMat.data;
+    
+    if (mMatGradAngle.empty() || mMatGradAngle.ptr<float>(0) == nullptr) {
+        LOG(ERROR) << "SparseFeatureDetector::regionGrowthClusteringOCanny: mMatGradAngle is invalid!";
+        return;
+    }
+    
     const float* angle_ptr = mMatGradAngle.ptr<float>(0);
     const int canny_step = mMatCanny.step;
     const int label_step = labelMatTmp.step / sizeof(uint16_t);;
     const int visited_step = visitedMat.step;
     const int angle_step = mMatGradAngle.step / sizeof(float);
     
+    LOG(INFO) << "SparseFeatureDetector::regionGrowthClusteringOCanny: initialized pointers, angle_step=" << angle_step;
+    
     // Mask pointer for checking valid detection regions
     const uint8_t* mask_ptr = detection_mask.empty() ? nullptr : detection_mask.ptr<uint8_t>(0);
     const int mask_step = detection_mask.empty() ? 0 : detection_mask.step;
 
     int label_global = 0;
+    int total_clusters_started = 0;
+    int total_clusters_filtered = 0;
     for(int y = 0; y < mMatCanny.rows; ++y)
     {
         for(int x = 0; x < mMatCanny.cols; ++x)
@@ -382,6 +422,7 @@ void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, cons
             //-- 创建一个新的聚类
             std::vector<edgePoint> current_cluster;
             label_global++;
+            total_clusters_started++;
             //-- 更新当前位置的访问状态
             visited_ptr[y * visited_step + x] = 1;
             //-- 每个 cluster 中的点均会获得从0开始的编号
@@ -456,14 +497,19 @@ void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, cons
             }
             
             //-- region growth 结束，一组聚类生成，判断聚类大小，只取大序列
-            if(current_cluster.size()>9)
+            if(current_cluster.size() > 9)
             {
                 //-- 结束一组聚类，此时得到一个完整的current_cluster
                 EdgeCluster edge(current_cluster);
                 mvEdgeClusters.push_back(edge);
+            } else {
+                total_clusters_filtered++;
             }
         }
     }
+    LOG(INFO) << "SparseFeatureDetector::regionGrowthClusteringOCanny: started " << total_clusters_started 
+              << " clusters, filtered " << total_clusters_filtered 
+              << " (size <= 9), kept " << mvEdgeClusters.size() << " clusters";
 }
 
 void SparseFeatureDetector::cvt2OrderedEdgesParallel()
