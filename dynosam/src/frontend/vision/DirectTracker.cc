@@ -7,7 +7,7 @@
 
 // #define __VISUALIZE_PHOTOMETRIC__
 
-namespace dyno {
+namespace direct {
 
 int patternNum = 12;
 int pattern[12][2] = {{0,-2}, {0,2}, {-2,0}, {2,0}, {0,1}, {1,1}, {1,0},{1,-1},{0,-1}, {-1,-1},{-1,0},{-1,1}};
@@ -644,7 +644,7 @@ void DirectTracker::estimatePyramid(Sophus::SE3d &T21, bool use_parallel)
 
 }
 
-} // namespace dyno
+} // namespace direct
 
 
 

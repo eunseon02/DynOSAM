@@ -75,7 +75,7 @@ FeatureContainer ExternalFlowFeatureTracker::trackStatic(
     FeatureTrackerInfo& tracker_info, const cv::Mat&,
     std::vector<Edge>& detected_edges,
     const std::optional<gtsam::Rot3>&) {
-  LOG(INFO) << "ExternalFlowFeatureTracker::trackStatic";
+  VLOG(10) << "ExternalFlowFeatureTracker::trackStatic";
   // ExternalFlowFeatureTracker doesn't detect edges, so clear output
   detected_edges.clear();
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
@@ -253,7 +253,8 @@ FeatureContainer KltFeatureTracker::trackStatic(
     FeatureTrackerInfo& tracker_info, const cv::Mat& detection_mask,
     std::vector<Edge>& detected_edges,
     const std::optional<gtsam::Rot3>& R_km1_k) {
-  LOG(INFO) << "KltFeatureTracker::trackStatic called, FLAGS_use_edge_feature=" << FLAGS_use_edge_feature;
+  VLOG(10) << "KltFeatureTracker::trackStatic called, FLAGS_use_edge_feature="
+           << FLAGS_use_edge_feature;
   // tracked features and new features
   FeatureContainer new_tracks_and_detections;
   EdgeContainer new_edges;
@@ -263,66 +264,74 @@ FeatureContainer KltFeatureTracker::trackStatic(
 
   // Validate image_container before processing
   if (!image_container.hasRgb()) {
-    LOG(ERROR) << "image_container has no RGB, cannot track static features";
+    LOG_EVERY_N(ERROR, 50)
+        << "image_container has no RGB, cannot track static features";
     return new_tracks_and_detections;
   }
 
   cv::Mat current_equialized_greyscale;
-  LOG(INFO) << "KltFeatureTracker::trackStatic: calling equalizeImage for current frame";
+  VLOG(15) << "KltFeatureTracker::trackStatic: calling equalizeImage for current frame";
   equalizeImage(image_container, current_equialized_greyscale);
-  LOG(INFO) << "KltFeatureTracker::trackStatic: equalizeImage completed, image size=" << current_equialized_greyscale.size();
+  VLOG(15) << "KltFeatureTracker::trackStatic: equalizeImage completed, image size="
+           << current_equialized_greyscale.size();
   
   if (current_equialized_greyscale.empty()) {
-    LOG(ERROR) << "current_equialized_greyscale is empty after equalizeImage, cannot track static features";
+    LOG_EVERY_N(ERROR, 50)
+        << "current_equialized_greyscale is empty after equalizeImage, cannot track static features";
     return new_tracks_and_detections;
   }
 
   if (!previous_frame) {
-    LOG(INFO) << "KltFeatureTracker::trackStatic: no previous frame, detecting features";
+    VLOG(10) << "KltFeatureTracker::trackStatic: no previous frame, detecting features";
     FeatureContainer previous_inliers;
     detectFeatures(current_equialized_greyscale, image_container,
                    previous_inliers, new_tracks_and_detections, new_edges,
                    detection_mask);
     
     // Copy detected edges from new_edges to output parameter
-    LOG(INFO) << "KltFeatureTracker::trackStatic (no previous frame): new_edges.size()=" << new_edges.size();
+    VLOG(15) << "KltFeatureTracker::trackStatic (no previous frame): new_edges.size()="
+             << new_edges.size();
     for (const Edge& edge : new_edges) {
       detected_edges.push_back(edge);
     }
-    LOG(INFO) << "KltFeatureTracker::trackStatic (no previous frame): detected_edges.size()=" << detected_edges.size();
+    VLOG(15) << "KltFeatureTracker::trackStatic (no previous frame): detected_edges.size()="
+             << detected_edges.size();
 
     tracker_info.static_track_detections = new_tracks_and_detections.size();
 
     return new_tracks_and_detections;
   } else {
-    LOG(INFO) << "KltFeatureTracker::trackStatic: has previous frame, processing";
+    VLOG(10) << "KltFeatureTracker::trackStatic: has previous frame, processing";
     // we have previous tracks
     // we should have already calculated the processed rgb image from the
     // previous frame
     cv::Mat previous_equialized_greyscale;
-    LOG(INFO) << "KltFeatureTracker::trackStatic: calling equalizeImage for previous frame";
+    VLOG(15) << "KltFeatureTracker::trackStatic: calling equalizeImage for previous frame";
     equalizeImage(previous_frame->image_container_,
                   previous_equialized_greyscale);
-    LOG(INFO) << "KltFeatureTracker::trackStatic: equalizeImage for previous frame completed, image size=" << previous_equialized_greyscale.size();
+    VLOG(15) << "KltFeatureTracker::trackStatic: equalizeImage for previous frame completed, image size="
+             << previous_equialized_greyscale.size();
     
     if (previous_equialized_greyscale.empty()) {
-      LOG(ERROR) << "previous_equialized_greyscale is empty after equalizeImage, cannot track static features";
+      LOG_EVERY_N(ERROR, 50)
+          << "previous_equialized_greyscale is empty after equalizeImage, cannot track static features";
       return new_tracks_and_detections;
     }
 
-    LOG(INFO) << "KltFeatureTracker::trackStatic: collecting previous inliers";
+    VLOG(15) << "KltFeatureTracker::trackStatic: collecting previous inliers";
     FeatureContainer previous_inliers;
     auto iter = previous_frame->static_features_.beginUsable();
     for (const auto& inlier_feature : iter) {
       previous_inliers.add(inlier_feature);
     }
-    LOG(INFO) << "KltFeatureTracker::trackStatic: collected " << previous_inliers.size() << " previous inliers";
+    VLOG(15) << "KltFeatureTracker::trackStatic: collected " << previous_inliers.size()
+             << " previous inliers";
 
     // if we dont actually have any previous tracks
     // this may be in cases where we have an IMU and so we have some odometry
     // but no feature tracks from the previous frame!
     if (previous_inliers.empty()) {
-      LOG(INFO) << "KltFeatureTracker::trackStatic: previous_inliers is empty, detecting new features";
+      VLOG(10) << "KltFeatureTracker::trackStatic: previous_inliers is empty, detecting new features";
       FeatureContainer previous_inliers;
       detectFeatures(current_equialized_greyscale, image_container,
                      previous_inliers, new_tracks_and_detections, new_edges,
@@ -337,17 +346,15 @@ FeatureContainer KltFeatureTracker::trackStatic(
       return new_tracks_and_detections;
     }
 
-    LOG(INFO) << "KltFeatureTracker::trackStatic: previous_inliers not empty, proceeding to trackPoints";
+    VLOG(10) << "KltFeatureTracker::trackStatic: previous_inliers not empty, proceeding to trackPoints";
     // Tracklet ids associated with the set of previous inliers that are now
     // outliers
     TrackletIds previous_outliers;
-    LOG(INFO) << "KltFeatureTracker::trackStatic: created previous_outliers";
-    
-    LOG(INFO) << "KltFeatureTracker::trackStatic: checking image sizes";
-    LOG(INFO) << "KltFeatureTracker::trackStatic: current_equialized_greyscale.size()=" << current_equialized_greyscale.size();
-    LOG(INFO) << "KltFeatureTracker::trackStatic: previous_equialized_greyscale.size()=" << previous_equialized_greyscale.size();
-    LOG(INFO) << "KltFeatureTracker::trackStatic: previous_inliers.size()=" << previous_inliers.size();
-    LOG(INFO) << "KltFeatureTracker::trackStatic: about to call trackPoints";
+    VLOG(15) << "KltFeatureTracker::trackStatic: created previous_outliers";
+    VLOG(15) << "KltFeatureTracker::trackStatic sizes"
+             << " curr_img=" << current_equialized_greyscale.size()
+             << " prev_img=" << previous_equialized_greyscale.size()
+             << " prev_inliers=" << previous_inliers.size();
 
     // track features from the previous frame and detect new ones if necessary
     bool track_result = trackPoints(
@@ -355,20 +362,22 @@ FeatureContainer KltFeatureTracker::trackStatic(
         image_container, previous_inliers, new_tracks_and_detections,
         previous_outliers, tracker_info, detection_mask, R_km1_k, new_edges);
     
-    LOG(INFO) << "KltFeatureTracker::trackStatic: trackPoints returned " << track_result;
+    VLOG(15) << "KltFeatureTracker::trackStatic: trackPoints returned " << track_result;
     
     if (!track_result) {
-      LOG(ERROR) << "KltFeatureTracker::trackStatic: trackPoints failed!";
+      LOG_EVERY_N(ERROR, 50) << "KltFeatureTracker::trackStatic: trackPoints failed!";
       return new_tracks_and_detections;
     }
     // CHECK(trackEdges(current_equialized_greyscale, previous_equialized_greyscale, image_container, previous_inliers, new_tracks_and_detections, previous_outliers, tracker_info, detection_mask, R_km1_k));
 
     // Copy detected edges from new_edges to output parameter
-    LOG(INFO) << "KltFeatureTracker::trackStatic (with previous frame): new_edges.size()=" << new_edges.size();
+    VLOG(15) << "KltFeatureTracker::trackStatic (with previous frame): new_edges.size()="
+             << new_edges.size();
     for (const Edge& edge : new_edges) {
       detected_edges.push_back(edge);
     }
-    LOG(INFO) << "KltFeatureTracker::trackStatic (with previous frame): detected_edges.size()=" << detected_edges.size();
+    VLOG(15) << "KltFeatureTracker::trackStatic (with previous frame): detected_edges.size()="
+             << detected_edges.size();
 
     // after tracking, mark features in the older frame as outliers
     // TODO: (jesse) actually not sure we HAVE to do this, but better to keep
@@ -388,7 +397,7 @@ void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
                                       cv::Mat& equialized_greyscale) const {
   try {
     if (!image_container.hasRgb()) {
-      LOG(ERROR) << "image_container has no RGB in equalizeImage";
+      LOG_EVERY_N(ERROR, 100) << "image_container has no RGB in equalizeImage";
       equialized_greyscale = cv::Mat();
       return;
     }
@@ -396,21 +405,21 @@ void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
     const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container.rgb();
     
     if (!rgb_wrapper.exists()) {
-      LOG(ERROR) << "rgb_wrapper does not exist in equalizeImage";
+      LOG_EVERY_N(ERROR, 100) << "rgb_wrapper does not exist in equalizeImage";
       equialized_greyscale = cv::Mat();
       return;
     }
     
     const cv::Mat& rgb = rgb_wrapper.toRGB();
     if (rgb.empty()) {
-      LOG(ERROR) << "rgb image is empty in equalizeImage";
+      LOG_EVERY_N(ERROR, 100) << "rgb image is empty in equalizeImage";
       equialized_greyscale = cv::Mat();
       return;
     }
     
     cv::Mat mono = ImageType::RGBMono::toMono(rgb_wrapper);
     if (mono.empty()) {
-      LOG(ERROR) << "mono image is empty in equalizeImage";
+      LOG_EVERY_N(ERROR, 100) << "mono image is empty in equalizeImage";
       equialized_greyscale = cv::Mat();
       return;
     }
@@ -420,10 +429,10 @@ void KltFeatureTracker::equalizeImage(const ImageContainer& image_container,
 
     // clahe_->apply(mono, equialized_greyscale);
   } catch (const std::exception& e) {
-    LOG(ERROR) << "Exception in equalizeImage: " << e.what();
+    LOG_EVERY_N(ERROR, 100) << "Exception in equalizeImage: " << e.what();
     equialized_greyscale = cv::Mat();
   } catch (...) {
-    LOG(ERROR) << "Unknown exception in equalizeImage";
+    LOG_EVERY_N(ERROR, 100) << "Unknown exception in equalizeImage";
     equialized_greyscale = cv::Mat();
   }
 }
@@ -450,28 +459,31 @@ std::vector<Edge> KltFeatureTracker::detectEdges(const cv::Mat& processed_img, i
   
   // Validate input image
   if (processed_img.empty()) {
-    LOG(WARNING) << "processed_img is empty, skipping edge detection";
+    VLOG(5) << "processed_img is empty, skipping edge detection";
     detected_edges_.clear();
     return detected_edges;
   }
   
+  // Follow the same pattern as trackStatic -> detectFeatures -> detectEdgeFeatures
   {
     utils::ChronoTimingStats edge_timer("static_feature_track.detect_edges");
-    cv::Mat empty_mask;  // Use empty mask to detect edges on all pixels (static + dynamic regions)
+    // Use empty mask to detect edges on all pixels (static + dynamic regions)
+    // This matches the behavior in detectFeatures (line 607)
+    cv::Mat empty_mask;
     try {
       detected_edges = detectEdgeFeatures(processed_img, number_tracked, empty_mask);
-      LOG(INFO) << "Edge detection: detected " << detected_edges.size() << " edges (FLAGS_use_edge_feature=" 
-                << FLAGS_use_edge_feature << ")";
+      VLOG(15) << "Edge detection: detected " << detected_edges.size()
+               << " edges (FLAGS_use_edge_feature=" << FLAGS_use_edge_feature << ")";
     } catch (const std::exception& e) {
-      LOG(ERROR) << "Exception in detectEdgeFeatures: " << e.what();
+      LOG_EVERY_N(ERROR, 50) << "Exception in detectEdgeFeatures: " << e.what();
       detected_edges.clear();
     } catch (...) {
-      LOG(ERROR) << "Unknown exception in detectEdgeFeatures";
+      LOG_EVERY_N(ERROR, 50) << "Unknown exception in detectEdgeFeatures";
       detected_edges.clear();
     }
   }
   
-  // Validate and store detected edges
+  // Validate and store detected edges (same validation as in detectFeatures)
   // Always update detected_edges_ even if empty
   // This ensures that if edge detection fails in one frame, we can retry in the next frame
   try {
@@ -511,17 +523,48 @@ std::vector<Edge> KltFeatureTracker::detectEdges(const cv::Mat& processed_img, i
       }
     }
     // Always update detected_edges_ with only valid edges
-    // If empty, it means edge detection failed or all edges were invalid
+    // This matches the behavior in detectFeatures (line 615)
     detected_edges_ = valid_edges;
   } catch (const std::exception& e) {
-    LOG(ERROR) << "Exception while storing detected edges: " << e.what();
+    LOG_EVERY_N(ERROR, 50) << "Exception while storing detected edges: " << e.what();
     detected_edges_.clear();
   } catch (...) {
-    LOG(ERROR) << "Unknown exception while storing detected edges";
+    LOG_EVERY_N(ERROR, 50) << "Unknown exception while storing detected edges";
     detected_edges_.clear();
   }
   
   return detected_edges_;
+}
+
+std::vector<Edge> KltFeatureTracker::detectEdges(const ImageContainer& image_container, int number_tracked) {
+  // Follow the same pattern as trackStatic (lines 272-274)
+  // First equalize the image, then detect edges
+  std::vector<Edge> detected_edges;
+  
+  // Validate image_container before processing
+  if (!image_container.hasRgb()) {
+    LOG_EVERY_N(ERROR, 50)
+        << "image_container has no RGB, cannot detect edges";
+    detected_edges_.clear();
+    return detected_edges;
+  }
+
+  // Equalize image (same as trackStatic line 274)
+  cv::Mat equalized_greyscale;
+  VLOG(15) << "KltFeatureTracker::detectEdges: calling equalizeImage";
+  equalizeImage(image_container, equalized_greyscale);
+  VLOG(15) << "KltFeatureTracker::detectEdges: equalizeImage completed, image size="
+           << equalized_greyscale.size();
+  
+  if (equalized_greyscale.empty()) {
+    LOG_EVERY_N(ERROR, 50)
+        << "equalized_greyscale is empty after equalizeImage, cannot detect edges";
+    detected_edges_.clear();
+    return detected_edges;
+  }
+
+  // Call the processed image version (same pattern as trackStatic -> detectFeatures -> detectEdgeFeatures)
+  return detectEdges(equalized_greyscale, number_tracked);
 }
 
 bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
@@ -593,20 +636,20 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
   {
     utils::ChronoTimingStats timer("static_feature_track.detect_edges");
     if (FLAGS_use_edge_feature) {
-      LOG(INFO) << "KltFeatureTracker::detectFeatures: FLAGS_use_edge_feature=true, detecting edges";
+      VLOG(10) << "KltFeatureTracker::detectFeatures: FLAGS_use_edge_feature=true, detecting edges";
       // Use empty mask to detect edges on all pixels (static + dynamic regions)
       cv::Mat empty_mask;
       std::vector<Edge> edges =
           detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
-      LOG(INFO) << "KltFeatureTracker::detectFeatures: detectEdgeFeatures returned " << edges.size() << " edges";
+      VLOG(10) << "KltFeatureTracker::detectFeatures: detectEdgeFeatures returned " << edges.size() << " edges";
       // Add detected edges to output container and internal storage
       for (const Edge& edge : edges) {
         new_edges.add(edge);
       }
       detected_edges_ = edges;
-      LOG(INFO) << "KltFeatureTracker::detectFeatures: after adding edges, new_edges.size()=" << new_edges.size();
+      VLOG(10) << "KltFeatureTracker::detectFeatures: after adding edges, new_edges.size()=" << new_edges.size();
     } else {
-      LOG(INFO) << "KltFeatureTracker::detectFeatures: FLAGS_use_edge_feature=false, skipping edge detection";
+      VLOG(10) << "KltFeatureTracker::detectFeatures: FLAGS_use_edge_feature=false, skipping edge detection";
     }
   }
 
@@ -644,78 +687,52 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
                                     const cv::Mat& detection_mask,
                                     const std::optional<gtsam::Rot3>& R_km1_k,
                                     EdgeContainer& new_edges) {
-  LOG(INFO) << "KltFeatureTracker::trackPoints: entered function";
+  VLOG(20) << "KltFeatureTracker::trackPoints: entered function";
   if (current_processed_img.empty() || previous_processed_img.empty() ||
       previous_features.empty()) {
-    LOG(WARNING) << "KltFeatureTracker::trackPoints: input validation failed";
+    VLOG(5) << "KltFeatureTracker::trackPoints: input validation failed";
     return false;
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: input validation passed";
+  VLOG(20) << "KltFeatureTracker::trackPoints: input validation passed";
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: clearing outlier_previous_features";
   outlier_previous_features.clear();
-  LOG(INFO) << "KltFeatureTracker::trackPoints: cleared outlier_previous_features";
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: getting motion_mask";
   const cv::Mat& motion_mask = image_container.objectMotionMask();
-  LOG(INFO) << "KltFeatureTracker::trackPoints: got motion_mask, size=" << motion_mask.size();
   
-  LOG(INFO) << "KltFeatureTracker::trackPoints: getting frame_k";
   const FrameId frame_k = image_container.frameId();
-  LOG(INFO) << "KltFeatureTracker::trackPoints: got frame_k=" << frame_k;
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: creating vectors";
   std::vector<uchar> klt_status;
   std::vector<float> err;
   // All tracklet ids from the set of previous features to track
   TrackletIds tracklet_ids;
-  LOG(INFO) << "KltFeatureTracker::trackPoints: created vectors";
 
   // cannot just get inliers (becuase in reality this is)
-  LOG(INFO) << "KltFeatureTracker::trackPoints: calling previous_features.toOpenCV, previous_features.size()=" << previous_features.size();
+  VLOG(20) << "KltFeatureTracker::trackPoints: previous_features.size()="
+           << previous_features.size();
   std::vector<cv::Point2f> previous_pts =
       previous_features.toOpenCV(&tracklet_ids, true);
-  LOG(INFO) << "KltFeatureTracker::trackPoints: toOpenCV completed, previous_pts.size()=" << previous_pts.size() << ", tracklet_ids.size()=" << tracklet_ids.size();
   CHECK_EQ(previous_pts.size(), previous_features.size());
   CHECK_EQ(previous_pts.size(), tracklet_ids.size());
-  LOG(INFO) << "KltFeatureTracker::trackPoints: size checks passed";
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: defining KLT parameters";
   static const cv::Size klt_window_size(21, 21);  // Window size for KLT
   static const int klt_max_level = 3;             // Max pyramid levels for KLT
   static const cv::TermCriteria klt_criteria = cv::TermCriteria(
       cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 30, 0.03);
-  LOG(INFO) << "KltFeatureTracker::trackPoints: KLT parameters defined";
 
   // used as flags argument for calcOpticalFlowPyrLK - initially starts as
   // default (0) flag
-  LOG(INFO) << "KltFeatureTracker::trackPoints: initializing klt_flags and current_points";
   int klt_flags = 0;
   std::vector<cv::Point2f> current_points;
-  LOG(INFO) << "KltFeatureTracker::trackPoints: checking R_km1_k, has_value=" << R_km1_k.has_value();
   if (R_km1_k) {
-    LOG(INFO) << "KltFeatureTracker::trackPoints: calling predictKeypointsGivenRotation";
     predictKeypointsGivenRotation(current_points, previous_pts, *R_km1_k);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: predictKeypointsGivenRotation completed, current_points.size()=" << current_points.size();
     klt_flags = cv::OPTFLOW_USE_INITIAL_FLOW;
   } else {
-    LOG(INFO) << "KltFeatureTracker::trackPoints: no R_km1_k, resizing current_points to " << previous_pts.size();
     // as per documentation the vector must have the same size as the input
     current_points.resize(previous_pts.size());
-    LOG(INFO) << "KltFeatureTracker::trackPoints: resized current_points, size=" << current_points.size();
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: checking current_points size";
   CHECK_EQ(current_points.size(), previous_pts.size());
-  LOG(INFO) << "KltFeatureTracker::trackPoints: current_points size check passed";
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: entering KLT calculation block";
   {
-    LOG(INFO) << "KltFeatureTracker::trackPoints: about to call calcOpticalFlowPyrLK";
-    LOG(INFO) << "KltFeatureTracker::trackPoints: previous_processed_img.size()=" << previous_processed_img.size() 
-              << ", current_processed_img.size()=" << current_processed_img.size()
-              << ", previous_pts.size()=" << previous_pts.size()
-              << ", current_points.size()=" << current_points.size();
-    
     // utils::ChronoTimingStats timer("static_feature_track.calc_LK");
     // cv::cuda::GpuMat gpu_prev_img(previous_processed_img);
     // cv::cuda::GpuMat gpu_current_img(current_processed_img);
@@ -733,67 +750,49 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     // d_points2.download(current_points);
     // d_status.download(status);
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: calling cv::calcOpticalFlowPyrLK";
     cv::calcOpticalFlowPyrLK(previous_processed_img, current_processed_img,
                              previous_pts, current_points, klt_status, err,
                              klt_window_size, klt_max_level, klt_criteria,
                              klt_flags);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: calcOpticalFlowPyrLK completed, klt_status.size()=" << klt_status.size();
 
     // if we used OPTFLOW_USE_INITIAL_FLOW check that we actually got good flow
-    LOG(INFO) << "KltFeatureTracker::trackPoints: checking klt_flags, value=" << klt_flags;
     if (klt_flags == cv::OPTFLOW_USE_INITIAL_FLOW) {
-      LOG(INFO) << "KltFeatureTracker::trackPoints: OPTFLOW_USE_INITIAL_FLOW was used, checking success count";
       static constexpr int kMinSuccessTracks = 10;
       int succ_num = 0;
       for (size_t i = 0; i < klt_status.size(); i++) {
         if (klt_status[i]) succ_num++;
       }
-      LOG(INFO) << "KltFeatureTracker::trackPoints: success count=" << succ_num;
       if (succ_num < kMinSuccessTracks) {
-        LOG(WARNING) << "Using initial flow for KLT tracking failed: only "
-                     << succ_num << " tracked!";
-        LOG(INFO) << "KltFeatureTracker::trackPoints: retrying calcOpticalFlowPyrLK without initial flow";
+        LOG_EVERY_N(WARNING, 50) << "Using initial flow for KLT tracking failed: only "
+                                 << succ_num << " tracked! Retrying without initial flow.";
         cv::calcOpticalFlowPyrLK(previous_processed_img, current_processed_img,
                                  previous_pts, current_points, klt_status, err,
                                  klt_window_size, klt_max_level, klt_criteria);
-        LOG(INFO) << "KltFeatureTracker::trackPoints: retry completed";
       }
     }
 
     // check flow back
-    LOG(INFO) << "KltFeatureTracker::trackPoints: preparing reverse flow check";
     std::vector<cv::Point2f> reverse_previous_feature_points = current_points;
-    LOG(INFO) << "KltFeatureTracker::trackPoints: created reverse_previous_feature_points, size=" << reverse_previous_feature_points.size();
     std::vector<uchar> klt_reverse_status;
-    LOG(INFO) << "KltFeatureTracker::trackPoints: calling reverse calcOpticalFlowPyrLK";
     cv::calcOpticalFlowPyrLK(current_processed_img, previous_processed_img,
                              current_points, reverse_previous_feature_points,
                              klt_reverse_status, err, cv::Size(21, 21), 5);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: reverse calcOpticalFlowPyrLK completed, klt_reverse_status.size()=" << klt_reverse_status.size();
     CHECK_EQ(klt_reverse_status.size(), tracklet_ids.size());
-    LOG(INFO) << "KltFeatureTracker::trackPoints: reverse status size check passed";
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: defining distance lambda";
     auto distance = [](const cv::Point2f& pt1,
                        const cv::Point2f& pt2) -> float {
       float dx = pt1.x - pt2.x;
       float dy = pt1.y - pt2.y;
       return std::sqrt(dx * dx + dy * dy);
     };
-    LOG(INFO) << "KltFeatureTracker::trackPoints: distance lambda defined";
     
     // update klt status based on result from flow
-    LOG(INFO) << "KltFeatureTracker::trackPoints: starting status update loop, klt_status.size()=" << klt_status.size();
     for (size_t i = 0; i < klt_status.size(); i++) {
-      LOG(INFO) << "KltFeatureTracker::trackPoints: processing index " << i << " of " << klt_status.size();
       const bool both_status_good =
           klt_status.at(i) && klt_reverse_status.at(i);
-      LOG(INFO) << "KltFeatureTracker::trackPoints: both_status_good=" << both_status_good;
       const bool within_distance =
           distance(previous_pts.at(i), reverse_previous_feature_points.at(i)) <=
           0.5;
-      LOG(INFO) << "KltFeatureTracker::trackPoints: within_distance=" << within_distance;
 
       if (both_status_good && within_distance) {
         klt_status.at(i) = 1;
@@ -801,24 +800,15 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
         klt_status.at(i) = 0;
       }
     }
-    LOG(INFO) << "KltFeatureTracker::trackPoints: status update loop completed";
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: exiting KLT calculation block";
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: checking sizes before geometric verification";
   CHECK_EQ(previous_pts.size(), current_points.size());
   CHECK_EQ(klt_status.size(), current_points.size());
-  LOG(INFO) << "KltFeatureTracker::trackPoints: size checks passed, previous_pts.size()=" << previous_pts.size() 
-            << ", current_points.size()=" << current_points.size() 
-            << ", klt_status.size()=" << klt_status.size();
 
-  LOG(INFO) << "KltFeatureTracker::trackPoints: creating good_current, good_previous, good_tracklets vectors";
   std::vector<cv::Point2f> good_current, good_previous;
   TrackletIds good_tracklets;
-  LOG(INFO) << "KltFeatureTracker::trackPoints: vectors created";
   
   // can also look at the err?
-  LOG(INFO) << "KltFeatureTracker::trackPoints: filtering good tracks, klt_status.size()=" << klt_status.size();
   for (size_t i = 0; i < klt_status.size(); i++) {
     if (klt_status[i]) {
       good_current.push_back(current_points.at(i));
@@ -826,19 +816,19 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       good_tracklets.push_back(tracklet_ids.at(i));
     }
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: filtering completed, good_current.size()=" << good_current.size();
+  VLOG(20) << "KltFeatureTracker::trackPoints: good_current.size()=" << good_current.size();
 
   // Geometric verification using RANSAC
-  LOG(INFO) << "KltFeatureTracker::trackPoints: calling geometricVerification, good_previous.size()=" << good_previous.size() 
+  VLOG(20) << "KltFeatureTracker::trackPoints: calling geometricVerification, good_previous.size()=" << good_previous.size() 
             << ", good_current.size()=" << good_current.size();
   const cv::Mat geometric_verification_mask =
       geometricVerification(good_previous, good_current);
-  LOG(INFO) << "KltFeatureTracker::trackPoints: geometricVerification completed, mask.rows=" << geometric_verification_mask.rows;
+  VLOG(20) << "KltFeatureTracker::trackPoints: geometricVerification completed, mask.rows=" << geometric_verification_mask.rows;
   
-  LOG(INFO) << "KltFeatureTracker::trackPoints: creating verified vectors";
+  VLOG(20) << "KltFeatureTracker::trackPoints: creating verified vectors";
   std::vector<cv::Point2f> verified_current, verified_previous;
   TrackletIds verified_tracklets;
-  LOG(INFO) << "KltFeatureTracker::trackPoints: iterating over geometric_verification_mask, rows=" << geometric_verification_mask.rows;
+  VLOG(20) << "KltFeatureTracker::trackPoints: iterating over geometric_verification_mask, rows=" << geometric_verification_mask.rows;
   for (int i = 0; i < geometric_verification_mask.rows; ++i) {
     if (geometric_verification_mask.at<uchar>(i)) {
       verified_current.push_back(good_current.at(i));
@@ -846,82 +836,82 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       verified_tracklets.push_back(good_tracklets.at(i));
     }
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: verified vectors populated, verified_current.size()=" << verified_current.size();
+  VLOG(20) << "KltFeatureTracker::trackPoints: verified vectors populated, verified_current.size()=" << verified_current.size();
 
   CHECK_EQ(verified_tracklets.size(), verified_current.size());
-  LOG(INFO) << "KltFeatureTracker::trackPoints: verified size check passed";
+  VLOG(20) << "KltFeatureTracker::trackPoints: verified size check passed";
 
   // add to tracked features
-  LOG(INFO) << "KltFeatureTracker::trackPoints: starting to add tracked features, verified_tracklets.size()=" << verified_tracklets.size();
+  VLOG(20) << "KltFeatureTracker::trackPoints: starting to add tracked features, verified_tracklets.size()=" << verified_tracklets.size();
   for (size_t i = 0; i < verified_tracklets.size(); i++) {
-    LOG(INFO) << "KltFeatureTracker::trackPoints: processing verified feature " << i << " of " << verified_tracklets.size();
+    VLOG(25) << "KltFeatureTracker::trackPoints: processing verified feature " << i << " of " << verified_tracklets.size();
     TrackletId tracklet_id = verified_tracklets.at(i);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: tracklet_id=" << tracklet_id;
+    VLOG(25) << "KltFeatureTracker::trackPoints: tracklet_id=" << tracklet_id;
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: getting previous_feature by tracklet_id";
+    VLOG(25) << "KltFeatureTracker::trackPoints: getting previous_feature by tracklet_id";
     const Feature::Ptr previous_feature =
         previous_features.getByTrackletId(tracklet_id);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: got previous_feature, ptr=" << (void*)previous_feature.get();
+    VLOG(25) << "KltFeatureTracker::trackPoints: got previous_feature, ptr=" << (void*)previous_feature.get();
     
     if (!previous_feature) {
-      LOG(ERROR) << "KltFeatureTracker::trackPoints: previous_feature is null for tracklet_id=" << tracklet_id;
+      LOG_EVERY_N(ERROR, 100) << "KltFeatureTracker::trackPoints: previous_feature is null for tracklet_id=" << tracklet_id;
       continue;
     }
     
     // TODO: check this is the same as the previos kp to guarnatee order?
-    LOG(INFO) << "KltFeatureTracker::trackPoints: checking if previous_feature is usable";
+    VLOG(25) << "KltFeatureTracker::trackPoints: checking if previous_feature is usable";
     if (!previous_feature->usable()) {
-      LOG(WARNING) << "KltFeatureTracker::trackPoints: previous_feature is not usable for tracklet_id=" << tracklet_id;
+      VLOG(25) << "KltFeatureTracker::trackPoints: previous_feature is not usable for tracklet_id=" << tracklet_id;
       continue;
     }
-    LOG(INFO) << "KltFeatureTracker::trackPoints: previous_feature is usable";
+    VLOG(25) << "KltFeatureTracker::trackPoints: previous_feature is usable";
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: getting verified_current point at index " << i;
+    VLOG(25) << "KltFeatureTracker::trackPoints: getting verified_current point at index " << i;
     const cv::Point2f kp_cv = verified_current.at(i);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: kp_cv=(" << kp_cv.x << ", " << kp_cv.y << ")";
+    VLOG(25) << "KltFeatureTracker::trackPoints: kp_cv=(" << kp_cv.x << ", " << kp_cv.y << ")";
     
     Keypoint kp(static_cast<double>(kp_cv.x), static_cast<double>(kp_cv.y));
-    LOG(INFO) << "KltFeatureTracker::trackPoints: created Keypoint";
+    VLOG(25) << "KltFeatureTracker::trackPoints: created Keypoint";
 
     const int x = functional_keypoint::u(kp);
     const int y = functional_keypoint::v(kp);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: x=" << x << ", y=" << y;
+    VLOG(25) << "KltFeatureTracker::trackPoints: x=" << x << ", y=" << y;
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: checking motion_mask, size=" << motion_mask.size();
+    VLOG(25) << "KltFeatureTracker::trackPoints: checking motion_mask, size=" << motion_mask.size();
     // Bounds check before accessing motion_mask
     if (y < 0 || y >= motion_mask.rows || x < 0 || x >= motion_mask.cols) {
-      LOG(WARNING) << "KltFeatureTracker::trackPoints: keypoint out of bounds (x=" << x << ", y=" << y 
+      VLOG(25) << "KltFeatureTracker::trackPoints: keypoint out of bounds (x=" << x << ", y=" << y 
                    << "), motion_mask size=" << motion_mask.size() << ", skipping";
       continue;
     }
     const ObjectId instance_label = motion_mask.at<ObjectId>(y, x);
     if (instance_label != background_label) {
-      LOG(INFO) << "KltFeatureTracker::trackPoints: motion_mask label is not background, skipping";
+      VLOG(25) << "KltFeatureTracker::trackPoints: motion_mask label is not background, skipping";
       continue;
     }
-    LOG(INFO) << "KltFeatureTracker::trackPoints: motion_mask label is background";
+    VLOG(25) << "KltFeatureTracker::trackPoints: motion_mask label is background";
 
-    LOG(INFO) << "KltFeatureTracker::trackPoints: checking if keypoint is contained and within shrunken image";
+    VLOG(25) << "KltFeatureTracker::trackPoints: checking if keypoint is contained and within shrunken image";
     if (!(camera_->isKeypointContained(kp) && isWithinShrunkenImage(kp))) {
-      LOG(INFO) << "KltFeatureTracker::trackPoints: keypoint not contained or not within shrunken image, skipping";
+      VLOG(25) << "KltFeatureTracker::trackPoints: keypoint not contained or not within shrunken image, skipping";
       continue;
     }
-    LOG(INFO) << "KltFeatureTracker::trackPoints: keypoint is valid";
+    VLOG(25) << "KltFeatureTracker::trackPoints: keypoint is valid";
     
-    LOG(INFO) << "KltFeatureTracker::trackPoints: calling constructStaticFeatureFromPrevious";
+    VLOG(25) << "KltFeatureTracker::trackPoints: calling constructStaticFeatureFromPrevious";
     Feature::Ptr feature = constructStaticFeatureFromPrevious(
         kp, previous_feature, tracklet_id, frame_k);
-    LOG(INFO) << "KltFeatureTracker::trackPoints: constructStaticFeatureFromPrevious returned, ptr=" << (void*)feature.get();
+    VLOG(25) << "KltFeatureTracker::trackPoints: constructStaticFeatureFromPrevious returned, ptr=" << (void*)feature.get();
     
     if (feature) {
-      LOG(INFO) << "KltFeatureTracker::trackPoints: adding feature to tracked_features";
+      VLOG(25) << "KltFeatureTracker::trackPoints: adding feature to tracked_features";
       tracked_features.add(feature);
-      LOG(INFO) << "KltFeatureTracker::trackPoints: feature added";
+      VLOG(25) << "KltFeatureTracker::trackPoints: feature added";
     } else {
-      LOG(WARNING) << "KltFeatureTracker::trackPoints: constructStaticFeatureFromPrevious returned nullptr";
+      VLOG(25) << "KltFeatureTracker::trackPoints: constructStaticFeatureFromPrevious returned nullptr";
     }
   }
-  LOG(INFO) << "KltFeatureTracker::trackPoints: finished adding tracked features";
+  VLOG(20) << "KltFeatureTracker::trackPoints: finished adding tracked features";
 
   // Get the outliers associated with the previous_features container by taking
   // the set difference between the verified and total tracklets NOTE: verified
@@ -945,7 +935,7 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       static_cast<size_t>(params_.min_features_per_frame);
   bool need_edge_detection = FLAGS_use_edge_feature;
   
-  LOG(INFO) << "KltFeatureTracker::trackPoints: need_feature_detection=" << need_feature_detection 
+  VLOG(10) << "KltFeatureTracker::trackPoints: need_feature_detection=" << need_feature_detection 
             << ", need_edge_detection=" << need_edge_detection 
             << ", FLAGS_use_edge_feature=" << FLAGS_use_edge_feature
             << ", tracked_features.size()=" << tracked_features.size()
@@ -956,27 +946,27 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
     
     if (need_feature_detection) {
       // if we do not have enough features, detect more on the current image
-      LOG(INFO) << "KltFeatureTracker::trackPoints: calling detectFeatures";
+      VLOG(10) << "KltFeatureTracker::trackPoints: calling detectFeatures";
       detectFeatures(current_processed_img, image_container, tracked_features,
                      tracked_features, new_edges, detection_mask);
-      LOG(INFO) << "KltFeatureTracker::trackPoints: after detectFeatures, new_edges.size()=" << new_edges.size();
+      VLOG(10) << "KltFeatureTracker::trackPoints: after detectFeatures, new_edges.size()=" << new_edges.size();
       tracker_info.new_static_detections = true;
       const auto n_detected = tracked_features.size() - n_tracked;
       tracker_info.static_track_detections += n_detected;
     } else {
       // Only detect edges without detecting new point features
       // This ensures edges are detected every frame for FineTracker
-      LOG(INFO) << "KltFeatureTracker::trackPoints: calling detectEdges";
+      VLOG(10) << "KltFeatureTracker::trackPoints: calling detectEdges";
       std::vector<Edge> detected_edges = detectEdges(current_processed_img, tracked_features.size());
-      LOG(INFO) << "KltFeatureTracker::trackPoints: detectEdges returned " << detected_edges.size() << " edges";
+      VLOG(10) << "KltFeatureTracker::trackPoints: detectEdges returned " << detected_edges.size() << " edges";
       // Add detected edges to new_edges container
       for (const Edge& edge : detected_edges) {
         new_edges.add(edge);
       }
-      LOG(INFO) << "KltFeatureTracker::trackPoints: after adding edges, new_edges.size()=" << new_edges.size();
+      VLOG(10) << "KltFeatureTracker::trackPoints: after adding edges, new_edges.size()=" << new_edges.size();
     }
   } else {
-    LOG(INFO) << "KltFeatureTracker::trackPoints: skipping edge detection (need_feature_detection=" 
+    VLOG(10) << "KltFeatureTracker::trackPoints: skipping edge detection (need_feature_detection=" 
               << need_feature_detection << ", need_edge_detection=" << need_edge_detection << ")";
   }
 

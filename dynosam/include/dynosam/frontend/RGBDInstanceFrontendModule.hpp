@@ -30,6 +30,13 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+
+#include <tbb/concurrent_queue.h>
+
 #include <gtsam/navigation/NavState.h>
 
 #include "dynosam/frontend/FrontendModule.hpp"
@@ -43,6 +50,12 @@
 
 #include "dynosam/frontend/vision/FineTracker.hpp"
 #include "dynosam/frontend/vision/DirectTracker.hpp"
+
+// Edge-based local mapping includes
+#include "dynosam_common/EdgeSelector.hpp"
+#include "dynosam/backend/edge_map/KeyFrame.hpp"
+#include "dynosam/backend/edge_map/localMap.hpp"
+#include "dynosam/backend/edge_map/Optimizer.hpp"
 
 namespace dyno {
 
@@ -60,8 +73,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   // TODO: shared pointer for now during debig phase!
   ObjectMotionSolver::Ptr object_motion_solver_;
   FeatureTracker::UniquePtr tracker_;
-  FineTracker::UniquePtr fine_tracker_;
-  DirectTracker::UniquePtr direct_tracker_;
+  fine::FineTracker::UniquePtr fine_tracker_;
+  direct::DirectTracker::UniquePtr direct_tracker_;
   RGBDFrontendLogger::UniquePtr logger_;
 
  private:
@@ -138,6 +151,49 @@ class RGBDInstanceFrontendModule : public FrontendModule {
 
   //! Last keyframe
   Frame::Ptr frame_lkf_;
+
+  // Edge-based local mapping components (from localmapping.cc)
+  edge_map::localMapPtr local_map_;
+  std::unique_ptr<edgeSelector> edge_selector_;
+  gtsam::Pose3 pose_last_edge_kf_;  // Last edge keyframe pose
+  bool is_edge_initialized_{false};
+  
+  // Sliding window parameters
+  int window_size_{10};
+  int window_step_{4};
+  float kf_rot_thres_{5.0f};      // degrees
+  float kf_trans_thres_{0.1f};    // meters
+  
+  // Threading for async keyframe processing
+  mutable std::mutex local_map_mutex_;  // Protects local_map_ during optimization (mutable for const getLocalMap)
+  tbb::concurrent_bounded_queue<KeyFramePtr> optimization_queue_;
+  std::thread processing_thread_;
+  std::atomic<bool> processing_running_{false};
+  std::atomic<bool> optimization_in_progress_{false};  // Track if optimization is currently running
+  
+  // Processing thread function
+  void processingThreadFunction();
+  
+  // Edge-based keyframe management
+  bool shouldAddEdgeKeyFrame(const gtsam::Pose3& pose_curr, 
+                             const gtsam::Pose3& pose_last) const;
+  void processEdgeKeyFrame(const Frame::Ptr& frame, const gtsam::Pose3& pose_curr);
+  KeyFramePtr createKeyFrameFromFrame(const Frame::Ptr& frame, 
+                                                 const gtsam::Pose3& pose_curr);
+  void optimizeEdgeSlidingWindow();
+  void updateEdgeSlidingWindow();
+  
+  // Sliding window keyframe processing and optimization trigger
+  // Called by processing thread after popping from queue
+  void processSlidingWindowKeyFrame(KeyFramePtr kf);
+  
+ public:
+  // Getter for local map (for visualization)
+  // Thread-safe: returns a copy of the pointer (shared_ptr is thread-safe for reading)
+  edge_map::localMapPtr getLocalMap() const {
+    std::lock_guard<std::mutex> lock(local_map_mutex_);
+    return local_map_;
+  }
 };
 
 }  // namespace dyno

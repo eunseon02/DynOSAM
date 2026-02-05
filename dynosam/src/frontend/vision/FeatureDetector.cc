@@ -262,7 +262,7 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
     mWidth = image.cols;
     mHeight = image.rows;
     
-    LOG(INFO) << "SparseFeatureDetector::detectEdge: image size=" << image.size() 
+    VLOG(10) << "SparseFeatureDetector::detectEdge: image size=" << image.size() 
               << ", type=" << image.type() << ", mask.empty()=" << detection_mask.empty()
               << ", mbUseFixedThreshold=" << mbUseFixedThreshold
               << ", canny_low=" << mpCanny_lower_bound << ", canny_high=" << mpCanny_higher_bound
@@ -276,12 +276,12 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
     mMatGradMagnitude.create(image.size(), CV_32F);
     mMatGradAngle.create(image.size(), CV_32F);
     
-    LOG(INFO) << "SparseFeatureDetector::detectEdge: created gradient matrices, size=" << mMatGradAngle.size();
+    VLOG(10) << "SparseFeatureDetector::detectEdge: created gradient matrices, size=" << mMatGradAngle.size();
 
     //-- 计算梯度幅值和方向, magnitude是大小，angle是方向，取值是0~360度
     //-- 最后一个值是false就是L1范数的梯度模值，true就是L2范数的梯度模值
     cv::cartToPolar(grad_x, grad_y, mMatGradMagnitude, mMatGradAngle, true);
-    LOG(INFO) << "SparseFeatureDetector::detectEdge: cartToPolar completed";
+    VLOG(10) << "SparseFeatureDetector::detectEdge: cartToPolar completed";
 
     if(mbUseFixedThreshold)
     {
@@ -294,7 +294,7 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
     
     // Count Canny edge pixels before mask
     int canny_pixels_before = cv::countNonZero(mMatCanny);
-    LOG(INFO) << "SparseFeatureDetector::detectEdge: Canny detected " << canny_pixels_before << " edge pixels";
+    VLOG(10) << "SparseFeatureDetector::detectEdge: Canny detected " << canny_pixels_before << " edge pixels";
     
     // Apply detection_mask to Canny result: only detect edges where mask != 0
     if (!detection_mask.empty()) {
@@ -302,19 +302,19 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
       CHECK_EQ(mMatCanny.size(), detection_mask.size());
       cv::bitwise_and(mMatCanny, detection_mask, mMatCanny);
       int canny_pixels_after = cv::countNonZero(mMatCanny);
-      LOG(INFO) << "SparseFeatureDetector::detectEdge: After mask, " << canny_pixels_after << " edge pixels remain";
+      VLOG(10) << "SparseFeatureDetector::detectEdge: After mask, " << canny_pixels_after << " edge pixels remain";
     }
     
         preprocessCannyMat();
         int canny_pixels_after_preprocess = cv::countNonZero(mMatCanny);
-        LOG(INFO) << "SparseFeatureDetector::detectEdge: After preprocessCannyMat, " << canny_pixels_after_preprocess << " edge pixels remain";
+        VLOG(10) << "SparseFeatureDetector::detectEdge: After preprocessCannyMat, " << canny_pixels_after_preprocess << " edge pixels remain";
         
         regionGrowthClusteringOCanny(mpAngle_bias, detection_mask);
-        LOG(INFO) << "SparseFeatureDetector::detectEdge: After regionGrowthClusteringOCanny, " << mvEdgeClusters.size() << " edge clusters found";
+        VLOG(10) << "SparseFeatureDetector::detectEdge: After regionGrowthClusteringOCanny, " << mvEdgeClusters.size() << " edge clusters found";
         
         // cvt2OrderedEdges();
         cvt2OrderedEdgesParallel();
-        LOG(INFO) << "SparseFeatureDetector::detectEdge: After cvt2OrderedEdgesParallel, " << mvEdges.size() << " edges created";
+        VLOG(10) << "SparseFeatureDetector::detectEdge: After cvt2OrderedEdgesParallel, " << mvEdges.size() << " edges created";
 
         edges = mvEdges;
     } catch (const std::exception& e) {

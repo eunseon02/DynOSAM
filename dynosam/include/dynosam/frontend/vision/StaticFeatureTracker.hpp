@@ -82,6 +82,38 @@ class StaticFeatureTracker : public FeatureTrackerBase {
 
   virtual std::vector<Edge> getDetectedEdges() const = 0;
 
+  /**
+   * @brief Detects and validates edges from the processed image.
+   * 
+   * This function handles edge detection, validation, and storage of detected edges.
+   * It is separate from detectFeatures to allow independent edge detection.
+   * 
+   * @param processed_img The processed grayscale image
+   * @param number_tracked Number of currently tracked features (for logging)
+   * @return std::vector<Edge> Validated detected edges
+   */
+  virtual std::vector<Edge> detectEdges(const cv::Mat& processed_img, int number_tracked) {
+    // Default implementation returns empty vector
+    // Subclasses should override this
+    return std::vector<Edge>();
+  }
+
+  /**
+   * @brief Detects and validates edges from ImageContainer (following trackStatic pattern).
+   * 
+   * This function first equalizes the image (like trackStatic does), then detects edges.
+   * It follows the same pattern as trackStatic -> equalizeImage -> detectEdges.
+   * 
+   * @param image_container The image container with RGB image
+   * @param number_tracked Number of currently tracked features (for logging)
+   * @return std::vector<Edge> Validated detected edges
+   */
+  virtual std::vector<Edge> detectEdges(const ImageContainer& image_container, int number_tracked) {
+    // Default implementation returns empty vector
+    // Subclasses should override this
+    return std::vector<Edge>();
+  }
+
  protected:
   std::vector<Edge> detected_edges_;
 };
@@ -164,6 +196,32 @@ class KltFeatureTracker : public StaticFeatureTracker {
       std::vector<Edge>& detected_edges,
       const std::optional<gtsam::Rot3>& R_km1_k = {}) override;
 
+  /**
+   * @brief Detects and validates edges from the processed image.
+   * 
+   * This function handles edge detection, validation, and storage of detected edges.
+   * It is separate from detectFeatures to allow independent edge detection.
+   * 
+   * @param processed_img The processed grayscale image
+   * @param number_tracked Number of currently tracked features (for logging)
+   * @return std::vector<Edge> Validated detected edges
+   */
+  std::vector<Edge> detectEdges(const cv::Mat& processed_img, int number_tracked) override;
+
+  /**
+   * @brief Detects and validates edges from ImageContainer (following trackStatic pattern).
+   * 
+   * This function first equalizes the image (like trackStatic does), then detects edges.
+   * It follows the same pattern as trackStatic -> equalizeImage -> detectEdges.
+   * 
+   * @param image_container The image container with RGB image
+   * @param number_tracked Number of currently tracked features (for logging)
+   * @return std::vector<Edge> Validated detected edges
+   */
+  std::vector<Edge> detectEdges(const ImageContainer& image_container, int number_tracked) override;
+
+  std::vector<Edge> getDetectedEdges() const override;
+
  private:
   /**
    * @brief Outputs a CLAHE equalized greyscale image from the input RGB, which
@@ -197,20 +255,6 @@ class KltFeatureTracker : public StaticFeatureTracker {
   std::vector<Edge> detectEdgeFeatures(const cv::Mat& processed_img,
                                        int number_tracked,
                                        const cv::Mat& mask = cv::Mat());
-
-  /**
-   * @brief Detects and validates edges from the processed image.
-   * 
-   * This function handles edge detection, validation, and storage of detected edges.
-   * It is separate from detectFeatures to allow independent edge detection.
-   * 
-   * @param processed_img The processed grayscale image
-   * @param number_tracked Number of currently tracked features (for logging)
-   * @return std::vector<Edge> Validated detected edges
-   */
-  std::vector<Edge> detectEdges(const cv::Mat& processed_img, int number_tracked);
-
-  std::vector<Edge> getDetectedEdges() const override;
 
   // image container associated with the processed image
   bool detectFeatures(const cv::Mat& processed_img,

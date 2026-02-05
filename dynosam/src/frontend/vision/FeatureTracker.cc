@@ -41,6 +41,7 @@
 
 // Declare the flag defined in RGBDInstanceFrontendModule.cc
 DECLARE_bool(use_dynamic_track);
+DECLARE_bool(use_static_track);
 
 #include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/vision/VisionTools.hpp"
@@ -134,20 +135,31 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   std::vector<Edge> static_edges;
   FeatureTrackerInfo static_tracker_info = info_copy;
 
-  // Static tracking
-  VLOG(20) << "Starting static track";
-  utils::ChronoTimingStats static_track_timer("static_feature_track");
-  
-  // Validate input_images_copy before tracking
-  if (!input_images_copy.hasRgb()) {
-    LOG(ERROR) << "input_images_copy has no RGB, cannot track static features";
-    static_features = FeatureContainer();
+  // Static tracking (if enabled)
+  if (FLAGS_use_static_track) {
+    VLOG(20) << "Starting static track";
+    utils::ChronoTimingStats static_track_timer("static_feature_track");
+    
+    // Validate input_images_copy before tracking
+    if (!input_images_copy.hasRgb()) {
+      LOG(ERROR) << "input_images_copy has no RGB, cannot track static features";
+      static_features = FeatureContainer();
+    } else {
+      static_features = static_feature_tracker_->trackStatic(
+          previous_frame_copy, input_images_copy, static_tracker_info,
+          boundary_mask_copy, static_edges, R_km1_k);
+    }
+    VLOG(20) << "Static edges: " << static_edges.size();
   } else {
-    static_features = static_feature_tracker_->trackStatic(
-        previous_frame_copy, input_images_copy, static_tracker_info,
-        boundary_mask_copy, static_edges, R_km1_k);
+    VLOG(20) << "Skipping static track (FLAGS_use_static_track=false)";
+    static_features = FeatureContainer();
+    // Still detect edges even if static tracking is disabled
+    if (input_images_copy.hasRgb()) {
+      static_edges = static_feature_tracker_->detectEdges(input_images_copy, static_features.size());
+    } else {
+      static_edges.clear();
+    }
   }
-  VLOG(20) << "Static edges: " << static_edges.size();
 
   // Dynamic tracking (if enabled)
   if (FLAGS_use_dynamic_track) {

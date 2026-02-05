@@ -418,15 +418,35 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
   // right now we cannot use the viz when we load from file as do not load
   // certain data values (e.g. camera and debug info) so these will be null -
   // the viz's try and access these causing a seg fault. Just need to add checks
+  LOG(INFO) << "DIAGNOSTIC: Setting up visualization pipelines";
+  LOG(INFO) << "  - use_offline_frontend_: " << use_offline_frontend_;
+  LOG(INFO) << "  - backend: " << (backend ? "valid" : "null");
+  LOG(INFO) << "  - backend_display: " << (backend_display ? "valid" : "null");
+  LOG(INFO) << "  - frontend_display: " << (frontend_display ? "valid" : "null");
+  
   if (!use_offline_frontend_) {
     if (backend && backend_display) {
+      LOG(INFO) << "DIAGNOSTIC: Creating BackendVizPipeline";
       backend_viz_pipeline_ = std::make_unique<BackendVizPipeline>(
           "backend-viz-pipeline", &backend_output_queue_, backend_display);
       backend_viz_pipeline_->parallelRun(parallel_run);
+      LOG(INFO) << "DIAGNOSTIC: BackendVizPipeline created and started";
+    } else {
+      LOG(WARNING) << "DIAGNOSTIC: BackendVizPipeline NOT created - backend=" 
+                   << (backend ? "valid" : "null") 
+                   << ", backend_display=" << (backend_display ? "valid" : "null");
     }
-    frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>(
-        "frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);
-    frontend_viz_pipeline_->parallelRun(parallel_run);
+    if (frontend_display) {
+      LOG(INFO) << "DIAGNOSTIC: Creating FrontendVizPipeline";
+      frontend_viz_pipeline_ = std::make_unique<FrontendVizPipeline>(
+          "frontend-viz-pipeline", &frontend_viz_input_queue_, frontend_display);
+      frontend_viz_pipeline_->parallelRun(parallel_run);
+      LOG(INFO) << "DIAGNOSTIC: FrontendVizPipeline created and started";
+    } else {
+      LOG(WARNING) << "DIAGNOSTIC: FrontendVizPipeline NOT created - frontend_display is null";
+    }
+  } else {
+    LOG(WARNING) << "DIAGNOSTIC: Visualization pipelines NOT created because use_offline_frontend_=true";
   }
 }
 

@@ -46,13 +46,23 @@
 #include "dynosam/pipeline/PipelineManager.hpp"
 #include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
-#include "dynosam/visualizer/TrajectoryLoggerDisplay.hpp"
+#include "dynosam/visualizer/VoViewer.hpp"
 #include "dynosam/backend/BackendFactory.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
+#include "dynosam/backend/edge_map/localMap.hpp"
+#include "dynosam/backend/edge_map/KeyFrame.hpp"
+#include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam_common/viz/Colour.hpp"
+#include "dynosam_common/Edge.hpp"
 #include "dynosam_cv/Camera.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_nn/PyObjectDetector.hpp"
+
+#include <pangolin/pangolin.h>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <chrono>
 
 // ROS2 includes for DynoPipelineManagerRos (optional)
 #ifdef HAVE_DYNOSAM_ROS
@@ -73,6 +83,14 @@ DEFINE_string(
     params_folder_path, "",
     "Path to the folder containing the yaml files with the VIO parameters. "
     "If empty, tries to find params in install/share/dynosam/params or src/core/dynosam/params");
+
+// Declare FLAGS_use_edge_feature (defined in RGBDInstanceFrontendModule.cc)
+DECLARE_bool(use_edge_feature);
+
+// Global variable to store RGBDInstanceFrontendModule pointer for edge visualization
+// This is a workaround to access local map from the display
+// Note: This needs to be set from the pipeline manager or frontend module
+static std::weak_ptr<dyno::RGBDInstanceFrontendModule> g_frontend_module;
 
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
@@ -112,6 +130,130 @@ void LoadTUMImages(const std::string& strAssociationFilename,
     }
   }
   fAssociation.close();
+}
+
+// Helper functions for edge-based visualization (from localmapping.cc)
+namespace edge_viz {
+  // Camera parameters for visualization (similar to localmapping.cc)
+  static float fx = 525.0f;
+  static float fy = 525.0f;
+  static float cx = 319.5f;
+  static float cy = 239.5f;
+  
+  void setCameraParams(float fx_val, float fy_val, float cx_val, float cy_val) {
+    fx = fx_val;
+    fy = fy_val;
+    cx = cx_val;
+    cy = cy_val;
+  }
+  
+  // Visualize association result (from localmapping.cc lines 27-78)
+  void visualizeAssociationResult(const edge_map::localMapPtr& pLocalMap,
+                                  std::vector<std::vector<cv::Point3d>>& clusterClouds,
+                                  std::vector<cv::Vec3b>& clusterCloudColors) {
+    clusterClouds.clear();
+    clusterCloudColors.clear();
+    for(const auto& cluster : pLocalMap->mvEleEdgeClusters) {
+      std::vector<unsigned int> edgeIDs = cluster.mvElementEdgeIDs;
+      std::vector<int> edgeIdx;
+      if(edgeIDs.size() < 5) continue;
+      for(size_t i = 0; i < edgeIDs.size(); ++i) {
+        int index = pLocalMap->mmElementID2index.at(edgeIDs[i]);
+        edgeIdx.push_back(index);
+      }
+
+      // Edge cluster point cloud
+      std::vector<cv::Point3d> clusterCloud;
+      cv::Vec3b color = cluster.visColor;
+
+      for(size_t i = 0; i < edgeIdx.size(); ++i) {
+        int kf_edge_idx = pLocalMap->mvElementEdges[edgeIdx[i]].kf_edge_idx;
+        int kf_id = pLocalMap->mvElementEdges[edgeIdx[i]].kf_id;
+        int kf_idx = pLocalMap->mmKFID2KFindex.at(kf_id);
+
+        Edge& edge = pLocalMap->mvKeyFrames[kf_idx]->mvEdges[kf_edge_idx];
+        // Global pose of current map element edge
+        Eigen::Matrix4d Trans_curr = pLocalMap->mvKeyFrames[kf_idx]->KF_pose_g.matrix();
+        // Relative pose of current map element edge w.r.t. local map reference frame
+        Eigen::Matrix4d Trans_ref_curr = Trans_curr;
+        // Point cloud of single edge map element
+        std::vector<cv::Point3d> cloud;
+        // Calculate point cloud of single edge map element
+        for(size_t j = 0; j < edge.mvPoints.size(); ++j) {
+          orderedEdgePoint pt = edge.mvPoints[j];
+          // Calculate 3D coordinates
+          float x = (float(pt.x) - cx)/fx * pt.depth;
+          float y = (float(pt.y) - cy)/fy * pt.depth;
+          float z = pt.depth;
+          Eigen::Vector4d points(x,y,z,1);
+          // Reproject to get new projection points
+          points = Trans_ref_curr*points;
+          cv::Point3d point(points.x(),points.y(),points.z());
+          cloud.push_back(point);
+        }
+        clusterCloud.insert(clusterCloud.end(), cloud.begin(), cloud.end());
+      }
+      clusterClouds.push_back(clusterCloud);
+      clusterCloudColors.push_back(color);
+    }
+  }
+
+  // Visualize merged local map (from localmapping.cc lines 80-92)
+  void visualizeMergedLocalMap(const edge_map::localMapPtr& pLocalMap,
+                               std::vector<std::vector<cv::Point3d>>& mergedClouds) {
+    mergedClouds.clear();
+    mergedClouds.reserve(pLocalMap->mvEleEdgeClusters.size());
+
+    for(const auto& cluster : pLocalMap->mvEleEdgeClusters) {
+      if(cluster.mbMerged == false) continue;
+      std::vector<cv::Point3d> merged_cloud = cluster.mvMergedCloud_ref;
+      mergedClouds.push_back(merged_cloud);
+    }
+  }
+
+  // Get sliding window poses (from localmapping.cc lines 107-115)
+  void getSlidingWindow(const edge_map::localMapPtr& pLocalMap,
+                        std::vector<Eigen::Matrix4d>& sliding_window) {
+    sliding_window.clear();
+    for(size_t i = 0; i < pLocalMap->mvKeyFrames.size(); ++i) {
+      sliding_window.push_back(pLocalMap->mvKeyFrames[i]->KF_pose_g.matrix());
+    }
+  }
+  
+  // Save edge keyframe trajectory in TUM format
+  void saveEdgeKeyFrameTrajectory(const std::string& filename,
+                                   const edge_map::localMapPtr& pLocalMap) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+      LOG(WARNING) << "Failed to open edge keyframe trajectory file: " << filename;
+      return;
+    }
+    
+    for(size_t i = 0; i < pLocalMap->mvKeyFrames.size(); ++i) {
+      const auto& kf = pLocalMap->mvKeyFrames[i];
+      const Sophus::SE3d& pose = kf->KF_pose_g;
+      const Eigen::Matrix4d& T = pose.matrix();
+      
+      // Extract translation
+      double tx = T(0, 3);
+      double ty = T(1, 3);
+      double tz = T(2, 3);
+      
+      // Extract rotation matrix and convert to quaternion
+      Eigen::Matrix3d R = T.block<3, 3>(0, 0);
+      Eigen::Quaterniond q(R);
+      
+      // TUM format: timestamp tx ty tz qx qy qz qw
+      file << std::fixed << std::setprecision(6)
+           << kf->KF_stamp << " "
+           << tx << " " << ty << " " << tz << " "
+           << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+    }
+    
+    file.close();
+    LOG(INFO) << "Saved " << pLocalMap->mvKeyFrames.size() 
+              << " edge keyframe poses to: " << filename;
+  }
 }
 
 int main(int argc, char* argv[]) {
@@ -302,28 +444,174 @@ int main(int argc, char* argv[]) {
           FLAGS_path_to_tum, FLAGS_tum_association, camera_params);
       
       // Create displays
-      auto frontend_display = std::make_shared<OpenCVFrontendDisplay>();
       std::string output_file = FLAGS_output_trajectory.empty() ? "/tmp/trajectory.txt" : FLAGS_output_trajectory;
-      auto trajectory_logger = std::make_shared<TrajectoryLoggerDisplay>(output_file, true);
+      LOG(INFO) << "Creating displays with output file prefix: " << output_file;
       
-      // Create a BackendDisplay adapter that wraps TrajectoryLoggerDisplay
-      class TrajectoryBackendDisplayAdapter : public BackendDisplay {
+      // Create a FrontendDisplay that also logs frontend poses and visualizes them
+      // and includes edge-based visualization using VoViewer
+      class FrontendPoseLoggerDisplay : public OpenCVFrontendDisplay {
        public:
-        TrajectoryBackendDisplayAdapter(TrajectoryLoggerDisplay::Ptr logger)
-            : logger_(logger) {}
+        FrontendPoseLoggerDisplay(const std::string& output_file, bool show_window = true,
+                                  const CameraParams& camera_params = CameraParams())
+            : output_file_(output_file), show_window_(show_window), 
+              edge_viewer_running_(false),
+              camera_params_(camera_params) {
+          frontend_trajectory_file_.open(output_file_ + ".frontend");
+          if (!frontend_trajectory_file_.is_open()) {
+            LOG(WARNING) << "Failed to open frontend trajectory output file: " << output_file_ + ".frontend";
+          } else {
+            LOG(INFO) << "Frontend pose logging to: " << output_file_ + ".frontend";
+          }
+          
+          // Set camera params for edge visualization
+          edge_viz::setCameraParams(camera_params.fx(), camera_params.fy(), 
+                                     camera_params.cu(), camera_params.cv());
+          
+          if (show_window_) {
+            // Start edge viewer thread if edge features are enabled (uses VoViewer)
+            if (FLAGS_use_edge_feature) {
+              edge_viewer_running_ = true;
+              edge_viewer_thread_ = std::thread(&FrontendPoseLoggerDisplay::runEdgeViewer, this);
+              LOG(INFO) << "Edge-based VoViewer thread started";
+            }
+          }
+        }
+        
+        ~FrontendPoseLoggerDisplay() {
+          if (frontend_trajectory_file_.is_open()) {
+            frontend_trajectory_file_.close();
+            LOG(INFO) << "Frontend trajectory saved to: " << output_file_ + ".frontend" 
+                      << " (total poses: " << frontend_pose_count_ << ")";
+          }
+          
+          if (edge_viewer_running_) {
+            edge_viewer_running_ = false;
+            if (edge_viewer_thread_.joinable()) {
+              edge_viewer_thread_.join();
+            }
+            LOG(INFO) << "Edge-based VoViewer thread stopped";
+          }
+        }
         
        protected:
-        void spinOnceImpl(const BackendOutputPacket::ConstPtr& input) override {
-          if (logger_) {
-            logger_->spin(input);
+        void spinOnceImpl(const VisionImuPacket::ConstPtr& input) override {
+          // Call base class
+          OpenCVFrontendDisplay::spinOnceImpl(input);
+          
+          // Log frontend pose if available
+          if (input && frontend_trajectory_file_.is_open()) {
+            const gtsam::Pose3& pose = input->cameraPose();
+            const double timestamp = input->timestamp();
+            const FrameId frame_id = input->frameId();
+            
+            const gtsam::Point3& t = pose.translation();
+            const gtsam::Rot3& R = pose.rotation();
+            const gtsam::Quaternion q = R.toQuaternion();
+            
+            // Save to file (TUM format: timestamp tx ty tz qx qy qz qw)
+            frontend_trajectory_file_ << std::fixed << std::setprecision(6) 
+                                       << timestamp << " "
+                                       << t.x() << " " << t.y() << " " << t.z() << " "
+                                       << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+            frontend_trajectory_file_.flush();
+            
+            frontend_pose_count_++;
+            if (frontend_pose_count_ % 10 == 0) {
+              LOG(INFO) << "Frontend pose logged: frame=" << frame_id 
+                        << ", timestamp=" << timestamp 
+                        << ", total_poses=" << frontend_pose_count_;
+            }
           }
         }
         
        private:
-        TrajectoryLoggerDisplay::Ptr logger_;
+        void runEdgeViewer() {
+          // Create VoViewer for edge-based visualization
+          voViewer viewer("DynoSAM: Edge-based Local Map Viewer");
+          
+          std::vector<std::vector<cv::Point3d>> clusterClouds;
+          std::vector<cv::Vec3b> clusterCloudColors;
+          std::vector<std::vector<cv::Point3d>> localMapClouds;
+          std::vector<Eigen::Matrix4d> slidingWindow;
+          std::vector<std::vector<cv::Point3d>> environment_cloud;
+          
+          // Save edge keyframe trajectory
+          std::string edge_kf_trajectory_file = output_file_ + ".edge_kf";
+          std::ofstream edge_kf_trajectory_file_stream;
+          bool trajectory_file_opened = false;
+          
+          LOG(INFO) << "Edge-based VoViewer loop started";
+          
+          while (edge_viewer_running_) {
+            // Try to get frontend module
+            auto frontend_module = g_frontend_module.lock();
+            if (frontend_module) {
+              auto local_map = frontend_module->getLocalMap();
+              if (local_map && !local_map->mvKeyFrames.empty()) {
+                // Update visualization data
+                edge_viz::visualizeAssociationResult(local_map, clusterClouds, clusterCloudColors);
+                edge_viz::visualizeMergedLocalMap(local_map, localMapClouds);
+                edge_viz::getSlidingWindow(local_map, slidingWindow);
+                
+                // Update viewer
+                viewer.update_covisibilityCloud(clusterClouds, clusterCloudColors);
+                viewer.update_localMap(localMapClouds);
+                viewer.update_sliding_window(slidingWindow);
+                
+                // Update trajectory
+                if (!local_map->mvKeyFrames.empty()) {
+                  const auto& latest_kf = local_map->mvKeyFrames.back();
+                  Eigen::Matrix4d pose = latest_kf->KF_pose_g.matrix();
+                  viewer.update_Trajectory(pose);
+                  viewer.set_CameraPoses(pose);
+                }
+                
+                // Save edge keyframe trajectory
+                if (!trajectory_file_opened) {
+                  edge_kf_trajectory_file_stream.open(edge_kf_trajectory_file);
+                  if (edge_kf_trajectory_file_stream.is_open()) {
+                    trajectory_file_opened = true;
+                    LOG(INFO) << "Opened edge keyframe trajectory file: " << edge_kf_trajectory_file;
+                  }
+                }
+                
+                if (trajectory_file_opened) {
+                  edge_viz::saveEdgeKeyFrameTrajectory(edge_kf_trajectory_file, local_map);
+                  trajectory_file_opened = false; // Save once per update
+                }
+              }
+            }
+            
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+          }
+          
+          if (trajectory_file_opened) {
+            edge_kf_trajectory_file_stream.close();
+          }
+          
+          LOG(INFO) << "Edge-based VoViewer loop ended";
+        }
+        
+        std::string output_file_;
+        std::ofstream frontend_trajectory_file_;
+        size_t frontend_pose_count_ = 0;
+        
+        // Edge-based visualization (uses VoViewer)
+        bool show_window_;
+        std::atomic<bool> edge_viewer_running_;
+        std::thread edge_viewer_thread_;
+        CameraParams camera_params_;
       };
       
-      auto backend_display = std::make_shared<TrajectoryBackendDisplayAdapter>(trajectory_logger);
+      auto frontend_display = std::make_shared<FrontendPoseLoggerDisplay>(output_file, true, camera_params);
+
+      // Backend display can be a no-op if trajectory logging is disabled
+      class NullBackendDisplay : public BackendDisplay {
+       protected:
+        void spinOnceImpl(const BackendOutputPacket::ConstPtr&) override {}
+      };
+
+      auto backend_display = std::make_shared<NullBackendDisplay>();
       
       // Create backend factory
       // Use DefaultRegularBackendModuleFactory which is BackendFactory<NoVizPolicy, RegularBackendModuleTraits::MapType>

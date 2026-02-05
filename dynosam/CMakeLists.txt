@@ -31,6 +31,9 @@ find_package(dynosam_cv REQUIRED)
 find_package(dynosam_opt REQUIRED)
 find_package(dynosam_nn REQUIRED)
 
+# Find Pangolin (required for TrajectoryLoggerDisplay)
+find_package(Pangolin REQUIRED)
+
 
 
 include(VerifyGtsamConfig)
@@ -109,6 +112,12 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/rgbd/impl/test_HybridFormulations.cc
   src/backend/ParallelObjectISAM.cc
   src/backend/ParallelHybridBackendModule.cc
+  # src/backend/EdgeBackendModule.cc
+  src/backend/edge_map/KeyFrame.cc
+  src/backend/edge_map/localMap.cc
+  src/backend/edge_map/Optimizer.cc
+  src/backend/edge_map/FeatureMerger.cc
+  src/backend/edge_map/ElementEdge.cc
 
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
@@ -129,6 +138,8 @@ add_library(${PROJECT_NAME} SHARED
   src/visualizer/OpenCVFrontendDisplay.cc
   src/visualizer/TrajectoryLoggerDisplay.cc
   src/visualizer/Visualizer-Definitions.cc
+  src/visualizer/VisualizerBase.cc
+  src/visualizer/VoViewer.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}
@@ -146,6 +157,11 @@ target_link_libraries(${PROJECT_NAME}
   dynosam_cv::dynosam_cv
   dynosam_opt::dynosam_opt
   dynosam_nn::dynosam_nn
+  pango_core
+  pango_opengl
+  pango_display
+  pango_windowing
+  pango_vars
   # rclcpp::rclcpp
   # opengv
   # nlohmann_json::nlohmann_json
@@ -260,6 +276,11 @@ ament_export_targets(export_${PROJECT_NAME} HAS_LIBRARY_TARGET)
 add_executable(dyno_sam example/dyno_sam.cc)
 target_link_libraries(dyno_sam
   ${PROJECT_NAME}
+  pango_core
+  pango_opengl
+  pango_display
+  pango_windowing
+  pango_vars
 )
 
 # add_executable(dyno_sam_tum example/dyno_sam_tum.cc)

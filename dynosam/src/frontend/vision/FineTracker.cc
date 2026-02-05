@@ -5,6 +5,8 @@
 
 using namespace dyno;
 
+namespace fine {
+
 FineTracker::FineTracker(double fx, double fy, double cx, double cy, float ratio): 
 mFx(fx), mFy(fy), mCx(cx), mCy(cy), geo_photo_ratio(ratio)
 {
@@ -165,7 +167,7 @@ void FineTracker::associationRef2CurParallel()
     
     // Validate edge_point_lookup_map_ for current frame
     if (mpF_cur->edge_point_lookup_map_.empty()) {
-        LOG(WARNING) << "FineTracker: mpF_cur->edge_point_lookup_map_ is empty, cannot perform association";
+        VLOG(5) << "FineTracker: mpF_cur->edge_point_lookup_map_ is empty, cannot perform association";
         mvGeometryPoints.clear();
         return;
     }
@@ -174,7 +176,7 @@ void FineTracker::associationRef2CurParallel()
     int ref_edge_num = mpF_ref->static_edges_.size();
     
     if (ref_edge_num == 0) {
-        LOG(WARNING) << "FineTracker: mpF_ref->static_edges_ is empty";
+        VLOG(5) << "FineTracker: mpF_ref->static_edges_ is empty";
         mvGeometryPoints.clear();
         return;
     }
@@ -911,34 +913,36 @@ void FineTracker::estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_
     mpF_ref = frame_ref;
     T_cur_ref = T21;
 
-    LOG(INFO) << "FineTracker::estimate: calling associationRef2CurParallel";
+    VLOG(10) << "FineTracker::estimate: calling associationRef2CurParallel";
     associationRef2CurParallel();
-    LOG(INFO) << "FineTracker::estimate: associationRef2CurParallel completed, mvGeometryPoints.size()=" << mvGeometryPoints.size();
+    VLOG(10) << "FineTracker::estimate: associationRef2CurParallel completed, mvGeometryPoints.size()=" << mvGeometryPoints.size();
 
     // Check if we have matched geometry points after association
     // If empty, cannot proceed with registration (will cause "Input vector is empty" error)
     if (mvGeometryPoints.empty()) {
-        LOG(WARNING) << "FineTracker::estimate: mvGeometryPoints is empty after association, returning";
+        VLOG(5) << "FineTracker::estimate: mvGeometryPoints is empty after association, returning";
         // Keep the initial pose T21 unchanged
         return;
     }
 
-    LOG(INFO) << "FineTracker::estimate: geo_photo_ratio=" << geo_photo_ratio;
+    VLOG(10) << "FineTracker::estimate: geo_photo_ratio=" << geo_photo_ratio;
     if(geo_photo_ratio > 0)
     {
-        LOG(INFO) << "FineTracker::estimate: calling RegistrationCombinedParallel";
+        VLOG(10) << "FineTracker::estimate: calling RegistrationCombinedParallel";
         RegistrationCombinedParallel();
-        LOG(INFO) << "FineTracker::estimate: RegistrationCombinedParallel completed";
+        VLOG(10) << "FineTracker::estimate: RegistrationCombinedParallel completed";
     }else{
-        LOG(INFO) << "FineTracker::estimate: calling RegistrationGeometricParallel";
+        VLOG(10) << "FineTracker::estimate: calling RegistrationGeometricParallel";
         RegistrationGeometricParallel();
-        LOG(INFO) << "FineTracker::estimate: RegistrationGeometricParallel completed";
+        VLOG(10) << "FineTracker::estimate: RegistrationGeometricParallel completed";
     }
 
     //-- 此时得到 T_cur_ref
 
     //-- 求逆获得参考帧到当前帧的位姿变换
-    LOG(INFO) << "FineTracker::estimate: computing inverse of T_cur_ref";
+    VLOG(10) << "FineTracker::estimate: computing inverse of T_cur_ref";
     T21 = T_cur_ref.inverse();
-    LOG(INFO) << "FineTracker::estimate: completed successfully";
+    VLOG(10) << "FineTracker::estimate: completed successfully";
 }
+
+} // namespace fine

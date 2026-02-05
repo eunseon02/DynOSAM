@@ -25,7 +25,7 @@
 #define PYR_SCALE 0.5
 #define NAN FLT_MAX
 
-namespace dyno{
+namespace direct{
     
 
 typedef Eigen::Matrix<float,  6, 6> Mat66f;
@@ -62,7 +62,7 @@ public:
 class DirectTracker {
 public:
 	DYNO_POINTER_TYPEDEFS(DirectTracker)
-	EIGEN_MAKE_ALIGNED_OPERATOR_NEW;
+        EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 	DirectTracker(int w, int h, double fx, double fy, double cx, double cy);
 
@@ -114,7 +114,6 @@ private:
 	void estimateSingleLayer(int lvl, Sophus::SE3d& T21, bool use_parallel, bool use_rotational_invariant = false);
 };
 
-} // namespace dyno
-
+} // namespace direct
 
 #endif

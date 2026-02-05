@@ -27,7 +27,10 @@
 
 #include <chrono> //-- 计时函数
 
-namespace dyno {
+namespace fine {
+
+// Bring Frame into fine namespace scope
+using dyno::Frame;
 
 typedef Eigen::Matrix<float,  6, 6> Mat66f;
 typedef Eigen::Matrix<double, 6, 6> Mat66d;
@@ -103,8 +106,6 @@ class FineTracker {
         
     };
 
-
-}//namespace dyno
-
+} // namespace fine
 
 #endif
