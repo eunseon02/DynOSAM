@@ -1,6 +1,6 @@
 #pragma once
 
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "dynosam_common/DynamicObjects.hpp"
 #include "dynosam_common/utils/Macros.hpp"

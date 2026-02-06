@@ -34,6 +34,7 @@
 
 #include "dynosam/backend/BackendFactory.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
+#include "dynosam/frontend/FrontendModuleAccessor.hpp"
 #include "dynosam_common/logger/Logger.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
 #include "dynosam_opt/Map.hpp"
@@ -315,6 +316,13 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         frontend = std::make_shared<RGBDInstanceFrontendModule>(
             params_, camera, &display_queue_);
         LOG(INFO) << "Made RGBDInstanceFrontendModule";
+        
+        // Set g_frontend_module for VoViewer visualization
+        // This allows VoViewer to access frontend module's local map data
+        auto rgbd_frontend = std::static_pointer_cast<RGBDInstanceFrontendModule>(frontend);
+        g_frontend_module = rgbd_frontend;
+        LOG(INFO) << "g_frontend_module set for VoViewer visualization";
+        
         // need to make the derived pipeline so we can set parallel run etc
         // the manager takes a pointer to the base MIMO so we can have different
         // types of pipelines

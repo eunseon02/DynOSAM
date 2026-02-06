@@ -2,7 +2,7 @@
 
 #include <glog/logging.h>
 
-#include <opencv4/opencv2/core/cuda_stream_accessor.hpp>
+#include <opencv2/core/cuda_stream_accessor.hpp>
 
 namespace dyno {
 

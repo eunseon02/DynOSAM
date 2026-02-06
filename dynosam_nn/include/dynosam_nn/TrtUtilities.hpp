@@ -42,7 +42,7 @@
 #include <filesystem>
 #include <memory>
 #include <numeric>
-#include <opencv4/opencv2/core/mat.hpp>
+#include <opencv2/core/mat.hpp>
 #include <optional>
 #include <string>
 

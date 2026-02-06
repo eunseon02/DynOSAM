@@ -108,26 +108,41 @@ if "$USE_NVIDIA"; then
     #     --name=$CONTAINER_NAME \
     #     $CONTAINER_IMAGE_NAME "$@"
     docker run \
-        --privileged \
-        --gpus all \
-        -i -d \
-        --volume $XSOCK:$XSOCK:rw \
+        -it \
+        --init \
+        --ipc=host \
+        --shm-size=8G \
+        --gpus=all \
+        -p 7822:22 \
+        -e DISPLAY=$DISPLAY \
+        -e XDG_RUNTIME_DIR=/run/user/1000 \
+        -e QT_GRAPHICSSYSTEM=native \
+        -e USER=$USER \
+        -e UDEV=1 \
+        -e LIBUSB_DEBUG=1 \
+        -e NVIDIA_DRIVER_CAPABILITIES=all \
+        -e QT_X11_NO_MITSHM=1 \
+        -e QT_QPA_PLATFORM=xcb \
+        -e WAYLAND_DISPLAY= \
+        -e XDG_SESSION_TYPE=x11 \
+        -e EGL_PLATFORM=x11 \
+        -e __GLX_VENDOR_LIBRARY_NAME=nvidia \
+        -v /usr/share/glvnd/egl_vendor.d/10_nvidia.json:/usr/share/glvnd/egl_vendor.d/10_nvidia.json:ro \
+        -e __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json \
+        -e LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu/nvidia:/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/lib/x86_64-linux-gnu \
+        --device=/dev/dri \
+        -v /dev/dri:/dev/dri \
+        -v /dev/nvidia0:/dev/nvidia0 \
+        -v /dev/nvidiactl:/dev/nvidiactl \
+        -v /dev/nvidia-uvm:/dev/nvidia-uvm \
+        -v /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools \
         -v $LOCAL_DATA_FOLDER:$CONTAINER_DATA_FOLDER \
         -v $LOCAL_RESULTS_FOLDER:$CONTAINER_RESULTS_FOLDER \
         -v $LOCAL_DYNO_SAM_FOLDER:$CONTAINER_WORKSPACE_FOLDER \
         -v $LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER:$CONTAINER_WORKSPACE_FOLDER_THIRD_PARTY \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        --env DISPLAY=$DISPLAY \
-        --env XAUTHORITY=$XAUTH \
-        --env QT_X11_NO_MITSHM=0 \
-        --env QT_X11_NO_XRENDER=0 \
-        --volume $XAUTH:$XAUTH:rw \
-        --net host \
-        --pid host \
-        --ipc host \
-        -it \
+        -v $XSOCK:$XSOCK:rw \
         --name=$CONTAINER_NAME \
-        $CONTAINER_IMAGE_NAME
+        $CONTAINER_IMAGE_NAME /bin/bash
 fi
 
 # FOR NOW?

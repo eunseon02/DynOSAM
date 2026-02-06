@@ -1,7 +1,7 @@
 #pragma once
 #include <pybind11/numpy.h>
 
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <string>
 #include <vector>
 

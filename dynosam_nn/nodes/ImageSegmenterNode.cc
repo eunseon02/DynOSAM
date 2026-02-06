@@ -4,7 +4,7 @@
 #include <cuda_runtime_api.h>
 
 #include <boost/python.hpp>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "cv_bridge/cv_bridge.hpp"
 #include "dynosam_common/utils/Statistics.hpp"

@@ -6,7 +6,7 @@
 #include <boost/python.hpp>
 #include <boost/python/numpy.hpp>
 #include <iostream>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 #include <typeinfo>
 
 #include "dynosam_nn/bindings/PyBoostWrapper.hpp"

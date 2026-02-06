@@ -80,6 +80,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/Frame.cc
   src/frontend/FrontendPipeline.cc
   src/frontend/FrontendModule.cc
+  src/frontend/FrontendModuleAccessor.cc
   src/frontend/FrontendParams.cc
   src/frontend/RGBDInstanceFrontendModule.cc
   src/frontend/VisionImuOutputPacket.cc
@@ -283,6 +284,17 @@ target_link_libraries(dyno_sam
   pango_vars
 )
 
+# Test VoViewer executable
+add_executable(test_voviewer example/test_voviewer.cc)
+target_link_libraries(test_voviewer
+  ${PROJECT_NAME}
+  pango_core
+  pango_opengl
+  pango_display
+  pango_windowing
+  pango_vars
+)
+
 # add_executable(dyno_sam_tum example/dyno_sam_tum.cc)
 # target_link_libraries(dyno_sam
 #   ${PROJECT_NAME}
@@ -291,6 +303,11 @@ target_link_libraries(dyno_sam
 
 install(TARGETS
   dyno_sam
+  DESTINATION lib/${PROJECT_NAME})
+
+# install test executable too (so it appears under install/dynosam/lib/dynosam/)
+install(TARGETS
+  test_voviewer
   DESTINATION lib/${PROJECT_NAME})
 
 

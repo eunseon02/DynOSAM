@@ -2,7 +2,7 @@
 
 #include <glog/logging.h>
 
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 namespace bp = boost::python;
 namespace np = boost::python::numpy;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <opencv4/opencv2/core/cuda.hpp>
-#include <opencv4/opencv2/core/types.hpp>
+#include <opencv2/core/cuda.hpp>
+#include <opencv2/core/types.hpp>
 
 #include "dynosam_common/DynamicObjects.hpp"
 

@@ -14,6 +14,11 @@ pangolin::OpenGlMatrix Eigen2gl(Eigen::Matrix4f matrix)
 voViewer::voViewer(std::string windowName)
 {
     windowName_ = windowName;
+    
+    // Disable X11 shared memory to avoid MESA errors in Docker/remote environments
+    setenv("LIBGL_ALWAYS_INDIRECT", "1", 0);
+    setenv("MESA_GL_VERSION_OVERRIDE", "3.3", 0);
+    
     pangolin::CreateWindowAndBind(windowName, 640,480);
     glEnable(GL_DEPTH_TEST);
     //3D visualizing window
@@ -59,6 +64,8 @@ void voViewer::render_loop()
 
     while (!pangolin::ShouldQuit() && !stop_)
     {
+        // Clear screen first with white background
+        glClearColor(1.0f,1.0f,1.0f,1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         pangolin::OpenGlMatrix glMatrix = Eigen2gl(gtPose.cast<float>());
@@ -70,7 +77,10 @@ void voViewer::render_loop()
 
         if(stop_) break;
         d_cam_->Activate(*s_cam_);
+        
+        // Clear again after activating display to ensure background is visible
         glClearColor(1.0f,1.0f,1.0f,1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         //绘制原点标准坐标轴
         Eigen::Matrix4d E = Eigen::MatrixXd::Identity(4,4);

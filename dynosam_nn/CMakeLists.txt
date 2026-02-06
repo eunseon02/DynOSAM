@@ -6,6 +6,9 @@ set(CMAKE_C_FLAGS "-Wall -Wextra  -O3")
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
+  # Workaround for OpenCV 4.6 flann any.h placement new issue with GCC 13
+  # Allow non-standard code to compile (OpenCV 4.6 has void** placement new bug)
+  add_compile_options(-fpermissive)
 endif()
 
 set(CMAKE_CXX_STANDARD 17)

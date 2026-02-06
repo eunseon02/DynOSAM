@@ -29,8 +29,8 @@
  */
 
 #include "dynosam_opt/SlidingWindowOptimization.hpp"
-#include "dynosam/visualizer/TumPose.hpp"
-#include "dynosam/visualizer/TumFile.hpp"
+// #include "dynosam/visualizer/TumPose.hpp"
+// #include "dynosam/visualizer/TumFile.hpp"
 
 namespace dyno {
 

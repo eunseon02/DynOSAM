@@ -2,7 +2,7 @@
 
 #include <cstddef>
 #include <memory>
-#include <opencv4/opencv2/core/mat.hpp>
+#include <opencv2/core/mat.hpp>
 
 #include "dynosam_nn/trackers/byte_tracker/KalmanFilter.hpp"
 #include "dynosam_nn/trackers/byte_tracker/Rect.hpp"

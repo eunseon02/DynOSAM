@@ -87,10 +87,8 @@ DEFINE_string(
 // Declare FLAGS_use_edge_feature (defined in RGBDInstanceFrontendModule.cc)
 DECLARE_bool(use_edge_feature);
 
-// Global variable to store RGBDInstanceFrontendModule pointer for edge visualization
-// This is a workaround to access local map from the display
-// Note: This needs to be set from the pipeline manager or frontend module
-static std::weak_ptr<dyno::RGBDInstanceFrontendModule> g_frontend_module;
+// Include header that defines g_frontend_module
+#include "dynosam/frontend/FrontendModuleAccessor.hpp"
 
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
 #include "dynosam/dataprovider/OMDDataProvider.hpp"
@@ -548,6 +546,12 @@ int main(int argc, char* argv[]) {
             if (frontend_module) {
               auto local_map = frontend_module->getLocalMap();
               if (local_map && !local_map->mvKeyFrames.empty()) {
+                static int update_count = 0;
+                if (update_count % 100 == 0) {
+                  LOG(INFO) << "VoViewer: Updating visualization data - KeyFrames=" 
+                            << local_map->mvKeyFrames.size();
+                }
+                update_count++;
                 // Update visualization data
                 edge_viz::visualizeAssociationResult(local_map, clusterClouds, clusterCloudColors);
                 edge_viz::visualizeMergedLocalMap(local_map, localMapClouds);
@@ -579,7 +583,20 @@ int main(int argc, char* argv[]) {
                   edge_viz::saveEdgeKeyFrameTrajectory(edge_kf_trajectory_file, local_map);
                   trajectory_file_opened = false; // Save once per update
                 }
+              } else {
+                static int empty_count = 0;
+                if (empty_count % 100 == 0) {
+                  LOG(WARNING) << "VoViewer: local_map is null or empty (KeyFrames=" 
+                               << (local_map ? local_map->mvKeyFrames.size() : 0) << ")";
+                }
+                empty_count++;
               }
+            } else {
+              static int null_count = 0;
+              if (null_count % 100 == 0) {
+                LOG(WARNING) << "VoViewer: g_frontend_module is null or expired";
+              }
+              null_count++;
             }
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -619,6 +636,7 @@ int main(int argc, char* argv[]) {
       
       // Create pipeline manager
       // Note: make_shared uses perfect forwarding, so we need to ensure const reference
+      // g_frontend_module will be set automatically in PipelineManager::loadPipelines
       auto pipeline = std::make_shared<DynoPipelineManager>(
           static_cast<const DynoParams&>(params), data_provider, frontend_display, backend_display, backend_factory);
       

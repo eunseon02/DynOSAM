@@ -179,7 +179,7 @@ if __name__ == '__main__':
 
     # run_viodes()
     prep_tum_sequence(
-        "/root/data/tum-rgbd/rgbd_dataset_freiburg2_desk/",
+        "/root/data/tum-rgbd/fr_2_desk",
         "/root/data/tum-rgbd/fr2_desk/rgbd_dataset_freiburg2_large_with_loop_associated.txt",
         "tum_fr2_desk",
         0  # backend_type (positional argument, not keyword)

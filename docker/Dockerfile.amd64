@@ -25,12 +25,13 @@ RUN apt-get update \
     software-properties-common \
     nano \
     vim \
+    gedit \
     clang-format \
     && pip3 install black pre-commit \
     && rm -rf /var/lib/apt/lists/*
 
 # ROS installs
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
       ros-kilted-ros2cli-common-extensions \
       ros-kilted-vision-opencv \
       nlohmann-json3-dev
@@ -109,16 +110,8 @@ RUN cd gtsam && \
     cd build && \
     cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
     -DGTSAM_USE_SYSTEM_EIGEN=ON \
-    -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF \
-    -DGTSAM_BUILD_PYTHON=ON \
-    -DPython3_EXECUTABLE=$(which python3) \
-    -DPython3_INCLUDE_DIR=$(python3 -c "import sysconfig; print(sysconfig.get_path('include'))") \
-    -DCMAKE_BUILD_RPATH=/usr/lib/x86_64-linux-gnu \
-    -DCMAKE_INSTALL_RPATH=/usr/lib/x86_64-linux-gnu \
-    .. && \
-    sed -i '176d' /root/gtsam/build/python/navigation.cpp && \
-    make -j$(nproc) install && \
-    python3 -c "import sysconfig; import shutil; import os; site_packages = sysconfig.get_path('purelib'); gtsam_python = '/root/gtsam/build/python'; if os.path.exists(gtsam_python + '/gtsam'): shutil.copytree(gtsam_python + '/gtsam', site_packages + '/gtsam', dirs_exist_ok=True); shutil.copytree(gtsam_python + '/gtsam_unstable', site_packages + '/gtsam_unstable', dirs_exist_ok=True); shutil.copytree('/root/gtsam/python/gtsam', site_packages + '/gtsam', dirs_exist_ok=True)"
+    -DGTSAM_BUILD_TESTS=OFF -DGTSAM_BUILD_EXAMPLES_ALWAYS=OFF -DCMAKE_BUILD_TYPE=Release -DGTSAM_BUILD_UNSTABLE=ON -DGTSAM_POSE3_EXPMAP=ON -DGTSAM_ROT3_EXPMAP=ON -DGTSAM_TANGENT_PREINTEGRATION=OFF .. && \
+    make -j$(nproc) install
 
 
 # Install Open_GV
@@ -131,13 +124,54 @@ RUN cd opengv/build && \
       .. && make -j$(nproc) install
 
 
+# Install Pangolin
+RUN apt-get update && apt-get install -y build-essential cmake git pkg-config \
+    libglew-dev libgl1-mesa-dev libx11-dev libjpeg-dev libpng-dev libepoxy-dev
+RUN git clone https://github.com/stevenlovegrove/Pangolin.git
+RUN cd Pangolin && \
+      mkdir build && \
+      cd build && \
+      cmake .. && make -j$(nproc) install
+RUN sed -i 's/attributes\.memoryType/attributes.type/g' /usr/local/include/pangolin/image/memcpy.h
 
-RUN mkdir -p /home/user/dev_ws/src/core
-RUN mkdir -p /home/user/dev_ws/src/third_parties
-RUN mkdir -p /home/user/upstream_ws/src
+
+# Install Sophus
+RUN git clone https://github.com/strasdat/Sophus.git
+RUN cd Sophus && \
+      mkdir build && \
+      cd build && \
+      cmake .. && make -j$(nproc) install
+
+
+# Install dynamic_slam_interfaces
+RUN git clone https://github.com/ACFR-RPG/dynamic_slam_interfaces.git
+RUN source /opt/ros/kilted/setup.bash && \
+      cd dynamic_slam_interfaces && \
+      mkdir build && \
+      cd build && \
+      cmake .. && make -j$(nproc) install
+
+
+RUN unset OPENMPI_VERSION
+RUN unset OMPI_MCA_coll_hcoll_enable
+RUN unset OPAL_PREFIX
+RUN export PATH=$(echo $PATH | tr ':' '\n' | grep -v '/opt/hpcx' | grep -v '/usr/local/mpi/bin' | paste -sd:)
+
+RUN apt-get update && apt-get install -y libopenmpi-dev openmpi-bin
+
+RUN mkdir -p /home/user/dev_ws/src/core \
+    /home/user/dev_ws/src/third_parties \
+    /home/user/upstream_ws/src
 
 SHELL ["/bin/bash", "-c"]
 
 RUN source /opt/ros/kilted/setup.bash
+
+# Add aliases to .bashrc
+RUN echo "" >> /root/.bashrc && \
+    echo "# DynoSAM aliases" >> /root/.bashrc && \
+    echo "alias dynobuild='cd /home/user/dev_ws && env -u OPAL_PREFIX -u HPCX_VERSION colcon build --packages-select dynosam --cmake-clean-cache --cmake-args -DPython3_EXECUTABLE=/usr/bin/python3 --event-handlers console_direct+ && source /home/user/dev_ws/install/setup.bash'" >> /root/.bashrc && \
+    echo "alias runros='ros2 launch dynosam_ros dyno_sam_online_m3dgr.py v:=1'" >> /root/.bashrc && \
+    echo "alias runtum='./install/dynosam/lib/dynosam/dyno_sam --use_tum   --path_to_tum=/root/data/tum-rgbd/fr_2_desk/   --tum_association=/root/data/tum-rgbd/fr2_desk/rgbd_dataset_freiburg2_large_with_loop_associated.txt   --use_pipeline=true   --output_trajectory=/root/results/trajectory_tum.txt   --use_dynamic_track=false    --v=1'" >> /root/.bashrc
 
 WORKDIR /home/user/dev_ws

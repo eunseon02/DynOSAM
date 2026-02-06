@@ -7,12 +7,14 @@
 #include <cstdio>
 #include <stdio.h>
 
-#include <opencv4/opencv2/core/cuda.hpp>
-#include <opencv4/opencv2/cudawarping.hpp>
-#include <opencv4/opencv2/cudaimgproc.hpp>
-#include <opencv4/opencv2/cudaarithm.hpp>
+#include <opencv2/core/cuda.hpp>
+#ifdef DYNO_CUDA_OPENCV_ENABLED
+#include <opencv2/cudawarping.hpp>
+#include <opencv2/cudaimgproc.hpp>
+#include <opencv2/cudaarithm.hpp>
+#endif
 
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include <glog/logging.h>
 

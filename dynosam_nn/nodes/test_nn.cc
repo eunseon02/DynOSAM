@@ -1,7 +1,7 @@
 #include <glog/logging.h>
 
 #include <boost/python.hpp>
-#include <opencv4/opencv2/opencv.hpp>
+#include <opencv2/opencv.hpp>
 
 #include "dynosam_nn/PyObjectDetector.hpp"
 
