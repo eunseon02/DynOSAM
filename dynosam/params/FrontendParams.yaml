@@ -75,22 +75,22 @@ tracker_params:
 
   # Edge detection parameters
   coarse:
-    width: 739
-    height: 458
-    kf_trans_thres: 0.01
-    kf_rot_thres: 4
-    sample_bias: 5
-    maximum_point: 2000
-    cannyHigh: 40
-    cannyLow: 20
+    width: 640
+    height: 480
+    kf_trans_thres: 0.03
+    kf_rot_thres: 7
+    sample_bias: 7
+    maximum_point: 1500
+    cannyHigh: 50
+    cannyLow: 30
 
   fine:
     kf_trans_thres: 0.05
     kf_rot_thres: 7
-    geo_photo_ratio: 0.01
-    sample_bias: 4
-    cannyHigh: 40
-    cannyLow: 15
+    geo_photo_ratio: -1
+    sample_bias: 2
+    cannyHigh: 50
+    cannyLow: 30
 
   win:
     kf_trans_thres: 0.05

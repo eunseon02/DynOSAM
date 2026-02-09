@@ -106,6 +106,21 @@ void declare_config(CameraParams& config) {
 
   config =
       CameraParams(intrinsics, distortion, image_size, model, T_robot_camera);
+  
+  // Read optional depthmap_factor from YAML and set depth params
+  double depthmap_factor = 5000.0;  // Default TUM depth scale factor
+  try {
+    field(depthmap_factor, "depthmap_factor");
+    // depthmap_factor is typically the inverse of depth_to_meters
+    // For TUM: depthmap_factor = 5000.0 means depth_to_meters = 1.0/5000.0
+    // For ORB-SLAM2 style: depthmap_factor = 5208.0 means depth_to_meters = 1.0/5208.0
+    CameraParams::DepthParams depth_params;
+    depth_params.valid = true;
+    depth_params.depth_to_meters = 1.0 / depthmap_factor;
+    config.setDepthParams(depth_params);
+  } catch (...) {
+    // depthmap_factor not found in YAML, use default or skip
+  }
 }
 
 CameraParams::CameraParams(const IntrinsicsCoeffs& intrinsics,

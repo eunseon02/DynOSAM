@@ -113,6 +113,11 @@ ObjectIds getObjectLabels(const cv::Mat& image) {
   // v.erase(std::remove(v.begin(), v.end(), 0), v.end());
   // return v;
 
+  // Handle empty images
+  if (image.empty() || image.rows == 0 || image.cols == 0) {
+    return ObjectIds();
+  }
+
   // from testing in test_code_concepts.cc (CodeConcepts.uniqueLabelSpeed)
   // this implementation is up to 28x faster than a simple a std::set approach!!
   const int numThreads =
@@ -122,17 +127,27 @@ ObjectIds getObjectLabels(const cv::Mat& image) {
   std::vector<std::future<std::unordered_set<int>>> futures;
 
   // Launch threads to process row chunks
+  // Handle different image types (CV_8UC1 vs CV_32SC1)
+  const bool is_8bit = (image.type() == CV_8UC1);
+  
   for (int t = 0; t < numThreads; ++t) {
     int startRow = t * rowsPerThread;
     int endRow = (t == numThreads - 1) ? image.rows : (t + 1) * rowsPerThread;
 
     futures.push_back(
-        std::async(std::launch::async, [&image, startRow, endRow]() {
+        std::async(std::launch::async, [&image, startRow, endRow, is_8bit]() {
           std::unordered_set<int> localUnique;
           for (int row = startRow; row < endRow; ++row) {
-            const int* rowPtr = image.ptr<int>(row);
-            for (int col = 0; col < image.cols; ++col) {
-              localUnique.insert(rowPtr[col]);
+            if (is_8bit) {
+              const uint8_t* rowPtr = image.ptr<uint8_t>(row);
+              for (int col = 0; col < image.cols; ++col) {
+                localUnique.insert(static_cast<int>(rowPtr[col]));
+              }
+            } else {
+              const int* rowPtr = image.ptr<int>(row);
+              for (int col = 0; col < image.cols; ++col) {
+                localUnique.insert(rowPtr[col]);
+              }
             }
           }
           return localUnique;
@@ -381,6 +396,26 @@ void computeObjectMaskBoundaryMaskHelper(
   cv::Mat viz = cv::Mat(mask.size(), CV_8UC3, cv::Scalar(0));
 
   result.objects_detected = get_object_labels();
+  
+  // Filter out object_ids that don't actually exist in the mask
+  // This can happen when getObjectLabels reads invalid memory or when mask is empty
+  ObjectIds valid_object_ids;
+  for (const auto object_id : result.objects_detected) {
+    std::vector<std::vector<cv::Point>> detected_contours;
+    cv::Rect detected_rect;
+    // Verify that object_id actually exists in the mask
+    if (vision_tools::findObjectBoundingBox(mask, object_id, detected_rect,
+                                             detected_contours)) {
+      valid_object_ids.push_back(object_id);
+    } else {
+      VLOG(10) << "Skipping invalid object_id=" << object_id 
+               << " (not found in mask, likely false positive from getObjectLabels)";
+    }
+  }
+  
+  // Update objects_detected to only include valid ones
+  result.objects_detected = valid_object_ids;
+  
   // this basically just creates a full mask over the existing masks using the
   // detected contours
   for (const auto object_id : result.objects_detected) {
@@ -388,8 +423,14 @@ void computeObjectMaskBoundaryMaskHelper(
     // NOTE: if we use the object detection result I guess the discovered
     // rectangle here could be different to detection rectangle!
     cv::Rect detected_rect;
-    CHECK(vision_tools::findObjectBoundingBox(mask, object_id, detected_rect,
-                                              detected_contours));
+    // Now we know object_id exists, so this should succeed
+    bool found = vision_tools::findObjectBoundingBox(mask, object_id, detected_rect,
+                                                      detected_contours);
+    if (!found) {
+      LOG(WARNING) << "Failed to find bounding box for object_id=" << object_id 
+                   << " in mask (unexpected). Skipping.";
+      continue;
+    }
 
     CHECK_LE(object_id, 255);  // works only with uint8 types...
     cv::drawContours(thicc_boarder, detected_contours, -1, object_id,
@@ -424,7 +465,12 @@ void computeObjectMaskBoundaryMaskHelper(
   // approximated by a bounding box
   for (const auto object_id : result.objects_detected) {
     cv::Rect detected_rect;
-    vision_tools::findObjectBoundingBox(eroded_mask, object_id, detected_rect);
+    // findObjectBoundingBox may fail if object_id is not actually in the eroded mask
+    if (!vision_tools::findObjectBoundingBox(eroded_mask, object_id, detected_rect)) {
+      LOG(WARNING) << "Failed to find inner bounding box for object_id=" << object_id 
+                   << " in eroded mask. Using empty rect.";
+      detected_rect = cv::Rect();  // Use empty rect as fallback
+    }
     result.inner_boarder_object_bounding_boxes.push_back(detected_rect);
   }
 

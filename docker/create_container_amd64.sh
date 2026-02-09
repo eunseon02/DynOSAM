@@ -7,4 +7,4 @@ LOCAL_RESULTS_FOLDER=~/results/
 LOCAL_DYNO_SAM_FOLDER=~/Code/src/DynOSAM/
 LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER=~/Code/src/third_party_dynosam/
 
-bash create_container_base.sh dyno_sam_cuda:latest dyno_sam_2 $LOCAL_DATA_FOLDER $LOCAL_RESULTS_FOLDER $LOCAL_DYNO_SAM_FOLDER $LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER
+bash create_container_base.sh dyno_sam_cuda:latest dynosam $LOCAL_DATA_FOLDER $LOCAL_RESULTS_FOLDER $LOCAL_DYNO_SAM_FOLDER $LOCAL_THIRD_PARTY_DYNO_SAM_FOLDER

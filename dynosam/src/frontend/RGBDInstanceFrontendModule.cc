@@ -441,26 +441,26 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const auto t_nominal_end = std::chrono::steady_clock::now();
   
   // Log processing times
-  const char* CYAN = "\033[36m";
-  const char* RESET = "\033[0m";
-  
-  static int log_counter = 0;
-  if (++log_counter % 10 == 0) {
-    std::ostringstream oss;
-    oss << CYAN << "nominalSpin frame=" << frame->getFrameId() << "\n"
-        << "  ├─ track_ms: " << ms(t_track_start, t_track_end) << "\n"
-        << "  ├─ update_depths_ms: " << ms(t_update_depths_start, t_update_depths_end) << "\n"
-        << "  ├─ stereo1_ms: " << ms(t_stereo1_start, t_stereo1_end) << "\n"
-        << "  ├─ direct_ms: " << ms(t_direct_start, t_direct_end) << "\n"
-        << "  ├─ fine_ms: " << ms(t_fine_start, t_fine_end) << "\n"
-        << "  ├─ stereo2_ms: " << ms(t_stereo2_start, t_stereo2_end) << "\n"
-        << "  ├─ object_motion_ms: " << ms(t_object_motion_start, t_object_motion_end) << "\n"
-        << "  ├─ fill_packet_ms: " << ms(t_fill_packet_start, t_fill_packet_end) << "\n"
-        << "  ├─ create_image_ms: " << ms(t_create_image_start, t_create_image_end) << "\n"
-        << "  ├─ send_logger_ms: " << ms(t_send_logger_start, t_send_logger_end) << "\n"
-        << "  └─ total_ms: " << ms(t_nominal_start, t_nominal_end) << RESET;
-    LOG(INFO) << oss.str();
-  }
+  // const char* CYAN = "\033[36m";
+  // const char* RESET = "\033[0m";
+  // 
+  // static int log_counter = 0;
+  // if (++log_counter % 10 == 0) {
+  //   std::ostringstream oss;
+  //   oss << CYAN << "nominalSpin frame=" << frame->getFrameId() << "\n"
+  //       << "  ├─ track_ms: " << ms(t_track_start, t_track_end) << "\n"
+  //       << "  ├─ update_depths_ms: " << ms(t_update_depths_start, t_update_depths_end) << "\n"
+  //       << "  ├─ stereo1_ms: " << ms(t_stereo1_start, t_stereo1_end) << "\n"
+  //       << "  ├─ direct_ms: " << ms(t_direct_start, t_direct_end) << "\n"
+  //       << "  ├─ fine_ms: " << ms(t_fine_start, t_fine_end) << "\n"
+  //       << "  ├─ stereo2_ms: " << ms(t_stereo2_start, t_stereo2_end) << "\n"
+  //       << "  ├─ object_motion_ms: " << ms(t_object_motion_start, t_object_motion_end) << "\n"
+  //       << "  ├─ fill_packet_ms: " << ms(t_fill_packet_start, t_fill_packet_end) << "\n"
+  //       << "  ├─ create_image_ms: " << ms(t_create_image_start, t_create_image_end) << "\n"
+  //       << "  ├─ send_logger_ms: " << ms(t_send_logger_start, t_send_logger_end) << "\n"
+  //       << "  └─ total_ms: " << ms(t_nominal_start, t_nominal_end) << RESET;
+  //   LOG(INFO) << oss.str();
+  // }
 
   // if (FLAGS_log_projected_masks)
   //   vision_tools::writeOutProjectMaskAndDepthMap(

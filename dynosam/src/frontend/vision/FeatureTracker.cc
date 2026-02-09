@@ -66,7 +66,7 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
   lk_cuda_tracker_ = cv::cuda::SparsePyrLKOpticalFlow::create(
       klt_window_size, klt_max_level, 30);
 
-  if (!params_.prefer_provided_object_detection) {
+  if (FLAGS_use_dynamic_track && !params_.prefer_provided_object_detection) {
     LOG(INFO) << "Creating object detection engine";
     dyno::YoloConfig yolo_config;
     dyno::ModelConfig model_config;
@@ -219,7 +219,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   new_frame->setMaxBackgroundDepth(frontend_params_.max_background_depth);
   new_frame->setMaxObjectDepth(frontend_params_.max_object_depth);
 
-  VLOG(1) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15)
+  VLOG(5) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15)
           << timestamp << ", object ids "
           << container_to_string(new_frame->getObjectIds());
   previous_frame_ = new_frame;
@@ -1254,6 +1254,20 @@ bool FeatureTracker::objectDetection(
                     "is missing!";
     }
   } else {
+    // Only run object detection if dynamic tracking is enabled
+    if (!FLAGS_use_dynamic_track) {
+      // Return empty mask when dynamic tracking is disabled
+      // MotionMask requires CV_32SC1 type (signed 32-bit integer)
+      cv::Mat empty_mask = cv::Mat::zeros(img_size_, CV_32SC1);
+      vision_tools::computeObjectMaskBoundaryMask(
+          boundary_mask_result, empty_mask, scaled_boarder_thickness,
+          kUseAsFeatureDetectionMask);
+      // Add empty mask to ImageContainer so that objectMotionMask() calls don't fail
+      image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
+                                                   empty_mask);
+      return false;
+    }
+    
     CHECK(object_detection_);
     VLOG(30) << "Running object detection and tracking inference k="
              << image_container.frameId();

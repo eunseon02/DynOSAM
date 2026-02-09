@@ -33,6 +33,7 @@
 
 #include <Eigen/Dense>
 #include <png++/png.hpp>
+#include <set>
 
 #include "dynosam/dataprovider/ClusterSlamDataProvider.hpp"
 #include "dynosam/dataprovider/KittiDataProvider.hpp"
@@ -54,6 +55,7 @@
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
 #include "dynosam_common/viz/Colour.hpp"
 #include "dynosam_common/Edge.hpp"
+#include "dynosam_common/utils/Statistics.hpp"
 #include "dynosam_cv/Camera.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_nn/PyObjectDetector.hpp"
@@ -151,14 +153,28 @@ namespace edge_viz {
                                   std::vector<cv::Vec3b>& clusterCloudColors) {
     clusterClouds.clear();
     clusterCloudColors.clear();
+    
+    int skipped_small = 0;
+    int skipped_missing = 0;
     for(const auto& cluster : pLocalMap->mvEleEdgeClusters) {
       std::vector<unsigned int> edgeIDs = cluster.mvElementEdgeIDs;
       std::vector<int> edgeIdx;
-      if(edgeIDs.size() < 5) continue;
+      if(edgeIDs.size() < 5) {
+        skipped_small++;
+        continue;
+      }
+      bool all_found = true;
       for(size_t i = 0; i < edgeIDs.size(); ++i) {
-        int index = pLocalMap->mmElementID2index.at(edgeIDs[i]);
+        auto it = pLocalMap->mmElementID2index.find(edgeIDs[i]);
+        if (it == pLocalMap->mmElementID2index.end()) {
+          all_found = false;
+          skipped_missing++;
+          break;
+        }
+        int index = it->second;
         edgeIdx.push_back(index);
       }
+      if (!all_found || edgeIdx.empty()) continue;
 
       // Edge cluster point cloud
       std::vector<cv::Point3d> clusterCloud;
@@ -191,8 +207,19 @@ namespace edge_viz {
         }
         clusterCloud.insert(clusterCloud.end(), cloud.begin(), cloud.end());
       }
-      clusterClouds.push_back(clusterCloud);
-      clusterCloudColors.push_back(color);
+      if (!clusterCloud.empty()) {
+        clusterClouds.push_back(clusterCloud);
+        clusterCloudColors.push_back(color);
+      }
+    }
+    
+    // Debug: Log filtering results
+    static int call_count = 0;
+    if (++call_count % 100 == 0) {
+      LOG(INFO) << "visualizeAssociationResult: total_clusters=" << pLocalMap->mvEleEdgeClusters.size()
+                << ", skipped_small=" << skipped_small 
+                << ", skipped_missing=" << skipped_missing
+                << ", output_clusters=" << clusterClouds.size();
     }
   }
 
@@ -249,7 +276,7 @@ namespace edge_viz {
     }
     
     file.close();
-    LOG(INFO) << "Saved " << pLocalMap->mvKeyFrames.size() 
+    VLOG(10) << "Saved " << pLocalMap->mvKeyFrames.size() 
               << " edge keyframe poses to: " << filename;
   }
 }
@@ -327,7 +354,8 @@ int main(int argc, char* argv[]) {
   FLAGS_logtostderr = 1;
   FLAGS_colorlogtostderr = 1;
   FLAGS_log_prefix = 1;
-  FLAGS_v = 30;
+  // FLAGS_v is set by command line argument --v, don't override it
+  // FLAGS_v = 30;
   
   // Log loaded flags for debugging (these are declared in RGBDInstanceFrontendModule.cc)
   // Note: We can't access them here directly, but they will be loaded from flag files
@@ -410,16 +438,24 @@ int main(int argc, char* argv[]) {
       // Run pipeline
       exec.add_node(ros_pipeline);
       LOG(INFO) << "Starting ROS pipeline...";
+      static int ros_frame_count = 0;
       while (rclcpp::ok()) {
         if (!ros_pipeline->spinOnce()) {
           break;
         }
         exec.spin_some();
+        
+        // Print statistics every 50 frames
+        if (++ros_frame_count % 50 == 0) {
+          LOG(INFO) << "\n=== Timing Statistics (frame " << ros_frame_count << ") ===\n"
+                    << utils::Statistics::Print();
+        }
       }
       
       ros_pipeline.reset();
       rclcpp::shutdown();
       
+      LOG(INFO) << "\n=== Final Timing Statistics ===\n" << utils::Statistics::Print();
       return 0;
 #else
       // Use non-ROS DynoPipelineManager
@@ -467,11 +503,17 @@ int main(int argc, char* argv[]) {
           
           if (show_window_) {
             // Start edge viewer thread if edge features are enabled (uses VoViewer)
+            LOG(INFO) << "FrontendPoseLoggerDisplay: show_window_=true, FLAGS_use_edge_feature=" 
+                      << FLAGS_use_edge_feature;
             if (FLAGS_use_edge_feature) {
               edge_viewer_running_ = true;
               edge_viewer_thread_ = std::thread(&FrontendPoseLoggerDisplay::runEdgeViewer, this);
               LOG(INFO) << "Edge-based VoViewer thread started";
+            } else {
+              LOG(WARNING) << "VoViewer not started: FLAGS_use_edge_feature is false";
             }
+          } else {
+            LOG(WARNING) << "VoViewer not started: show_window_ is false";
           }
         }
         
@@ -540,7 +582,9 @@ int main(int argc, char* argv[]) {
           
           LOG(INFO) << "Edge-based VoViewer loop started";
           
+          int loop_count = 0;
           while (edge_viewer_running_) {
+            loop_count++;
             // Try to get frontend module
             auto frontend_module = g_frontend_module.lock();
             if (frontend_module) {
@@ -557,31 +601,71 @@ int main(int argc, char* argv[]) {
                 edge_viz::visualizeMergedLocalMap(local_map, localMapClouds);
                 edge_viz::getSlidingWindow(local_map, slidingWindow);
                 
+                // Debug: Log visualization data sizes
+                if (update_count % 100 == 0) {
+                  LOG(INFO) << "VoViewer data sizes: clusterClouds=" << clusterClouds.size() 
+                            << ", localMapClouds=" << localMapClouds.size()
+                            << ", slidingWindow=" << slidingWindow.size();
+                }
+                
                 // Update viewer
                 viewer.update_covisibilityCloud(clusterClouds, clusterCloudColors);
                 viewer.update_localMap(localMapClouds);
                 viewer.update_sliding_window(slidingWindow);
                 
-                // Update trajectory
-                if (!local_map->mvKeyFrames.empty()) {
-                  const auto& latest_kf = local_map->mvKeyFrames.back();
-                  Eigen::Matrix4d pose = latest_kf->KF_pose_g.matrix();
-                  viewer.update_Trajectory(pose);
-                  viewer.set_CameraPoses(pose);
-                }
+                // Update trajectory only when keyframe count changes (to avoid duplicate poses)
+                static size_t last_keyframe_count = 0;
+                static std::set<size_t> processed_kf_ids;  // Track processed keyframe IDs to avoid duplicates
+                size_t current_keyframe_count = local_map->mvKeyFrames.size();
                 
-                // Save edge keyframe trajectory
-                if (!trajectory_file_opened) {
-                  edge_kf_trajectory_file_stream.open(edge_kf_trajectory_file);
-                  if (edge_kf_trajectory_file_stream.is_open()) {
-                    trajectory_file_opened = true;
-                    LOG(INFO) << "Opened edge keyframe trajectory file: " << edge_kf_trajectory_file;
+                if (current_keyframe_count != last_keyframe_count && !local_map->mvKeyFrames.empty()) {
+                  // Handle sliding window update: if count decreased, reset tracking
+                  if (current_keyframe_count < last_keyframe_count) {
+                    LOG(INFO) << "VoViewer: Sliding window updated, keyframe count decreased from " 
+                              << last_keyframe_count << " to " << current_keyframe_count
+                              << " (trajectory will be rebuilt)";
+                    // Clear processed IDs and rebuild trajectory from current keyframes
+                    processed_kf_ids.clear();
+                    // Note: We don't clear trajectory here as it should keep historical data
+                    // But we'll only add new keyframes that haven't been processed
                   }
-                }
-                
-                if (trajectory_file_opened) {
+                  
+                  // Add only new keyframes that haven't been processed yet
+                  int new_kf_count = 0;
+                  for (size_t i = 0; i < current_keyframe_count; ++i) {
+                    const auto& kf = local_map->mvKeyFrames[i];
+                    size_t kf_id = kf->KF_ID;
+                    
+                    if (processed_kf_ids.find(kf_id) == processed_kf_ids.end()) {
+                      Eigen::Matrix4d pose = kf->KF_pose_g.matrix();
+                      viewer.update_Trajectory(pose);
+                      processed_kf_ids.insert(kf_id);
+                      new_kf_count++;
+                    }
+                  }
+                  
+                  // Update camera pose to latest keyframe
+                  const auto& latest_kf = local_map->mvKeyFrames.back();
+                  Eigen::Matrix4d latest_pose = latest_kf->KF_pose_g.matrix();
+                  viewer.set_CameraPoses(latest_pose);
+                  
+                  if (new_kf_count > 0) {
+                    LOG(INFO) << "VoViewer: Updated trajectory with " << new_kf_count 
+                              << " new keyframes (total=" << current_keyframe_count 
+                              << "), latest pose=[" << latest_pose(0,3) << ", " 
+                              << latest_pose(1,3) << ", " << latest_pose(2,3) << "]";
+                  }
+                  
+                  last_keyframe_count = current_keyframe_count;
+                  
+                  // Save edge keyframe trajectory
                   edge_viz::saveEdgeKeyFrameTrajectory(edge_kf_trajectory_file, local_map);
-                  trajectory_file_opened = false; // Save once per update
+                  VLOG(3) << "Saved edge keyframe trajectory: " << current_keyframe_count << " keyframes";
+                } else if (!local_map->mvKeyFrames.empty()) {
+                  // Update camera pose even if no new keyframes (for smooth following)
+                  const auto& latest_kf = local_map->mvKeyFrames.back();
+                  Eigen::Matrix4d latest_pose = latest_kf->KF_pose_g.matrix();
+                  viewer.set_CameraPoses(latest_pose);
                 }
               } else {
                 static int empty_count = 0;
@@ -594,9 +678,16 @@ int main(int argc, char* argv[]) {
             } else {
               static int null_count = 0;
               if (null_count % 100 == 0) {
-                LOG(WARNING) << "VoViewer: g_frontend_module is null or expired";
+                LOG(WARNING) << "VoViewer: g_frontend_module is null or expired (loop_count=" 
+                             << loop_count << ")";
               }
               null_count++;
+            }
+            
+            // Log every 1000 iterations to confirm loop is running
+            if (loop_count % 1000 == 0) {
+              LOG(INFO) << "VoViewer loop running: iteration=" << loop_count 
+                        << ", edge_viewer_running_=" << edge_viewer_running_;
             }
             
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -642,11 +733,17 @@ int main(int argc, char* argv[]) {
       
       // Run pipeline
       LOG(INFO) << "Starting non-ROS pipeline...";
+      static int pipeline_frame_count = 0;
       while (pipeline->spin()) {
-        // Continue spinning until data provider is finished
+        // Print statistics every 50 frames
+        // if (++pipeline_frame_count % 100 == 0) {
+        //   LOG(INFO) << "\n=== Timing Statistics (frame " << pipeline_frame_count << ") ===\n"
+        //             << utils::Statistics::Print();
+        // }
       }
       
       LOG(INFO) << "Pipeline finished";
+      LOG(INFO) << "\n=== Final Timing Statistics ===\n" << utils::Statistics::Print();
       return 0;
 #endif
     }
@@ -710,7 +807,10 @@ int main(int argc, char* argv[]) {
 
       // Convert depth to float (TUM depth images are typically 16-bit)
       if (depth.type() == CV_16UC1) {
-        depth.convertTo(depth, CV_64F, 1.0 / 5000.0);  // TUM depth scale factor
+        double depth_scale = camera_params.hasDepthParams() 
+                             ? camera_params.depthParams().depth_to_meters 
+                             : (1.0 / 5000.0);  // Default TUM scale factor
+        depth.convertTo(depth, CV_64F, depth_scale);
       }
 
       // Create empty optical flow and motion mask (TUM dataset doesn't provide these)
@@ -732,6 +832,13 @@ int main(int argc, char* argv[]) {
 
       auto frame = tracker->track(frame_id, timestamp, image_container);
       Frame::Ptr previous_frame = tracker->getPreviousFrame();
+      
+      // Print statistics every 50 frames
+      static int tracker_frame_count = 0;
+      if (++tracker_frame_count % 50 == 0) {
+        LOG(INFO) << "\n=== Timing Statistics (frame " << tracker_frame_count << ") ===\n"
+                  << utils::Statistics::Print();
+      }
 
       // Estimate camera pose
       if (frame) {
@@ -794,6 +901,7 @@ int main(int argc, char* argv[]) {
       LOG(INFO) << "Trajectory saved to: " << FLAGS_output_trajectory;
     }
 
+    LOG(INFO) << "\n=== Final Timing Statistics ===\n" << utils::Statistics::Print();
     return 0;
   }
 
@@ -914,6 +1022,14 @@ int main(int argc, char* argv[]) {
     if (!tracking.empty()) cv::imshow("Tracking", tracking);
 
     LOG(INFO) << to_string(tracker->getTrackerInfo());
+    
+    // Print statistics every 50 frames
+    static int loader_frame_count = 0;
+    if (++loader_frame_count % 50 == 0) {
+      LOG(INFO) << "\n=== Timing Statistics (frame " << loader_frame_count << ") ===\n"
+                << utils::Statistics::Print();
+    }
+    
     const std::string path = "/root/results/misc/";
     // if (previous_frame && (char)cv::waitKey(0) == 's') {
     //   LOG(INFO) << "Saving...";
@@ -933,6 +1049,8 @@ int main(int argc, char* argv[]) {
 
   while (loader.spin()) {
   }
+  
+  LOG(INFO) << "\n=== Final Timing Statistics ===\n" << utils::Statistics::Print();
 }
 
 // #include "dynosam/dataprovider/ProjectAriaDataProvider.hpp"

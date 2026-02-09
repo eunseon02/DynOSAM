@@ -37,7 +37,7 @@
 namespace dyno {
 
 void OpenCVFrontendDisplay::spinOnceImpl(const VisionImuPacket::ConstPtr&) {
-  LOG(INFO) << "In frontend opencv display";
+  VLOG(10) << "In frontend opencv display";
 
   // cv::Mat input_frames;
   // if(frontend_output.input) {

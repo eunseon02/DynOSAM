@@ -2,8 +2,11 @@ cmake_minimum_required(VERSION 3.11)
 
 project(dynosam)
 
+set(CMAKE_BUILD_TYPE "Release")
 # set(CMAKE_C_FLAGS "-std=gnu11 -Wall -Wextra -O3 -march=sandybridge -flto")
 set(CMAKE_C_FLAGS "-Wall -Wextra  -O3")
+# Set C++ optimization flags explicitly (same as ROEVO uses -O2)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O2")
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)

@@ -542,6 +542,12 @@ void Frame::updateDepthsFeatureContainer(
 
 void Frame::constructDynamicObservations() {
   object_observations_.clear();
+  
+  // Early return if no dynamic features
+  if (dynamic_features_.empty()) {
+    return;
+  }
+  
   // assumes that the mask gets updated with the tracking label
   const ObjectIds instance_labels =
       vision_tools::getObjectLabels(image_container_.objectMotionMask());
@@ -568,6 +574,11 @@ void Frame::constructDynamicObservations() {
     //     dynamic_feature->trackletId());
   }
 
+  // Early return if no object observations were created
+  if (object_observations_.empty()) {
+    return;
+  }
+
   // now construct image masks from tracking mask
   // For each tracked object, find its id in the mask
   // and draw it.
@@ -577,7 +588,13 @@ void Frame::constructDynamicObservations() {
   for (auto& object_observation_pair : object_observations_) {
     const ObjectId object_id = object_observation_pair.first;
     SingleDetectionResult& obs = object_observation_pair.second;
-    vision_tools::findObjectBoundingBox(mask, object_id, obs.bounding_box);
+    // findObjectBoundingBox may fail if object_id is not in mask, handle gracefully
+    if (!vision_tools::findObjectBoundingBox(mask, object_id, obs.bounding_box)) {
+      // If bounding box not found, set empty rect and log warning
+      obs.bounding_box = cv::Rect();
+      VLOG(10) << "Failed to find bounding box for object_id=" << object_id 
+               << " in mask (object may have been removed)";
+    }
   }
 }
 
