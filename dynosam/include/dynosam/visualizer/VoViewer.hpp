@@ -2,6 +2,7 @@
 #define VOVIEWER_H
 
 #include "dynosam/visualizer/VisualizerBase.hpp"
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
 //pcl dependency
 #include <pcl/console/parse.h>
 #include <pcl/io/ply_io.h>
@@ -36,17 +37,17 @@ public:
     void update_covisibilityCloud(const std::vector<std::vector<cv::Point3d>>& clusterClouds,
                                   const std::vector<cv::Vec3b>& clusterCloudColors)
     {
-        // 清空输出容器
+        // Clear output containers
         std::vector<cv::Point3d> covisibility_cloud_new;
         std::vector<cv::Vec3b>   covisibility_color_new;
 
-        // 检查输入是否有效
+        // Check if input is valid
         if (clusterClouds.size() != clusterCloudColors.size()) {
             std::cerr << "Warning: clusterClouds and clusterCloudColors size mismatch!" << std::endl;
             return;
         }
 
-        // 预计算总点数，避免多次扩容
+        // Pre-calculate total points to avoid multiple reallocations
         size_t total_points = 0;
         for (const auto& cloud : clusterClouds) 
         {
@@ -55,7 +56,7 @@ public:
         covisibility_cloud_new.reserve(total_points);
         covisibility_color_new.reserve(total_points);
 
-        // 合并点云和颜色
+        // Merge point clouds and colors
         for (size_t i = 0; i < clusterClouds.size(); ++i) 
         {
             const auto& cloud = clusterClouds[i];

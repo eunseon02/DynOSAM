@@ -429,6 +429,8 @@ class Frame {
   //-- Reproject the edge points to the current frame
   std::vector<int> edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr);
 
+  std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
+
  protected:
   // these do not do distortion or projection along the ray
   bool getStaticCorrespondences(FeaturePairs& correspondences,
@@ -462,6 +464,8 @@ class Frame {
 
   //-- Visualize the edge point lookup map
   cv::Mat visualizeSearchPlain();
+
+
 
   //-- Traverse each point in edges to calculate: far-near confidence score, observation confidence score, and depth completion
   void assignProperty3D(const cv::Mat& depth_image);

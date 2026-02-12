@@ -31,6 +31,7 @@
 #include "dynosam/pipeline/PipelineManager.hpp"
 
 #include <glog/logging.h>
+#include <sstream>
 
 #include "dynosam/backend/BackendFactory.hpp"
 #include "dynosam/frontend/RGBDInstanceFrontendModule.hpp"
@@ -278,6 +279,8 @@ void DynoPipelineManager::loadPipelines(const CameraParams& camera_params,
         // mutable_camera_params.setDepthParams(0.07);
         mutable_camera_params.setDepthParams(0.1);
       }
+      
+
       Camera::Ptr camera = std::make_shared<Camera>(mutable_camera_params);
       CHECK_NOTNULL(camera);
 

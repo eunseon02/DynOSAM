@@ -91,6 +91,7 @@ class CameraParams {
     //! Extrinsic transform between the depth and rgb cameras
     cv::Mat T_color_depth;
 
+    DepthParams() = default;
     DepthParams(double baseline) : valid(true), virtual_baseline(baseline) {}
   };
 

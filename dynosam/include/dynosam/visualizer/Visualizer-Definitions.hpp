@@ -32,6 +32,8 @@
 
 #include <opencv4/opencv2/opencv.hpp>
 #include <optional>
+#include <memory>
+#include <Eigen/Dense>
 
 #include "dynosam/pipeline/ThreadSafeQueue.hpp"
 
@@ -48,6 +50,38 @@ struct ImageToDisplay {
 };
 
 using ImageDisplayQueue = ThreadsafeQueue<ImageToDisplay>;
+
+/**
+ * @brief Snapshot for edge-based local map visualization (Option A)
+ *
+ * This message is published (typically every frame) by the frontend and consumed by the
+ * visualization thread. Heavy data (point clouds, sliding window, environment) is passed
+ * by shared_ptr so we can publish frequently without copying large buffers.
+ *
+ * The visualization thread can render directly from this snapshot:
+ * - currentFramePose: always valid
+ * - the shared_ptr fields may be null until the corresponding data becomes available
+ */
+struct EdgeVisualizationData {
+  // Current camera pose in world (used for trajectory + camera pose)
+  Eigen::Matrix4d currentFramePose{Eigen::Matrix4d::Identity()};
+
+  // Individual edge clusters (raw covisibility point cloud)
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> clusterClouds;
+  std::shared_ptr<const std::vector<cv::Vec3b>> clusterCloudColors;
+
+  // Merged edge clusters (optimized local map)
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> localMapClouds;
+
+  // Keyframe poses in the sliding window
+  std::shared_ptr<const std::vector<Eigen::Matrix4d>> slidingWindow;
+
+  // Accumulated environment point clouds over time
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud;
+};
+
+// Pointer type for EdgeVisualizationData
+using EdgeVisualizationDataPtr = std::shared_ptr<EdgeVisualizationData>;
 
 class OpenCVImageDisplayQueue {
  public:

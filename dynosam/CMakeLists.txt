@@ -144,6 +144,7 @@ add_library(${PROJECT_NAME} SHARED
   src/visualizer/Visualizer-Definitions.cc
   src/visualizer/VisualizerBase.cc
   src/visualizer/VoViewer.cc
+  src/visualizer/EdgeVizUtils.cc
 )
 
 # target_compile_definitions(${PROJECT_NAME}

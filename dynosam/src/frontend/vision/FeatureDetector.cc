@@ -185,7 +185,7 @@ SparseFeatureDetector::SparseFeatureDetector(
       mbUseFixedThreshold(true),
       mpCanny_lower_bound(tracker_params.edge_coarse.cannyLow),
       mpCanny_higher_bound(tracker_params.edge_coarse.cannyHigh),
-      mpAngle_bias(30.0f) {
+      mpAngle_bias(20.0f) {
   // Enable OpenCV optimizations (same as ROEVO)
   cv::setUseOptimized(true);
   cv::setNumThreads(0);

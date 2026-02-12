@@ -45,6 +45,7 @@
 #include "dynosam_common/utils/SafeCast.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
+#include "dynosam/visualizer/EdgeVizUtils.hpp"
 
 
 DEFINE_bool(use_frontend_logger, false,
@@ -73,6 +74,50 @@ DEFINE_bool(use_edge_selector_track, false,
 
 namespace dyno {
 
+// Helper function matching coarseTracking.cpp generateSrcPixelsSampled
+static double degreesToPiRange(double degrees) {
+    assert(degrees >= 0 && degrees < 360.0);
+    // Map to [-π, π]
+    if (degrees <= 180) {
+        return degrees * M_PI / 180.0; // 0~180 → 0~π
+    } else {
+        return (degrees - 360) * M_PI / 180.0; // 180~360 → -π~0
+    }
+}
+
+static void generateSrcPixelsSampled(const Frame::Ptr& frame_cur,
+                                     std::vector<float>& edge_point_total_x,
+                                     std::vector<float>& edge_point_total_y,
+                                     std::vector<float>& edge_depth_total,
+                                     std::vector<float>& edge_weight_total,
+                                     std::vector<cv::Point3f>& cloud_total,
+                                     std::vector<float>& edge_point_total_theta,
+                                     int sample_bias,
+                                     int maximum_point) {
+    edge_point_total_x.clear();
+    edge_point_total_y.clear();
+    edge_depth_total.clear();
+    edge_weight_total.clear();
+    cloud_total.clear();
+    edge_point_total_theta.clear();
+    
+    std::vector<orderedEdgePoint> sampledPoints = frame_cur->getCoarseSampledPoints(sample_bias, maximum_point);
+    for(size_t i = 0; i < sampledPoints.size(); ++i) {
+        const orderedEdgePoint& pt = sampledPoints[i];
+        float angle = pt.imgGradAngle;
+        angle = static_cast<float>(degreesToPiRange(angle));
+        float depth = pt.depth;
+        float weight = pt.score_depth;
+        cv::Point3f cloud_pt = cv::Point3f(pt.x_3d, pt.y_3d, pt.z_3d);
+        edge_depth_total.push_back(depth);
+        edge_weight_total.push_back(weight);
+        edge_point_total_x.push_back(pt.x);
+        edge_point_total_y.push_back(pt.y);
+        cloud_total.push_back(cloud_pt);
+        edge_point_total_theta.push_back(angle);
+    }
+}
+
 RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     const DynoParams& params, Camera::Ptr camera,
     ImageDisplayQueue* display_queue)
@@ -91,6 +136,17 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   local_map_.reset(new edge_map::localMap());
   // TODO: Load canny parameters from config
   edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
+  
+  // Load sliding window parameters from config
+  const auto& win_params = getFrontendParams().tracker_params.edge_win;
+  window_size_ = win_params.window_size;
+  window_step_ = win_params.window_step;
+  kf_trans_thres_ = static_cast<float>(win_params.kf_trans_thres);
+  kf_rot_thres_ = static_cast<float>(win_params.kf_rot_thres);
+
+  // Set camera intrinsics for edge_viz utility (copied from dyno_sam.cc)
+  edge_viz::setCameraParams(camera->getParams().fx(), camera->getParams().fy(),
+                            camera->getParams().cu(), camera->getParams().cv());
   
   if (FLAGS_use_frontend_logger) {
     LOG(INFO) << "Using front-end logger!";
@@ -116,6 +172,26 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   // Start background processing thread for keyframe queue
   processing_running_ = true;
   processing_thread_ = std::thread(&RGBDInstanceFrontendModule::processingThreadFunction, this);
+
+  // Initialize visualization caches
+  {
+    std::lock_guard<std::mutex> lock(local_map_mutex_);
+    cluster_clouds_cache_ =
+        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+            std::vector<std::vector<cv::Point3d>>{});
+    cluster_colors_cache_ =
+        std::make_shared<const std::vector<cv::Vec3b>>(
+            std::vector<cv::Vec3b>{});
+    local_map_clouds_cache_ =
+        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+            std::vector<std::vector<cv::Point3d>>{});
+    environment_cloud_cache_ =
+        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+            std::vector<std::vector<cv::Point3d>>{});
+    environment_frames_.clear();
+    // Initialize visualization data (will be updated every frame)
+    latest_visualization_data_ = nullptr;
+  }
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -136,6 +212,7 @@ RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
     // JsonConverter::WriteOutJson(output_packet_record_, file_path,
     //                             JsonConverter::Format::BSON);
   }
+
 }
 
 FrontendModule::ImageValidationResult
@@ -237,32 +314,31 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   //   LOG(ERROR) << "Could not solve for camera";
   // }
 
-  // Use DirectTrack instead of solveCameraMotion
-  // Calculate initial relative pose estimate (can use IMU prediction or constant velocity)
-  VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: about to call DirectTrack";
-  gtsam::Pose3 T_k_1_k_initial;
-  if (last_imu_k_ == frame->getFrameId() && has_imu) {
-    // Use IMU prediction if available
-    const gtsam::Pose3 T_world_k_1 = nav_state_prev_.pose();
-    const gtsam::Pose3 T_world_k = nav_state_curr_.pose();
-    T_k_1_k_initial = T_world_k_1.inverse() * T_world_k;
-    VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using IMU prediction for initial pose";
-  } else {
-    // Use constant velocity model
-    T_k_1_k_initial = vo_velocity_;
-    VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using constant velocity model for initial pose";
-  }
+  
+  // TODO: Uncomment below to use IMU prediction or constant velocity model as initial pose
+  // gtsam::Pose3 T_k_1_k_initial;
+  // if (last_imu_k_ == frame->getFrameId() && has_imu) {
+  //   // Use IMU prediction if available
+  //   const gtsam::Pose3 T_world_k_1 = nav_state_prev_.pose();
+  //   const gtsam::Pose3 T_world_k = nav_state_curr_.pose();
+  //   T_k_1_k_initial = T_world_k_1.inverse() * T_world_k;
+  //   VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using IMU prediction for initial pose";
+  // } else {
+  //   // Use constant velocity model
+  //   T_k_1_k_initial = vo_velocity_;
+  //   VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using constant velocity model for initial pose";
+  // }
+  
+  gtsam::Pose3 T_k_1_k_initial = gtsam::Pose3();  // Identity pose
   
   // Perform DirectTrack
-  VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: calling DirectTrack";
   const auto t_direct_start = std::chrono::steady_clock::now();
   gtsam::Pose3 T_k_1_k_refined;
   if (!DirectTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
-    VLOG(5) << "DirectTrack failed, using initial pose estimate";
+    LOG(ERROR) << "DirectTrack failed, using identity pose";
     T_k_1_k_refined = T_k_1_k_initial;
   }
   const auto t_direct_end = std::chrono::steady_clock::now();
-  VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: DirectTrack completed";
   
   // Update frame pose with DirectTrack result
   frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
@@ -274,11 +350,59 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     if (!FineTrack(frame, previous_frame, T_k_1_k_refined, T_k_1_k_fine_refined)) {
       VLOG(5) << "Could not fine track";
     } else {
-      // Update frame pose with refined result from FineTrack
-      frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_fine_refined;
+      // Check for pose jump 
+      // Reject fine tracking result if it shows unreasonable motion (prevents trajectory flips)
+      const gtsam::Matrix3& R = T_k_1_k_fine_refined.rotation().matrix();
+      const gtsam::Point3& t = T_k_1_k_fine_refined.translation();
+      const double t_thres = 0.10;  // meters
+      const double angle_thres = 15.0;  // degrees
+      
+      Eigen::AngleAxisd rotation_vector(R);
+      const double angle_deg = rotation_vector.angle() * 180.0 / M_PI;
+      const double translation_norm = t.norm();
+      
+      if (translation_norm > t_thres || angle_deg > angle_thres) {
+        LOG_EVERY_N(WARNING, 50) << "FineTrack pose jump detected: trans=" << translation_norm 
+                                  << "m, angle=" << angle_deg << "deg, using DirectTrack result";
+        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+      } else {
+        // Update frame pose with refined result from FineTrack
+        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_fine_refined;
+        // T_w_ref * T_ref_cur = T_w_cur
+      }
     }
   }
   const auto t_fine_end = std::chrono::steady_clock::now();
+
+  // Update visualization snapshot every frame
+
+  {
+    EdgeVisualizationDataPtr snap = std::make_shared<EdgeVisualizationData>();
+    snap->currentFramePose = frame->T_world_camera_.matrix();
+
+    // Read caches + sliding window under the local_map_mutex_
+    std::lock_guard<std::mutex> lock(local_map_mutex_);
+
+    snap->clusterClouds = cluster_clouds_cache_;
+    snap->clusterCloudColors = cluster_colors_cache_;
+    snap->localMapClouds = local_map_clouds_cache_;
+    snap->environment_cloud = environment_cloud_cache_;
+
+    auto window = std::make_shared<std::vector<Eigen::Matrix4d>>();
+    if (local_map_) {
+      window->reserve(local_map_->mvKeyFrames.size());
+      for (size_t i = 0; i < local_map_->mvKeyFrames.size(); ++i) {
+        window->push_back(local_map_->mvKeyFrames[i]->KF_pose_g.matrix());
+      }
+    }
+    snap->slidingWindow = window;
+
+    // Update latest visualization data (thread-safe, visualization thread can read anytime)
+    {
+      std::lock_guard<std::mutex> viz_lock(viz_mutex_);
+      latest_visualization_data_ = snap;
+    }
+  }
 
 
 
@@ -357,19 +481,19 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       if (local_map_empty) {
         pose_curr = pose_curr_coarse;
       } else {
-        // Use last optimized pose and relative motion
-        gtsam::Pose3 pose_last_prior = pose_curr_coarse; // Simplified
+        gtsam::Pose3 pose_last_prior = pose_last_edge_kf_;
         gtsam::Pose3 pose_bias = pose_last_prior.inverse() * pose_curr_coarse;
         pose_curr = pose_last_kf * pose_bias;
       }
       
-      // Create keyframe in nominalSpin (synchronous)
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
       const auto t_create_kf_end = std::chrono::steady_clock::now();
       
       if (pKF) {
         // Push to queue for async processing
         optimization_queue_.push(pKF);
+        VLOG(10) << "\033[32m[QUEUE PUSH]\033[0m kf_id=" << pKF->KF_ID
+                  << ", frame_id=" << frame->getFrameId();
       }
       
       pose_last_edge_kf_ = pose_curr_coarse;
@@ -578,121 +702,47 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
                                            const gtsam::Pose3& T_k_1_k_initial, 
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.direct_track");
-  // LOG(INFO) << "DirectTrack: entered function";
-  
-  // Check if direct_tracker_ is initialized
-  if (!direct_tracker_) {
-    // LOG(ERROR) << "DirectTrack: direct_tracker_ is null!";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  
-  // Validate frame image containers
-  // LOG(INFO) << "DirectTrack: validating frame image containers";
-  if (!frame_k_1->image_container_.hasRgb() || !frame_k->image_container_.hasRgb()) {
-    // LOG(WARNING) << "DirectTrack: frame image containers missing RGB, skipping";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
   
   // Get grayscale images
-  // LOG(INFO) << "DirectTrack: converting RGB to mono";
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_cur = frame_k->image_container_.rgb();
   cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
   cv::Mat mono_cur = ImageType::RGBMono::toMono(rgb_wrapper_cur);
   
-  if (mono_ref.empty() || mono_cur.empty()) {
-    // LOG(WARNING) << "DirectTrack: failed to convert RGB to mono";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  // LOG(INFO) << "DirectTrack: mono images converted, ref.size()=" << mono_ref.size() << ", cur.size()=" << mono_cur.size();
+  // // Collect static features with depth from previous frame
+  // TrackletIds tracklets = frame_k_1->static_features_.collectTracklets();
+  // if (tracklets.empty()) {
+  //   // LOG(WARNING) << "DirectTrack: no tracklets available";
+  //   T_k_1_k_refined = T_k_1_k_initial;
+  //   return false;
+  // }
   
-  // Collect static features with depth from previous frame
-  // LOG(INFO) << "DirectTrack: collecting tracklets";
-  TrackletIds tracklets = frame_k_1->static_features_.collectTracklets();
-  if (tracklets.empty()) {
-    // LOG(WARNING) << "DirectTrack: no tracklets available";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  // LOG(INFO) << "DirectTrack: collected " << tracklets.size() << " tracklets";
+  // std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+  // std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
   
-  std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
-  // LOG(INFO) << "DirectTrack: filtering features with depth";
-  for (const auto& tracklet_id : tracklets) {
-    Feature::Ptr feature = frame_k_1->static_features_.getByTrackletId(tracklet_id);
-    if (!feature || !feature->usable() || !feature->hasDepth()) {
-      continue;
-    }
-    
-    const Keypoint& kp = feature->keypoint();
-    x_list.push_back(kp(0));
-    y_list.push_back(kp(1));
-    depth_list.push_back(feature->depth());
-    weight_list.push_back(1.0f);  // Default weight
-    theta_list.push_back(0.0f);  // Default theta (gradient angle)
-  }
+  // // Get coarse sampling parameters from config
+  // const int sample_bias = getFrontendParams().tracker_params.edge_coarse.sample_bias;
+  // const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
   
-  if (x_list.empty()) {
-    // LOG(WARNING) << "DirectTrack: no valid features with depth";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  // LOG(INFO) << "DirectTrack: found " << x_list.size() << " features with depth";
+  // generateSrcPixelsSampled(frame_k_1, x_list, y_list, depth_list, weight_list, 
+  //                         frame_cloud_ref, theta_list, sample_bias, maximum_point);
   
-  // Set reference frame
-  // LOG(INFO) << "DirectTrack: calling setReference";
-  try {
-    direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
-  } catch (const std::exception& e) {
-    // LOG(ERROR) << "DirectTrack: setReference failed with exception: " << e.what();
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  // LOG(INFO) << "DirectTrack: setReference completed";
+  // // Set reference frame
+  // direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+
+  if(x_list.size()>200) isDataValid = true;
+
   
-  // Set current frame
-  // LOG(INFO) << "DirectTrack: calling setCurrent";
-  try {
+  if(!isDataValid) {
+    // Set current frame
     direct_tracker_->setCurrent(mono_cur);
-  } catch (const std::exception& e) {
-    // LOG(ERROR) << "DirectTrack: setCurrent failed with exception: " << e.what();
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  // LOG(INFO) << "DirectTrack: setCurrent completed";
-  
-  // Convert gtsam::Pose3 to Sophus::SE3d for DirectTracker
-  // DirectTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
-  // LOG(INFO) << "DirectTrack: converting pose to Sophus::SE3d";
-  const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
-  const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
-  Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
-                   T_matrix.topRightCorner<3, 1>());
-  // LOG(INFO) << "DirectTrack: pose conversion completed";
-  
-  // Run DirectTracker estimation
-  // LOG(INFO) << "DirectTrack: calling estimatePyramid";
-  try {
+    const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
+    const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+    Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+                     T_matrix.topRightCorner<3, 1>());
     direct_tracker_->estimatePyramid(T21, true);
-    // LOG(INFO) << "DirectTrack: estimatePyramid completed";
-  } catch (const std::runtime_error& e) {
-    // LOG(WARNING) << "DirectTracker failed with error: " << e.what() 
-    //              << ". Falling back to initial pose.";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  } catch (const std::exception& e) {
-    // LOG(WARNING) << "DirectTracker failed with exception: " << e.what() 
-    //              << ". Falling back to initial pose.";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  } catch (...) {
-    LOG_EVERY_N(WARNING, 50)
-        << "DirectTracker failed with unknown exception. Falling back to initial pose.";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
+
+  
   }
   
   // Check if tracking was successful
@@ -704,10 +754,9 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
   
   // Convert Sophus::SE3d result back to gtsam::Pose3
   // DirectTracker returns T_cur_ref, so we need to invert to get T_k_1_k
-  VLOG(10) << "DirectTrack: converting result back to gtsam::Pose3";
+  // VLOG(10) << "DirectTrack: converting result back to gtsam::Pose3";
   const Eigen::Matrix4d T_result = T21.inverse().matrix();
   T_k_1_k_refined = gtsam::Pose3(T_result);
-  VLOG(10) << "DirectTrack: completed successfully";
   
   return true;
 }
@@ -978,11 +1027,9 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
   return tracking_image;
 }
 
-// Edge-based local mapping functions (from localmapping.cc)
-
+// Edge-based local mapping functions
 bool RGBDInstanceFrontendModule::shouldAddEdgeKeyFrame(
     const gtsam::Pose3& pose_curr, const gtsam::Pose3& pose_last) const {
-  // From localmapping.cc shouldAddKeyFrame function
   gtsam::Pose3 trans = pose_last.inverse() * pose_curr;
   
   gtsam::Matrix3 R_bias = trans.rotation().matrix();
@@ -994,6 +1041,7 @@ bool RGBDInstanceFrontendModule::shouldAddEdgeKeyFrame(
 }
 
 void RGBDInstanceFrontendModule::processingThreadFunction() {
+  int last_popped_kf_id = -1;
   while (processing_running_) {
     KeyFramePtr kf;
     optimization_queue_.pop(kf);  // Blocking pop from queue
@@ -1002,6 +1050,16 @@ void RGBDInstanceFrontendModule::processingThreadFunction() {
       // nullptr means shutdown signal
       break;
     }
+    
+    // Check if keyframes are popped in order
+    if (last_popped_kf_id >= 0 && kf->KF_ID <= last_popped_kf_id) {
+      LOG(WARNING) << "\033[31m[QUEUE ORDER ERROR]\033[0m last_kf_id=" << last_popped_kf_id
+                   << ", current_kf_id=" << kf->KF_ID
+                   << " (queue may not maintain FIFO order)";
+    }
+    last_popped_kf_id = kf->KF_ID;
+    
+    VLOG(10) << "\033[34m[QUEUE POP]\033[0m kf_id=" << kf->KF_ID;
     
     // Process sliding window keyframe
     processSlidingWindowKeyFrame(kf);
@@ -1015,40 +1073,110 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
   
   const auto t0 = std::chrono::steady_clock::now();
   
-  // Add keyframe to local map
+  // Add keyframe to local map and perform optimization if window is full
+  // Keep lock held throughout to match localmapping.cc behavior (addFrame2LocalMap -> clusterFittingProjection)
   size_t kf_count = 0;
   {
     std::lock_guard<std::mutex> lock(local_map_mutex_);
+    
+    // Log before adding keyframe
+    size_t clusters_before = local_map_->mvEleEdgeClusters.size();
+    size_t edges_before = 0;
+    for(const auto& kf : local_map_->mvKeyFrames) {
+      edges_before += kf->mvEdges.size();
+    }
+    
     local_map_->addFrame2LocalMap(kf);
     kf_count = local_map_->mvKeyFrames.size();
-  }
-  
-  const auto t1 = std::chrono::steady_clock::now();
-  const auto ms = [](const auto& a, const auto& b) -> double {
-    return std::chrono::duration<double, std::milli>(b - a).count();
-  };
-  
-  VLOG(1) << "EdgeKF processed from queue kf_id=" << kf->KF_ID
-          << " add_to_map_ms=" << ms(t0, t1)
-          << " local_map_kfs=" << kf_count;
-  
-  // Check if window is full and perform optimization
-  if (kf_count >= window_size_) {
-    // Perform optimization directly (already in processing thread)
-    if (!optimization_in_progress_.load()) {
-      optimization_in_progress_ = true;
-      
-      const auto t_opt_start = std::chrono::steady_clock::now();
-      {
-        std::lock_guard<std::mutex> map_lock(local_map_mutex_);
+    
+    // Log after adding keyframe
+    size_t clusters_after = local_map_->mvEleEdgeClusters.size();
+    size_t edges_after = 0;
+    for(const auto& kf : local_map_->mvKeyFrames) {
+      edges_after += kf->mvEdges.size();
+    }
+    
+    VLOG(1) << "After addFrame2LocalMap: kf_id=" << kf->KF_ID
+            << " kf_count=" << kf_count
+            << " clusters: " << clusters_before << " -> " << clusters_after
+            << " (+" << (clusters_after - clusters_before) << ")"
+            << " edges: " << edges_before << " -> " << edges_after
+            << " (+" << (edges_after - edges_before) << ")";
+    
+    // This allows visualization of clusters before optimization
+    std::vector<std::vector<cv::Point3d>> clusterClouds;
+    std::vector<cv::Vec3b> clusterCloudColors;
+    edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+
+    cluster_clouds_cache_ =
+        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+            std::move(clusterClouds));
+    cluster_colors_cache_ =
+        std::make_shared<const std::vector<cv::Vec3b>>(
+            std::move(clusterCloudColors));
+    
+    const auto t1 = std::chrono::steady_clock::now();
+    const auto ms = [](const auto& a, const auto& b) -> double {
+      return std::chrono::duration<double, std::milli>(b - a).count();
+    };
+    
+    VLOG(10) << "EdgeKF processed from queue kf_id=" << kf->KF_ID
+            << " add_to_map_ms=" << ms(t0, t1)
+            << " local_map_kfs=" << kf_count;
+    
+    // Check if window is full and perform optimization
+    if (kf_count == window_size_) {
+      // Perform optimization directly (already in processing thread)
+      if (!optimization_in_progress_.load()) {
+        optimization_in_progress_ = true;
         
-        // From localmapping.cc lines 233-236
+        LOG(INFO) << "Starting edge sliding-window optimization";
+        
+        const auto t_opt_start = std::chrono::steady_clock::now();
+        
         local_map_->clusterFittingProjection();
         const auto t1 = std::chrono::steady_clock::now();
+        
+        // LOG merged clusters after clusterFittingProjection
+        int merged_after_fit = 0;
+        for(const auto& cluster : local_map_->mvEleEdgeClusters) {
+          if(cluster.mbMerged) merged_after_fit++;
+        }
+        LOG(INFO) << "After clusterFittingProjection: merged_clusters=" << merged_after_fit
+                  << " / " << local_map_->mvEleEdgeClusters.size();
+        
         edge_map::Optimizer::optimizeAllInvolvedKFs(local_map_);
+
+        // Update merged local map cache (heavy data) for visualization snapshots
+        {
+          std::vector<std::vector<cv::Point3d>> mergedClouds;
+          edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
+          local_map_clouds_cache_ =
+              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                  std::move(mergedClouds));
+
+          // Accumulate environment cloud from merged local map
+          std::vector<cv::Point3d> currentLocalMapCloud;
+          for (const auto& c : *local_map_clouds_cache_) {
+            currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+          }
+          environment_frames_.push_back(std::move(currentLocalMapCloud));
+          while (environment_frames_.size() > 150) {
+            environment_frames_.pop_front();
+          }
+          auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
+          env->reserve(environment_frames_.size());
+          for (const auto& f : environment_frames_) {
+            env->push_back(f);
+          }
+          environment_cloud_cache_ =
+              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                  std::move(*env));
+        }
+        
         const auto t2 = std::chrono::steady_clock::now();
         
-        VLOG(1) << "Edge sliding-window optimized (async)"
+        VLOG(5) << "Edge sliding-window optimized (async)"
                 << " cluster_fit_ms="
                 << std::chrono::duration<double, std::milli>(t1 - t_opt_start).count()
                 << " optimize_ms="
@@ -1056,11 +1184,22 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
                 << " total_ms="
                 << std::chrono::duration<double, std::milli>(t2 - t_opt_start).count();
         
-        // Update sliding window after optimization
+        // Update sliding window after optimization (this will reset local map)
+        // Keep lock held to match localmapping.cc behavior
         updateEdgeSlidingWindow();
+        
+        optimization_in_progress_ = false;
+      } else {
+        VLOG(1) << "Optimization already in progress, skipping";
       }
-      
-      optimization_in_progress_ = false;
+    } else {
+      // Log when window is not full yet
+      static int log_count = 0;
+      if (++log_count % 50 == 0) {
+        LOG(INFO) << "Edge sliding-window not full yet: kf_count=" << kf_count
+                  << " < window_size=" << window_size_
+                  << " (need " << (window_size_ - kf_count) << " more keyframes)";
+      }
     }
   }
 }
@@ -1083,6 +1222,18 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
       std::lock_guard<std::mutex> lock(local_map_mutex_);
       local_map_->addFrame2LocalMap(pKF);
       kf_count = local_map_->mvKeyFrames.size();
+
+      // // Update covisibility cluster cache (heavy data) for snapshots
+      // std::vector<std::vector<cv::Point3d>> clusterClouds;
+      // std::vector<cv::Vec3b> clusterCloudColors;
+      // edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+
+      // cluster_clouds_cache_ =
+      //     std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+      //         std::move(clusterClouds));
+      // cluster_colors_cache_ =
+      //     std::make_shared<const std::vector<cv::Vec3b>>(
+      //         std::move(clusterCloudColors));
     }
     const auto t_add1 = std::chrono::steady_clock::now();
     
@@ -1166,10 +1317,9 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
           << std::chrono::duration<double, std::milli>(t_kf_ctor1 - t_kf_ctor0).count();
   
   // Get fine sampled points (from localmapping.cc line 223)
-  // TODO: Get sample_bias from params
-  // Note: bias must be >= 1 (integer), using 2 as default (similar to FineTracker which uses 4)
   const auto t_sample0 = std::chrono::steady_clock::now();
-  pKF->getFineSampledPoints(2);  // Default value, should come from params
+  const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
+  pKF->getFineSampledPoints(sample_bias);
   const auto t_sample1 = std::chrono::steady_clock::now();
   VLOG(2) << "Fine sample frame=" << frame_id
           << " ms="
@@ -1189,11 +1339,30 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // Note: This function should be called from optimizationThreadFunction
   // with local_map_mutex_ already locked
   const auto t0 = std::chrono::steady_clock::now();
+  
+  size_t current_kf_count = local_map_->mvKeyFrames.size();
+  
+  // // Log keyframes before removal
+  // LOG(INFO) << "\033[33m[SLIDING WINDOW UPDATE]\033[0m before: kf_count=" << current_kf_count
+  //           << ", window_size=" << window_size_ << ", window_step=" << window_step_;
+  // if (current_kf_count > 0) {
+  //   std::string kf_ids_before = "kf_ids=[";
+  //   for (size_t i = 0; i < std::min(current_kf_count, size_t(10)); ++i) {
+  //     if (i > 0) kf_ids_before += ", ";
+  //     kf_ids_before += std::to_string(local_map_->mvKeyFrames[i]->KF_ID);
+  //   }
+  //   if (current_kf_count > 10) kf_ids_before += ", ...";
+  //   kf_ids_before += "]";
+  //   LOG(INFO) << "  " << kf_ids_before;
+  // }
+  
   // Save poses and timestamps of removed keyframes
   std::vector<Eigen::Matrix4d> removed_poses;
   std::vector<double> removed_stamps;
+  std::vector<int> removed_kf_ids;
   
   for (int j = 0; j < window_step_; ++j) {
+    removed_kf_ids.push_back(local_map_->mvKeyFrames[j]->KF_ID);
     double removed_stamp = local_map_->mvKeyFrames[j]->KF_stamp;
     Eigen::Matrix4d removed_pose = 
         local_map_->mvKeyFrames[j]->KF_pose_g.matrix();
@@ -1202,10 +1371,25 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     removed_stamps.push_back(removed_stamp);
   }
   
+  // LOG(INFO) << "  Removing " << window_step_ << " keyframes: kf_ids=["
+  //           << (removed_kf_ids.empty() ? "" : std::to_string(removed_kf_ids[0]));
+  // for (size_t i = 1; i < removed_kf_ids.size(); ++i) {
+  //   LOG(INFO) << ", " << removed_kf_ids[i];
+  // }
+  // LOG(INFO) << "]";
+  
   // Keep overlapping keyframes
   std::vector<KeyFramePtr> newKFs(
       local_map_->mvKeyFrames.begin() + window_step_,
       local_map_->mvKeyFrames.begin() + window_size_);
+  
+  // std::string kept_kf_ids = "kf_ids=[";
+  // for (size_t i = 0; i < newKFs.size(); ++i) {
+  //   if (i > 0) kept_kf_ids += ", ";
+  //   kept_kf_ids += std::to_string(newKFs[i]->KF_ID);
+  // }
+  // kept_kf_ids += "]";
+  // LOG(INFO) << "  Keeping " << newKFs.size() << " keyframes: " << kept_kf_ids;
   
   // Reset local map and add overlapping keyframes
   local_map_.reset(new edge_map::localMap());
@@ -1216,10 +1400,9 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   }
   
   const auto t1 = std::chrono::steady_clock::now();
-  VLOG(1) << "Updated edge sliding window, kept "
-          << (window_size_ - window_step_) << " keyframes"
-          << " rebuild_ms="
-          << std::chrono::duration<double, std::milli>(t1 - t0).count();
+  // LOG(INFO) << "  After update: kf_count=" << local_map_->mvKeyFrames.size()
+  //           << " rebuild_ms="
+  //           << std::chrono::duration<double, std::milli>(t1 - t0).count();
 }
 
 }  // namespace dyno

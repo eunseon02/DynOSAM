@@ -56,6 +56,9 @@
 #include "dynosam/backend/edge_map/KeyFrame.hpp"
 #include "dynosam/backend/edge_map/localMap.hpp"
 #include "dynosam/backend/edge_map/Optimizer.hpp"
+#include "dynosam/visualizer/Visualizer-Definitions.hpp"
+
+#include <deque>
 
 namespace dyno {
 
@@ -170,6 +173,19 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   std::thread processing_thread_;
   std::atomic<bool> processing_running_{false};
   std::atomic<bool> optimization_in_progress_{false};  // Track if optimization is currently running
+
+  // Latest visualization data (always available, updated every frame)
+  // Protected by viz_mutex_ for thread-safe read/write
+  mutable std::mutex viz_mutex_;
+  EdgeVisualizationDataPtr latest_visualization_data_;
+
+  // Cached visualization state (heavy data) protected by local_map_mutex_
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> cluster_clouds_cache_;
+  std::shared_ptr<const std::vector<cv::Vec3b>> cluster_colors_cache_;
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> local_map_clouds_cache_;
+  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud_cache_;
+  std::deque<std::vector<cv::Point3d>> environment_frames_;  // <=150 frames
+
   
   // Processing thread function
   void processingThreadFunction();
@@ -193,6 +209,22 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   edge_map::localMapPtr getLocalMap() const {
     std::lock_guard<std::mutex> lock(local_map_mutex_);
     return local_map_;
+  }
+  
+  // Getter for current frame (for visualization)
+  // Returns the most recently tracked frame
+  Frame::Ptr getCurrentFrame() const {
+    if (tracker_) {
+      return tracker_->getCurrentFrame();
+    }
+    return nullptr;
+  }
+  
+  // Get latest visualization data (thread-safe, always returns current snapshot)
+  // Returns nullptr if no data is available yet
+  EdgeVisualizationDataPtr getLatestVisualizationData() const {
+    std::lock_guard<std::mutex> lock(viz_mutex_);
+    return latest_visualization_data_;
   }
 };
 

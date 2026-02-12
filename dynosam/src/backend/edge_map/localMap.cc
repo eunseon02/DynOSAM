@@ -1,70 +1,70 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
 using namespace edge_map;
 
-//-- 在关键帧数量大于2的时候初始化一个局部地图
+//-- Initialize a local map when the number of keyframes is greater than 2
 void localMap::initLocalMap()
 {
     assert(mvKeyFrames.size() == 2);
 
-    //-- 获取三个关键帧
+    //-- Get two keyframes
     KeyFramePtr pKF_0 = mvKeyFrames[0];
     KeyFramePtr pKF_1 = mvKeyFrames[1];
 
-    //* STEP-0 首先将 pKF_0 完整加入地图
+    //* STEP-0 First, add all edges from pKF_0 to the map
     for(int i = 0; i < pKF_0->mvEdges.size(); ++i)
     {
-        //-- 关键帧中的边缘都是有效边缘
+        //-- All edges in the keyframe are valid edges
         int edge_idx = i;
         elementEdge ele(pKF_0->KF_ID, edge_idx);
-        //-- 局部地图添加当前的边缘元素
+        //-- Add current edge element to local map
         mvElementEdges.push_back(ele);
         mmElementID2index[ele.element_id] = mvElementEdges.size()-1;
-        //-- 关键帧索引当前的局部地图
+        //-- Keyframe indexes the current local map
         pKF_0->mmEdgeIndex2ElementEdgeID[i] = ele.element_id;
     }
 
-    //-- 初始化整个局部地图的基准坐标系
+    //-- Initialize the reference coordinate frame of the entire local map
     // T_ref = pKF_0->KF_pose_g;
 
-    //-- 两帧关联
+    //-- Associate two frames
     associationResult res = associationMulti2Multi(pKF_0, pKF_1);
 
-    //*  归纳关联结果
-    //-- 构建索引, first是边缘类别的id, second 是边缘类别对应的 pKF_0 边缘的 root_idx
+    //* Summarize association results
+    //-- Build index, first is edge category id, second is root_idx of pKF_0 edge corresponding to edge category
     std::unordered_map<int, int> labelRootMap;
-    std::unordered_map<int, int> edgeLabelMap = std::move(res.second); //-- 边缘-label map
-    std::unordered_map<int, int> curRefMap = std::move(res.first);     //-- 当前帧-参考帧 map
+    std::unordered_map<int, int> edgeLabelMap = std::move(res.second); //-- edge-label map
+    std::unordered_map<int, int> curRefMap = std::move(res.first);     //-- current frame-reference frame map
 
-    //-- 标记 pKF_0 中哪些边缘可关联哪些不可
+    //-- Mark which edges in pKF_0 can be associated and which cannot
     std::vector<bool> isAssociated(pKF_0->mvEdges.size(), false);
 
-    // * STEP-1 pKF_0 内部进行并查集合并
+    // * STEP-1 Perform union-find merge within pKF_0
     for(const auto &pair : edgeLabelMap)
     {
         const int label = pair.second;
         const int edge_idx = pair.first;
 
-        //-- 能遍历到说明可关联
+        //-- If traversed, it means it can be associated
         isAssociated[edge_idx] = true;
 
         if(labelRootMap.find(label) == labelRootMap.end())
         {
             labelRootMap[label] = edge_idx;
         }else{
-            //-- 得到当前index的 root_idx
+            //-- Get root_idx of current index
             int root_idx = labelRootMap[label];
 
-            //-- 由帧边缘ID对应到地图的边缘ID，并使用并查集进行合并这些边缘
+            //-- Map frame edge ID to map edge ID, and merge these edges using union-find
             unsigned int map_id_1 = pKF_0->mmEdgeIndex2ElementEdgeID.at(root_idx);
             unsigned int map_id_2 = pKF_0->mmEdgeIndex2ElementEdgeID.at(edge_idx);
 
-            //-- 并查集的归并
+            //-- Union-find merge
             int map_idx_2 = mmElementID2index.at(map_id_2);
             mvElementEdges[map_idx_2].union_id = findRoot(map_id_1);
         }
     }
 
-    // * STEP-2 遍历 pKF_1 的关联列表，将能够关联的边缘加入Map中
+    // * STEP-2 Traverse association list of pKF_1, add edges that can be associated to Map
     for(const auto& pair: curRefMap)
     {
         int cur_idx = pair.first;
@@ -72,12 +72,12 @@ void localMap::initLocalMap()
 
         int label_id = edgeLabelMap[ref_idx];
 
-        //-- 如果被关联到的参考帧是无效帧，在frame2MapElement中找不到，则跳过
+        //-- If the associated reference frame is invalid and not found in frame2MapElement, skip
         if(pKF_0->mmEdgeIndex2ElementEdgeID.find(ref_idx)==pKF_0->mmEdgeIndex2ElementEdgeID.end()) continue;
 
         int size = mvElementEdges.size();
         elementEdge ele(pKF_1->KF_ID, cur_idx);
-        //-- 与当前帧的该边缘关联的参考帧的地图id
+        //-- Map id of reference frame associated with this edge of current frame
         ele.union_id = pKF_0->mmEdgeIndex2ElementEdgeID[ref_idx];
 
         mvElementEdges.push_back(ele);
@@ -85,22 +85,22 @@ void localMap::initLocalMap()
         pKF_1->mmEdgeIndex2ElementEdgeID[cur_idx] = ele.element_id;
     }
 
-    // * STEP-3 将 pKF_0 中不能与 pKF_1 关联的边缘移除出局部地图
+    // * STEP-3 Remove edges from pKF_0 that cannot be associated with pKF_1 from local map
     for (auto it = mvElementEdges.begin(); it != mvElementEdges.end(); ) {
         if(it->kf_id == pKF_0->KF_ID && !isAssociated[it->kf_edge_idx]) 
         {
-            //-- 首先删除关键帧到局部地图的索引
+            //-- First delete keyframe to local map index
             if (pKF_0->mmEdgeIndex2ElementEdgeID.find(it->kf_edge_idx) != pKF_0->mmEdgeIndex2ElementEdgeID.end())
             {
                 pKF_0->mmEdgeIndex2ElementEdgeID.erase(it->kf_edge_idx);
             }
-            //-- 再删除局部地图的 elementEdge
-            it = mvElementEdges.erase(it); // erase 返回下一个有效迭代器
+            //-- Then delete elementEdge from local map
+            it = mvElementEdges.erase(it); // erase returns next valid iterator
         }else{
-            ++it; // 否则继续
+            ++it; // Otherwise continue
         }
     }
-    //-- 有删除元素即需要重置 id2idx 的map
+    //-- If elements are deleted, need to reset id2idx map
     mmElementID2index.clear();
     for(size_t i = 0; i < mvElementEdges.size(); ++i)
     {
@@ -108,12 +108,12 @@ void localMap::initLocalMap()
         mmElementID2index[ele.element_id] = i;
     }
 
-    //-- 剪枝
+    //-- Pruning
     pruningMap();
 
-    //-- 生成 elementEdge Cluster
-    //-- 边缘地图元素与类别ID的映射, 
-    //-- first是map element的label，second是map element的列表，即一团map element是一个完整边缘
+    //-- Generate elementEdge Cluster
+    //-- Mapping of edge map elements to category IDs,
+    //-- first is label of map element, second is list of map elements, i.e., a group of map elements is a complete edge
     std::map<unsigned int, std::vector<unsigned int>> eleEdgeMap;
     eleEdgeMap.clear();
     for(int i = 0; i < mvElementEdges.size(); ++i)
@@ -121,7 +121,7 @@ void localMap::initLocalMap()
         unsigned int curr_id = mvElementEdges[i].element_id;
         unsigned int root_id = findRoot(curr_id);
         //std::cout<<root_idx<<std::endl;
-        //-- root_idx是0的时候会有BUG, 需要检查
+        //-- There will be a BUG when root_idx is 0, need to check
         eleEdgeMap[root_id].push_back(mvElementEdges[i].element_id);
     }
 
@@ -139,15 +139,15 @@ void localMap::initLocalMap()
 
 }
 
-//-- 输入 curr_id 是当前 elementEdge 的 element_id
+//-- Input curr_id is the element_id of current elementEdge
 unsigned int localMap::findRoot(unsigned int curr_id)
 {
-    //-- 与当前帧同类的根节点
+    //-- Root node of same class as current frame
     int curr_idx = mmElementID2index.at(curr_id);
     int union_id = mvElementEdges.at(curr_idx).union_id;
-    if(union_id == -1){//-- 如果当前的curr_id的根节点就是-1，说明这个就是独立的根节点
+    if(union_id == -1){//-- If root node of current curr_id is -1, it means this is an independent root node
         return curr_id;
-    }else{//-- 如果不是，就递归找根节点
+    }else{//-- Otherwise, recursively find root node
         return findRoot(union_id);
     }
 }
@@ -162,84 +162,84 @@ void localMap::pruningMap(){
     }
 }
 
-//-- 将 frame_cur 投影到 frame_ref 上实现 frame_cur 与 frame_ref 的多对多关联
-//-- 默认 frame_ref 时间戳在 frame_cur 之前
+//-- Project frame_cur onto frame_ref to achieve many-to-many association between frame_cur and frame_ref
+//-- By default, frame_ref timestamp is before frame_cur
 associationResult localMap::associationMulti2Multi(KeyFramePtr frame_ref, KeyFramePtr frame_cur)
 {
-    //-- 为参考帧的边缘创建一个并查集，并在后续持续的优化过程中更新这个并查集
+    //-- Create a union-find set for edges of reference frame, and update this union-find set in subsequent continuous optimization
     const int ref_edge_num = frame_ref->mvEdges.size();
     DisjointSet edgeRefSet(ref_edge_num);
 
-    std::vector<bool> isAssociated(ref_edge_num, false); //-- 有的参考帧的边并没有被关联上，这里记录一下
+    std::vector<bool> isAssociated(ref_edge_num, false); //-- Some edges of reference frame are not associated, record here
 
-    //-- 由于是当前帧重投影到参考帧关联参考帧，故而是当前帧存储与参考帧的关联关系
-    std::unordered_map<int, int> currframeMap; //-- <idx1, idx2> 记录当前帧的第idx1条边与参考帧的第idx2条边是一类的
+    //-- Since current frame is reprojected to reference frame to associate reference frame, current frame stores association relationship with reference frame
+    std::unordered_map<int, int> currframeMap; //-- <idx1, idx2> records that idx1-th edge of current frame and idx2-th edge of reference frame are of the same class
     currframeMap.reserve(frame_cur->mvEdges.size() / 2);
 
-    //-- 位姿差
+    //-- Pose difference
     Sophus::SE3d T_ref_cur = frame_ref->KF_pose_g.inverse() * frame_cur->KF_pose_g;
 
-    //-- 缓存参考帧的mmIndexMap以避免重复查找
+    //-- Cache reference frame's mmIndexMap to avoid repeated lookups
     const auto& refIndexMap = frame_ref->mmIndexMap;
 
-    //-- 用当前帧的有效边缘去参考帧中关联参考帧的边缘，并且对关联到多个的参考帧关联进行并查集的合并
+    //-- Use valid edges of current frame to associate edges in reference frame, and merge reference frame associations that are associated to multiple using union-find
     const int cur_edge_num = frame_cur->mvEdges.size();
     for(int i = 0; i < cur_edge_num; ++i)
     {
         Edge& query_edge = frame_cur->mvEdges[i];
-        //-- 让当前帧的一条边缘关联参考帧
+        //-- Associate one edge of current frame with reference frame
         std::vector<int> associated_edges = frame_ref->edgeWiseCorrespondenceLocalMapping(query_edge,T_ref_cur);
         
         if(associated_edges.empty()) continue;
         
-        //-- 此时整个返回的列表里的边缘都需要进行合并
+        //-- At this point, all edges in the returned list need to be merged
         if(associated_edges.size() >= 2)
         {
-            //-- associated_edges[0]是第0条边的ID
+            //-- associated_edges[0] is ID of 0-th edge
             const int root_idx = refIndexMap.at(associated_edges[0]);
 
             for(size_t j = 1; j < associated_edges.size(); j++)
             {
-                //-- associated_edges[j]是这些被关联的边中的第j条边的ID
+                //-- associated_edges[j] is ID of j-th edge among these associated edges
                 int curr_idx = refIndexMap.at(associated_edges[j]);
-                //-- 在并查集中合并这两个idx，即mvEdges[root_idx]与mvEdges[curr_idx]是相同的一个类
+                //-- Merge these two idx in union-find set, i.e., mvEdges[root_idx] and mvEdges[curr_idx] are of the same class
                 edgeRefSet.to_union(root_idx, curr_idx);
             }
         }
 
-        //-- 更新关联关系, 如果有建立正确的关联，则得到当前边与参考帧的关联
+        //-- Update association relationship, if correct association is established, get association between current edge and reference frame
         currframeMap[i] = refIndexMap.at(associated_edges[0]);
-        //-- 记录一下参考帧的这条边有没有被关联
+        //-- Record whether this edge of reference frame is associated
         for(const auto& edge_id : associated_edges)
         {
             const int curr_idx = refIndexMap.at(edge_id);
             isAssociated[curr_idx] = true;
         }
     }
-    //-- 至此多对多的聚类完成
+    //-- At this point, many-to-many clustering is complete
     edgeRefSet.pruningSet();
 
-    //-- 整理分类与可视化，需要为并查集中所有的类创建一个唯一的颜色，并在可视化时查找这个颜色并渲染
-    std::unordered_map<int, int> clusterMap; //-- 分类与颜色对应的map，分类就是ref帧的并查集的根节点的idx
-                                             //-- first是ref帧的每条边缘的idx，second是对应的类别
+    //-- Organize classification and visualization, need to create a unique color for all classes in union-find set, and look up this color during visualization and render
+    std::unordered_map<int, int> clusterMap; //-- Map corresponding classification to color, classification is idx of root node of union-find set of ref frame
+                                             //-- first is idx of each edge of ref frame, second is corresponding category
     clusterMap.reserve(ref_edge_num / 2);
     
     for(int i = 0; i < ref_edge_num; ++i){
         if(isAssociated[i]==false) continue;
-        //-- 对于可关联的边，通过并查集找到其根节点
+        //-- For associable edges, find their root node through union-find set
         clusterMap[i] = edgeRefSet.find(i);
     }
     associationResult res;
     res.first = std::move(currframeMap);
     res.second = std::move(clusterMap);
-    //-- 预存储当前帧与参考帧的关联关系
+    //-- Pre-store association relationship between current frame and reference frame
     frame_cur->mmMapAssociations[frame_ref->KF_ID] = res;
     return res;
 }
 
 void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
 {
-    //-- 先确认有没有初始化好, 没有初始化好则后面全部不予执行
+    //-- First check if initialization is complete, if not, skip all subsequent execution
     if(msState == State::NOT_INITIALIZED)
     {
         if(mvKeyFrames.size() < 2)
@@ -257,14 +257,14 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         return;
     }
 
-    //-- 先初始化所有的cluster的mbModifiedCur，以标记当前这些cluster有没有被修改
+    //-- First initialize mbModifiedCur of all clusters to mark whether these clusters have been modified
     for (auto& cluster : mvEleEdgeClusters)
     {
         cluster.mbModifiedCur = false;
     }
 
     int N = frame_cur->mvEdges.size();
-    //-- 当前帧的关联列表，能与先前任一参考帧关联的都会被设为true
+    //-- Association list of current frame, edges that can be associated with any previous reference frame will be set to true
     std::vector<bool> isAssociated(N, false);
     frame_cur->mmEdgeIndex2ElementEdgeID.clear();
 
@@ -272,26 +272,26 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
     {
         KeyFramePtr frame_ref = mvKeyFrames[i];
         associationResult res;
-        //-- 先检查当前帧有没有和参考帧建立过关联
+        //-- First check if current frame has established association with reference frame
         if(frame_cur->mmMapAssociations.find(frame_ref->KF_ID) != frame_cur->mmMapAssociations.end()){
-            //-- 关联过就不用重新执行关联了
+            //-- If already associated, no need to re-execute association
             res = frame_cur->mmMapAssociations[frame_ref->KF_ID];
         }else{
-            //-- 没关联过就要重新关联一下
+            //-- If not associated, need to re-associate
             res = associationMulti2Multi(frame_ref, frame_cur);
         }
 
-        //-- 归纳关联结果
-        //-- 构建索引, first是边缘类别的id, second是边缘类别对应的ref边缘的idx
+        //-- Summarize association results
+        //-- Build index, first is edge category id, second is idx of ref edge corresponding to edge category
         std::unordered_map<int, int> labelRootMap;
-        std::unordered_map<int, int> edgeLabelMap = std::move(res.second); //-- 边缘-label map
-        std::unordered_map<int, int> curRefMap = std::move(res.first);     //-- 当前帧-参考帧 map
+        std::unordered_map<int, int> edgeLabelMap = std::move(res.second); //-- edge-label map
+        std::unordered_map<int, int> curRefMap = std::move(res.first);     //-- current frame-reference frame map
 
-        //-- 参考帧内部进行并查集合并（参考帧自己的边缘是同一个边缘）
+        //-- Perform union-find merge within reference frame (edges of reference frame itself are the same edge)
         for(const auto &pair : edgeLabelMap)
         {
             const int label = pair.second;
-            const int edge_idx = pair.first; //-- 该edge_idx一定存在于local map中
+            const int edge_idx = pair.first; //-- This edge_idx must exist in local map
 
             if(labelRootMap.find(label) == labelRootMap.end())
             {
@@ -299,20 +299,20 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
             }else{
                 int root_idx = labelRootMap[label];
 
-                //-- 由帧边缘ID对应到地图的边缘ID，并使用并查集进行合并这些边缘
+                //-- Map frame edge ID to map edge ID, and merge these edges using union-find
                 unsigned int map_id_1 = frame_ref->mmEdgeIndex2ElementEdgeID.at(root_idx);
                 unsigned int map_id_2 = frame_ref->mmEdgeIndex2ElementEdgeID.at(edge_idx);
 
-                // * 并查集的归并
+                // * Union-find merge
                 int map_idx_2 = mmElementID2index.at(map_id_2);
                 int map_idx_1 = mmElementID2index.at(map_id_1);
-                //-- 检查需要归并的两个 elementEdge 是不是原本同类
-                //-- 原本同类不需要额外处理，非同类需要归并
+                //-- Check if two elementEdges that need to be merged are originally of the same class
+                //-- If originally same class, no additional processing needed; if different classes, need to merge
                 unsigned int cluster_id_1 = findRoot(map_id_1);
                 unsigned int cluster_id_2 = findRoot(map_id_2);
                 if(cluster_id_1 != cluster_id_2)
                 {
-                    //-- 不是同类，需要merge两个cluster
+                    //-- Not same class, need to merge two clusters
                     int cluster_idx_1 = mmClusterID2index.at(cluster_id_1);
                     int cluster_idx_2 = mmClusterID2index.at(cluster_id_2);
                     
@@ -322,18 +322,18 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
             }
         }
 
-        //-- 遍历当前帧的关联列表，将能够关联的帧加入Map中
+        //-- Traverse association list of current frame, add frames that can be associated to Map
         for(const auto& pair: curRefMap){
             int cur_idx = pair.first;
-            //-- 如果当前边缘已经被其他参考帧关联了，那跳过这个边缘
+            //-- If current edge has already been associated by other reference frame, skip this edge
             if(isAssociated[cur_idx]==true) continue;
             int ref_id = pair.second;
             int label_id = edgeLabelMap[ref_id];
 
-            //-- 如果被关联到的参考帧是无效帧，在frame2MapElement中找不到，则跳过
+            //-- If associated reference frame is invalid and not found in frame2MapElement, skip
             if(frame_ref->mmEdgeIndex2ElementEdgeID.find(ref_id)==frame_ref->mmEdgeIndex2ElementEdgeID.end()) continue;
 
-            //-- 对于已经关联了的边缘，创建 elementEdge 并union
+            //-- For edges that have been associated, create elementEdge and union
             isAssociated[cur_idx] = true;
             
             elementEdge ele(frame_cur->KF_ID, cur_idx);
@@ -345,7 +345,7 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
             mmElementID2index[ele.element_id] = mvElementEdges.size()-1;
             frame_cur->mmEdgeIndex2ElementEdgeID[cur_idx] = ele.element_id;
 
-            //-- 将当前 elementEdge 归到 elementEdgeCluster 中
+            //-- Add current elementEdge to elementEdgeCluster
             unsigned int cluster_id = ele.union_id;
             if(mmClusterID2index.find(cluster_id)==mmClusterID2index.end())
             {
@@ -358,10 +358,10 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         }
     }
 
-    //-- 遍历当前帧未被关联的边缘，将其加入到地图中
+    //-- Traverse unassociated edges of current frame, add them to map
     for(int i = 0; i < frame_cur->mvEdges.size(); ++i){
         if(isAssociated[i]== true) continue;
-        //-- 对于未被关联的边缘，加入地图中
+        //-- For unassociated edges, add to map
         int size = mvElementEdges.size();
         
         elementEdge ele(frame_cur->KF_ID, i);
@@ -377,18 +377,18 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         mmClusterID2index[cluster_id] = mvEleEdgeClusters.size() - 1;
         
     }
-    //-- 将当前帧添加入Map
+    //-- Add current frame to Map
     mvKeyFrames.push_back(frame_cur);
     mmKFID2KFindex[frame_cur->KF_ID] = mvKeyFrames.size()-1;
 
-    //-- 统计被修改的cluster 更新所有 cluster 的 count_not_update
+    //-- Count modified clusters, update count_not_update of all clusters
     for (auto& cluster : mvEleEdgeClusters)
     {
         if(cluster.mbModifiedCur == false)
         {
             cluster.count_not_update += 1;
         }else{
-            //-- 如果被修改就从0开始继续数
+            //-- If modified, restart counting from 0
             cluster.count_not_update = 0;
         }
     }
@@ -397,7 +397,7 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
 
 void localMap::mergeElementCluster(int cluster_idx_1, int cluster_idx_2)
 {
-    //-- 检查两个cluster里谁大小更大
+    //-- Check which of the two clusters is larger
     elementEdgeCluster& cluster_1 = mvEleEdgeClusters[cluster_idx_1];
     elementEdgeCluster& cluster_2 = mvEleEdgeClusters[cluster_idx_2];
     int size_1 = cluster_1.mvElementEdgeIDs.size();
@@ -405,49 +405,49 @@ void localMap::mergeElementCluster(int cluster_idx_1, int cluster_idx_2)
 
     if(size_1 > size_2)
     {
-        //-- size_1 更大就将 cluster_2 合并到 cluster_1;
-        // * STEP-1 调整 cluster_2 中的所有边的根节点
+        //-- If size_1 is larger, merge cluster_2 into cluster_1
+        // * STEP-1 Adjust root nodes of all edges in cluster_2
         for(auto& id : cluster_2.mvElementEdgeIDs)
         {
             int idx = mmElementID2index[id];
-            mvElementEdges[idx].union_id = cluster_1.cluster_id; //-- cluster_id 就是根节点id
+            mvElementEdges[idx].union_id = cluster_1.cluster_id; //-- cluster_id is the root node id
         }
-        // * STEP-2 将 cluster_2 中所有边移动到 cluster_1
+        // * STEP-2 Move all edges from cluster_2 to cluster_1
         auto& vElementIDS_1 = cluster_1.mvElementEdgeIDs;
         vElementIDS_1.insert(vElementIDS_1.end(), cluster_2.mvElementEdgeIDs.begin(), cluster_2.mvElementEdgeIDs.end());
         
-        // * STEP-3 删除 cluster_2
-        mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_2); // 删除第i个元素
+        // * STEP-3 Delete cluster_2
+        mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_2); // Delete i-th element
         mmClusterID2index.clear();
         for (int i = 0; i < mvEleEdgeClusters.size(); ++i)
         {
             unsigned int c_id = mvEleEdgeClusters[i].cluster_id;
             mmClusterID2index[c_id] = i;
         }
-        // * STEP-4 最新操作，因此记录 cluster_1 本轮被修改
+        // * STEP-4 Latest operation, so record that cluster_1 was modified this round
         cluster_1.mbModifiedCur = true;
 
     }else{
-        //-- size_2 更大就将 cluster_1 合并到 cluster_2;
-        // * STEP-1 调整 cluster_2 中的所有边的根节点
+        //-- If size_2 is larger, merge cluster_1 into cluster_2
+        // * STEP-1 Adjust root nodes of all edges in cluster_1
         for(auto& id : cluster_1.mvElementEdgeIDs)
         {
             int idx = mmElementID2index[id];
-            mvElementEdges[idx].union_id = cluster_2.cluster_id; //-- cluster_id 就是根节点id
+            mvElementEdges[idx].union_id = cluster_2.cluster_id; //-- cluster_id is the root node id
         }
-        // * STEP-2 将 cluster_1 中所有边移动到 cluster_2
+        // * STEP-2 Move all edges from cluster_1 to cluster_2
         auto& vElementIDS_2 = cluster_2.mvElementEdgeIDs;
         vElementIDS_2.insert(vElementIDS_2.end(), cluster_1.mvElementEdgeIDs.begin(), cluster_1.mvElementEdgeIDs.end());
         
-        // * STEP-3 删除 cluster_1
-        mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_1); // 删除第i个元素
+        // * STEP-3 Delete cluster_1
+        mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_1); // Delete i-th element
         mmClusterID2index.clear();
         for (int i = 0; i < mvEleEdgeClusters.size(); ++i)
         {
             unsigned int c_id = mvEleEdgeClusters[i].cluster_id;
             mmClusterID2index[c_id] = i;
         }
-        // * STEP-4 最新操作，因此记录 cluster_2 本轮被修改
+        // * STEP-4 Latest operation, so record that cluster_2 was modified this round
         cluster_2.mbModifiedCur = true;
     }
 }
@@ -460,41 +460,41 @@ void localMap::elementClusterCulling()
     {
         if(cluster_iter->count_not_update > 3)
         {
-            //-- 删除
-            // * STEP-1 先删除该cluster中的所有边缘
+            //-- Delete
+            // * STEP-1 First delete all edges in this cluster
             int N = cluster_iter->mvElementEdgeIDs.size();
             std::vector<int> indicesToDelete;
             indicesToDelete.reserve(N);
             for(int i = 0; i < N; ++i)
             {
-                //-- 删除 ele_id 对应的 elementEdge
+                //-- Delete elementEdge corresponding to ele_id
                 unsigned int ele_id = cluster_iter->mvElementEdgeIDs[i];
                 int ele_idx = mmElementID2index[ele_id];
                 elementEdge& ele_edge = mvElementEdges[ele_idx];
 
-                //-- substep-1 删除关键帧对该 elementEdge 的索引
+                //-- substep-1 Delete keyframe index to this elementEdge
                 KeyFramePtr pKF = mvKeyFrames.at(mmKFID2KFindex[ele_edge.kf_id]);
                 pKF->mmEdgeIndex2ElementEdgeID.erase(ele_edge.kf_edge_idx);
                 
-                //-- substep-2 记录要删除的 elementEdge 的索引
+                //-- substep-2 Record index of elementEdge to be deleted
                 indicesToDelete.push_back(ele_idx);
             }
-            //-- substep-3 整理记录的要删除的 elementEdge
+            //-- substep-3 Organize recorded elementEdges to be deleted
             ele_index_tobe_deleted.insert(ele_index_tobe_deleted.end(), indicesToDelete.begin(), indicesToDelete.end());
 
-            // * STEP-2 删除该 cluster
+            // * STEP-2 Delete this cluster
             cluster_iter = mvEleEdgeClusters.erase(cluster_iter);
         }else{
             cluster_iter++;
         }
     }
 
-    // * STEP-3 根据整理出来的要删除的 elementEdge 做统一删除
+    // * STEP-3 Perform unified deletion based on organized elementEdges to be deleted
     std::sort(ele_index_tobe_deleted.begin(), ele_index_tobe_deleted.end(), std::greater<int>());
     for(int idx : ele_index_tobe_deleted) {
         mvElementEdges.erase(mvElementEdges.begin() + idx);
     }
-    //-- 重置 elementEdge 的索引映射
+    //-- Reset index mapping of elementEdge
     mmElementID2index.clear();
     for(size_t i = 0; i < mvElementEdges.size(); ++i)
     {
@@ -502,7 +502,7 @@ void localMap::elementClusterCulling()
         mmElementID2index[ele.element_id] = i;
     }
 
-    // * STEP-4 重新整理 cluster 的 ID-索引 映射
+    // * STEP-4 Reorganize ID-index mapping of clusters
     mmClusterID2index.clear();
     for (int i = 0; i < mvEleEdgeClusters.size(); ++i)
     {
@@ -521,7 +521,7 @@ void localMap::removeKeyFrameFront()
 
     std::cout<<"remove frame "<<kf_id<<std::endl;
 
-    // * STEP-1 找到 elementEdge 中所有来自该关键帧的边缘
+    // * STEP-1 Find all edges from this keyframe in elementEdge
     std::vector<int> indicesToDelete;
     indicesToDelete.reserve(pKF_del->mvEdges.size());
 
@@ -533,11 +533,11 @@ void localMap::removeKeyFrameFront()
         if(ele_curr.kf_id == kf_id)
         {
             indicesToDelete.push_back(i);
-            //-- 找这个 elementEdge 的 cluster
+            //-- Find cluster of this elementEdge
             unsigned int cluster_id = findRoot(ele_curr.element_id);
             if(mmClusterID2index.find(cluster_id) != mmClusterID2index.end())
             {
-                //-- 标记这个 cluster，其需要后续被清理
+                //-- Mark this cluster, it needs to be cleaned up later
                 clusters_tobe_culled.insert(cluster_id);
             }else{
                 std::cout<<cluster_id<<std::endl;
@@ -546,7 +546,7 @@ void localMap::removeKeyFrameFront()
         }
     }
 
-    // * STEP-2 从 cluster 中删去这些边缘的索引
+    // * STEP-2 Remove indices of these edges from clusters
     std::vector<int> clusterIdxToDelete;
     clusterIdxToDelete.reserve(mvEleEdgeClusters.size()/10);
     for(auto id = clusters_tobe_culled.begin(); id != clusters_tobe_culled.end(); ++id)
@@ -563,26 +563,26 @@ void localMap::removeKeyFrameFront()
             int ele_idx = mmElementID2index[ele_id];
             if(mvElementEdges[ele_idx].kf_id == kf_id)
             {
-                //-- 标记这个位置
+                //-- Mark this position
                 indicesToDelete_ele.push_back(i);
             }
         }
 
-        //-- 删除这个cluster中的该关键帧的边缘索引
+        //-- Delete edge indices of this keyframe in this cluster
         std::sort(indicesToDelete_ele.begin(), indicesToDelete_ele.end(), std::greater<int>());
         for(int idx : indicesToDelete_ele) {
             cluster.mvElementEdgeIDs.erase(cluster.mvElementEdgeIDs.begin() + idx);
         }
 
-        //-- 如果这个 cluster 空了，那删除这个cluster, 此处做标记
+        //-- If this cluster is empty, delete this cluster, mark here
         if(cluster.mvElementEdgeIDs.size()==0)
         {
             clusterIdxToDelete.push_back(index);
             continue;
         }
 
-        //-- 如果这个 cluster 非空，删除之后该 cluster_id 需要重新赋值，以防旧的 root 被删除
-        //-- 让这个cluster 中的所有 elementEdge 将其中的任意边缘作为 root
+        //-- If this cluster is not empty, after deletion, cluster_id needs to be reassigned to prevent old root from being deleted
+        //-- Let all elementEdges in this cluster use any edge as root
         int new_N = cluster.mvElementEdgeIDs.size();
         unsigned int ele_id_new_root = cluster.mvElementEdgeIDs[0];
         int ele_idx_new_root = mmElementID2index[ele_id_new_root];
@@ -593,24 +593,24 @@ void localMap::removeKeyFrameFront()
             int ele_idx = mmElementID2index[ele_id];
             mvElementEdges[ele_idx].union_id = mvElementEdges[ele_idx_new_root].element_id;
         }
-        //-- 重置该 cluster 的 cluster_id
+        //-- Reset cluster_id of this cluster
         if(mmClusterID2index.find(ele_id_new_root) == mmClusterID2index.end())
         {
             cluster.cluster_id = ele_id_new_root;
         }else{
             if(cluster.cluster_id != ele_id_new_root){
-                //-- 理论上不可能有其他的 cluster 的 cluster_id 是这个 cluster 中的elementEdge 的 id 
+                //-- Theoretically impossible for other cluster's cluster_id to be id of elementEdge in this cluster
                 std::cout<<"\033[31m [ERROR] \033[0m"<<"wrong cluster construction"<<std::endl;
             }
         }
     }
 
-    //-- 删除 cluster
+    //-- Delete clusters
     std::sort(clusterIdxToDelete.begin(), clusterIdxToDelete.end(), std::greater<int>());
     for(int idx : clusterIdxToDelete) {
         mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + idx);
     }
-    //-- 重新整理 cluster 的 id-index 映射
+    //-- Reorganize id-index mapping of clusters
     mmClusterID2index.clear();
     for(int i = 0; i < mvEleEdgeClusters.size(); ++i)
     {
@@ -619,13 +619,13 @@ void localMap::removeKeyFrameFront()
     }
 
 
-    // * STEP-3 从 mvElementEdges 中删掉这些边缘
-    //-- 从后往前删，不破坏索引
+    // * STEP-3 Delete these edges from mvElementEdges
+    //-- Delete from back to front to avoid breaking indices
     std::sort(indicesToDelete.begin(), indicesToDelete.end(), std::greater<int>());
     for(int idx : indicesToDelete) {
         mvElementEdges.erase(mvElementEdges.begin() + idx);
     }
-    //-- 重新索引 mvElementEdges
+    //-- Re-index mvElementEdges
     mmElementID2index.clear();
     for(size_t i = 0; i < mvElementEdges.size(); ++i)
     {
@@ -634,11 +634,11 @@ void localMap::removeKeyFrameFront()
     }
 
 
-    // * STEP-4 移除关键帧，并清理关键帧与局部地图有关的信息
+    // * STEP-4 Remove keyframe and clean up information related to keyframe and local map
     pKF_del->mmEdgeIndex2ElementEdgeID.clear();
     pKF_del->mmMapAssociations.clear();
 
-    //-- 移除第一个帧
+    //-- Remove first frame
     mvKeyFrames.erase(mvKeyFrames.begin());
     mmKFID2KFindex.clear();
     for(int i = 0; i < mvKeyFrames.size(); ++i)
@@ -647,7 +647,7 @@ void localMap::removeKeyFrameFront()
         mmKFID2KFindex[ckf_id] = i;
     }
 
-    //-- 修改local_map的参考坐标位置为当前首帧的位姿
+    //-- Modify reference coordinate position of local_map to pose of current first frame
     // assert(mvKeyFrames.size()>0);
     // T_ref = mvKeyFrames[0]->KF_pose_g;
 }
@@ -656,7 +656,7 @@ pcl::PointXYZ localMap::calcCloudCentroid(const pcl::PointCloud<pcl::PointXYZ>& 
 {
     pcl::PointXYZ NaN(0,0,0);
     pcl::PointXYZ centroid = current;
-    // //-- 防止current点自己深度不好，不考虑current点
+    // //-- Prevent current point itself from having bad depth, don't consider current point
     // centroid.x = 0;
     // centroid.y = 0;
     // centroid.z = 0;
@@ -679,7 +679,7 @@ pcl::PointXYZ localMap::calcCloudCentroid(const pcl::PointCloud<pcl::PointXYZ>& 
 void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>>& clusterCloud,
                                   pcl::PointCloud<pcl::PointXYZ>& mergedCloud)
 {
-    //-- 寻找最长的一条边缘
+    //-- Find the longest edge
     int maxLength = 0;
     int maxIndex = -1;
     for (int i = 0; i < clusterCloud.size(); ++i){
@@ -689,45 +689,45 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
         }
     }
 
-    //-- 对最长的边缘进行采样
+    //-- Sample the longest edge
     pcl::PointCloud<pcl::PointXYZ> sampled_longest_cloud;
     const int sampleBias = 3;
     const auto& longestCloud = clusterCloud[maxIndex]; 
     const size_t cloudSize = longestCloud.size();
 
     sampled_longest_cloud.reserve(cloudSize / sampleBias + 2);
-    sampled_longest_cloud.push_back(longestCloud[0]);  // 第一个点
+    sampled_longest_cloud.push_back(longestCloud[0]);  // First point
     for(size_t i = sampleBias; i < cloudSize - 1; i += sampleBias) {
         sampled_longest_cloud.push_back(longestCloud[i]);
     }
-    if(cloudSize > 1) {  // 最后一个点
+    if(cloudSize > 1) {  // Last point
         sampled_longest_cloud.push_back(longestCloud.back());
     }
 
 
-    //-- 对最长的边缘作为参考边缘，建立KDtree
+    //-- Use longest edge as reference edge, build KDtree
     pcl::PointCloud<pcl::PointXYZ>::Ptr p_ref_cloud(new pcl::PointCloud<pcl::PointXYZ>);
     *p_ref_cloud = sampled_longest_cloud;
     pcl::KdTreeFLANN<pcl::PointXYZ> kdtree;  
     kdtree.setInputCloud (p_ref_cloud);
 
-    //-- 最长的边的端点，用来判断新加入的边插在哪边
+    //-- Endpoints of longest edge, used to determine where newly added edges are inserted
     pcl::PointXYZ end_point_1 = p_ref_cloud->points[0];
     pcl::PointXYZ end_point_2 = p_ref_cloud->points.back();
 
-    //-- 存储与当前采样边缘有关联的其他点的信息
+    //-- Store information of other points associated with current sampled edge
     std::vector<pcl::PointCloud<pcl::PointXYZ>> associatedClouds;
     associatedClouds.resize(p_ref_cloud->points.size());
     
-    //-- 通过垂足关系找到与这条边缘关联的其他的关联部分
+    //-- Find other associated parts related to this edge through foot point relationship
     for(int i = 0; i < clusterCloud.size(); ++i){
         std::vector<bool> isAssociated;
         if(i == maxIndex){
             continue;
         }
-        //-- 遍历当前边缘，对每个边缘点计算一个垂足
+        //-- Traverse current edge, calculate foot point for each edge point
         for(int j = 0; j < clusterCloud[i].size(); ++j){
-            //-- 最近邻搜索得到垂线的基准点
+            //-- Nearest neighbor search to get reference point of perpendicular line
             pcl::PointXYZ query = clusterCloud[i][j];
             int K = 1;
             std::vector<int> pointIdxNKNSearch(K);
@@ -735,12 +735,12 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
             kdtree.nearestKSearch(query, K, pointIdxNKNSearch, pointNKNSquaredDistance);
             int nearestIndex = pointIdxNKNSearch[0];
             float nearestDistance = pointNKNSquaredDistance[0];
-            //-- 根据左右方向得到垂线端点
+            //-- Get endpoints of perpendicular line based on left-right direction
             int index_front = nearestIndex-1>=0 ? nearestIndex-1 : 0;
             int index_rear = nearestIndex+1<p_ref_cloud->points.size() ? nearestIndex+1 : p_ref_cloud->points.size()-1;
             pcl::PointXYZ point_a = p_ref_cloud->points[index_front];
             pcl::PointXYZ point_b = p_ref_cloud->points[index_rear];
-            //-- 计算垂足
+            //-- Calculate foot point
             Eigen::Vector3d bias;
             bias(0) = point_a.x - point_b.x;
             bias(1) = point_a.y - point_b.y;
@@ -754,17 +754,17 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
             foot.x = length*bias(0) + point_b.x;
             foot.y = length*bias(1) + point_b.y;
             foot.z = length*bias(2) + point_b.z;
-            //-- 判断垂足在不在两点中间
-            if(length < 0 || length > 1){//-- 垂足不在两点之间，说明点关联偏了
+            //-- Check if foot point is between two points
+            if(length < 0 || length > 1){//-- Foot point not between two points, indicates point association is off
                 isAssociated.push_back(false);
-            }else{//-- 垂足中正
+            }else{//-- Foot point is correct
                 isAssociated.push_back(true);
-                //-- 根据关联关系，更新与参考边缘关联的点云，一定距离阈值内的才要更新
+                //-- Based on association relationship, update point cloud associated with reference edge, only update within certain distance threshold
                 if(nearestDistance < 0.03){
                     int asso_idx = nearestIndex;
                     float nearest_foot_dist = 0;
                     pcl::PointXYZ point_n = p_ref_cloud->points[nearestIndex];
-                    //-- 判断垂足离point_a, point_b, point_n谁最近
+                    //-- Determine which of point_a, point_b, point_n the foot point is closest to
                     double distance_1 = pcl::euclideanDistance(foot, point_n);
                     double distance_2 = pcl::euclideanDistance(foot, point_a);
                     double distance_3 = pcl::euclideanDistance(foot, point_b);
@@ -786,14 +786,14 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
             }
         }
 
-        // //-- 寻找当前边缘false关联最长的一段
+        // //-- Find longest segment of false associations in current edge
         // int maxLength = 0, currentLength = 0;
         // int start_index = -1, end_index = -1;
         // int final_start_index;
         // for(int j = 0; j < isAssociated.size(); ++j){
         //     bool b = isAssociated[j];
         //     if(b == false){
-        //         //-- 如果首次出现false或由true变为false, 则记录这个index
+        //         //-- If false appears for the first time or changes from true to false, record this index
         //         if(currentLength == 0) start_index = j;
         //         currentLength++;
         //     }else{
@@ -805,20 +805,20 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
         //         currentLength = 0;
         //     }
         // }
-        // //-- 遍历完一遍，如果结尾全是false且最大则调整之
+        // //-- After traversing once, if the end is all false and maximum, adjust it
         // if(currentLength > maxLength){
         //     maxLength = currentLength;
         //     final_start_index = start_index;
         //     end_index = isAssociated.size();
         // }
-        // //-- 现在final_start_index到end_index-1中间这一部分是需要被添加的部分
+        // //-- Now the part between final_start_index and end_index-1 is the part that needs to be added
         // int false_length = end_index - final_start_index;
-        // //-- 太短的不要
+        // //-- Don't take ones that are too short
         // if(false_length < 5){
         //     continue;
         // }
 
-        // //-- 整理出多出的这一段
+        // //-- Organize the extra segment
         // pcl::PointCloud<pcl::PointXYZ> addCloud;
         // for(int j = final_start_index; j < end_index; ++j){
         //     if(j == final_start_index || j == end_index - 1 || (j-final_start_index)%3==0){
@@ -826,11 +826,11 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
         //     }
         // }
 
-        // //-- 多出的这一段的关联关系同样需要修改
+        // //-- Association relationship of the extra segment also needs to be modified
         // std::vector<pcl::PointCloud<pcl::PointXYZ>> add_associatedClouds;
         // add_associatedClouds.resize(addCloud.size());
 
-        // //-- 判断这一段应该插在哪里
+        // //-- Determine where this segment should be inserted
         // pcl::PointXYZ end_point_3 = addCloud.points[0];
         // pcl::PointXYZ end_point_4 = addCloud.points.back();
         // double dst1 = sqrt((end_point_3.x-end_point_1.x)*(end_point_3.x-end_point_1.x)
@@ -847,30 +847,30 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
         //                   +(end_point_4.z-end_point_2.z)*(end_point_4.z-end_point_2.z));
         // pcl::PointCloud<pcl::PointXYZ> cloud_merge = *p_ref_cloud;
         // if(dst1 <= dst2 && dst1 <= dst3 && dst1 <= dst4){
-        //     //-- 插入顺序为4--3|1--2
+        //     //-- Insertion order is 4--3|1--2
         //     std::reverse(addCloud.begin(), addCloud.end());
         //     cloud_merge = addCloud + cloud_merge;
         //     associatedClouds.insert(associatedClouds.begin(), 
         //                             add_associatedClouds.begin(), add_associatedClouds.end());
         // }else if(dst2 <= dst1 && dst2 <= dst3 && dst2 <= dst4){
-        //     //-- 插入顺序为1--2|3--4
+        //     //-- Insertion order is 1--2|3--4
         //     cloud_merge = cloud_merge + addCloud;
         //     associatedClouds.insert(associatedClouds.end(), 
         //                             add_associatedClouds.begin(), add_associatedClouds.end());
         // }else if(dst3 <= dst1 && dst3 <= dst2 && dst3 <= dst4){
-        //     //-- 插入顺序为3--4|1--2
+        //     //-- Insertion order is 3--4|1--2
         //     cloud_merge = addCloud + cloud_merge;
         //     associatedClouds.insert(associatedClouds.begin(), 
         //                             add_associatedClouds.begin(), add_associatedClouds.end());
         // }else if(dst4 <= dst1 && dst4 <= dst2 && dst4 <= dst3){
-        //     //-- 插入顺序为1--2|4--3
+        //     //-- Insertion order is 1--2|4--3
         //     std::reverse(addCloud.begin(), addCloud.end());
         //     cloud_merge = cloud_merge + addCloud;
         //     associatedClouds.insert(associatedClouds.end(), 
         //                             add_associatedClouds.begin(), add_associatedClouds.end());
         // }
 
-        // //-- 更新kdtree
+        // //-- Update kdtree
         // *p_ref_cloud = cloud_merge;
         // pcl::KdTreeFLANN<pcl::PointXYZ> kdtree_new;  
         // kdtree_new.setInputCloud (p_ref_cloud);
@@ -878,20 +878,20 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
         // end_point_1 = p_ref_cloud->points[0];
         // end_point_2 = p_ref_cloud->points.back();
 
-        // //-- 更新isAssociated
+        // //-- Update isAssociated
         // for(int j = final_start_index; j < end_index; ++j){
         //     isAssociated[j] = true;
         // }
 
     } 
-    // //-- 计算关联的质心
+    // //-- Calculate centroid of associations
     pcl::PointCloud<pcl::PointXYZ> cloud_adjust;
     pcl::PointXYZ NaN(0,0,0);
     for(int cnt = 0; cnt < p_ref_cloud->points.size(); ++cnt)
     {
         pcl::PointXYZ centroid = calcCloudCentroid(associatedClouds[cnt], p_ref_cloud->points[cnt]);
         if(centroid.x == 0 && centroid.y == 0 && centroid.z == 0){
-            continue; //-- 遇到没有关联的NaN的点就不管这个点
+            continue; //-- Encounter NaN point without association, ignore this point
         }
         cloud_adjust.push_back(centroid);
         //cloud_adjust.push_back(p_ref_cloud->points[cnt]);
@@ -903,7 +903,7 @@ void localMap::getMergedCluster(const std::vector<pcl::PointCloud<pcl::PointXYZ>
 
 void localMap::clustersFitting3D()
 {
-    //-- 遍历所有的cluster
+    //-- Traverse all clusters
     for(size_t i = 0; i < mvEleEdgeClusters.size(); ++i)
     {
         
@@ -920,7 +920,7 @@ void localMap::clustersFitting3D()
 
         std::vector<pcl::PointCloud<pcl::PointXYZ>> clusterCloud;
         clusterCloud.reserve(ele_indices.size());
-        //-- 构造
+        //-- Construct
         int N = ele_indices.size();
         for(size_t j = 0; j < N; ++j)
         {
@@ -936,20 +936,20 @@ void localMap::clustersFitting3D()
             for(size_t k = 0; k < edge.mvPoints.size(); ++k)
             {
                 const orderedEdgePoint& pt = edge.mvPoints[k];
-                //-- 计算3D坐标
+                //-- Calculate 3D coordinates
                 Eigen::Vector3d point_3d(pt.x_3d,pt.y_3d,pt.z_3d);
-                //-- 重投影得到新的投影点
+                //-- Reproject to get new projection points
                 point_3d = T_ref_cur * point_3d;
                 pcl::PointXYZ point(point_3d.x(),point_3d.y(),point_3d.z());
                 cloud.points.push_back(point);
             }
             clusterCloud.push_back(cloud);
         }
-        //-- 在 T_ref 坐标系下的 merged_cloud;
+        //-- merged_cloud in T_ref coordinate frame
         pcl::PointCloud<pcl::PointXYZ> merged_cloud;
         getMergedCluster(clusterCloud, merged_cloud);
 
-        //-- 将 pcl::PointCloud 类型转为 opencv 的点云类型
+        //-- Convert pcl::PointCloud type to opencv point cloud type
         std::vector<cv::Point3d> result;
         result.reserve(merged_cloud.size());
         
@@ -958,7 +958,7 @@ void localMap::clustersFitting3D()
         for (size_t i = 0; i < size; ++i) {
             result.emplace_back(data[i].x, data[i].y, data[i].z);
         }
-        //-- 把 merged 的结果存放在 cluster 中
+        //-- Store merged result in cluster
         cluster.mvMergedCloud_ref = std::move(result);
         cluster.mbMerged = true; 
 
@@ -970,7 +970,7 @@ void localMap::clustersFitting3D()
 
 void localMap::clusterFittingProjection()
 {
-    //-- 重新构造就先清理掉
+    //-- Clear before reconstructing
     for(size_t i = 0; i < mvEleEdgeClusters.size(); ++i)
     {
         elementEdgeCluster& cluster = mvEleEdgeClusters[i];
@@ -979,7 +979,7 @@ void localMap::clusterFittingProjection()
         cluster.dist_thres = -1.0;
     }
 
-    //-- 遍历所有的cluster
+    //-- Traverse all clusters
     for(size_t i = 0; i < mvEleEdgeClusters.size(); ++i)
     {
         
@@ -998,7 +998,7 @@ void localMap::clusterFittingProjection()
         std::vector<int> kf_indices;
         clusterElement.reserve(ele_indices.size());
         kf_indices.reserve(ele_indices.size());
-        //-- 构造
+        //-- Construct
         int N = ele_indices.size();
         for(size_t j = 0; j < N; ++j)
         {
@@ -1008,14 +1008,14 @@ void localMap::clusterFittingProjection()
             clusterElement.push_back(ele_edge);
             kf_indices.push_back(kf_idx);
         }
-        //-- 在 T_ref 坐标系下的 merged_cloud;
+        //-- merged_cloud in T_ref coordinate frame
         std::vector<cv::Point3d> merged_cloud;
         double dist_thres;
         std::vector<int> involved_elements;
         //-- featureMerger::getMergedClusterProjection(clusterElement, kf_indices, mvKeyFrames, merged_cloud, involved_elements);
         // featureMerger::getMergedClusterIncremental(clusterElement, kf_indices, mvKeyFrames, merged_cloud, involved_elements);
         featureMerger::getMergedClusterIterative(clusterElement, kf_indices, mvKeyFrames, merged_cloud, dist_thres, involved_elements);
-        //-- 把 merged 的结果存放在 cluster 中
+        //-- Store merged result in cluster
         cluster.mvMergedCloud_ref = std::move(merged_cloud);
         cluster.mvInvolvedLocalMapElementIndices = std::move(involved_elements);
         cluster.mbMerged = true; 
@@ -1036,16 +1036,16 @@ void localMap::assignWeights()
         cluster.weightBA = 1.0;
     }
 
-    // 1. 检查输入是否为空
+    // 1. Check if input is empty
     if (dist_thres_values.empty()) {
         return;
     }
 
-    // 2. 创建排序后的副本（从大到小）
+    // 2. Create sorted copy (from large to small)
     std::vector<double> sorted_values = dist_thres_values;
     std::sort(sorted_values.begin(), sorted_values.end(), std::greater<double>());
 
-    // 3. 计算平均值
+    // 3. Calculate mean value
     double sum = std::accumulate(sorted_values.begin(), sorted_values.end(), 0.0);
     double mean = sum / sorted_values.size();
 
@@ -1054,19 +1054,19 @@ void localMap::assignWeights()
         if (cluster.mbMerged == false) continue;
         double curr_dist = cluster.dist_thres;
 
-        // 4. 如果dist小于等于平均值，权重为1
+        // 4. If dist is less than or equal to mean, weight is 1
         if (curr_dist <= mean) {
             cluster.weightBA = 1.0;
             continue;
         }
 
-        // 5. 计算dist在排序列表中的相对位置（百分位）
+        // 5. Calculate relative position (percentile) of dist in sorted list
         auto it = std::lower_bound(sorted_values.begin(), sorted_values.end(), curr_dist, std::greater<double>());
         double rank = std::distance(sorted_values.begin(), it);
         double percentile = rank / sorted_values.size();
 
-        // 6. 设计权重函数：满足dist越大权重越小，衰减速度逐渐变慢
-        // 使用指数衰减函数，但调整衰减速率
+        // 6. Design weight function: larger dist results in smaller weight, decay speed gradually slows down
+        // Use exponential decay function, but adjust decay rate
         double normalized_dist = (curr_dist - mean) / (sorted_values.front() - mean);
         double weight = std::exp(-normalized_dist * (1.0 + percentile));
         cluster.weightBA = weight;
@@ -1087,7 +1087,7 @@ void localMap::getAssoFrameMergeEdge(int kf_id_dst, std::vector<match3d_2d>& mat
         std::vector<cv::Point3d> merged_cloud = cluster.mvMergedCloud_ref;
         std::vector<elementEdge> associated_ele_edges;
 
-        //-- 每个cluster的构成边缘
+        //-- Edges that constitute each cluster
         std::vector<int> involved_ele_indices = cluster.mvInvolvedLocalMapElementIndices;
         if(involved_ele_indices.empty())
         {

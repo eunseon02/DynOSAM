@@ -1384,5 +1384,44 @@ void Frame::edgeCullingContinuity()
 }
 
 
+std::vector<orderedEdgePoint> Frame::getCoarseSampledPoints(int bias, int maximum_point)
+{
+    std::vector<orderedEdgePoint> selectedPoints;
+    for(int i = 0; i < static_edges_.size(); ++i)
+    {
+        const Edge& edge = static_edges_[i];
+        //-- 获取采样的序列
+        for(int j = 0; j < edge.mvPoints.size(); ++j)
+        {
+            const orderedEdgePoint& pt = edge.mvPoints[j];
+            selectedPoints.push_back(pt);
+        }
+    }
+    //-- 根据空间均匀的原则进行采样，分数高的点优先
+    //-- 对点按分数进行排序
+    std::sort(selectedPoints.begin(),selectedPoints.end(),
+              [](const orderedEdgePoint& a, const orderedEdgePoint& b){ 
+                 return a.score_depth > b.score_depth; 
+              });
+
+    //-- 创建全黑的图像作为掩膜
+    cv::Mat mask(img_height_, img_width_, CV_8U, cv::Scalar(0));
+    //-- 根据掩膜进行采样排序
+    std::vector<orderedEdgePoint> sampledPoints;
+    sampledPoints.reserve(std::min(maximum_point, static_cast<int>(selectedPoints.size())));
+
+    for(const auto& pt : selectedPoints)
+    {
+        if(mask.at<uint8_t>(pt.y, pt.x) == 255) continue;
+        //-- 当前点可以选择
+        sampledPoints.push_back(pt);
+        cv::circle(mask, cv::Point(pt.x, pt.y), bias, 255, -1);
+        if(sampledPoints.size() >= maximum_point) break;
+    }
+    //-- 目前是完全采样完成的所有点
+    return sampledPoints;
+}
+
+
 
 }  // namespace dyno

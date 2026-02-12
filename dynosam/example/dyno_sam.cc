@@ -48,6 +48,7 @@
 #include "dynosam/pipeline/PipelineParams.hpp"
 #include "dynosam/visualizer/OpenCVFrontendDisplay.hpp"
 #include "dynosam/visualizer/VoViewer.hpp"
+#include "dynosam/visualizer/EdgeVizUtils.hpp"
 #include "dynosam/backend/BackendFactory.hpp"
 #include "dynosam/backend/BackendDefinitions.hpp"
 #include "dynosam/backend/edge_map/localMap.hpp"
@@ -132,154 +133,8 @@ void LoadTUMImages(const std::string& strAssociationFilename,
   fAssociation.close();
 }
 
-// Helper functions for edge-based visualization (from localmapping.cc)
-namespace edge_viz {
-  // Camera parameters for visualization (similar to localmapping.cc)
-  static float fx = 525.0f;
-  static float fy = 525.0f;
-  static float cx = 319.5f;
-  static float cy = 239.5f;
-  
-  void setCameraParams(float fx_val, float fy_val, float cx_val, float cy_val) {
-    fx = fx_val;
-    fy = fy_val;
-    cx = cx_val;
-    cy = cy_val;
-  }
-  
-  // Visualize association result (from localmapping.cc lines 27-78)
-  void visualizeAssociationResult(const edge_map::localMapPtr& pLocalMap,
-                                  std::vector<std::vector<cv::Point3d>>& clusterClouds,
-                                  std::vector<cv::Vec3b>& clusterCloudColors) {
-    clusterClouds.clear();
-    clusterCloudColors.clear();
-    
-    int skipped_small = 0;
-    int skipped_missing = 0;
-    for(const auto& cluster : pLocalMap->mvEleEdgeClusters) {
-      std::vector<unsigned int> edgeIDs = cluster.mvElementEdgeIDs;
-      std::vector<int> edgeIdx;
-      if(edgeIDs.size() < 5) {
-        skipped_small++;
-        continue;
-      }
-      bool all_found = true;
-      for(size_t i = 0; i < edgeIDs.size(); ++i) {
-        auto it = pLocalMap->mmElementID2index.find(edgeIDs[i]);
-        if (it == pLocalMap->mmElementID2index.end()) {
-          all_found = false;
-          skipped_missing++;
-          break;
-        }
-        int index = it->second;
-        edgeIdx.push_back(index);
-      }
-      if (!all_found || edgeIdx.empty()) continue;
-
-      // Edge cluster point cloud
-      std::vector<cv::Point3d> clusterCloud;
-      cv::Vec3b color = cluster.visColor;
-
-      for(size_t i = 0; i < edgeIdx.size(); ++i) {
-        int kf_edge_idx = pLocalMap->mvElementEdges[edgeIdx[i]].kf_edge_idx;
-        int kf_id = pLocalMap->mvElementEdges[edgeIdx[i]].kf_id;
-        int kf_idx = pLocalMap->mmKFID2KFindex.at(kf_id);
-
-        Edge& edge = pLocalMap->mvKeyFrames[kf_idx]->mvEdges[kf_edge_idx];
-        // Global pose of current map element edge
-        Eigen::Matrix4d Trans_curr = pLocalMap->mvKeyFrames[kf_idx]->KF_pose_g.matrix();
-        // Relative pose of current map element edge w.r.t. local map reference frame
-        Eigen::Matrix4d Trans_ref_curr = Trans_curr;
-        // Point cloud of single edge map element
-        std::vector<cv::Point3d> cloud;
-        // Calculate point cloud of single edge map element
-        for(size_t j = 0; j < edge.mvPoints.size(); ++j) {
-          orderedEdgePoint pt = edge.mvPoints[j];
-          // Calculate 3D coordinates
-          float x = (float(pt.x) - cx)/fx * pt.depth;
-          float y = (float(pt.y) - cy)/fy * pt.depth;
-          float z = pt.depth;
-          Eigen::Vector4d points(x,y,z,1);
-          // Reproject to get new projection points
-          points = Trans_ref_curr*points;
-          cv::Point3d point(points.x(),points.y(),points.z());
-          cloud.push_back(point);
-        }
-        clusterCloud.insert(clusterCloud.end(), cloud.begin(), cloud.end());
-      }
-      if (!clusterCloud.empty()) {
-        clusterClouds.push_back(clusterCloud);
-        clusterCloudColors.push_back(color);
-      }
-    }
-    
-    // Debug: Log filtering results
-    static int call_count = 0;
-    if (++call_count % 100 == 0) {
-      LOG(INFO) << "visualizeAssociationResult: total_clusters=" << pLocalMap->mvEleEdgeClusters.size()
-                << ", skipped_small=" << skipped_small 
-                << ", skipped_missing=" << skipped_missing
-                << ", output_clusters=" << clusterClouds.size();
-    }
-  }
-
-  // Visualize merged local map (from localmapping.cc lines 80-92)
-  void visualizeMergedLocalMap(const edge_map::localMapPtr& pLocalMap,
-                               std::vector<std::vector<cv::Point3d>>& mergedClouds) {
-    mergedClouds.clear();
-    mergedClouds.reserve(pLocalMap->mvEleEdgeClusters.size());
-
-    for(const auto& cluster : pLocalMap->mvEleEdgeClusters) {
-      if(cluster.mbMerged == false) continue;
-      std::vector<cv::Point3d> merged_cloud = cluster.mvMergedCloud_ref;
-      mergedClouds.push_back(merged_cloud);
-    }
-  }
-
-  // Get sliding window poses (from localmapping.cc lines 107-115)
-  void getSlidingWindow(const edge_map::localMapPtr& pLocalMap,
-                        std::vector<Eigen::Matrix4d>& sliding_window) {
-    sliding_window.clear();
-    for(size_t i = 0; i < pLocalMap->mvKeyFrames.size(); ++i) {
-      sliding_window.push_back(pLocalMap->mvKeyFrames[i]->KF_pose_g.matrix());
-    }
-  }
-  
-  // Save edge keyframe trajectory in TUM format
-  void saveEdgeKeyFrameTrajectory(const std::string& filename,
-                                   const edge_map::localMapPtr& pLocalMap) {
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-      LOG(WARNING) << "Failed to open edge keyframe trajectory file: " << filename;
-      return;
-    }
-    
-    for(size_t i = 0; i < pLocalMap->mvKeyFrames.size(); ++i) {
-      const auto& kf = pLocalMap->mvKeyFrames[i];
-      const Sophus::SE3d& pose = kf->KF_pose_g;
-      const Eigen::Matrix4d& T = pose.matrix();
-      
-      // Extract translation
-      double tx = T(0, 3);
-      double ty = T(1, 3);
-      double tz = T(2, 3);
-      
-      // Extract rotation matrix and convert to quaternion
-      Eigen::Matrix3d R = T.block<3, 3>(0, 0);
-      Eigen::Quaterniond q(R);
-      
-      // TUM format: timestamp tx ty tz qx qy qz qw
-      file << std::fixed << std::setprecision(6)
-           << kf->KF_stamp << " "
-           << tx << " " << ty << " " << tz << " "
-           << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
-    }
-    
-    file.close();
-    VLOG(10) << "Saved " << pLocalMap->mvKeyFrames.size() 
-              << " edge keyframe poses to: " << filename;
-  }
-}
+// Helper functions for edge-based visualization moved to library utility:
+// `dynosam/visualizer/EdgeVizUtils.{hpp,cc}` (namespace `edge_viz`)
 
 int main(int argc, char* argv[]) {
   using namespace dyno;
@@ -378,12 +233,23 @@ int main(int argc, char* argv[]) {
       LOG(FATAL) << "TUM association file not specified! Use --tum_association=path/to/association.txt";
     }
 
-    // Load camera parameters (TUM uses standard camera params)
-    CameraParams::IntrinsicsCoeffs intrinsics({525.0, 525.0, 319.5, 239.5});
-    CameraParams::DistortionCoeffs distortion({0.0, 0.0, 0.0, 0.0});
-    cv::Size image_size(640, 480);
-    auto distortion_model = CameraParams::stringToDistortion("radtan", "pinhole");
-    CameraParams camera_params(intrinsics, distortion, image_size, distortion_model);
+    // Load DynoParams first to get camera params from CameraParams.yaml
+    // Ensure params_path ends with '/'
+    if (!params_path.empty() && params_path.back() != '/') {
+      params_path += "/";
+    }
+    if (params_path.empty()) {
+      LOG(FATAL) << "Could not find params folder. Please specify --params_folder_path";
+    }
+    LOG(INFO) << "Loading DynoParams from: " << params_path;
+    DynoParams params(params_path);
+    
+    // Use camera params from DynoParams (loaded from CameraParams.yaml)
+    CameraParams camera_params = params.camera_params_;
+    LOG(INFO) << "Using CameraParams from CameraParams.yaml: fx=" << camera_params.fx()
+              << ", fy=" << camera_params.fy()
+              << ", cx=" << camera_params.cu()
+              << ", cy=" << camera_params.cv();
 
     // Use full pipeline with backend if requested
     if (FLAGS_use_pipeline) {
@@ -461,17 +327,7 @@ int main(int argc, char* argv[]) {
       // Use non-ROS DynoPipelineManager
       LOG(INFO) << "Using non-ROS DynoPipelineManager with backend";
       
-      // Load parameters (reuse params_path found earlier in the code)
-      // params_path should already be set from the code above (lines 130-168)
-      if (params_path.empty()) {
-        LOG(FATAL) << "Could not find params folder. Please specify --params_folder_path";
-      }
-      // Ensure params_path ends with '/'
-      if (params_path.back() != '/') {
-        params_path += "/";
-      }
-      LOG(INFO) << "Loading DynoParams from: " << params_path;
-      DynoParams params(params_path);
+      // params and camera_params are already loaded above (before FLAGS_use_pipeline check)
       
       // Create TUM data provider
       auto data_provider = std::make_shared<TUMDataProvider>(
@@ -557,7 +413,7 @@ int main(int argc, char* argv[]) {
             
             frontend_pose_count_++;
             if (frontend_pose_count_ % 10 == 0) {
-              LOG(INFO) << "Frontend pose logged: frame=" << frame_id 
+              VLOG(10) << "Frontend pose logged: frame=" << frame_id 
                         << ", timestamp=" << timestamp 
                         << ", total_poses=" << frontend_pose_count_;
             }
@@ -588,92 +444,61 @@ int main(int argc, char* argv[]) {
             // Try to get frontend module
             auto frontend_module = g_frontend_module.lock();
             if (frontend_module) {
-              auto local_map = frontend_module->getLocalMap();
-              if (local_map && !local_map->mvKeyFrames.empty()) {
-                static int update_count = 0;
-                if (update_count % 100 == 0) {
-                  LOG(INFO) << "VoViewer: Updating visualization data - KeyFrames=" 
-                            << local_map->mvKeyFrames.size();
+              // Get latest visualization snapshot (always available, updated every frame)
+              auto latest_snap = frontend_module->getLatestVisualizationData();
+
+              if (latest_snap) {
+                // Always update pose/trajectory
+                viewer.update_Trajectory(latest_snap->currentFramePose);
+                viewer.set_CameraPoses(latest_snap->currentFramePose);
+                viewer.set_gtPoses(latest_snap->currentFramePose);
+                // Update heavy buffers only when the shared_ptr changes
+                static std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> last_clusters;
+                static std::shared_ptr<const std::vector<cv::Vec3b>> last_cluster_colors;
+                static std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> last_local_map;
+                static std::shared_ptr<const std::vector<Eigen::Matrix4d>> last_window;
+                static std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> last_env;
+
+                if (latest_snap->clusterClouds && latest_snap->clusterCloudColors &&
+                    (latest_snap->clusterClouds != last_clusters ||
+                     latest_snap->clusterCloudColors != last_cluster_colors)) {
+                  viewer.update_covisibilityCloud(*latest_snap->clusterClouds,
+                                                  *latest_snap->clusterCloudColors);
+                  last_clusters = latest_snap->clusterClouds;
+                  last_cluster_colors = latest_snap->clusterCloudColors;
                 }
-                update_count++;
-                // Update visualization data
-                edge_viz::visualizeAssociationResult(local_map, clusterClouds, clusterCloudColors);
-                edge_viz::visualizeMergedLocalMap(local_map, localMapClouds);
-                edge_viz::getSlidingWindow(local_map, slidingWindow);
-                
-                // Debug: Log visualization data sizes
-                if (update_count % 100 == 0) {
-                  LOG(INFO) << "VoViewer data sizes: clusterClouds=" << clusterClouds.size() 
-                            << ", localMapClouds=" << localMapClouds.size()
-                            << ", slidingWindow=" << slidingWindow.size();
+
+                if (latest_snap->localMapClouds && latest_snap->localMapClouds != last_local_map) {
+                  viewer.update_localMap(*latest_snap->localMapClouds);
+                  last_local_map = latest_snap->localMapClouds;
                 }
-                
-                // Update viewer
-                viewer.update_covisibilityCloud(clusterClouds, clusterCloudColors);
-                viewer.update_localMap(localMapClouds);
-                viewer.update_sliding_window(slidingWindow);
-                
-                // Update trajectory only when keyframe count changes (to avoid duplicate poses)
-                static size_t last_keyframe_count = 0;
-                static std::set<size_t> processed_kf_ids;  // Track processed keyframe IDs to avoid duplicates
-                size_t current_keyframe_count = local_map->mvKeyFrames.size();
-                
-                if (current_keyframe_count != last_keyframe_count && !local_map->mvKeyFrames.empty()) {
-                  // Handle sliding window update: if count decreased, reset tracking
-                  if (current_keyframe_count < last_keyframe_count) {
-                    LOG(INFO) << "VoViewer: Sliding window updated, keyframe count decreased from " 
-                              << last_keyframe_count << " to " << current_keyframe_count
-                              << " (trajectory will be rebuilt)";
-                    // Clear processed IDs and rebuild trajectory from current keyframes
-                    processed_kf_ids.clear();
-                    // Note: We don't clear trajectory here as it should keep historical data
-                    // But we'll only add new keyframes that haven't been processed
-                  }
-                  
-                  // Add only new keyframes that haven't been processed yet
-                  int new_kf_count = 0;
-                  for (size_t i = 0; i < current_keyframe_count; ++i) {
-                    const auto& kf = local_map->mvKeyFrames[i];
-                    size_t kf_id = kf->KF_ID;
-                    
-                    if (processed_kf_ids.find(kf_id) == processed_kf_ids.end()) {
-                      Eigen::Matrix4d pose = kf->KF_pose_g.matrix();
-                      viewer.update_Trajectory(pose);
-                      processed_kf_ids.insert(kf_id);
-                      new_kf_count++;
-                    }
-                  }
-                  
-                  // Update camera pose to latest keyframe
-                  const auto& latest_kf = local_map->mvKeyFrames.back();
-                  Eigen::Matrix4d latest_pose = latest_kf->KF_pose_g.matrix();
-                  viewer.set_CameraPoses(latest_pose);
-                  
-                  if (new_kf_count > 0) {
-                    LOG(INFO) << "VoViewer: Updated trajectory with " << new_kf_count 
-                              << " new keyframes (total=" << current_keyframe_count 
-                              << "), latest pose=[" << latest_pose(0,3) << ", " 
-                              << latest_pose(1,3) << ", " << latest_pose(2,3) << "]";
-                  }
-                  
-                  last_keyframe_count = current_keyframe_count;
-                  
-                  // Save edge keyframe trajectory
-                  edge_viz::saveEdgeKeyFrameTrajectory(edge_kf_trajectory_file, local_map);
-                  VLOG(3) << "Saved edge keyframe trajectory: " << current_keyframe_count << " keyframes";
-                } else if (!local_map->mvKeyFrames.empty()) {
-                  // Update camera pose even if no new keyframes (for smooth following)
-                  const auto& latest_kf = local_map->mvKeyFrames.back();
-                  Eigen::Matrix4d latest_pose = latest_kf->KF_pose_g.matrix();
-                  viewer.set_CameraPoses(latest_pose);
+
+                if (latest_snap->slidingWindow && latest_snap->slidingWindow != last_window) {
+                  viewer.update_sliding_window(*latest_snap->slidingWindow);
+                  last_window = latest_snap->slidingWindow;
+                }
+
+                if (latest_snap->environment_cloud && latest_snap->environment_cloud != last_env) {
+                  viewer.update_Environment(*latest_snap->environment_cloud);
+                  last_env = latest_snap->environment_cloud;
                 }
               } else {
-                static int empty_count = 0;
-                if (empty_count % 100 == 0) {
-                  LOG(WARNING) << "VoViewer: local_map is null or empty (KeyFrames=" 
-                               << (local_map ? local_map->mvKeyFrames.size() : 0) << ")";
+                static int empty_snap_count = 0;
+                if (empty_snap_count % 100 == 0) {
+                  LOG(WARNING) << "VoViewer: no visualization snapshot available yet";
                 }
-                empty_count++;
+                empty_snap_count++;
+              }
+
+              // Optional: save keyframe trajectory (uses local_map, but not used for rendering)
+              auto local_map = frontend_module->getLocalMap();
+              if (local_map && !local_map->mvKeyFrames.empty()) {
+                static size_t last_keyframe_count = 0;
+                size_t current_keyframe_count = local_map->mvKeyFrames.size();
+                if (current_keyframe_count != last_keyframe_count) {
+                  edge_viz::saveEdgeKeyFrameTrajectory(edge_kf_trajectory_file, local_map);
+                  last_keyframe_count = current_keyframe_count;
+                }
               }
             } else {
               static int null_count = 0;

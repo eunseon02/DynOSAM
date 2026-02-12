@@ -114,7 +114,7 @@ void declare_config(CameraParams& config) {
     // depthmap_factor is typically the inverse of depth_to_meters
     // For TUM: depthmap_factor = 5000.0 means depth_to_meters = 1.0/5000.0
     // For ORB-SLAM2 style: depthmap_factor = 5208.0 means depth_to_meters = 1.0/5208.0
-    CameraParams::DepthParams depth_params;
+    CameraParams::DepthParams depth_params{};  // Use brace initialization
     depth_params.valid = true;
     depth_params.depth_to_meters = 1.0 / depthmap_factor;
     config.setDepthParams(depth_params);

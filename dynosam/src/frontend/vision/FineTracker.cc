@@ -937,7 +937,7 @@ void FineTracker::estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_
         VLOG(10) << "FineTracker::estimate: RegistrationGeometricParallel completed";
     }
 
-    //-- 此时得到 T_cur_ref
+    //--  T_cur_ref
 
     //-- 求逆获得参考帧到当前帧的位姿变换
     VLOG(10) << "FineTracker::estimate: computing inverse of T_cur_ref";
