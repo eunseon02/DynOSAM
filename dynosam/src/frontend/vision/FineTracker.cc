@@ -4,6 +4,7 @@
 #include <glog/logging.h>
 
 using namespace dyno;
+using dyno::FrameId;
 
 namespace fine {
 
@@ -28,6 +29,24 @@ void FineTracker::setCurrent(const Frame::Ptr f_curr)
     {
         mpF_cur = f_curr;
     }
+}
+
+FrameId FineTracker::getReference() const
+{
+    if(mpF_ref)
+    {
+        return mpF_ref->getFrameId();
+    }
+    return 0; // Return 0 if reference frame is not set
+}
+
+FrameId FineTracker::getCurrent() const
+{
+    if(mpF_cur)
+    {
+        return mpF_cur->getFrameId();
+    }
+    return 0; // Return 0 if current frame is not set
 }
 
 //-- 输入当前帧到参考帧的位姿先验
@@ -905,13 +924,8 @@ void FineTracker::RegistrationGeometricParallel()
     }
 }
 
-void FineTracker::estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, Sophus::SE3d &T21, bool use_parallel)
+void FineTracker::estimate(Sophus::SE3d &T21, bool use_parallel)
 {
-    assert(frame_ref != nullptr && frame_cur != nullptr);
-
-    mpF_cur = frame_cur;
-    mpF_ref = frame_ref;
-    T_cur_ref = T21;
 
     VLOG(10) << "FineTracker::estimate: calling associationRef2CurParallel";
     associationRef2CurParallel();

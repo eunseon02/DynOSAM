@@ -16,6 +16,7 @@
 
 --use_dynamic_track=false
 --use_static_track=false
+--use_object=true
 
 --log_projected_masks=false
 --set_dense_labelled_cloud=false

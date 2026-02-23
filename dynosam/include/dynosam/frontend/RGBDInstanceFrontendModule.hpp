@@ -107,9 +107,11 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   bool DirectTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
                    const gtsam::Pose3& T_k_1_k_initial, gtsam::Pose3& T_k_1_k_refined);
   
-  bool FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
+  bool FineTrack(Frame::Ptr frame,
                  const gtsam::Pose3& T_k_1_k_initial, gtsam::Pose3& T_k_1_k_refined);
 
+  bool checkPoseJump(Sophus::SE3d pose);
+  
   void fillOutputPacketWithTracks(VisionImuPacket::Ptr vision_imu_packet,
                                   const Frame& frame,
                                   const gtsam::Pose3& T_k_1_k,
@@ -161,6 +163,10 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   gtsam::Pose3 pose_last_edge_kf_;  // Last edge keyframe pose
   bool is_edge_initialized_{false};
   
+  // Cached last keyframe (updated when keyframe is added, avoids frequent lock)
+  mutable std::mutex last_kf_mutex_;
+  Frame::Ptr last_keyframe_{nullptr};  // Last keyframe Frame (from when keyframe was created)
+  
   // Sliding window parameters
   int window_size_{10};
   int window_step_{4};
@@ -185,6 +191,9 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> local_map_clouds_cache_;
   std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud_cache_;
   std::deque<std::vector<cv::Point3d>> environment_frames_;  // <=150 frames
+
+
+  bool is_data_valid_{false};
 
   
   // Processing thread function

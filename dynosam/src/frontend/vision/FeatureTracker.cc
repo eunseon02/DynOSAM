@@ -42,6 +42,7 @@
 // Declare the flag defined in RGBDInstanceFrontendModule.cc
 DECLARE_bool(use_dynamic_track);
 DECLARE_bool(use_static_track);
+DECLARE_bool(use_object);
 
 #include "dynosam/frontend/anms/NonMaximumSuppression.h"
 #include "dynosam/frontend/vision/VisionTools.hpp"
@@ -66,9 +67,31 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
   lk_cuda_tracker_ = cv::cuda::SparsePyrLKOpticalFlow::create(
       klt_window_size, klt_max_level, 30);
 
+  // LOG(INFO) << "FeatureTracker constructor: FLAGS_use_dynamic_track=" << FLAGS_use_dynamic_track
+  //           << ", FLAGS_use_object=" << FLAGS_use_object
+  //           << ", prefer_provided_object_detection=" << params_.prefer_provided_object_detection;
+
   if (FLAGS_use_dynamic_track && !params_.prefer_provided_object_detection) {
     LOG(INFO) << "Creating object detection engine";
     dyno::YoloConfig yolo_config;
+    dyno::ModelConfig model_config;
+    model_config.model_file = "yolov8n-seg.pt";
+    // model_config.model_file = "yoloe-v8s-seg.onnx";
+    object_detection_ =
+        std::make_shared<dyno::YoloV8ObjectDetector>(model_config, yolo_config);
+  }
+
+  if (FLAGS_use_object && !params_.prefer_provided_object_detection) {
+    LOG(INFO) << "Creating object detection engine";
+    dyno::YoloConfig yolo_config;
+    yolo_config.conf_threshold = 0.20;  // Lower confidence threshold to detect more objects
+    yolo_config.nms_threshold = 0.45;
+    // Empty included_classes means all classes are included
+    yolo_config.included_classes.clear();
+    LOG(INFO) << "YoloConfig: conf_threshold=" << yolo_config.conf_threshold
+              << ", nms_threshold=" << yolo_config.nms_threshold
+              << ", included_classes.size()=" << yolo_config.included_classes.size()
+              << " (empty means all classes included)";
     dyno::ModelConfig model_config;
     model_config.model_file = "yolov8n-seg.pt";
     // model_config.model_file = "yoloe-v8s-seg.onnx";
@@ -193,6 +216,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // are never actually used!! this prevents the frame from needing to do the
   // same calculations we've alrady done
   std::map<ObjectId, SingleDetectionResult> object_observations;
+  LOG(INFO) << "Creating object_observations from boundary_mask_result: "
+            << "objects_detected.size()=" << boundary_mask_result.objects_detected.size()
+            << ", object_bounding_boxes.size()=" << boundary_mask_result.object_bounding_boxes.size();
   for (size_t i = 0; i < boundary_mask_result.objects_detected.size(); i++) {
     ObjectId object_id = boundary_mask_result.objects_detected.at(i);
     const cv::Rect& bb_detection =
@@ -205,8 +231,10 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
     object_observations[object_id] = observation;
   }
+  LOG(INFO) << "Created object_observations with " << object_observations.size() << " objects";
 
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
+  // LOG(INFO) << "static_edges: " << static_edges.size();
   auto new_frame = std::make_shared<Frame>(
       frame_id, timestamp, camera_, input_images, static_features,
       dynamic_features, static_edges, object_observations, info_);
@@ -1254,9 +1282,9 @@ bool FeatureTracker::objectDetection(
                     "is missing!";
     }
   } else {
-    // Only run object detection if dynamic tracking is enabled
-    if (!FLAGS_use_dynamic_track) {
-      // Return empty mask when dynamic tracking is disabled
+    // Only run object detection if dynamic tracking or object detection is enabled
+    if (!FLAGS_use_dynamic_track && !FLAGS_use_object) {
+      // Return empty mask when both dynamic tracking and object detection are disabled
       // MotionMask requires CV_32SC1 type (signed 32-bit integer)
       cv::Mat empty_mask = cv::Mat::zeros(img_size_, CV_32SC1);
       vision_tools::computeObjectMaskBoundaryMask(
@@ -1268,15 +1296,47 @@ bool FeatureTracker::objectDetection(
       return false;
     }
     
-    CHECK(object_detection_);
-    VLOG(30) << "Running object detection and tracking inference k="
-             << image_container.frameId();
+    if (!object_detection_) {
+      LOG(WARNING) << "object_detection_ is null! FLAGS_use_dynamic_track=" 
+                   << FLAGS_use_dynamic_track 
+                   << ", FLAGS_use_object=" << FLAGS_use_object
+                   << ", prefer_provided_object_detection=" 
+                   << params_.prefer_provided_object_detection;
+      // Return empty mask when object_detection_ is not initialized
+      cv::Mat empty_mask = cv::Mat::zeros(img_size_, CV_32SC1);
+      vision_tools::computeObjectMaskBoundaryMask(
+          boundary_mask_result, empty_mask, scaled_boarder_thickness,
+          kUseAsFeatureDetectionMask);
+      image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
+                                                   empty_mask);
+      return false;
+    }
+    
+    // LOG(INFO) << "Running object detection and tracking inference k="
+    //          << image_container.frameId()
+    //          << ", FLAGS_use_dynamic_track=" << FLAGS_use_dynamic_track
+    //          << ", FLAGS_use_object=" << FLAGS_use_object;
     ObjectDetectionResult detection_result;
     {
       utils::ChronoTimingStats timing("tracking_timer.detection_inference");
       detection_result = object_detection_->process(image_container.rgb());
     }
     cv::Mat object_mask = detection_result.labelled_mask;
+    
+    LOG(INFO) << "Object detection result: num=" << detection_result.num()
+              << ", objectIds=" << container_to_string(detection_result.objectIds())
+              << ", detections.size()=" << detection_result.detections.size()
+              << ", labelled_mask.empty()=" << object_mask.empty()
+              << ", labelled_mask.type()=" << (object_mask.empty() ? -1 : object_mask.type());
+    
+    // Log detection details
+    for (size_t i = 0; i < detection_result.detections.size(); ++i) {
+      const auto& det = detection_result.detections[i];
+      LOG(INFO) << "  Detection[" << i << "]: object_id=" << det.object_id
+                << ", class_name=" << det.class_name
+                << ", confidence=" << det.confidence
+                << ", bbox=" << det.bounding_box;
+    }
 
     {
       utils::ChronoTimingStats timing("tracking_timer.compute_boundary_mask");
@@ -1284,6 +1344,53 @@ bool FeatureTracker::objectDetection(
           boundary_mask_result, detection_result, scaled_boarder_thickness,
           kUseAsFeatureDetectionMask);
     }
+    
+    // If detection_result.num() == 0 but labelled_mask has objects, extract from mask
+    if (boundary_mask_result.objects_detected.empty() && !object_mask.empty()) {
+      LOG(INFO) << "detection_result.num()=0 but labelled_mask not empty, extracting object IDs from mask";
+      
+      // Debug: Check mask statistics
+      if (object_mask.type() == CV_32SC1) {
+        double min_val, max_val;
+        cv::minMaxLoc(object_mask, &min_val, &max_val);
+        int non_zero_count = cv::countNonZero(object_mask);
+        LOG(INFO) << "labelled_mask stats: type=CV_32SC1, size=" << object_mask.size()
+                  << ", min=" << min_val << ", max=" << max_val
+                  << ", non_zero_pixels=" << non_zero_count
+                  << ", total_pixels=" << object_mask.total();
+      } else if (object_mask.type() == CV_8UC1) {
+        double min_val, max_val;
+        cv::minMaxLoc(object_mask, &min_val, &max_val);
+        int non_zero_count = cv::countNonZero(object_mask);
+        LOG(INFO) << "labelled_mask stats: type=CV_8UC1, size=" << object_mask.size()
+                  << ", min=" << min_val << ", max=" << max_val
+                  << ", non_zero_pixels=" << non_zero_count
+                  << ", total_pixels=" << object_mask.total();
+      } else {
+        LOG(INFO) << "labelled_mask stats: type=" << object_mask.type()
+                  << ", size=" << object_mask.size();
+      }
+      
+      ObjectIds mask_object_ids = vision_tools::getObjectLabels(object_mask);
+      LOG(INFO) << "Extracted " << mask_object_ids.size() << " object IDs from mask: " 
+                << container_to_string(mask_object_ids);
+      
+      // Manually populate boundary_mask_result from mask
+      for (const ObjectId& object_id : mask_object_ids) {
+        cv::Rect bbox;
+        if (vision_tools::findObjectBoundingBox(object_mask, object_id, bbox)) {
+          boundary_mask_result.objects_detected.push_back(object_id);
+          boundary_mask_result.object_bounding_boxes.push_back(bbox);
+        }
+      }
+      LOG(INFO) << "Manually populated boundary_mask_result: objects_detected=" 
+                << container_to_string(boundary_mask_result.objects_detected)
+                << ", bounding_boxes=" << boundary_mask_result.object_bounding_boxes.size();
+    }
+    
+    LOG(INFO) << "After computeObjectMaskBoundaryMask: objects_detected=" 
+              << container_to_string(boundary_mask_result.objects_detected)
+              << ", bounding_boxes=" << boundary_mask_result.object_bounding_boxes.size();
 
     // update or insert image container with object mask
     image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,

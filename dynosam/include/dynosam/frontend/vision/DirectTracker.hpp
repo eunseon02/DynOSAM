@@ -73,6 +73,15 @@ public:
 					  std::vector<float>& theta_list);
 	//-- 设置当前帧，当前帧包括图像金字塔与图像梯度
 	void setCurrent(cv::Mat current_image);
+	
+	//-- 设置参考帧的frame id
+	void setReferenceFrameId(size_t frame_id);
+	//-- 设置当前帧的frame id
+	void setCurrentFrameId(size_t frame_id);
+	//-- 获取参考帧的frame id
+	size_t getReference() const;
+	//-- 获取当前帧的frame id
+	size_t getCurrent() const;
 
 	void estimatePyramid(Sophus::SE3d &T21, bool use_parallel = true);
 
@@ -91,6 +100,10 @@ private:
 	std::vector<cv::Mat> mvPyrImagesRef;
 	//-- 当前帧图像金字塔
 	std::vector<cv::Mat> mvPyrImagesCur;
+	
+	//-- 参考帧和当前帧的frame id
+	size_t reference_frame_id_{0};
+	size_t current_frame_id_{0};
 
 
 	

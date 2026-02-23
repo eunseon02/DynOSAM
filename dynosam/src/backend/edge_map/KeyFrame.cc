@@ -826,32 +826,6 @@ std::vector<orderedEdgePoint> KeyFrame::getCoarseSampledPoints(int bias, int max
     return sampledPoints;
 }
 
-void KeyFrame::getFineSampledPoints(int bias)
-{
-    if (bias <= 0) {
-        return; // Invalid bias
-    }
-    
-    for(size_t i = 0; i < mvEdges.size(); ++i)
-    {
-        Edge& edge = mvEdges[i];
-        // Check if edge has valid points
-        if (edge.mvPoints.empty()) {
-            continue; // Skip empty edges
-        }
-        try {
-        edge.samplingEdgeUniform(bias);
-        } catch (const std::exception& e) {
-            // Log error and continue with next edge
-            std::cerr << "Error in samplingEdgeUniform for edge " << i 
-                      << ": " << e.what() << std::endl;
-            continue;
-        } catch (...) {
-            std::cerr << "Unknown error in samplingEdgeUniform for edge " << i << std::endl;
-            continue;
-        }
-    }
-}
 
 
 

@@ -97,7 +97,6 @@ public:
     //-- 获取粗匹配所需的3D边缘特征点
     std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
 
-    void getFineSampledPoints(int bias);
 
 private:
 

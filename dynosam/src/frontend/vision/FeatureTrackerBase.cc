@@ -40,7 +40,7 @@
 
 DECLARE_bool(use_dynamic_track);
 DECLARE_bool(use_edge_feature);
-
+DECLARE_bool(use_object);
 namespace dyno {
 
 decltype(TrackletIdManager::instance_) TrackletIdManager::instance_;
@@ -244,7 +244,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   // draw text info
   std::stringstream ss;
   ss << "Frame ID: " << current_frame.getFrameId() << " | ";
-  ss << "VO tracks: " << num_static_tracks << " | ";
+  // ss << "VO tracks: " << num_static_tracks << " | ";
 
   if (FLAGS_use_edge_feature) {
     // Count edge tracks (matched edge points between frames)
@@ -282,7 +282,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
 }
   
   // Only show objects if dynamic tracking is enabled
-  if (FLAGS_use_dynamic_track) {
+  if (FLAGS_use_dynamic_track || FLAGS_use_object) {
     ss << "Objects: ";
     if (objects_to_print.empty()) {
       ss << "None";

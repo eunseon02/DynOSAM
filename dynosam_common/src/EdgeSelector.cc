@@ -1,4 +1,5 @@
 #include "dynosam_common/EdgeSelector.hpp"
+#include <glog/logging.h>
 
 float edgeSelector::calcAngleBias(float angle_1, float angle_2)
 {
@@ -235,16 +236,23 @@ void edgeSelector::processImage(const cv::Mat& image)
 
     if(mbUseFixedThreshold)
     {
-        cv::Canny(image, mMatCanny, mpCanny_lower_bound, mpCanny_higher_bound, 3, true); 
+        cv::Canny(mMatGray, mMatCanny, mpCanny_lower_bound, mpCanny_higher_bound, 3, true); 
     }else{
         cv::Mat binary;
-        double otsu_thresh = cv::threshold(image, binary, 0, 255, cv::THRESH_OTSU);
-        cv::Canny(image, mMatCanny, 0.5*otsu_thresh, otsu_thresh, 3, true);
+        double otsu_thresh = cv::threshold(mMatGray, binary, 0, 255, cv::THRESH_OTSU);
+        cv::Canny(mMatGray, mMatCanny, 0.5*otsu_thresh, otsu_thresh, 3, true);
     }
+    int edge_count_before = cv::countNonZero(mMatCanny);
     preprocessCannyMat();
+    int edge_count_after = cv::countNonZero(mMatCanny);
+    LOG(INFO) << "[Edge Selector] preprocessCannyMat: before=" << edge_count_before 
+                << ", after=" << edge_count_after 
+                << ", removed=" << (edge_count_before - edge_count_after);
     regionGrowthClusteringOCanny(mpAngle_bias);
+    LOG(INFO) << "[Edge Selector] regionGrowthClusteringOCanny: clusters=" << mvEdgeClusters.size();
     // cvt2OrderedEdges();
     cvt2OrderedEdgesParallel();
+    LOG(INFO) << "[Edge Selector] cvt2OrderedEdgesParallel: edges=" << mvEdges.size();
 }
 
 void edgeSelector::cvt2OrderedEdges()

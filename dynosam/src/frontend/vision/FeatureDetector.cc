@@ -269,12 +269,6 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
     mWidth = image.cols;
     mHeight = image.rows;
     
-    VLOG(10) << "SparseFeatureDetector::detectEdge: image size=" << image.size() 
-              << ", type=" << image.type() << ", mask.empty()=" << detection_mask.empty()
-              << ", mbUseFixedThreshold=" << mbUseFixedThreshold
-              << ", canny_low=" << mpCanny_lower_bound << ", canny_high=" << mpCanny_higher_bound
-              << ", mWidth=" << mWidth << ", mHeight=" << mHeight;
-
     {
         utils::ChronoTimingStats timer("edge_detection.gradient");
         cv::Mat grad_x, grad_y;
@@ -314,9 +308,6 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
         int edge_count_before = cv::countNonZero(mMatCanny);
         preprocessCannyMat();
         int edge_count_after = cv::countNonZero(mMatCanny);
-        VLOG(5) << "[Edge Count] preprocessCannyMat: before=" << edge_count_before 
-                << ", after=" << edge_count_after 
-                << ", removed=" << (edge_count_before - edge_count_after);
     }
     
     {

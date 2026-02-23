@@ -246,10 +246,10 @@ int main(int argc, char* argv[]) {
     
     // Use camera params from DynoParams (loaded from CameraParams.yaml)
     CameraParams camera_params = params.camera_params_;
-    LOG(INFO) << "Using CameraParams from CameraParams.yaml: fx=" << camera_params.fx()
-              << ", fy=" << camera_params.fy()
-              << ", cx=" << camera_params.cu()
-              << ", cy=" << camera_params.cv();
+    // LOG(INFO) << "Using CameraParams from CameraParams.yaml: fx=" << camera_params.fx()
+    //           << ", fy=" << camera_params.fy()
+    //           << ", cx=" << camera_params.cu()
+    //           << ", cy=" << camera_params.cv();
 
     // Use full pipeline with backend if requested
     if (FLAGS_use_pipeline) {

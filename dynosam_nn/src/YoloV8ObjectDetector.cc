@@ -280,6 +280,9 @@ struct YoloV8ObjectDetector::Impl {
         h_indir_counter_, stream_pool_.getCudaStream());
 
     timing_boxes.stop();
+    
+    LOG(INFO) << "YoloOutputToDetections: count=" << count 
+              << ", conf_threshold=" << yolo_config_.conf_threshold;
 
     std::vector<cv::Rect> boxes;
     boxes.reserve(num_boxes);
@@ -298,8 +301,11 @@ struct YoloV8ObjectDetector::Impl {
       // Confidence is a straight copy
       confidences.push_back(det.confidence);
     }
+    LOG(INFO) << "After collecting boxes: boxes.size()=" << boxes.size();
+    
     // Early exit if no boxes after confidence threshold
     if (boxes.empty()) {
+      LOG(WARNING) << "No boxes after confidence threshold filtering";
       return false;
     }
 
@@ -309,7 +315,9 @@ struct YoloV8ObjectDetector::Impl {
     cv::dnn::NMSBoxes(boxes, confidences, yolo_config_.conf_threshold,
                       yolo_config_.nms_threshold, nms_indices);
     timing_nms.stop();
+    LOG(INFO) << "After NMS: nms_indices.size()=" << nms_indices.size();
     if (nms_indices.empty()) {
+      LOG(WARNING) << "No boxes after NMS";
       return false;
     }
 
@@ -357,6 +365,7 @@ struct YoloV8ObjectDetector::Impl {
         "yolov8_detection.post_process.detections", 5);
     std::vector<ObjectDetection> detections;
     detections.reserve(nms_indices.size());
+    int filtered_by_class = 0;
     for (const int idx : nms_indices) {
       AlignedYoloDetection* d_det = d_indir_buffer_ + idx;
       const AlignedYoloDetection* h_det = h_indir_buffer_ + idx;
@@ -365,6 +374,9 @@ struct YoloV8ObjectDetector::Impl {
 
       std::string class_label;
       if (!safeGetClassLabel(class_id, class_label)) {
+        filtered_by_class++;
+        VLOG(5) << "Filtered detection: class_id=" << class_id 
+                << " (not in included_classes)";
         continue;
       }
 
@@ -379,6 +391,9 @@ struct YoloV8ObjectDetector::Impl {
           mask_h, mask_w, stream, detection);
       detections.push_back(detection);
     }
+    
+    LOG(INFO) << "After class filtering: detections.size()=" << detections.size()
+              << ", filtered_by_class=" << filtered_by_class;
 
     timing_detections.stop();
 

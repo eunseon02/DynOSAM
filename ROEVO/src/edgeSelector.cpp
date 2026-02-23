@@ -247,26 +247,26 @@ void edgeSelector::processImage(const cv::Mat& image)
     
     {
         utils::ChronoTimingStats timer("edge_detection.preprocessCannyMat");
-        int edge_count_before = cv::countNonZero(mMatCanny);
-        auto start = std::chrono::steady_clock::now();
         preprocessCannyMat();
         auto end = std::chrono::steady_clock::now();
         auto dt = std::chrono::duration<double, std::milli>(end - start).count();
-        int edge_count_after = cv::countNonZero(mMatCanny);
-        std::cout << "\033[36m[Timing] \033[0mpreprocessCannyMat: " 
-                  << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
-        std::cout << "\033[36m[Edge Count] \033[0mpreprocessCannyMat: before=" << edge_count_before 
-                  << ", after=" << edge_count_after 
-                  << ", removed=" << (edge_count_before - edge_count_after) << std::endl;
+        // std::cout << "\033[36m[Timing] \033[0mpreprocessCannyMat: " 
+        //           << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
     }
     {
         utils::ChronoTimingStats timer("edge_detection.regionGrowthClusteringOCanny");
+        int edge_count_before = cv::countNonZero(mMatCanny);
         auto start = std::chrono::steady_clock::now();
         regionGrowthClusteringOCanny(mpAngle_bias);
         auto end = std::chrono::steady_clock::now();
         auto dt = std::chrono::duration<double, std::milli>(end - start).count();
-        std::cout << "\033[36m[Timing] \033[0mregionGrowthClusteringOCanny: " 
-                  << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
+        int edge_count_after = cv::countNonZero(mMatCanny);
+        // std::cout << "\033[36m[Timing] \033[0mregionGrowthClusteringOCanny: " 
+        //           << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
+        // std::cout << "\033[36m[Edge Count] \033[0mpreprocessCannyMat: before=" << edge_count_before 
+        //     << ", after=" << edge_count_after 
+        //     << ", removed=" << (edge_count_before - edge_count_after) << std::endl;
+
     }
     // cvt2OrderedEdges();
     {
@@ -275,8 +275,8 @@ void edgeSelector::processImage(const cv::Mat& image)
         cvt2OrderedEdgesParallel();
         auto end = std::chrono::steady_clock::now();
         auto dt = std::chrono::duration<double, std::milli>(end - start).count();
-        std::cout << "\033[36m[Timing] \033[0mcvt2OrderedEdgesParallel: " 
-                  << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
+        // std::cout << "\033[36m[Timing] \033[0mcvt2OrderedEdgesParallel: " 
+        //           << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
     }
 }
 

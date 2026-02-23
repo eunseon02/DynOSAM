@@ -123,6 +123,30 @@ void DirectTracker::setCurrent(cv::Mat current_image)
     }
 }
 
+//-- 设置参考帧的frame id
+void DirectTracker::setReferenceFrameId(size_t frame_id)
+{
+    reference_frame_id_ = frame_id;
+}
+
+//-- 设置当前帧的frame id
+void DirectTracker::setCurrentFrameId(size_t frame_id)
+{
+    current_frame_id_ = frame_id;
+}
+
+//-- 获取参考帧的frame id
+size_t DirectTracker::getReference() const
+{
+    return reference_frame_id_;
+}
+
+//-- 获取当前帧的frame id
+size_t DirectTracker::getCurrent() const
+{
+    return current_frame_id_;
+}
+
 //-- 得到多层金字塔分别对应的相机参数
 void DirectTracker::assignPyramid(int w, int h, double fx, double fy, double cx, double cy)
 {
