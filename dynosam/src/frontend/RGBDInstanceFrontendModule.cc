@@ -33,6 +33,7 @@
 #include <glog/logging.h>
 #include <chrono>
 #include <sstream>
+#include <iomanip>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -44,6 +45,7 @@
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/utils/SafeCast.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
+#include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
 #include "dynosam/visualizer/EdgeVizUtils.hpp"
 
@@ -127,15 +129,24 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
                      camera->getParams()),
       imu_frontend_(params.frontend_params_.imu_params) {
   CHECK_NOTNULL(camera_);
+  // Log loaded Canny parameters from YAML
+  const auto& tracker_params = getFrontendParams().tracker_params;
+  LOG(INFO) << "Loaded Canny params from YAML: coarse.cannyLow=" 
+            << tracker_params.edge_coarse.cannyLow 
+            << ", coarse.cannyHigh=" << tracker_params.edge_coarse.cannyHigh;
+  
   tracker_ = std::make_unique<FeatureTracker>(getFrontendParams(), camera_,
                                               display_queue);
   fine_tracker_ = std::make_unique<fine::FineTracker>(camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv(), getFrontendParams().tracker_params.edge_fine.geo_photo_ratio);
+  LOG(INFO) << "height: " << camera->getParams().ImageHeight() << " width: " << camera->getParams().ImageWidth();
+  LOG(INFO) << "fx: " << camera->getParams().fx() << " fy: " << camera->getParams().fy() << " cx: " << camera->getParams().cu() << " cy: " << camera->getParams().cv();
   direct_tracker_ = std::make_unique<direct::DirectTracker>(camera->getParams().ImageWidth(), camera->getParams().ImageHeight(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
+  edge_selector_ = std::make_unique<edgeSelector>(20.0, tracker_params.edge_coarse.cannyLow, tracker_params.edge_coarse.cannyHigh);
   
   // Initialize edge-based local mapping (from localmapping.cc)
   local_map_.reset(new edge_map::localMap());
   // TODO: Load canny parameters from config
-  edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
+  // edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
   
   // Load sliding window parameters from config
   const auto& win_params = getFrontendParams().tracker_params.edge_win;
@@ -192,6 +203,12 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     // Initialize visualization data (will be updated every frame)
     latest_visualization_data_ = nullptr;
   }
+  
+  // Initialize last keyframe cache
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    last_keyframe_ = nullptr;
+  }
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -226,9 +243,77 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
 
+
+  // Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
+  //                                    *image_container);
+
+  // Process image with edgeSelector
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container->rgb();
+  cv::Mat grayscale_image = ImageType::RGBMono::toMono(rgb_wrapper);
+  edge_selector_->processImage(grayscale_image);
+  
+  // Still need to track frame for other processing
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container);
   CHECK(frame->updateDepths());
+  LOG(INFO) << "frame edge features: " << frame->static_edges_.size()
+            << ", edgeSelector edges: " << edge_selector_->mvEdges.size();
+
+  // Initialize first frame pose to identity
+  frame->T_world_camera_ = gtsam::Pose3::Identity();
+  
+  // Create first keyframe if edge features are enabled
+  if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
+    const gtsam::Pose3& pose_curr = frame->T_world_camera_;
+    
+    // Get fine sampled points
+    const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
+    const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
+
+    frame->getFineSampledPoints(sample_bias);
+
+    std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+    std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
+    
+    // Get coarse sampling parameters from config
+    generateSrcPixelsSampled(frame, x_list, y_list, depth_list, weight_list, 
+                            frame_cloud_ref, theta_list, sample_bias, maximum_point);
+    if(x_list.size()>200) is_data_valid_ = true;
+
+    // Set reference frame
+    const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame->image_container_.rgb();
+    cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
+    direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+    direct_tracker_->setReferenceFrameId(frame->getFrameId());
+    fine_tracker_->setCurrent(frame);
+
+    
+    // Create first keyframe
+    KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+    
+    if (pKF) {
+      // Add to local map
+      {
+        std::lock_guard<std::mutex> lock(local_map_mutex_);
+        local_map_->addFrame2LocalMap(pKF);
+        
+        // Update cached last keyframe Frame (store Frame object, not KeyFrame)
+        {
+          std::lock_guard<std::mutex> kf_lock(last_kf_mutex_);
+          last_keyframe_ = frame;
+        }
+      }
+      
+      // Push to queue for async processing (though it won't optimize until window is full)
+      optimization_queue_.push(pKF);
+      
+      pose_last_edge_kf_ = pose_curr;
+      is_edge_initialized_ = true;
+      
+      // LOG(INFO) << "Created first edge keyframe: kf_id=" << pKF->KF_ID 
+      //           << ", frame_id=" << frame->getFrameId();
+    }
+  }
 
   return {State::Nominal, nullptr};
 }
@@ -289,6 +374,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
   const auto t_update_depths_end = std::chrono::steady_clock::now();
 
+
+  const auto t_sample0 = std::chrono::steady_clock::now();
+  const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
+  frame->getFineSampledPoints(sample_bias);
+  const auto t_sample1 = std::chrono::steady_clock::now();
+  
+
   bool stereo_result = false;
   std::shared_ptr<RGBDCamera> rgbd_camera = camera_->safeGetRGBDCamera();
 
@@ -329,31 +421,62 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   //   VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using constant velocity model for initial pose";
   // }
   
-  gtsam::Pose3 T_k_1_k_initial = gtsam::Pose3();  // Identity pose
+  // Get last keyframe pose (if available) to use as reference instead of previous_frame
+  // Use cached value to avoid frequent lock
+  gtsam::Pose3 pose_ref;  // Reference pose for computing current frame pose
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    if (last_keyframe_) {
+        // Use last keyframe Frame pose as reference
+        pose_ref = last_keyframe_->T_world_camera_;
+        
+    } else {
+      // No keyframe yet, use previous_frame pose
+      LOG(ERROR) << "No keyframe yet, using previous_frame pose";
+    }
+  }
+  
+  gtsam::Pose3 pose_cur_initial = gtsam::Pose3();  // Identity pose
   
   // Perform DirectTrack
   const auto t_direct_start = std::chrono::steady_clock::now();
-  gtsam::Pose3 T_k_1_k_refined;
-  if (!DirectTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
+  gtsam::Pose3 pose_cur_refined;
+  if (!DirectTrack(frame, previous_frame, pose_cur_initial, pose_cur_refined)) {
     LOG(ERROR) << "DirectTrack failed, using identity pose";
-    T_k_1_k_refined = T_k_1_k_initial;
   }
   const auto t_direct_end = std::chrono::steady_clock::now();
   
+  // Log pose_ref in TUM format
+  const gtsam::Point3& t = pose_ref.translation();
+  const gtsam::Rot3& R = pose_ref.rotation();
+  const gtsam::Quaternion q = R.toQuaternion();
+  const double timestamp = last_keyframe_->getTimestamp();
+  
+  LOG(INFO) << "POSE_REF TUM: " << std::fixed << std::setprecision(6)
+            << timestamp << " "
+            << t.x() << " " << t.y() << " " << t.z() << " "
+            << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
+  
+
+  LOG(INFO) << "POSE_CUR_REFINED TUM: " << std::fixed << std::setprecision(6)
+            << frame->getTimestamp() << " "
+            << pose_cur_refined.translation().x() << " " << pose_cur_refined.translation().y() << " " << pose_cur_refined.translation().z() << " "
+            << pose_cur_refined.rotation().toQuaternion().x() << " " << pose_cur_refined.rotation().toQuaternion().y() << " " << pose_cur_refined.rotation().toQuaternion().z() << " " << pose_cur_refined.rotation().toQuaternion().w();
+  
   // Update frame pose with DirectTrack result
-  frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+  frame->T_world_camera_ = pose_ref * pose_cur_refined;
   
   // Calculate relative pose from DirectTrack result for FineTrack (if edge features enabled)
   const auto t_fine_start = std::chrono::steady_clock::now();
   if (FLAGS_use_edge_feature) {
-    gtsam::Pose3 T_k_1_k_fine_refined;
-    if (!FineTrack(frame, previous_frame, T_k_1_k_refined, T_k_1_k_fine_refined)) {
+    gtsam::Pose3 pose_cur_fine_refined;
+    if (!FineTrack(frame, pose_cur_refined, pose_cur_fine_refined)) {
       VLOG(5) << "Could not fine track";
     } else {
       // Check for pose jump 
       // Reject fine tracking result if it shows unreasonable motion (prevents trajectory flips)
-      const gtsam::Matrix3& R = T_k_1_k_fine_refined.rotation().matrix();
-      const gtsam::Point3& t = T_k_1_k_fine_refined.translation();
+      const gtsam::Matrix3& R = pose_cur_fine_refined.rotation().matrix();
+      const gtsam::Point3& t = pose_cur_fine_refined.translation();
       const double t_thres = 0.10;  // meters
       const double angle_thres = 15.0;  // degrees
       
@@ -364,12 +487,15 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       if (translation_norm > t_thres || angle_deg > angle_thres) {
         LOG_EVERY_N(WARNING, 50) << "FineTrack pose jump detected: trans=" << translation_norm 
                                   << "m, angle=" << angle_deg << "deg, using DirectTrack result";
-        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+        // Use DirectTrack result with reference pose (T_ref_prev already computed above)
+        frame->T_world_camera_ = pose_ref * pose_cur_refined;
       } else {
         // Update frame pose with refined result from FineTrack
-        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_fine_refined;
-        // T_w_ref * T_ref_cur = T_w_cur
+        frame->T_world_camera_ = pose_ref * pose_cur_fine_refined;
+        // T_w_ref * T_ref_prev * T_prev_cur = T_w_cur
       }
+
+      frame->T_world_camera_ = pose_ref * pose_cur_fine_refined;
     }
   }
   const auto t_fine_end = std::chrono::steady_clock::now();
@@ -475,6 +601,21 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     bool should_add_kf = select_edge_kf || local_map_empty;
     
     if (should_add_kf) {
+
+      std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+      std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
+      const int sample_bias = getFrontendParams().tracker_params.edge_coarse.sample_bias;
+      const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
+      generateSrcPixelsSampled(frame, x_list, y_list, depth_list, weight_list, 
+                              frame_cloud_ref, theta_list, sample_bias, maximum_point);
+      if(x_list.size()>200) is_data_valid_ = true;
+
+      // Set reference frame
+      const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame->image_container_.rgb();
+      cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
+      direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+      direct_tracker_->setReferenceFrameId(frame->getFrameId());
+      fine_tracker_->setCurrent(frame);
       const auto t_create_kf_start = std::chrono::steady_clock::now();
       // Calculate pose for keyframe
       gtsam::Pose3 pose_curr;
@@ -490,7 +631,11 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       const auto t_create_kf_end = std::chrono::steady_clock::now();
       
       if (pKF) {
-        // Push to queue for async processing
+        {
+          std::lock_guard<std::mutex> lock(last_kf_mutex_);
+          last_keyframe_ = frame;
+        }
+        
         optimization_queue_.push(pKF);
         VLOG(10) << "\033[32m[QUEUE PUSH]\033[0m kf_id=" << pKF->KF_ID
                   << ", frame_id=" << frame->getFrameId();
@@ -498,9 +643,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       
       pose_last_edge_kf_ = pose_curr_coarse;
       
-      LOG_EVERY_N(INFO, 30) << "CreateKeyFrame frame=" << frame->getFrameId()
-                            << " ms=" << std::chrono::duration<double, std::milli>(
-                                t_create_kf_end - t_create_kf_start).count();
+      // LOG_EVERY_N(INFO, 30) << "CreateKeyFrame frame=" << frame->getFrameId()
+      //                       << " ms=" << std::chrono::duration<double, std::milli>(
+      //                           t_create_kf_end - t_create_kf_start).count();
     }
   }
 
@@ -564,33 +709,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   const auto t_nominal_end = std::chrono::steady_clock::now();
   
-  // Log processing times
-  // const char* CYAN = "\033[36m";
-  // const char* RESET = "\033[0m";
-  // 
-  // static int log_counter = 0;
-  // if (++log_counter % 10 == 0) {
-  //   std::ostringstream oss;
-  //   oss << CYAN << "nominalSpin frame=" << frame->getFrameId() << "\n"
-  //       << "  ├─ track_ms: " << ms(t_track_start, t_track_end) << "\n"
-  //       << "  ├─ update_depths_ms: " << ms(t_update_depths_start, t_update_depths_end) << "\n"
-  //       << "  ├─ stereo1_ms: " << ms(t_stereo1_start, t_stereo1_end) << "\n"
-  //       << "  ├─ direct_ms: " << ms(t_direct_start, t_direct_end) << "\n"
-  //       << "  ├─ fine_ms: " << ms(t_fine_start, t_fine_end) << "\n"
-  //       << "  ├─ stereo2_ms: " << ms(t_stereo2_start, t_stereo2_end) << "\n"
-  //       << "  ├─ object_motion_ms: " << ms(t_object_motion_start, t_object_motion_end) << "\n"
-  //       << "  ├─ fill_packet_ms: " << ms(t_fill_packet_start, t_fill_packet_end) << "\n"
-  //       << "  ├─ create_image_ms: " << ms(t_create_image_start, t_create_image_end) << "\n"
-  //       << "  ├─ send_logger_ms: " << ms(t_send_logger_start, t_send_logger_end) << "\n"
-  //       << "  └─ total_ms: " << ms(t_nominal_start, t_nominal_end) << RESET;
-  //   LOG(INFO) << oss.str();
-  // }
-
-  // if (FLAGS_log_projected_masks)
-  //   vision_tools::writeOutProjectMaskAndDepthMap(
-  //       frame->image_container_.depth(),
-  //       frame->image_container_.objectMotionMask(), *frame->getCamera(),
-  //       frame->getFrameId());
 
   return {State::Nominal, vision_imu_packet};
 }
@@ -703,10 +821,10 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.direct_track");
   
-  // Get grayscale images
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
+  // // Get grayscale images
+  // const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
+  // cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_cur = frame_k->image_container_.rgb();
-  cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
   cv::Mat mono_cur = ImageType::RGBMono::toMono(rgb_wrapper_cur);
   
   // // Collect static features with depth from previous frame
@@ -717,126 +835,113 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
   //   return false;
   // }
   
-  // std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
-  // std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
-  
-  // // Get coarse sampling parameters from config
-  // const int sample_bias = getFrontendParams().tracker_params.edge_coarse.sample_bias;
-  // const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
-  
-  // generateSrcPixelsSampled(frame_k_1, x_list, y_list, depth_list, weight_list, 
-  //                         frame_cloud_ref, theta_list, sample_bias, maximum_point);
-  
-  // // Set reference frame
-  // direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
-
-  if(x_list.size()>200) isDataValid = true;
-
-  
-  if(!isDataValid) {
+  if(is_data_valid_) {
     // Set current frame
     direct_tracker_->setCurrent(mono_cur);
+    direct_tracker_->setCurrentFrameId(frame_k->getFrameId());
     const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
     const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
     Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
                      T_matrix.topRightCorner<3, 1>());
+    std::cout<<"DirectTrack: reference frame id=" << direct_tracker_->getReference()
+              << ", current frame id=" << direct_tracker_->getCurrent()<<std::endl;
+         
     direct_tracker_->estimatePyramid(T21, true);
+    // std::cout<<"DirectTrack: result pose is valid"<<T21.matrix().allFinite()<<std::endl;
 
+    if(checkPoseJump(T21)){
+      LOG(WARNING) << "\033[33m [WARNING] \033[0m"<<frame_k->getFrameId()<<" : pose jumped, remain with initial pose!";
+      // Convert gtsam::Pose3 back to Sophus::SE3d
+      const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
+      const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+      T21 = Sophus::SE3d(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+                         T_matrix.topRightCorner<3, 1>());
+    }
+
+    // Check if tracking was successful
+    if (!T21.matrix().allFinite()) {
+      LOG(WARNING) << "DirectTracker returned invalid pose matrix";
+      T_k_1_k_refined = T_k_1_k_initial;
+      return false;
+    }
+    
+    // Log T21 in TUM format
+    const Eigen::Matrix4d& T = T21.matrix();
+    Eigen::Vector3d translation = T.block<3, 1>(0, 3);
+    Eigen::Matrix3d rotation = T.block<3, 3>(0, 0);
+    Eigen::Quaterniond q(rotation);
+    const double timestamp = frame_k->getTimestamp();
+    
+    LOG(INFO) << "T21 TUM: " << std::fixed << std::setprecision(6)
+              << timestamp << " "
+              << translation.x() << " " << translation.y() << " " << translation.z() << " "
+              << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
+    
+    const Eigen::Matrix4d T_result = T21.inverse().matrix();
+    T_k_1_k_refined = gtsam::Pose3(T_result);
   
   }
-  
-  // Check if tracking was successful
-  if (!T21.matrix().allFinite()) {
-    LOG_EVERY_N(WARNING, 50) << "DirectTracker returned invalid pose matrix";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  
-  // Convert Sophus::SE3d result back to gtsam::Pose3
-  // DirectTracker returns T_cur_ref, so we need to invert to get T_k_1_k
-  // VLOG(10) << "DirectTrack: converting result back to gtsam::Pose3";
-  const Eigen::Matrix4d T_result = T21.inverse().matrix();
-  T_k_1_k_refined = gtsam::Pose3(T_result);
-  
+    
   return true;
 }
 
-bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
-                                           const gtsam::Pose3& T_k_1_k_initial, 
-                                           gtsam::Pose3& T_k_1_k_refined) {
+bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame,
+                                           const gtsam::Pose3& pose_cur_refined, 
+                                           gtsam::Pose3& pose_cur_fine_refined) {
   utils::ChronoTimingStats timer("frontend.fine_track");
   
-  // Count edge points
-  size_t ref_edge_points = 0;
-  size_t cur_edge_points = 0;
-  size_t ref_sampled_points = 0;
-  
-  for (const auto& edge : frame_k_1->static_edges_) {
-    ref_edge_points += edge.mvPoints.size();
-    ref_sampled_points += edge.mvSampledEdgeIndex.size();
+  // Get reference frame (last keyframe Frame)
+  Frame::Ptr ref_frame;
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    ref_frame = last_keyframe_;
   }
   
-  for (const auto& edge : frame_k->static_edges_) {
-    cur_edge_points += edge.mvPoints.size();
-  }
-  
-  if (ref_edge_points == 0 || cur_edge_points == 0) {
-    VLOG(5) << "FineTrack: edges have no points (ref: " << ref_edge_points
-             << ", cur: " << cur_edge_points << "), skipping";
-    return false;
-  }
-
-  VLOG(5) << "FineTrack: edge features available (ref edges: " 
-           << frame_k_1->static_edges_.size() << " with " << ref_edge_points 
-           << " points (" << ref_sampled_points << " sampled), cur edges: " 
-           << frame_k->static_edges_.size() << " with " << cur_edge_points 
-           << " points)";
-  
-  // Validate frame image containers before FineTracker estimation
-  if (!frame_k_1->image_container_.hasRgb() || !frame_k->image_container_.hasRgb()) {
-    VLOG(5) << "FineTrack: frame image containers missing RGB, skipping";
+  if (!ref_frame) {
+    VLOG(5) << "FineTrack: no reference keyframe available";
     return false;
   }
   
   // Convert gtsam::Pose3 to Sophus::SE3d for FineTracker
-  // FineTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
-  const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
-  const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+  // FineTracker expects T_cur_ref (current to reference), which is pose_cur_refined.inverse()
+  const gtsam::Pose3 T_cur_ref_initial = pose_cur_refined;
+  const gtsam::Matrix4& T_matrix = T_cur_ref_initial.matrix();
   Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
                    T_matrix.topRightCorner<3, 1>());
+
+  fine_tracker_->setReference(frame);
+  fine_tracker_->setPosePriorCur2Ref(T21);
+  Sophus::SE3d pose_final;
   
-  // Run FineTracker estimation with exception handling
-  try {
-    fine_tracker_->estimate(frame_k_1, frame_k, T21);
-  } catch (const std::runtime_error& e) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker failed with error: " << e.what()
-                             << ". Falling back to initial pose.";
-    return false;
-  } catch (const std::exception& e) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker failed with exception: " << e.what()
-                             << ". Falling back to initial pose.";
-    return false;
-  } catch (...) {
-    LOG_EVERY_N(WARNING, 50)
-        << "FineTracker failed with unknown exception. Falling back to initial pose.";
-    return false;
+  LOG(INFO) << "FineTrack: reference frame id=" << fine_tracker_->getReference()
+            << ", current frame id=" << fine_tracker_->getCurrent();
+
+  fine_tracker_->estimate(pose_final, true);
+  if(checkPoseJump(pose_final)){
+    LOG(WARNING) << "\033[33m [WARNING] \033[0m"<<frame->getFrameId()<<" : pose jumped, remain with coarse result!";
+    pose_final = T21;
   }
-  
-  // Check if tracking was successful
-  if (!T21.matrix().allFinite()) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker returned invalid pose matrix";
-    return false;
-  }
-  
-  // Convert Sophus::SE3d result back to gtsam::Pose3
-  // FineTracker returns T_ref_cur (T_k_1_k) after inverting T_cur_ref internally
-  // So T21 is already T_k_1_k, no need to invert again
-  const Eigen::Matrix4d T_result = T21.matrix();
-  T_k_1_k_refined = gtsam::Pose3(T_result);
+  pose_cur_fine_refined = gtsam::Pose3(pose_final.inverse().matrix());
   
   return true;
 }
 
+bool RGBDInstanceFrontendModule::checkPoseJump(Sophus::SE3d pose)
+{
+    Eigen::Matrix3d R = pose.rotationMatrix();
+    Eigen::Vector3d t = pose.translation();
+    double t_thres = 0.10;
+    double angle_thres = 15.0;
+    Eigen::AngleAxisd rotationVector(R);  
+    Eigen::Vector3d axis = rotationVector.axis();  
+    double angle = rotationVector.angle() * 180.0 / M_PI;
+    if(t_thres < t.norm() || angle > angle_thres){
+        return true;
+    }else{
+        return false;
+    }
+
+}
 
 void RGBDInstanceFrontendModule::fillOutputPacketWithTracks(
     VisionImuPacket::Ptr vision_imu_packet, const Frame& frame,
@@ -1089,6 +1194,10 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
     local_map_->addFrame2LocalMap(kf);
     kf_count = local_map_->mvKeyFrames.size();
     
+    // Note: processSlidingWindowKeyFrame receives KeyFrame from queue, not Frame
+    // Frame object is already cached when keyframe was created in nominalSpin
+    // So we don't update last_keyframe_ here
+    
     // Log after adding keyframe
     size_t clusters_after = local_map_->mvEleEdgeClusters.size();
     size_t edges_after = 0;
@@ -1312,18 +1421,6 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       cam_params.fx(), cam_params.fy(), 
       cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
-  VLOG(2) << "KeyFrame ctor frame=" << frame_id
-          << " ms="
-          << std::chrono::duration<double, std::milli>(t_kf_ctor1 - t_kf_ctor0).count();
-  
-  // Get fine sampled points (from localmapping.cc line 223)
-  const auto t_sample0 = std::chrono::steady_clock::now();
-  const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
-  pKF->getFineSampledPoints(sample_bias);
-  const auto t_sample1 = std::chrono::steady_clock::now();
-  VLOG(2) << "Fine sample frame=" << frame_id
-          << " ms="
-          << std::chrono::duration<double, std::milli>(t_sample1 - t_sample0).count();
   
   return pKF;
 }
@@ -1398,6 +1495,10 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     newKFs[j]->mmMapAssociations.clear();
     local_map_->addFrame2LocalMap(newKFs[j]);
   }
+  
+  // Note: updateEdgeSlidingWindow only has KeyFrame objects, not Frame objects
+  // Frame object is already cached when keyframe was created in nominalSpin
+  // So we don't update last_keyframe_ here - it will be updated when next keyframe is created
   
   const auto t1 = std::chrono::steady_clock::now();
   // LOG(INFO) << "  After update: kf_count=" << local_map_->mvKeyFrames.size()

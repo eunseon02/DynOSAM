@@ -431,6 +431,8 @@ class Frame {
 
   std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
 
+  void getFineSampledPoints(int bias);
+
  protected:
   // these do not do distortion or projection along the ray
   bool getStaticCorrespondences(FeaturePairs& correspondences,

@@ -88,25 +88,25 @@ void declare_config(TrackerParams::OrbParams& config) {
 void declare_config(TrackerParams::EdgeCoarseParams& config) {
   using namespace config;
   name("EdgeCoarseParams");
-  field(config.width, "coarse.width");
-  field(config.height, "coarse.height");
-  field(config.kf_trans_thres, "coarse.kf_trans_thres");
-  field(config.kf_rot_thres, "coarse.kf_rot_thres");
-  field(config.sample_bias, "coarse.sample_bias");
-  field(config.maximum_point, "coarse.maximum_point");
-  field(config.cannyHigh, "coarse.cannyHigh");
-  field(config.cannyLow, "coarse.cannyLow");
+  field(config.width, "width");
+  field(config.height, "height");
+  field(config.kf_trans_thres, "kf_trans_thres");
+  field(config.kf_rot_thres, "kf_rot_thres");
+  field(config.sample_bias, "sample_bias");
+  field(config.maximum_point, "maximum_point");
+  field(config.cannyHigh, "cannyHigh");
+  field(config.cannyLow, "cannyLow");
 }
 
 void declare_config(TrackerParams::EdgeFineParams& config) {
   using namespace config;
   name("EdgeFineParams");
-  field(config.kf_trans_thres, "fine.kf_trans_thres");
-  field(config.kf_rot_thres, "fine.kf_rot_thres");
-  field(config.geo_photo_ratio, "fine.geo_photo_ratio");
-  field(config.sample_bias, "fine.sample_bias");
-  field(config.cannyHigh, "fine.cannyHigh");
-  field(config.cannyLow, "fine.cannyLow");
+  field(config.kf_trans_thres, "kf_trans_thres");
+  field(config.kf_rot_thres, "kf_rot_thres");
+  field(config.geo_photo_ratio, "geo_photo_ratio");
+  field(config.sample_bias, "sample_bias");
+  field(config.cannyHigh, "cannyHigh");
+  field(config.cannyLow, "cannyLow");
 }
 
 void declare_config(TrackerParams::EdgeWinParams& config) {

@@ -207,6 +207,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   }
 
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
+  // LOG(INFO) << "static_edges: " << static_edges.size();
   auto new_frame = std::make_shared<Frame>(
       frame_id, timestamp, camera_, input_images, static_features,
       dynamic_features, static_edges, object_observations, info_);

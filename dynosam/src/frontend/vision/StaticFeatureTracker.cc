@@ -487,44 +487,45 @@ std::vector<Edge> KltFeatureTracker::detectEdges(const cv::Mat& processed_img, i
   // Always update detected_edges_ even if empty
   // This ensures that if edge detection fails in one frame, we can retry in the next frame
   try {
-    std::vector<Edge> valid_edges;  // Store only valid edges
-    if (!detected_edges.empty()) {
-      for (const Edge& edge : detected_edges) {
-        // Validate edge before adding
-        if (edge.mvPoints.empty()) {
-          VLOG(5) << "Skipping edge with empty mvPoints";
-          continue;
-        }
-        
-        // Validate edge points for invalid values
-        bool edge_valid = true;
-        for (const auto& pt : edge.mvPoints) {
-          // Check for NaN or invalid coordinates
-          if (std::isnan(pt.x) || std::isnan(pt.y) || 
-              std::isinf(pt.x) || std::isinf(pt.y) ||
-              pt.x < 0 || pt.y < 0) {
-            VLOG(5) << "Skipping edge with invalid point coordinates (x=" << pt.x << ", y=" << pt.y << ")";
-            edge_valid = false;
-            break;
-          }
-          // Check for invalid gradient angle
-          if (std::isnan(pt.imgGradAngle) || std::isinf(pt.imgGradAngle)) {
-            VLOG(5) << "Skipping edge with invalid gradient angle (angle=" << pt.imgGradAngle << ")";
-            edge_valid = false;
-            break;
-          }
-        }
-        
-        if (!edge_valid) {
-          continue;
-        }
-        
-        valid_edges.push_back(edge);  // Store valid edge
-      }
-    }
-    // Always update detected_edges_ with only valid edges
-    // This matches the behavior in detectFeatures (line 615)
-    detected_edges_ = valid_edges;
+    // Validation disabled to match edgeSelector behavior
+    // std::vector<Edge> valid_edges;  // Store only valid edges
+    // if (!detected_edges.empty()) {
+    //   for (const Edge& edge : detected_edges) {
+    //     // Validate edge before adding
+    //     if (edge.mvPoints.empty()) {
+    //       VLOG(5) << "Skipping edge with empty mvPoints";
+    //       continue;
+    //     }
+    //     
+    //     // Validate edge points for invalid values
+    //     bool edge_valid = true;
+    //     for (const auto& pt : edge.mvPoints) {
+    //       // Check for NaN or invalid coordinates
+    //       if (std::isnan(pt.x) || std::isnan(pt.y) || 
+    //           std::isinf(pt.x) || std::isinf(pt.y) ||
+    //           pt.x < 0 || pt.y < 0) {
+    //         VLOG(5) << "Skipping edge with invalid point coordinates (x=" << pt.x << ", y=" << pt.y << ")";
+    //         edge_valid = false;
+    //         break;
+    //       }
+    //       // Check for invalid gradient angle
+    //       if (std::isnan(pt.imgGradAngle) || std::isinf(pt.imgGradAngle)) {
+    //         VLOG(5) << "Skipping edge with invalid gradient angle (angle=" << pt.imgGradAngle << ")";
+    //         edge_valid = false;
+    //         break;
+    //       }
+    //     }
+    //     
+    //     if (!edge_valid) {
+    //       continue;
+    //     }
+    //     
+    //     valid_edges.push_back(edge);  // Store valid edge
+    //   }
+    // }
+    // Always update detected_edges_ with all edges (no validation)
+    // This matches the behavior in edgeSelector
+    detected_edges_ = detected_edges;
   } catch (const std::exception& e) {
     LOG_EVERY_N(ERROR, 50) << "Exception while storing detected edges: " << e.what();
     detected_edges_.clear();
