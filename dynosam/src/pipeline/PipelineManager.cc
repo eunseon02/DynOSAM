@@ -107,11 +107,11 @@ DynoPipelineManager::DynoPipelineManager(
   CameraParams camera_params;
   if (params_.preferDataProviderCameraParams() &&
       data_loader_->getCameraParams().has_value()) {
-    LOG(INFO) << "Using camera params from DataProvider, not the config in the "
-                 "CameraParams.yaml!";
+    // LOG(INFO) << "Using camera params from DataProvider, not the config in the "
+    //              "CameraParams.yaml!";
     camera_params = *data_loader_->getCameraParams();
   } else {
-    LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
+    // LOG(INFO) << "Using camera params specified in CameraParams.yaml!";
     camera_params = params_.camera_params_;
   }
   /// NOTE: no need to update the camera params like the imu params as we parse

@@ -71,6 +71,11 @@ public:
 
     }
 
+    // void update_Objects(std::vector<dyno::Object*> objects)
+    // {
+    //     objects = std::move(objects);
+    // }
+
     void update_TrajectoryGT(Eigen::Matrix4d fine_pose)
     {
         trajectory_GT.push_back(fine_pose);

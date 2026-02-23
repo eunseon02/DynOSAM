@@ -21,7 +21,8 @@ struct YoloConfig {
   //! Class labels to include when tracking - all other classes will be excluded
   //! If empty, all classes will be considered
   std::vector<std::string> included_classes = {
-      "person", "bicycle", "car", "motorcycle", "bus", "train", "truck"};
+  };
+      // "person", "bicycle", "car", "motorcycle", "bus", "train", "truck"};
 };
 
 class YoloV8ModelInfo {
@@ -94,6 +95,7 @@ class YoloV8ObjectDetector : public ObjectDetectionEngine, public TRTEngine {
   ~YoloV8ObjectDetector();
 
   ObjectDetectionResult process(const cv::Mat& image) override;
+  static_objects::ObjectDetectionResult processDetections(const cv::Mat& image);
   ObjectDetectionResult result() const override;
 
  private:

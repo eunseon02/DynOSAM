@@ -40,6 +40,7 @@
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 #include "dynosam_cv/Camera.hpp"
 #include "dynosam_cv/Feature.hpp"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
 // #include "dynosam_common/DynamicObjects.hpp"
 #include "dynosam_nn/ObjectDetector.hpp"
@@ -149,6 +150,10 @@ class FeatureTracker : public FeatureTrackerBase {
   bool objectDetection(
       vision_tools::ObjectBoundaryMaskResult& boundary_mask_result,
       ImageContainer& image_container);
+
+  // Get static object detections (without tracking)
+  static_objects::ObjectDetectionResult staticObjectDetection(
+      const ImageContainer& image_container);
 
   void computeImageBounds(const cv::Size& size, int& min_x, int& max_x,
                           int& min_y, int& max_y) const;

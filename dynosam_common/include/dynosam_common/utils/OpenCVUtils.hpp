@@ -228,6 +228,8 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
                             const cv::Rect& bounding_box,
                             const int& bb_thickness = 2);
 
+void drawWhiteBoundingBox(cv::Mat& image, const cv::Rect& bounding_box, const int& bb_thickness = 2);
+
 /**
  * @brief Draws organized edges on an image using a color map.
  * Each edge is drawn with colors from the PARULA colormap based on the

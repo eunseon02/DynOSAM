@@ -1,6 +1,6 @@
 #include "dynosam/backend/edge_map/ElementEdge.hpp"
 
-using namespace edge_map;
+using namespace dyno;
 // 静态counter 初始化
 unsigned int elementEdge::id_counter = 0;
 

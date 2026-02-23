@@ -56,6 +56,7 @@ Frame::Frame(
       dynamic_features_(dynamic_features),
       static_edges_(static_edges),
       object_observations_(object_observations),
+      static_object_observations_(),  // Initialize empty (will be populated separately)
       tracking_info_(tracking_info) {
   // NOTE: no rectification, use camera matrix as P for cv::undistortPoints
   // see
@@ -89,11 +90,27 @@ Frame::Frame(
     LOG(WARNING) << "static_edges_ is empty, skipping edge processing";
   } else {
     try {
+      int edges_before_assignProperty3D = static_edges_.size();
       assignProperty3D(image_container_.depth()); //-- Assign depth to edges
+      int edges_after_assignProperty3D = static_edges_.size();
+      // LOG(INFO) << "[Frame] assignProperty3D: before=" << edges_before_assignProperty3D
+      //           << ", after=" << edges_after_assignProperty3D;
+      
       // edgeCullingDepth();         //-- Remove all edges with invalid depth and invalid edge points within valid edges
+      int edges_before_culling = static_edges_.size();
       edgeCullingDepthParallel();
+      int edges_after_culling = static_edges_.size();
+      // LOG(INFO) << "[Frame] edgeCullingDepthParallel: before=" << edges_before_culling
+      //           << ", after=" << edges_after_culling
+      //           << ", removed=" << (edges_before_culling - edges_after_culling);
+      
       //-- Now all edge points in the remaining edges have valid depth
+      int edges_before_continuity = static_edges_.size();
       edgeCullingContinuity();    //-- Ensure 3D point depth continuity for each ordered edge
+      int edges_after_continuity = static_edges_.size();
+      // LOG(INFO) << "[Frame] edgeCullingContinuity: before=" << edges_before_continuity
+      //           << ", after=" << edges_after_continuity
+      //           << ", removed=" << (edges_before_continuity - edges_after_continuity);
 
       //-- Update frame_edge_ID and frame_point_index for each edge point in this frame
       assignPropertyIdx();
@@ -543,35 +560,45 @@ void Frame::updateDepthsFeatureContainer(
 void Frame::constructDynamicObservations() {
   object_observations_.clear();
   
-  // Early return if no dynamic features
-  if (dynamic_features_.empty()) {
+  // Get object labels from mask (works for both dynamic tracking and object detection)
+  const ObjectIds instance_labels =
+      vision_tools::getObjectLabels(image_container_.objectMotionMask());
+  
+  if (instance_labels.empty()) {
     return;
   }
   
-  // assumes that the mask gets updated with the tracking label
-  const ObjectIds instance_labels =
-      vision_tools::getObjectLabels(image_container_.objectMotionMask());
+  // If we have dynamic features, use them to create observations
+  if (!dynamic_features_.empty()) {
+    auto inlier_iterator = dynamic_features_.beginUsable();
+    for (const Feature::Ptr& dynamic_feature : inlier_iterator) {
+      CHECK(!dynamic_feature->isStatic());
+      CHECK(dynamic_feature->usable());
 
-  auto inlier_iterator = dynamic_features_.beginUsable();
-  for (const Feature::Ptr& dynamic_feature : inlier_iterator) {
-    CHECK(!dynamic_feature->isStatic());
-    CHECK(dynamic_feature->usable());
+      const ObjectId object_id = dynamic_feature->objectId();
+      // this check is just for sanity!
+      CHECK(std::find(instance_labels.begin(), instance_labels.end(),
+                      object_id) != instance_labels.end())
+          << "Missing " << object_id << " in "
+          << container_to_string(instance_labels);
 
-    const ObjectId object_id = dynamic_feature->objectId();
-    // this check is just for sanity!
-    CHECK(std::find(instance_labels.begin(), instance_labels.end(),
-                    object_id) != instance_labels.end())
-        << "Missing " << object_id << " in "
-        << container_to_string(instance_labels);
+      if (object_observations_.find(object_id) == object_observations_.end()) {
+        SingleDetectionResult observation;
+        observation.object_id = object_id;
+        object_observations_[object_id] = observation;
+      }
 
-    if (object_observations_.find(object_id) == object_observations_.end()) {
+      // object_observations_[object_id].object_features.push_back(
+      //     dynamic_feature->trackletId());
+    }
+  } else {
+    // If no dynamic features but we have object mask (e.g., FLAGS_use_object=1),
+    // create observations directly from mask labels
+    for (const ObjectId& object_id : instance_labels) {
       SingleDetectionResult observation;
       observation.object_id = object_id;
       object_observations_[object_id] = observation;
     }
-
-    // object_observations_[object_id].object_features.push_back(
-    //     dynamic_feature->trackletId());
   }
 
   // Early return if no object observations were created
@@ -1073,6 +1100,46 @@ void Frame::assignProperty3D(const cv::Mat& matDepth)
     //         assignProperty3DEach(static_edges_[i].mvPoints[j], matDepth);
     //     }
     // }
+    
+    // Debug: Log valid depth point statistics per edge
+    int total_edges = static_edges_.size();
+    int edges_with_valid_depth = 0;
+    int total_points = 0;
+    int total_valid_points = 0;
+    std::vector<int> valid_point_counts;
+    
+    for(const auto& edge : static_edges_) {
+        int valid_count = 0;
+        for(const auto& point : edge.mvPoints) {
+            total_points++;
+            if(point.depth > 0.2f && point.depth < 5.0f) {
+                valid_count++;
+                total_valid_points++;
+            }
+        }
+        valid_point_counts.push_back(valid_count);
+        if(valid_count > 0) {
+            edges_with_valid_depth++;
+        }
+    }
+    
+    // Count edges that would pass the 30% threshold
+    int edges_passing_threshold = 0;
+    for(size_t i = 0; i < static_edges_.size(); ++i) {
+        if(static_edges_[i].mvPoints.size() > 0) {
+            float valid_ratio = static_cast<float>(valid_point_counts[i]) / static_edges_[i].mvPoints.size();
+            if(valid_ratio >= 0.3f) {
+                edges_passing_threshold++;
+            }
+        }
+    }
+    
+    // LOG(INFO) << "[Frame] assignProperty3D stats: total_edges=" << total_edges
+    //           << ", edges_with_valid_depth=" << edges_with_valid_depth
+    //           << ", total_points=" << total_points
+    //           << ", total_valid_points=" << total_valid_points
+    //           << ", valid_ratio=" << (total_points > 0 ? static_cast<float>(total_valid_points) / total_points : 0.0f)
+    //           << ", edges_passing_30pct_threshold=" << edges_passing_threshold;
 }
 
 void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
@@ -1081,7 +1148,16 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
     int y_idx = pt.y;
 
     //-- 原本点的真实深度
-    float depth_orig = matDepth.at<float>(y_idx, x_idx);
+    // Handle both CV_32F and CV_64F depth images
+    float depth_orig = 0.0f;
+    if (matDepth.type() == CV_32F) {
+        depth_orig = matDepth.at<float>(y_idx, x_idx);
+    } else if (matDepth.type() == CV_64F) {
+        depth_orig = static_cast<float>(matDepth.at<double>(y_idx, x_idx));
+    } else {
+        LOG(WARNING) << "Unsupported depth image type: " << matDepth.type();
+        return;
+    }
 
     //-- 在5x5的patch中计算修正深度以及可见性分数
     std::vector<float> validDepthList; //-- 所有深度不为0的点的深度列表
@@ -1097,7 +1173,12 @@ void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)
 
             patch_total += 1; //-- 累积总体像素
             //-- 在图像区域里的话判断深度值是否有效
-            float depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
+            float depth = 0.0f;
+            if (matDepth.type() == CV_32F) {
+                depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
+            } else if (matDepth.type() == CV_64F) {
+                depth = static_cast<float>(matDepth.at<double>(curr_y_idx, curr_x_idx));
+            }
             if(depth > 0.2) validDepthList.push_back(depth);
 
         }
@@ -1420,6 +1501,33 @@ std::vector<orderedEdgePoint> Frame::getCoarseSampledPoints(int bias, int maximu
     }
     //-- 目前是完全采样完成的所有点
     return sampledPoints;
+}
+
+void Frame::getFineSampledPoints(int bias)
+{
+    if (bias <= 0) {
+        return; // Invalid bias
+    }
+    
+    for(size_t i = 0; i < static_edges_.size(); ++i)
+    {
+        Edge& edge = static_edges_[i];
+        // Check if edge has valid points
+        if (edge.mvPoints.empty()) {
+            continue; // Skip empty edges
+        }
+        try {
+        edge.samplingEdgeUniform(bias);
+        } catch (const std::exception& e) {
+            // Log error and continue with next edge
+            std::cerr << "Error in samplingEdgeUniform for edge " << i 
+                      << ": " << e.what() << std::endl;
+            continue;
+        } catch (...) {
+            std::cerr << "Unknown error in samplingEdgeUniform for edge " << i << std::endl;
+            continue;
+        }
+    }
 }
 
 

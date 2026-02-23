@@ -37,6 +37,9 @@ find_package(dynosam_nn REQUIRED)
 # Find Pangolin (required for TrajectoryLoggerDisplay)
 find_package(Pangolin REQUIRED)
 
+# Find dlib (required for Graph.hpp)
+find_package(dlib REQUIRED)
+
 
 
 include(VerifyGtsamConfig)
@@ -93,6 +96,9 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
   src/frontend/vision/StaticFeatureTracker.cc
+  src/frontend/vision/Object.cc
+  src/frontend/vision/ObjectMatcher.cc
+  src/frontend/vision/Distance.cc
   src/frontend/vision/RobustWeight.cc
   src/frontend/vision/TrackerParams.cc
   src/frontend/vision/FeatureTrackerBase.cc
@@ -122,6 +128,8 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/edge_map/Optimizer.cc
   src/backend/edge_map/FeatureMerger.cc
   src/backend/edge_map/ElementEdge.cc
+  src/backend/edge_map/Map.cc
+  src/backend/edge_map/Graph.cc
 
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc
@@ -167,6 +175,7 @@ target_link_libraries(${PROJECT_NAME}
   pango_display
   pango_windowing
   pango_vars
+  dlib::dlib
   # rclcpp::rclcpp
   # opengv
   # nlohmann_json::nlohmann_json
@@ -225,7 +234,10 @@ set(DYNO_EXPORT_DEPS
   dynosam_cv
   dynosam_opt
   dynosam_nn
+  dlib
 )
+
+
 
 
 ament_export_dependencies(${DYNO_EXPORT_DEPS})

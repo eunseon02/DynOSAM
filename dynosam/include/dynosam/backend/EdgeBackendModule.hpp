@@ -15,13 +15,13 @@
 #include "dynosam_common/Flags.hpp"
 #include "dynosam_opt/Map.hpp"
 
-// Forward declarations for edge_map components
-namespace edge_map {
+// Forward declarations for edge_map components (now in dyno namespace)
+namespace dyno {
 class localMap;
 using localMapPtr = std::shared_ptr<localMap>;
 class KeyFrame;
 using KeyFramePtr = std::shared_ptr<KeyFrame>;
-}  // namespace edge_map
+}
 
 namespace dyno {
 
@@ -62,7 +62,7 @@ class EdgeBackendModule
   /**
    * @brief Get local map for visualization or external access
    */
-  edge_map::localMapPtr getLocalMap() const { return pLocalMap_; }
+  dyno::localMapPtr getLocalMap() const { return pLocalMap_; }
 
  protected:
   /**
@@ -115,13 +115,13 @@ class EdgeBackendModule
   /**
    * @brief Convert VisionImuPacket to KeyFrame format
    */
-  edge_map::KeyFramePtr createKeyFrameFromPacket(
+  dyno::KeyFramePtr createKeyFrameFromPacket(
       VisionImuPacket::ConstPtr input, const gtsam::Pose3& pose_curr,
       FrameId frame_id);
 
   // Member variables
   Camera::Ptr camera_;
-  edge_map::localMapPtr pLocalMap_;
+  dyno::localMapPtr pLocalMap_;
   
   // Edge selector (from localmapping.cc)
   // Note: edgeSelector type needs to be defined in edge_map namespace

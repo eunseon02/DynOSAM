@@ -32,11 +32,13 @@
 #include "dynosam_common/Edge.hpp"
 #include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam/frontend/vision/DisjointSet.hpp"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
 //-- 关联的结果：first是cur帧的边缘与ref帧关联边缘的idx映射
 //--           second是ref帧的边缘对应的类别（ref帧的不同边缘可能是同一类）
 typedef std::pair<std::unordered_map<int, int>, std::unordered_map<int, int>> associationResult;
 
+namespace dyno {
 
 class KeyFrame
 {
@@ -66,6 +68,8 @@ public:
 
     //-- 用于半径搜索的二维Mat
     cv::Mat mMatSearch;
+
+    dyno::Graph* graph = nullptr;
 
     //-- 关键帧的第i条（索引）边对应的局部地图中的elementEdge的ID
     std::map<int, unsigned int> mmEdgeIndex2ElementEdgeID;
@@ -97,7 +101,6 @@ public:
     //-- 获取粗匹配所需的3D边缘特征点
     std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
 
-    void getFineSampledPoints(int bias);
 
 private:
 
@@ -129,8 +132,9 @@ private:
     void edgeCullingQualityParallel();
 };
 
-
 //-- 用using 定义智能指针
 using KeyFramePtr = std::shared_ptr<KeyFrame>;
+
+}  // namespace dyno
 
 #endif

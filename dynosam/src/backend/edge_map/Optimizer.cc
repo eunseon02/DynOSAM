@@ -1,9 +1,9 @@
 #include "dynosam/backend/edge_map/Optimizer.hpp"
 #include "dynosam/frontend/vision/FineTracker.hpp"
 
-using namespace edge_map;
+using namespace dyno;
 
-void Optimizer::optimizeAllInvolvedKFs(const edge_map::localMapPtr pLocalMap)
+void Optimizer::optimizeAllInvolvedKFs(const dyno::localMapPtr pLocalMap)
 {
     std::vector<KeyFramePtr>& vKFs = pLocalMap->mvKeyFrames;
     std::vector<match3d_2d> matches;

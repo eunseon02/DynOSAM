@@ -6,7 +6,7 @@
 
 #include <random>
 
-namespace edge_map{
+namespace dyno{
 
 //-- 用于多帧关联的边缘Edge的套壳
 class elementEdge{

@@ -33,6 +33,7 @@
 #include <glog/logging.h>
 #include <chrono>
 #include <sstream>
+#include <iomanip>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -44,8 +45,10 @@
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/utils/SafeCast.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
+// #include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
 #include "dynosam/visualizer/EdgeVizUtils.hpp"
+#include "dynosam/backend/edge_map/Object.hpp"
 
 
 DEFINE_bool(use_frontend_logger, false,
@@ -67,6 +70,9 @@ DEFINE_bool(set_dense_labelled_cloud, false,
             "If true, the dense labelled point cloud will be set");
 
 DEFINE_bool(use_object_motion_filtering, false, "For testing!");
+
+DEFINE_bool(use_object, false,
+            "If true, object detection will be enabled");
 
 DEFINE_bool(use_edge_selector_track, false,
             "If true, use edgeSelector.processImage() + direct KeyFrame creation "
@@ -127,15 +133,28 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
                      camera->getParams()),
       imu_frontend_(params.frontend_params_.imu_params) {
   CHECK_NOTNULL(camera_);
+  // Log loaded Canny parameters from YAML
+  const auto& tracker_params = getFrontendParams().tracker_params;
+  // LOG(INFO) << "Loaded Canny params from YAML: coarse.cannyLow=" 
+  //           << tracker_params.edge_coarse.cannyLow 
+  //           << ", coarse.cannyHigh=" << tracker_params.edge_coarse.cannyHigh;
+  
   tracker_ = std::make_unique<FeatureTracker>(getFrontendParams(), camera_,
                                               display_queue);
   fine_tracker_ = std::make_unique<fine::FineTracker>(camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv(), getFrontendParams().tracker_params.edge_fine.geo_photo_ratio);
+  // LOG(INFO) << "height: " << camera->getParams().ImageHeight() << " width: " << camera->getParams().ImageWidth();
+  // LOG(INFO) << "fx: " << camera->getParams().fx() << " fy: " << camera->getParams().fy() << " cx: " << camera->getParams().cu() << " cy: " << camera->getParams().cv();
   direct_tracker_ = std::make_unique<direct::DirectTracker>(camera->getParams().ImageWidth(), camera->getParams().ImageHeight(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
-  
+  // edge_selector_ = std::make_unique<edgeSelector>(20.0, tracker_params.edge_coarse.cannyLow, tracker_params.edge_coarse.cannyHigh);
+
+  object_matcher_ = std::make_unique<ObjectMatcher>(camera_->getParams());
+
+
   // Initialize edge-based local mapping (from localmapping.cc)
-  local_map_.reset(new edge_map::localMap());
+  local_map_.reset(new dyno::localMap());
+  map_.reset(new dyno::EdgeMap());
   // TODO: Load canny parameters from config
-  edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
+  // edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
   
   // Load sliding window parameters from config
   const auto& win_params = getFrontendParams().tracker_params.edge_win;
@@ -192,6 +211,12 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
     // Initialize visualization data (will be updated every frame)
     latest_visualization_data_ = nullptr;
   }
+  
+  // Initialize last keyframe cache
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    last_keyframe_ = nullptr;
+  }
 }
 
 RGBDInstanceFrontendModule::~RGBDInstanceFrontendModule() {
@@ -226,9 +251,78 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
   ImageContainer::Ptr image_container = input->image_container_;
 
+
+  // Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
+  //                                    *image_container);
+
+  // Process image with edgeSelector
+  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper = image_container->rgb();
+  cv::Mat grayscale_image = ImageType::RGBMono::toMono(rgb_wrapper);
+  // edge_selector_->processImage(grayscale_image);
+  
+  // Still need to track frame for other processing
   Frame::Ptr frame = tracker_->track(input->getFrameId(), input->getTimestamp(),
                                      *image_container);
   CHECK(frame->updateDepths());
+  // LOG(INFO) << "frame edge features: " << frame->static_edges_.size()
+  //           << ", edgeSelector edges: " << edge_selector_->mvEdges.size();
+
+  // Initialize first frame pose to identity
+  frame->T_world_camera_ = gtsam::Pose3::Identity();
+
+  ObjectsInitialization(frame);
+  // Create first keyframe if edge features are enabled
+  if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
+    const gtsam::Pose3& pose_curr = frame->T_world_camera_;
+    
+    // Get fine sampled points
+    const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
+    const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
+
+    frame->getFineSampledPoints(sample_bias);
+
+    std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+    std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
+    
+    // Get coarse sampling parameters from config
+    generateSrcPixelsSampled(frame, x_list, y_list, depth_list, weight_list, 
+                            frame_cloud_ref, theta_list, sample_bias, maximum_point);
+    if(x_list.size()>200) is_data_valid_ = true;
+
+    // Set reference frame
+    const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame->image_container_.rgb();
+    cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
+    direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+    direct_tracker_->setReferenceFrameId(frame->getFrameId());
+    fine_tracker_->setCurrent(frame);
+
+    
+    // Create first keyframe
+    KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+    
+    if (pKF) {
+      // Add to local map
+      {
+        std::lock_guard<std::mutex> lock(local_map_mutex_);
+        local_map_->addFrame2LocalMap(pKF);
+        
+        // Update cached last keyframe Frame (store Frame object, not KeyFrame)
+        {
+          std::lock_guard<std::mutex> kf_lock(last_kf_mutex_);
+          last_keyframe_ = frame;
+        }
+      }
+      
+      // Push to queue for async processing (though it won't optimize until window is full)
+      optimization_queue_.push(pKF);
+      
+      pose_last_edge_kf_ = pose_curr;
+      is_edge_initialized_ = true;
+      
+      // LOG(INFO) << "Created first edge keyframe: kf_id=" << pKF->KF_ID 
+      //           << ", frame_id=" << frame->getFrameId();
+    }
+  }
 
   return {State::Nominal, nullptr};
 }
@@ -270,7 +364,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
-
   // const FeatureTrackerInfo& tracker_info = tracker_->getTrackerInfo();
   // VLOG(1) << to_string(tracker_info);
 
@@ -288,6 +381,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     }
   }
   const auto t_update_depths_end = std::chrono::steady_clock::now();
+
+
+  const auto t_sample0 = std::chrono::steady_clock::now();
+  const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
+  frame->getFineSampledPoints(sample_bias);
+  const auto t_sample1 = std::chrono::steady_clock::now();
+  
 
   bool stereo_result = false;
   std::shared_ptr<RGBDCamera> rgbd_camera = camera_->safeGetRGBDCamera();
@@ -329,31 +429,51 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   //   VLOG(10) << "RGBDInstanceFrontendModule::nominalSpin: using constant velocity model for initial pose";
   // }
   
-  gtsam::Pose3 T_k_1_k_initial = gtsam::Pose3();  // Identity pose
+  // Get last keyframe pose (if available) to use as reference instead of previous_frame
+  // Use cached value to avoid frequent lock
+  gtsam::Pose3 pose_ref;  // Reference pose for computing current frame pose
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    if (last_keyframe_) {
+        // Use last keyframe Frame pose as reference
+        pose_ref = last_keyframe_->T_world_camera_;
+        
+    } else {
+      // No keyframe yet, use previous_frame pose
+      LOG(ERROR) << "No keyframe yet, using previous_frame pose";
+    }
+  }
+  
+  gtsam::Pose3 pose_cur_initial = gtsam::Pose3();  // Identity pose
   
   // Perform DirectTrack
   const auto t_direct_start = std::chrono::steady_clock::now();
-  gtsam::Pose3 T_k_1_k_refined;
-  if (!DirectTrack(frame, previous_frame, T_k_1_k_initial, T_k_1_k_refined)) {
+  gtsam::Pose3 pose_cur_refined;
+  if (!DirectTrack(frame, previous_frame, pose_cur_initial, pose_cur_refined)) {
     LOG(ERROR) << "DirectTrack failed, using identity pose";
-    T_k_1_k_refined = T_k_1_k_initial;
   }
   const auto t_direct_end = std::chrono::steady_clock::now();
   
+  // Log pose_ref in TUM format
+  const gtsam::Point3& t = pose_ref.translation();
+  const gtsam::Rot3& R = pose_ref.rotation();
+  const gtsam::Quaternion q = R.toQuaternion();
+  const double timestamp = last_keyframe_->getTimestamp();
+  
   // Update frame pose with DirectTrack result
-  frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+  frame->T_world_camera_ = pose_ref * pose_cur_refined;
   
   // Calculate relative pose from DirectTrack result for FineTrack (if edge features enabled)
   const auto t_fine_start = std::chrono::steady_clock::now();
   if (FLAGS_use_edge_feature) {
-    gtsam::Pose3 T_k_1_k_fine_refined;
-    if (!FineTrack(frame, previous_frame, T_k_1_k_refined, T_k_1_k_fine_refined)) {
+    gtsam::Pose3 pose_cur_fine_refined;
+    if (!FineTrack(frame, pose_cur_refined, pose_cur_fine_refined)) {
       VLOG(5) << "Could not fine track";
     } else {
       // Check for pose jump 
       // Reject fine tracking result if it shows unreasonable motion (prevents trajectory flips)
-      const gtsam::Matrix3& R = T_k_1_k_fine_refined.rotation().matrix();
-      const gtsam::Point3& t = T_k_1_k_fine_refined.translation();
+      const gtsam::Matrix3& R = pose_cur_fine_refined.rotation().matrix();
+      const gtsam::Point3& t = pose_cur_fine_refined.translation();
       const double t_thres = 0.10;  // meters
       const double angle_thres = 15.0;  // degrees
       
@@ -364,18 +484,91 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       if (translation_norm > t_thres || angle_deg > angle_thres) {
         LOG_EVERY_N(WARNING, 50) << "FineTrack pose jump detected: trans=" << translation_norm 
                                   << "m, angle=" << angle_deg << "deg, using DirectTrack result";
-        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_refined;
+        // Use DirectTrack result with reference pose (T_ref_prev already computed above)
+        frame->T_world_camera_ = pose_ref * pose_cur_refined;
       } else {
         // Update frame pose with refined result from FineTrack
-        frame->T_world_camera_ = previous_frame->T_world_camera_ * T_k_1_k_fine_refined;
-        // T_w_ref * T_ref_cur = T_w_cur
+        frame->T_world_camera_ = pose_ref * pose_cur_fine_refined;
+        // T_w_ref * T_ref_prev * T_prev_cur = T_w_cur
       }
+
+      frame->T_world_camera_ = pose_ref * pose_cur_fine_refined;
     }
   }
   const auto t_fine_end = std::chrono::steady_clock::now();
 
-  // Update visualization snapshot every frame
 
+  if(FLAGS_use_object) {
+    const int img_width = camera_->getParams().ImageWidth();
+    const int img_height = camera_->getParams().ImageHeight();
+    dyno::BBox2 img_bbox(0.0, 0.0,
+                         static_cast<double>(img_width),
+                         static_cast<double>(img_height));
+    // Use dyno::Object* for projections (matches ObjectMatcher API)
+    std::unordered_map<dyno::Object*, Ellipse> proj_bboxes;
+
+    // Compute projection matrix P = K * [R | t]
+    const gtsam::Matrix3& R = frame->T_world_camera_.rotation().matrix();
+    const gtsam::Point3& t = frame->T_world_camera_.translation();
+    
+    // Get camera intrinsic matrix K (Eigen 3x3)
+    const gtsam::Matrix3& K = camera_->getParams().getCameraMatrixEigen();
+    
+    // Construct [R | t] (3x4 matrix)
+    Eigen::Matrix<double, 3, 4> Rt;
+    Rt.block<3, 3>(0, 0) = R;
+    Rt.block<3, 1>(0, 3) = t;
+    
+    // Compute projection matrix P = K * [R | t]
+    Eigen::Matrix<double, 3, 4> P = K * Rt;
+
+    // Project all existing map objects and build proj_bboxes
+    const auto objects = map_->GetAllObjects();
+    for (auto* obj : objects) {
+      if (!obj) continue;
+
+      auto proj = obj->GetEllipsoid().project(P);
+      auto c3d = obj->GetEllipsoid().GetCenter();
+      auto bb_proj = proj.ComputeBbox();
+      double z = Rt.row(2).dot(c3d.homogeneous());
+      // Discard objects behind the camera or mostly outside image
+      if (z < 0 ||
+          bboxes_intersection(bb_proj, img_bbox) <
+              0.3 * bbox_area(bb_proj)) {
+        continue;
+      }
+      proj_bboxes[obj] = proj;
+      // Check occlusions and keep only the nearest
+      std::unordered_set<dyno::Object*> hidden;
+      for (auto it : proj_bboxes) {
+          if (it.first != obj && bboxes_iou(it.second.ComputeBbox(), bb_proj) > 0.8) {
+              Eigen::Vector3d c2 = it.first->GetEllipsoid().GetCenter();
+              double z2 = Rt.row(2).dot(c2.homogeneous());
+              if (z < z2) {
+                  // remove z2
+                  hidden.insert(it.first);
+              } else {
+                  // remove z
+                  hidden.insert(obj);
+              }
+              break;
+          }
+      }
+      for (auto hid : hidden) {
+          proj_bboxes.erase(hid);
+      }
+
+    }
+
+    // Hungarian matcher does not require P; it uses frame->graph and proj_bboxes.
+    int nmatches = object_matcher_->MatchObjectsHungarian(*frame, proj_bboxes);
+    // LOG(INFO) << "ObjectMatcher matched " << nmatches << " objects";
+
+
+
+
+  }
+  // Update visualization snapshot every frame
   {
     EdgeVisualizationDataPtr snap = std::make_shared<EdgeVisualizationData>();
     snap->currentFramePose = frame->T_world_camera_.matrix();
@@ -383,19 +576,50 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // Read caches + sliding window under the local_map_mutex_
     std::lock_guard<std::mutex> lock(local_map_mutex_);
 
+    // Update cluster cache if it's empty but clusters exist in local_map_
+    // This handles the case where clusters were created after the last cache update
+    if ((!cluster_clouds_cache_ || cluster_clouds_cache_->empty()) && 
+        local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(2) << "Updated cluster cache in snapshot: " << cluster_clouds_cache_->size() << " clusters";
+      }
+    }
+    
     snap->clusterClouds = cluster_clouds_cache_;
     snap->clusterCloudColors = cluster_colors_cache_;
     snap->localMapClouds = local_map_clouds_cache_;
     snap->environment_cloud = environment_cloud_cache_;
 
     auto window = std::make_shared<std::vector<Eigen::Matrix4d>>();
-    if (local_map_) {
+    if (local_map_ && local_map_->mvKeyFrames.size() > 0) {
       window->reserve(local_map_->mvKeyFrames.size());
       for (size_t i = 0; i < local_map_->mvKeyFrames.size(); ++i) {
         window->push_back(local_map_->mvKeyFrames[i]->KF_pose_g.matrix());
       }
     }
     snap->slidingWindow = window;
+    
+    // Debug: log visualization data status
+    static int debug_count = 0;
+    if (++debug_count % 100 == 0) {
+      VLOG(1) << "Visualization snapshot: "
+              << "clusterClouds=" << (snap->clusterClouds ? snap->clusterClouds->size() : 0)
+              << ", localMapClouds=" << (snap->localMapClouds ? snap->localMapClouds->size() : 0)
+              << ", slidingWindow=" << (snap->slidingWindow ? snap->slidingWindow->size() : 0)
+              << ", environment_cloud=" << (snap->environment_cloud ? snap->environment_cloud->size() : 0)
+              << ", local_map_kfs=" << (local_map_ ? local_map_->mvKeyFrames.size() : 0)
+              << ", local_map_clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0);
+    }
 
     // Update latest visualization data (thread-safe, visualization thread can read anytime)
     {
@@ -475,6 +699,21 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     bool should_add_kf = select_edge_kf || local_map_empty;
     
     if (should_add_kf) {
+
+      std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
+      std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
+      const int sample_bias = getFrontendParams().tracker_params.edge_coarse.sample_bias;
+      const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
+      generateSrcPixelsSampled(frame, x_list, y_list, depth_list, weight_list, 
+                              frame_cloud_ref, theta_list, sample_bias, maximum_point);
+      if(x_list.size()>200) is_data_valid_ = true;
+
+      // Set reference frame
+      const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame->image_container_.rgb();
+      cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
+      direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
+      direct_tracker_->setReferenceFrameId(frame->getFrameId());
+      fine_tracker_->setCurrent(frame);
       const auto t_create_kf_start = std::chrono::steady_clock::now();
       // Calculate pose for keyframe
       gtsam::Pose3 pose_curr;
@@ -488,9 +727,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
       const auto t_create_kf_end = std::chrono::steady_clock::now();
+
       
       if (pKF) {
-        // Push to queue for async processing
+        {
+          std::lock_guard<std::mutex> lock(last_kf_mutex_);
+          last_keyframe_ = frame;
+        }
+        
         optimization_queue_.push(pKF);
         VLOG(10) << "\033[32m[QUEUE PUSH]\033[0m kf_id=" << pKF->KF_ID
                   << ", frame_id=" << frame->getFrameId();
@@ -498,9 +742,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       
       pose_last_edge_kf_ = pose_curr_coarse;
       
-      LOG_EVERY_N(INFO, 30) << "CreateKeyFrame frame=" << frame->getFrameId()
-                            << " ms=" << std::chrono::duration<double, std::milli>(
-                                t_create_kf_end - t_create_kf_start).count();
+      // LOG_EVERY_N(INFO, 30) << "CreateKeyFrame frame=" << frame->getFrameId()
+      //                       << " ms=" << std::chrono::duration<double, std::milli>(
+      //                           t_create_kf_end - t_create_kf_start).count();
     }
   }
 
@@ -564,33 +808,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   const auto t_nominal_end = std::chrono::steady_clock::now();
   
-  // Log processing times
-  // const char* CYAN = "\033[36m";
-  // const char* RESET = "\033[0m";
-  // 
-  // static int log_counter = 0;
-  // if (++log_counter % 10 == 0) {
-  //   std::ostringstream oss;
-  //   oss << CYAN << "nominalSpin frame=" << frame->getFrameId() << "\n"
-  //       << "  ├─ track_ms: " << ms(t_track_start, t_track_end) << "\n"
-  //       << "  ├─ update_depths_ms: " << ms(t_update_depths_start, t_update_depths_end) << "\n"
-  //       << "  ├─ stereo1_ms: " << ms(t_stereo1_start, t_stereo1_end) << "\n"
-  //       << "  ├─ direct_ms: " << ms(t_direct_start, t_direct_end) << "\n"
-  //       << "  ├─ fine_ms: " << ms(t_fine_start, t_fine_end) << "\n"
-  //       << "  ├─ stereo2_ms: " << ms(t_stereo2_start, t_stereo2_end) << "\n"
-  //       << "  ├─ object_motion_ms: " << ms(t_object_motion_start, t_object_motion_end) << "\n"
-  //       << "  ├─ fill_packet_ms: " << ms(t_fill_packet_start, t_fill_packet_end) << "\n"
-  //       << "  ├─ create_image_ms: " << ms(t_create_image_start, t_create_image_end) << "\n"
-  //       << "  ├─ send_logger_ms: " << ms(t_send_logger_start, t_send_logger_end) << "\n"
-  //       << "  └─ total_ms: " << ms(t_nominal_start, t_nominal_end) << RESET;
-  //   LOG(INFO) << oss.str();
-  // }
-
-  // if (FLAGS_log_projected_masks)
-  //   vision_tools::writeOutProjectMaskAndDepthMap(
-  //       frame->image_container_.depth(),
-  //       frame->image_container_.objectMotionMask(), *frame->getCamera(),
-  //       frame->getFrameId());
 
   return {State::Nominal, vision_imu_packet};
 }
@@ -703,10 +920,10 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
                                            gtsam::Pose3& T_k_1_k_refined) {
   utils::ChronoTimingStats timer("frontend.direct_track");
   
-  // Get grayscale images
-  const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
+  // // Get grayscale images
+  // const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_ref = frame_k_1->image_container_.rgb();
+  // cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
   const ImageWrapper<ImageType::RGBMono>& rgb_wrapper_cur = frame_k->image_container_.rgb();
-  cv::Mat mono_ref = ImageType::RGBMono::toMono(rgb_wrapper_ref);
   cv::Mat mono_cur = ImageType::RGBMono::toMono(rgb_wrapper_cur);
   
   // // Collect static features with depth from previous frame
@@ -717,126 +934,113 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
   //   return false;
   // }
   
-  // std::vector<float> x_list, y_list, depth_list, weight_list, theta_list;
-  // std::vector<cv::Point3f> frame_cloud_ref;  // Not used but required by function signature
-  
-  // // Get coarse sampling parameters from config
-  // const int sample_bias = getFrontendParams().tracker_params.edge_coarse.sample_bias;
-  // const int maximum_point = getFrontendParams().tracker_params.edge_coarse.maximum_point;
-  
-  // generateSrcPixelsSampled(frame_k_1, x_list, y_list, depth_list, weight_list, 
-  //                         frame_cloud_ref, theta_list, sample_bias, maximum_point);
-  
-  // // Set reference frame
-  // direct_tracker_->setReference(mono_ref, x_list, y_list, depth_list, weight_list, theta_list);
-
-  if(x_list.size()>200) isDataValid = true;
-
-  
-  if(!isDataValid) {
+  if(is_data_valid_) {
     // Set current frame
     direct_tracker_->setCurrent(mono_cur);
+    direct_tracker_->setCurrentFrameId(frame_k->getFrameId());
     const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
     const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
     Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
                      T_matrix.topRightCorner<3, 1>());
+    // std::cout<<"DirectTrack: reference frame id=" << direct_tracker_->getReference()
+    //           << ", current frame id=" << direct_tracker_->getCurrent()<<std::endl;
+         
     direct_tracker_->estimatePyramid(T21, true);
+    // std::cout<<"DirectTrack: result pose is valid"<<T21.matrix().allFinite()<<std::endl;
 
+    if(checkPoseJump(T21)){
+      LOG(WARNING) << "\033[33m [WARNING] \033[0m"<<frame_k->getFrameId()<<" : pose jumped, remain with initial pose!";
+      // Convert gtsam::Pose3 back to Sophus::SE3d
+      const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
+      const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+      T21 = Sophus::SE3d(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+                         T_matrix.topRightCorner<3, 1>());
+    }
+
+    // Check if tracking was successful
+    if (!T21.matrix().allFinite()) {
+      LOG(WARNING) << "DirectTracker returned invalid pose matrix";
+      T_k_1_k_refined = T_k_1_k_initial;
+      return false;
+    }
+    
+    // Log T21 in TUM format
+    const Eigen::Matrix4d& T = T21.matrix();
+    Eigen::Vector3d translation = T.block<3, 1>(0, 3);
+    Eigen::Matrix3d rotation = T.block<3, 3>(0, 0);
+    Eigen::Quaterniond q(rotation);
+    const double timestamp = frame_k->getTimestamp();
+    
+    // LOG(INFO) << "T21 TUM: " << std::fixed << std::setprecision(6)
+    //           << timestamp << " "
+    //           << translation.x() << " " << translation.y() << " " << translation.z() << " "
+    //           << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
+    
+    const Eigen::Matrix4d T_result = T21.inverse().matrix();
+    T_k_1_k_refined = gtsam::Pose3(T_result);
   
   }
-  
-  // Check if tracking was successful
-  if (!T21.matrix().allFinite()) {
-    LOG_EVERY_N(WARNING, 50) << "DirectTracker returned invalid pose matrix";
-    T_k_1_k_refined = T_k_1_k_initial;
-    return false;
-  }
-  
-  // Convert Sophus::SE3d result back to gtsam::Pose3
-  // DirectTracker returns T_cur_ref, so we need to invert to get T_k_1_k
-  // VLOG(10) << "DirectTrack: converting result back to gtsam::Pose3";
-  const Eigen::Matrix4d T_result = T21.inverse().matrix();
-  T_k_1_k_refined = gtsam::Pose3(T_result);
-  
+    
   return true;
 }
 
-bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame_k, const Frame::Ptr& frame_k_1,
-                                           const gtsam::Pose3& T_k_1_k_initial, 
-                                           gtsam::Pose3& T_k_1_k_refined) {
+bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame,
+                                           const gtsam::Pose3& pose_cur_refined, 
+                                           gtsam::Pose3& pose_cur_fine_refined) {
   utils::ChronoTimingStats timer("frontend.fine_track");
   
-  // Count edge points
-  size_t ref_edge_points = 0;
-  size_t cur_edge_points = 0;
-  size_t ref_sampled_points = 0;
-  
-  for (const auto& edge : frame_k_1->static_edges_) {
-    ref_edge_points += edge.mvPoints.size();
-    ref_sampled_points += edge.mvSampledEdgeIndex.size();
+  // Get reference frame (last keyframe Frame)
+  Frame::Ptr ref_frame;
+  {
+    std::lock_guard<std::mutex> lock(last_kf_mutex_);
+    ref_frame = last_keyframe_;
   }
   
-  for (const auto& edge : frame_k->static_edges_) {
-    cur_edge_points += edge.mvPoints.size();
-  }
-  
-  if (ref_edge_points == 0 || cur_edge_points == 0) {
-    VLOG(5) << "FineTrack: edges have no points (ref: " << ref_edge_points
-             << ", cur: " << cur_edge_points << "), skipping";
-    return false;
-  }
-
-  VLOG(5) << "FineTrack: edge features available (ref edges: " 
-           << frame_k_1->static_edges_.size() << " with " << ref_edge_points 
-           << " points (" << ref_sampled_points << " sampled), cur edges: " 
-           << frame_k->static_edges_.size() << " with " << cur_edge_points 
-           << " points)";
-  
-  // Validate frame image containers before FineTracker estimation
-  if (!frame_k_1->image_container_.hasRgb() || !frame_k->image_container_.hasRgb()) {
-    VLOG(5) << "FineTrack: frame image containers missing RGB, skipping";
+  if (!ref_frame) {
+    VLOG(5) << "FineTrack: no reference keyframe available";
     return false;
   }
   
   // Convert gtsam::Pose3 to Sophus::SE3d for FineTracker
-  // FineTracker expects T_cur_ref (current to reference), which is T_k_k_1 = T_k_1_k^-1
-  const gtsam::Pose3 T_k_k_1_initial = T_k_1_k_initial.inverse();
-  const gtsam::Matrix4& T_matrix = T_k_k_1_initial.matrix();
+  // FineTracker expects T_cur_ref (current to reference), which is pose_cur_refined.inverse()
+  const gtsam::Pose3 T_cur_ref_initial = pose_cur_refined;
+  const gtsam::Matrix4& T_matrix = T_cur_ref_initial.matrix();
   Sophus::SE3d T21(Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
                    T_matrix.topRightCorner<3, 1>());
+
+  fine_tracker_->setReference(frame);
+  fine_tracker_->setPosePriorCur2Ref(T21);
+  Sophus::SE3d pose_final;
   
-  // Run FineTracker estimation with exception handling
-  try {
-    fine_tracker_->estimate(frame_k_1, frame_k, T21);
-  } catch (const std::runtime_error& e) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker failed with error: " << e.what()
-                             << ". Falling back to initial pose.";
-    return false;
-  } catch (const std::exception& e) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker failed with exception: " << e.what()
-                             << ". Falling back to initial pose.";
-    return false;
-  } catch (...) {
-    LOG_EVERY_N(WARNING, 50)
-        << "FineTracker failed with unknown exception. Falling back to initial pose.";
-    return false;
+  // LOG(INFO) << "FineTrack: reference frame id=" << fine_tracker_->getReference()
+  //           << ", current frame id=" << fine_tracker_->getCurrent();
+
+  fine_tracker_->estimate(pose_final, true);
+  if(checkPoseJump(pose_final)){
+    LOG(WARNING) << "\033[33m [WARNING] \033[0m"<<frame->getFrameId()<<" : pose jumped, remain with coarse result!";
+    pose_final = T21;
   }
-  
-  // Check if tracking was successful
-  if (!T21.matrix().allFinite()) {
-    LOG_EVERY_N(WARNING, 50) << "FineTracker returned invalid pose matrix";
-    return false;
-  }
-  
-  // Convert Sophus::SE3d result back to gtsam::Pose3
-  // FineTracker returns T_ref_cur (T_k_1_k) after inverting T_cur_ref internally
-  // So T21 is already T_k_1_k, no need to invert again
-  const Eigen::Matrix4d T_result = T21.matrix();
-  T_k_1_k_refined = gtsam::Pose3(T_result);
+  pose_cur_fine_refined = gtsam::Pose3(pose_final.inverse().matrix());
   
   return true;
 }
 
+bool RGBDInstanceFrontendModule::checkPoseJump(Sophus::SE3d pose)
+{
+    Eigen::Matrix3d R = pose.rotationMatrix();
+    Eigen::Vector3d t = pose.translation();
+    double t_thres = 0.10;
+    double angle_thres = 15.0;
+    Eigen::AngleAxisd rotationVector(R);  
+    Eigen::Vector3d axis = rotationVector.axis();  
+    double angle = rotationVector.angle() * 180.0 / M_PI;
+    if(t_thres < t.norm() || angle > angle_thres){
+        return true;
+    }else{
+        return false;
+    }
+
+}
 
 void RGBDInstanceFrontendModule::fillOutputPacketWithTracks(
     VisionImuPacket::Ptr vision_imu_packet, const Frame& frame,
@@ -1086,8 +1290,24 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
       edges_before += kf->mvEdges.size();
     }
     
+    // Log keyframe edges before adding to local map
+    if (kf->mvEdges.empty()) {
+      LOG(ERROR) << "processSlidingWindowKeyFrame: kf(id=" << kf->KF_ID 
+              << ") has 0 edges before adding to local_map!";
+    }
+    
     local_map_->addFrame2LocalMap(kf);
     kf_count = local_map_->mvKeyFrames.size();
+    
+    // Log keyframe edges after adding to local map
+    if (kf->mvEdges.empty()) {
+      LOG(ERROR) << "processSlidingWindowKeyFrame: kf(id=" << kf->KF_ID 
+              << ") has 0 edges after adding to local_map!";
+    }
+    
+    // Note: processSlidingWindowKeyFrame receives KeyFrame from queue, not Frame
+    // Frame object is already cached when keyframe was created in nominalSpin
+    // So we don't update last_keyframe_ here
     
     // Log after adding keyframe
     size_t clusters_after = local_map_->mvEleEdgeClusters.size();
@@ -1096,24 +1316,30 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
       edges_after += kf->mvEdges.size();
     }
     
-    VLOG(1) << "After addFrame2LocalMap: kf_id=" << kf->KF_ID
-            << " kf_count=" << kf_count
-            << " clusters: " << clusters_before << " -> " << clusters_after
-            << " (+" << (clusters_after - clusters_before) << ")"
-            << " edges: " << edges_before << " -> " << edges_after
-            << " (+" << (edges_after - edges_before) << ")";
+    // VLOG(1) << "After addFrame2LocalMap: kf_id=" << kf->KF_ID
+    //         << " kf_count=" << kf_count
+    //         << " clusters: " << clusters_before << " -> " << clusters_after
+    //         << " (+" << (clusters_after - clusters_before) << ")"
+    //         << " edges: " << edges_before << " -> " << edges_after
+    //         << " (+" << (edges_after - edges_before) << ")";
     
     // This allows visualization of clusters before optimization
-    std::vector<std::vector<cv::Point3d>> clusterClouds;
-    std::vector<cv::Vec3b> clusterCloudColors;
-    edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+    if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
 
-    cluster_clouds_cache_ =
-        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-            std::move(clusterClouds));
-    cluster_colors_cache_ =
-        std::make_shared<const std::vector<cv::Vec3b>>(
-            std::move(clusterCloudColors));
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(2) << "Updated cluster cache in processSlidingWindowKeyFrame: " 
+                << cluster_clouds_cache_->size() << " clusters";
+      }
+    }
     
     const auto t1 = std::chrono::steady_clock::now();
     const auto ms = [](const auto& a, const auto& b) -> double {
@@ -1129,7 +1355,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
       // Perform optimization directly (already in processing thread)
       if (!optimization_in_progress_.load()) {
         optimization_in_progress_ = true;
-        
+      
         LOG(INFO) << "Starting edge sliding-window optimization";
         
         const auto t_opt_start = std::chrono::steady_clock::now();
@@ -1142,36 +1368,46 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         for(const auto& cluster : local_map_->mvEleEdgeClusters) {
           if(cluster.mbMerged) merged_after_fit++;
         }
-        LOG(INFO) << "After clusterFittingProjection: merged_clusters=" << merged_after_fit
-                  << " / " << local_map_->mvEleEdgeClusters.size();
+        // LOG(INFO) << "After clusterFittingProjection: merged_clusters=" << merged_after_fit
+        //           << " / " << local_map_->mvEleEdgeClusters.size();
         
-        edge_map::Optimizer::optimizeAllInvolvedKFs(local_map_);
+        dyno::Optimizer::optimizeAllInvolvedKFs(local_map_);
 
         // Update merged local map cache (heavy data) for visualization snapshots
         {
           std::vector<std::vector<cv::Point3d>> mergedClouds;
-          edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
-          local_map_clouds_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(mergedClouds));
+          if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+            edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
+            if (!mergedClouds.empty()) {
+              local_map_clouds_cache_ =
+                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                      std::move(mergedClouds));
+              VLOG(2) << "Updated localMapClouds cache: " << local_map_clouds_cache_->size() << " merged clusters";
+            }
+          }
 
           // Accumulate environment cloud from merged local map
-          std::vector<cv::Point3d> currentLocalMapCloud;
-          for (const auto& c : *local_map_clouds_cache_) {
-            currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+          if (local_map_clouds_cache_ && !local_map_clouds_cache_->empty()) {
+            std::vector<cv::Point3d> currentLocalMapCloud;
+            for (const auto& c : *local_map_clouds_cache_) {
+              currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+            }
+            if (!currentLocalMapCloud.empty()) {
+              environment_frames_.push_back(std::move(currentLocalMapCloud));
+              while (environment_frames_.size() > 150) {
+                environment_frames_.pop_front();
+              }
+              auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
+              env->reserve(environment_frames_.size());
+              for (const auto& f : environment_frames_) {
+                env->push_back(f);
+              }
+              environment_cloud_cache_ =
+                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                      std::move(*env));
+              VLOG(2) << "Updated environment_cloud cache: " << environment_cloud_cache_->size() << " frames";
+            }
           }
-          environment_frames_.push_back(std::move(currentLocalMapCloud));
-          while (environment_frames_.size() > 150) {
-            environment_frames_.pop_front();
-          }
-          auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
-          env->reserve(environment_frames_.size());
-          for (const auto& f : environment_frames_) {
-            env->push_back(f);
-          }
-          environment_cloud_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(*env));
         }
         
         const auto t2 = std::chrono::steady_clock::now();
@@ -1223,17 +1459,29 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
       local_map_->addFrame2LocalMap(pKF);
       kf_count = local_map_->mvKeyFrames.size();
 
-      // // Update covisibility cluster cache (heavy data) for snapshots
-      // std::vector<std::vector<cv::Point3d>> clusterClouds;
-      // std::vector<cv::Vec3b> clusterCloudColors;
-      // edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      // Update covisibility cluster cache (heavy data) for snapshots
+      // Always update if clusters exist, even if cache is not empty (clusters may have changed)
+      if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+        std::vector<std::vector<cv::Point3d>> clusterClouds;
+        std::vector<cv::Vec3b> clusterCloudColors;
+        edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
 
-      // cluster_clouds_cache_ =
-      //     std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-      //         std::move(clusterClouds));
-      // cluster_colors_cache_ =
-      //     std::make_shared<const std::vector<cv::Vec3b>>(
-      //         std::move(clusterCloudColors));
+        if (!clusterClouds.empty()) {
+          cluster_clouds_cache_ =
+              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                  std::move(clusterClouds));
+          cluster_colors_cache_ =
+              std::make_shared<const std::vector<cv::Vec3b>>(
+                  std::move(clusterCloudColors));
+          VLOG(2) << "Updated cluster cache in processEdgeKeyFrame: " 
+                  << cluster_clouds_cache_->size() << " clusters (kf_id=" << pKF->KF_ID << ")";
+        } else {
+          VLOG(2) << "processEdgeKeyFrame: clusters exist but visualizeAssociationResult returned empty (kf_id=" << pKF->KF_ID << ")";
+        }
+      } else {
+        VLOG(2) << "processEdgeKeyFrame: no clusters to visualize (kf_id=" << pKF->KF_ID 
+                << ", clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0) << ")";
+      }
     }
     const auto t_add1 = std::chrono::steady_clock::now();
     
@@ -1279,6 +1527,21 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
     } else if (imgDepth.type() != CV_32F) {
       imgDepth.convertTo(imgDepth, CV_32F);
     }
+    
+    // Validate depth image
+    if (imgDepth.empty()) {
+      LOG(ERROR) << "WARNING: createKeyFrameFromFrame: depth image is empty for frame=" << frame->getFrameId();
+      return nullptr;
+    }
+    // Check if depth image has valid values
+    cv::Mat valid_mask = (imgDepth > 0) & (imgDepth < 100.0); // reasonable depth range
+    int valid_pixels = cv::countNonZero(valid_mask);
+    if (valid_pixels == 0) {
+      VLOG(1) << "WARNING: createKeyFrameFromFrame: depth image has no valid pixels for frame=" << frame->getFrameId();
+      return nullptr;
+    }
+    VLOG(2) << "createKeyFrameFromFrame: depth image has " << valid_pixels << " valid pixels out of " 
+            << imgDepth.rows * imgDepth.cols << " total";
   } else {
     LOG_EVERY_N(WARNING, 100) << "Frame " << frame->getFrameId()
                               << " has no depth, cannot create edge KeyFrame";
@@ -1287,6 +1550,11 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   
   // Use edges from Frame (already processed in tracker_->track())
   // No need to process again with edgeSelector - frame->static_edges_ already contains the edges
+  if (frame->static_edges_.empty()) {
+    VLOG(1) << "WARNING: createKeyFrameFromFrame: frame=" << frame->getFrameId()
+            << " has no static_edges_!";
+    return nullptr;
+  }
   VLOG(2) << "Using edges from Frame frame=" << frame->getFrameId()
           << " edges=" << frame->static_edges_.size();
   
@@ -1304,6 +1572,16 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   FrameId frame_id = frame->getFrameId();
   double timestamp = frame->getTimestamp();
   const CameraParams& cam_params = camera_->getParams();
+
+  // Build projection matrix P = K * [R | t] for this keyframe
+  const gtsam::Matrix4& T_cam = pose_curr.matrix();
+  Eigen::Matrix3d R = T_cam.topLeftCorner<3, 3>();
+  Eigen::Vector3d t_vec = T_cam.topRightCorner<3, 1>();
+  Eigen::Matrix3d K_eigen = cam_params.getCameraMatrixEigen();
+  Eigen::Matrix<double, 3, 4> Rt;
+  Rt.block<3, 3>(0, 0) = R;
+  Rt.block<3, 1>(0, 3) = t_vec;
+  Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
   
   const auto t_kf_ctor0 = std::chrono::steady_clock::now();
   KeyFramePtr pKF(new KeyFrame(
@@ -1312,18 +1590,77 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       cam_params.fx(), cam_params.fy(), 
       cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
-  VLOG(2) << "KeyFrame ctor frame=" << frame_id
-          << " ms="
-          << std::chrono::duration<double, std::milli>(t_kf_ctor1 - t_kf_ctor0).count();
   
-  // Get fine sampled points (from localmapping.cc line 223)
-  const auto t_sample0 = std::chrono::steady_clock::now();
-  const int sample_bias = static_cast<int>(getFrontendParams().tracker_params.edge_fine.sample_bias);
-  pKF->getFineSampledPoints(sample_bias);
-  const auto t_sample1 = std::chrono::steady_clock::now();
-  VLOG(2) << "Fine sample frame=" << frame_id
-          << " ms="
-          << std::chrono::duration<double, std::milli>(t_sample1 - t_sample0).count();
+
+  // Share graph pointer between Frame and KeyFrame
+  pKF->graph = frame->graph;
+
+  // Update existing objects with this keyframe's detections
+  for (auto [node_id, attribute] : frame->graph->attributes) {
+    auto bb_det = attribute.bbox;
+    if (attribute.obj) {
+        //std::cout<<"node "<<node_id<<" is matched with object "<<attribute.obj->GetId()<<std::endl;
+        //check iou again???
+        auto proj = attribute.obj->GetEllipsoid().project(P);
+        auto bb_proj = proj.ComputeBbox();
+        double iou = bboxes_iou(bb_proj, bb_det);
+        if (iou > 0.01) {
+            auto c = proj.GetCenter();
+            auto axes = proj.GetAxes();
+            double angle = proj.GetAngle();
+            (void)angle;
+            //if(iou<0.3)
+            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 0, 255), 2);
+            //else
+            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 0), 2);
+            if(axes[0] <= 0.001 || axes[1] <= 0.001)
+                continue;
+            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, attribute.obj->GetColor(), 2);
+            attribute.obj->AddDetection(attribute.label, bb_det, attribute.ell, attribute.confidence, Rt, frame->getFrameId(), pKF.get());
+            //attribute.obj->AddDetection(attribute.label, bb_det, Ellipse::FromBbox(bb_det), attribute.confidence, Rt, mCurrentFrame.mnId, kf);
+            //proj_bboxes.erase(attribute.obj);
+            //double dis_min = normalized_gaussian_wasserstein_2d(proj, Ellipse::FromBbox(bb_det), 10);
+            //std::cout<<"wasser:"<<dis_min<<std::endl;
+            //cv::putText(im_rgb_,  std::to_string(attribute.hue), cv::Point2i(bb_det[0]-10, bb_det[1]-5), cv::FONT_HERSHEY_DUPLEX,
+            //    0.55, cv::Scalar(255, 255, 0), 1, false);
+        }
+        else{//TODO??
+            //std::cout<<"BUT IOU IS NOT ENOUGH"<<std::endl;
+            //attribute.obj = nullptr;
+            continue;
+        }
+    }
+}
+
+  // Create new objects for unmatched graph nodes
+  if (pKF->graph) {
+    const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+
+    for (auto& [node_id, attribute] : pKF->graph->attributes) {
+      if (attribute.obj) {
+        continue;
+      }
+      if (node_id >= depth_data_per_det.size()) {
+        continue;
+      }
+      const auto& depth_data = depth_data_per_det[node_id];
+
+      dyno::Object* obj = new dyno::Object(
+          attribute.label, attribute.bbox, attribute.ell, attribute.confidence,
+          depth_data, K_eigen, Rt, frame->getFrameId(), pKF.get());
+
+      map_->AddObject(obj);
+      attribute.obj = obj;
+
+      auto proj = obj->GetEllipsoid().project(P);
+      auto c = proj.GetCenter();
+      auto axes = proj.GetAxes();
+      double angle = proj.GetAngle();
+      (void)c;
+      (void)axes;
+      (void)angle;
+    }
+  }
   
   return pKF;
 }
@@ -1392,17 +1729,150 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // LOG(INFO) << "  Keeping " << newKFs.size() << " keyframes: " << kept_kf_ids;
   
   // Reset local map and add overlapping keyframes
-  local_map_.reset(new edge_map::localMap());
+  local_map_.reset(new dyno::localMap());
+  
+  // Log keyframe edges before adding
+  size_t total_edges_before = 0;
   for (int j = 0; j < window_size_ - window_step_; ++j) {
+    size_t kf_edges = newKFs[j]->mvEdges.size();
+    total_edges_before += kf_edges;
+    if (kf_edges == 0) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") has 0 edges!";
+    }
+  }
+  VLOG(1) << "updateEdgeSlidingWindow: adding " << (window_size_ - window_step_) 
+          << " keyframes with total " << total_edges_before << " edges";
+  
+  for (int j = 0; j < window_size_ - window_step_; ++j) {
+    // Log keyframe edges before clearing and re-adding
+    if (newKFs[j]->mvEdges.empty()) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") already has 0 edges before re-adding!";
+    }
+    
     newKFs[j]->mmEdgeIndex2ElementEdgeID.clear();
     newKFs[j]->mmMapAssociations.clear();
     local_map_->addFrame2LocalMap(newKFs[j]);
+    
+    // Log keyframe edges after re-adding
+    if (newKFs[j]->mvEdges.empty()) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") has 0 edges after re-adding!";
+    }
+    
+    // Log after each keyframe addition
+    if (j == 0) {
+      VLOG(2) << "  After adding KF[0] (id=" << newKFs[j]->KF_ID 
+              << ", edges=" << newKFs[j]->mvEdges.size() 
+              << "): local_map kfs=" << local_map_->mvKeyFrames.size()
+              << ", element_edges=" << local_map_->mvElementEdges.size()
+              << ", clusters=" << local_map_->mvEleEdgeClusters.size()
+              << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : "INIT");
+    } else if (j == 1) {
+      VLOG(2) << "  After adding KF[1] (id=" << newKFs[j]->KF_ID 
+              << ", edges=" << newKFs[j]->mvEdges.size() 
+              << "): local_map kfs=" << local_map_->mvKeyFrames.size()
+              << ", element_edges=" << local_map_->mvElementEdges.size()
+              << ", clusters=" << local_map_->mvEleEdgeClusters.size()
+              << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : "INIT");
+    }
   }
+  
+  // After adding keyframes, if we have 2 or more keyframes and state is still NOT_INITIALIZED,
+  // initLocalMap() should have been called by addFrame2LocalMap. But if it wasn't (e.g., 
+  // we added exactly 2 keyframes in the loop above), we need to ensure initialization.
+  // Actually, addFrame2LocalMap handles this automatically when mvKeyFrames.size() == 2,
+  // so we just need to make sure clusters are created. Let's verify the state.
+  if (local_map_->mvKeyFrames.size() >= 2 && local_map_->msState == dyno::localMap::State::NOT_INITIALIZED) {
+    // This shouldn't happen if addFrame2LocalMap worked correctly, but let's be safe
+    VLOG(1) << "updateEdgeSlidingWindow: WARNING - local_map has " << local_map_->mvKeyFrames.size() 
+            << " keyframes but state is NOT_INITIALIZED";
+  }
+  
+  // Update cluster cache after sliding window update
+  // Log detailed state for debugging
+  if (local_map_) {
+    size_t element_edges_count = local_map_->mvElementEdges.size();
+    size_t clusters_count = local_map_->mvEleEdgeClusters.size();
+    size_t kf_count = local_map_->mvKeyFrames.size();
+    VLOG(1) << "updateEdgeSlidingWindow: after update - kf_count=" << kf_count
+            << ", element_edges=" << element_edges_count
+            << ", clusters=" << clusters_count
+            << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : 
+                              local_map_->msState == dyno::localMap::State::INITIALIZED ? "INIT" : "LOST");
+    
+    if (clusters_count > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(1) << "Updated cluster cache after sliding window update: " 
+                << cluster_clouds_cache_->size() << " clusters";
+      } else {
+        VLOG(1) << "updateEdgeSlidingWindow: clusters exist but visualizeAssociationResult returned empty";
+      }
+    } else {
+      VLOG(1) << "updateEdgeSlidingWindow: no clusters after update (element_edges=" 
+              << element_edges_count << ")";
+    }
+  }
+  
+  // Note: updateEdgeSlidingWindow only has KeyFrame objects, not Frame objects
+  // Frame object is already cached when keyframe was created in nominalSpin
+  // So we don't update last_keyframe_ here - it will be updated when next keyframe is created
   
   const auto t1 = std::chrono::steady_clock::now();
   // LOG(INFO) << "  After update: kf_count=" << local_map_->mvKeyFrames.size()
   //           << " rebuild_ms="
   //           << std::chrono::duration<double, std::milli>(t1 - t0).count();
+}
+
+
+void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame){
+  // Get static_detection_result from frame (set by FeatureTracker from ImageContainer)
+  if (!frame->image_container_.hasStaticDetectionResult() ||
+      frame->image_container_.staticDetectionResult().detections.empty()) {
+    LOG(WARNING) << "WARNING: NO DETECTION IN THE INITIALIZATION FRAME";
+    return;
+  }
+  const auto& static_detection_result = frame->image_container_.staticDetectionResult();
+  const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+  
+  if (frame->graph == nullptr || depth_data_per_det.size() != static_detection_result.detections.size()) {
+    LOG(WARNING) << "ObjectsInitialization: graph or depth_data size mismatch";
+    return;
+  }
+  
+  // Get K from camera params
+  Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+  // Construct Rt [R | t] from T_world_camera_
+  Matrix34d Rt;
+  Rt.block<3, 3>(0, 0) = frame->T_world_camera_.rotation().matrix();
+  Rt.block<3, 1>(0, 3) = frame->T_world_camera_.translation();
+  
+  int count = 0;
+  for (size_t di = 0; di < static_detection_result.detections.size(); ++di) {
+      const auto& det = static_detection_result.detections[di];
+      if (di >= depth_data_per_det.size()) continue;
+      const auto& depth_data = depth_data_per_det[di];
+      
+      if(depth_data.first > 0.01f && depth_data.first < 15.0f){
+          dyno::Object* obj = new dyno::Object(det.category_id, det.bbox, det.ell, det.score, depth_data, K_eigen,
+                        Rt, 0, nullptr);
+          map_->AddObject(obj);
+          count += 1;
+      }
+  }
+  std::vector<dyno::Object*> objects = map_->GetAllObjects();
+  LOG(INFO) << "ObjectsInitialization: created " << count << " objects, Map has " << objects.size() << " objects";
 }
 
 }  // namespace dyno

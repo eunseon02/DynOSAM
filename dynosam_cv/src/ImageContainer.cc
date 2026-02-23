@@ -45,6 +45,11 @@ ImageContainer ImageContainer::clone() const {
     container.images_.emplace(k, v.clone());
   }
 
+  // Copy static_detection_result_ if present
+  if (static_detection_result_.has_value()) {
+    container.static_detection_result_ = static_detection_result_;
+  }
+
   return container;
 }
 

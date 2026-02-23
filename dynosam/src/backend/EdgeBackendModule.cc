@@ -58,7 +58,7 @@ EdgeBackendModule::~EdgeBackendModule() {
 
 void EdgeBackendModule::initializeEdgeMapping() {
   // Initialize local map
-  pLocalMap_.reset(new edge_map::localMap());
+  pLocalMap_.reset(new dyno::localMap());
   
   // Initialize edge selector (parameters from localmapping.cc)
   // edgeSelector selector(20.0, canny_low, canny_high);
@@ -172,7 +172,7 @@ void EdgeBackendModule::processKeyFrame(VisionImuPacket::ConstPtr input,
   // TODO: Check how to get images from VisionImuPacket or store them separately
   
   // Create KeyFrame (similar to localmapping.cc line 222)
-  edge_map::KeyFramePtr pKF = createKeyFrameFromPacket(
+  dyno::KeyFramePtr pKF = createKeyFrameFromPacket(
       input, pose_curr, input->frameId());
   
   // Add to local map (from localmapping.cc line 226)
@@ -182,7 +182,7 @@ void EdgeBackendModule::processKeyFrame(VisionImuPacket::ConstPtr input,
             << " to local map (total: " << pLocalMap_->mvKeyFrames.size() << ")";
 }
 
-edge_map::KeyFramePtr EdgeBackendModule::createKeyFrameFromPacket(
+dyno::KeyFramePtr EdgeBackendModule::createKeyFrameFromPacket(
     VisionImuPacket::ConstPtr input, const gtsam::Pose3& pose_curr,
     FrameId frame_id) {
   // Convert VisionImuPacket to KeyFrame
@@ -213,7 +213,7 @@ edge_map::KeyFramePtr EdgeBackendModule::createKeyFrameFromPacket(
 void EdgeBackendModule::optimizeSlidingWindow() {
   // From localmapping.cc lines 233-236
   pLocalMap_->clusterFittingProjection();
-  edge_map::Optimizer::optimizeAllInvolvedKFs(pLocalMap_);
+  dyno::Optimizer::optimizeAllInvolvedKFs(pLocalMap_);
   
   LOG(INFO) << "Optimized sliding window";
 }
@@ -231,12 +231,12 @@ void EdgeBackendModule::updateSlidingWindow() {
   }
   
   // Keep overlapping keyframes
-  std::vector<edge_map::KeyFramePtr> newKFs(
+  std::vector<dyno::KeyFramePtr> newKFs(
       pLocalMap_->mvKeyFrames.begin() + window_step_,
       pLocalMap_->mvKeyFrames.begin() + window_size_);
   
   // Reset local map and add overlapping keyframes
-  pLocalMap_.reset(new edge_map::localMap());
+  pLocalMap_.reset(new dyno::localMap());
   for (int j = 0; j < window_size_ - window_step_; ++j) {
     newKFs[j]->mmEdgeIndex2ElementEdgeID.clear();
     newKFs[j]->mmMapAssociations.clear();

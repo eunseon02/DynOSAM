@@ -33,11 +33,13 @@
 #include <glog/logging.h>
 
 #include <exception>
+#include <optional>
 #include <opencv4/opencv2/opencv.hpp>
 #include <type_traits>
 
 #include "dynosam_common/Cuda.hpp"
 #include "dynosam_common/Exceptions.hpp"
+#include "dynosam_common/StaticObjects.hpp"
 #include "dynosam_common/Types.hpp"
 #include "dynosam_common/utils/Numerical.hpp"
 #include "dynosam_common/utils/OpenCVUtils.hpp"
@@ -222,6 +224,7 @@ class ImageContainer {
   FrameId frame_id_;
   Timestamp timestamp_;
   gtsam::FastMap<std::string, KeyImagePair> images_;
+  std::optional<static_objects::ObjectDetectionResult> static_detection_result_;
 
  public:
   DYNO_POINTER_TYPEDEFS(ImageContainer)
@@ -234,11 +237,11 @@ class ImageContainer {
 
  public:
   ImageContainer(FrameId frame_id, Timestamp timestamp)
-      : frame_id_(frame_id), timestamp_(timestamp), images_() {}
-  ImageContainer() : frame_id_(0), timestamp_(InvalidTimestamp), images_() {}
+      : frame_id_(frame_id), timestamp_(timestamp), images_(), static_detection_result_(std::nullopt) {}
+  ImageContainer() : frame_id_(0), timestamp_(InvalidTimestamp), images_(), static_detection_result_(std::nullopt) {}
 
   ImageContainer(const ImageContainer& other)
-      : frame_id_(other.frame_id_), timestamp_(other.timestamp_) {
+      : frame_id_(other.frame_id_), timestamp_(other.timestamp_), static_detection_result_(other.static_detection_result_) {
     for (const auto& [k, v] : other.images_) {
       images_.emplace(
           k, v);  // Uses KeyImagePair copy ctor above (ie. shallow image copy)
@@ -249,6 +252,7 @@ class ImageContainer {
     if (this != &other) {
       frame_id_ = other.frame_id_;
       timestamp_ = other.timestamp_;
+      static_detection_result_ = other.static_detection_result_;
       images_.clear();
       for (const auto& [k, v] : other.images_) {
         images_.emplace(k, v);
@@ -325,6 +329,17 @@ class ImageContainer {
   ImageContainer& opticalFlow(const cv::Mat& image);
   ImageContainer& objectMotionMask(const cv::Mat& image);
   ImageContainer& rightRgb(const cv::Mat& image);
+
+  // Static object detection result accessors
+  bool hasStaticDetectionResult() const { return static_detection_result_.has_value(); }
+  const static_objects::ObjectDetectionResult& staticDetectionResult() const {
+    CHECK(static_detection_result_.has_value()) << "Static detection result not set";
+    return static_detection_result_.value();
+  }
+  ImageContainer& staticDetectionResult(const static_objects::ObjectDetectionResult& result) {
+    static_detection_result_ = result;
+    return *this;
+  }
 
   Timestamp timestamp() const { return timestamp_; }
   FrameId frameId() const { return frame_id_; }

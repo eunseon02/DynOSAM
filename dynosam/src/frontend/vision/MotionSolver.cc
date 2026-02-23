@@ -475,6 +475,7 @@ ObjectMotionSolver::Result ObjectMotionSolver::solve(Frame::Ptr frame_k,
   ObjectIds failed_object_tracks;
   MotionEstimateMap motion_estimates;
 
+  // object_observations_ only contains dynamic objects (static objects are in static_object_observations_)
   // if only 1 object, no point parallelising
   if (motion_estimates.size() <= 1) {
     for (const auto& [object_id, observations] :

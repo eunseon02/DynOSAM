@@ -31,6 +31,7 @@ namespace fine {
 
 // Bring Frame into fine namespace scope
 using dyno::Frame;
+using dyno::FrameId;
 
 typedef Eigen::Matrix<float,  6, 6> Mat66f;
 typedef Eigen::Matrix<double, 6, 6> Mat66d;
@@ -51,13 +52,17 @@ class FineTracker {
         void setReference(const Frame::Ptr kf_ref);
         //-- 设置当前帧，当前帧就是普通帧指针
         void setCurrent(const Frame::Ptr f_curr);
+        //-- 获取参考帧的frame id
+        FrameId getReference() const;
+        //-- 获取当前帧的frame id
+        FrameId getCurrent() const;
         //-- 设置参考帧到当前帧的位姿先验
         void setPosePriorRef2Cur(const Sophus::SE3d& T);
         //-- 设置当前帧到参考帧的位姿先验
         void setPosePriorCur2Ref(const Sophus::SE3d& T);
 
         //-- 在给定参考帧与当前帧的情况下估计 ref->curr的位姿变换
-        void estimate(const Frame::Ptr &frame_ref, const Frame::Ptr &frame_cur, Sophus::SE3d &T21, bool use_parallel = true);
+        void estimate(Sophus::SE3d &T21, bool use_parallel = true);
 
         std::vector<orderedEdgePoint> getGeoPoints()
         {

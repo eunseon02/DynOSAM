@@ -43,8 +43,8 @@
 #include "dynosam_cv/Feature.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_cv/UndistortRectifier.hpp"
-// #include "dynosam/frontend/Graph.hpp"
 #include "dynosam_common/Ellipsoid.hpp"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
 #include <sophus/se3.hpp>
 
@@ -88,15 +88,20 @@ class Frame {
 
   // semantic instance label to object observation (by the actual observations
   // in the image) set in constructor
+  // Dynamic objects (object_id < 10000)
   std::map<ObjectId, SingleDetectionResult> object_observations_;
+  // Static objects (object_id >= 10000) - for visualization only
+  std::map<ObjectId, SingleDetectionResult> static_object_observations_;
   MotionEstimateMap
       motion_estimates_;  // map of object ids to object motions that take the
                           // object from k-1 to k in W. Updated in the frontend
                           // and will not initially have a value
 
   // Object
-  std::vector<Ellipsoid, Eigen::aligned_allocator<Ellipsoid>> ellipsoids; //FOR VISUALIZATION
-  // Graph* graph;
+  std::vector<Ellipsoid, Eigen::aligned_allocator<Ellipsoid>> ellipsoids;  // FOR VISUALIZATION
+  Graph* graph;
+  // Depth data per static detection (for ObjectsInitialization) - (avg_depth, depth_range)
+  std::vector<std::pair<float, float>> depth_data_per_detection_;
                       
 
   Frame(FrameId frame_id, Timestamp timestamp, Camera::Ptr camera,
@@ -133,6 +138,21 @@ class Frame {
   }
   inline std::map<ObjectId, SingleDetectionResult>& getObjectObservations() {
     return object_observations_;
+  }
+
+  inline const std::map<ObjectId, SingleDetectionResult>&
+  getStaticObjectObservations() const {
+    return static_object_observations_;
+  }
+  inline std::map<ObjectId, SingleDetectionResult>& getStaticObjectObservations() {
+    return static_object_observations_;
+  }
+
+  inline const std::vector<std::pair<float, float>>& getDepthDataPerDetection() const {
+    return depth_data_per_detection_;
+  }
+  inline std::vector<std::pair<float, float>>& getDepthDataPerDetection() {
+    return depth_data_per_detection_;
   }
 
   // note: this doesnt mean inliers/outliers in the current frame (as this
@@ -430,6 +450,8 @@ class Frame {
   std::vector<int> edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr);
 
   std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
+
+  void getFineSampledPoints(int bias);
 
  protected:
   // these do not do distortion or projection along the ray

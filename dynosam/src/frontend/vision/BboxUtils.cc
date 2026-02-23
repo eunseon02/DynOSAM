@@ -18,7 +18,7 @@
 */
 
 
-#include "dynosam_common/Utils.hpp"
+#include "dynosam/frontend/vision/BboxUtile.hpp"
 
 #include <fstream>
 #include <iomanip>

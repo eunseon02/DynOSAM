@@ -1,4 +1,7 @@
 #include "dynosam/backend/edge_map/KeyFrame.hpp"
+#include <glog/logging.h>
+
+namespace dyno {
 
 KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vEdges, const cv::Mat& matRGB, const cv::Mat& matDepth,
     const float& fx, const float& fy, const float& cx, const float& cy)
@@ -25,8 +28,10 @@ KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vE
 
     // Depth-related preprocessing: remove inconsistent edge features
     assignProperty3D(matDepth); // Assign depth to edges
+    
     // edgeCullingDepth();         // Remove all edges with invalid depth and invalid edge points in valid edges
     edgeCullingDepthParallel();
+    
     // All edge points in remaining edges now have valid depth
     edgeCullingContinuity();    // Ensure 3D point depth continuity for each ordered edge
 
@@ -379,7 +384,7 @@ void KeyFrame::assignPropertyIdx()
     }
 }
 
-// Build search array: put all points from mvEdges into a cv::Mat
+// Build search array: put all points from static_edges_ into a cv::Mat
 void KeyFrame::constructSearchPlain()
 {
     // Create a CV_32SC2 type Mat, initial value set to (-1, -1) to indicate invalid positions
@@ -471,11 +476,11 @@ void KeyFrame::assignProperty3D(const cv::Mat& matDepth)
         }
     });
 
-    // for(int i = 0; i < mvEdges.size(); ++i)
+    // for(int i = 0; i < static_edges_.size(); ++i)
     // {
-    //     for(int j = 0; j < mvEdges[i].mvPoints.size(); ++j)
+    //     for(int j = 0; j < static_edges_[i].mvPoints.size(); ++j)
     //     {
-    //         assignProperty3DEach(mvEdges[i].mvPoints[j], matDepth);
+    //         assignProperty3DEach(static_edges_[i].mvPoints[j], matDepth);
     //     }
     // }
 }
@@ -486,6 +491,8 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
     int y_idx = pt.y;
 
     // Original point's true depth
+    // Note: matDepth should already be converted to CV_32F in createKeyFrameFromFrame
+    // So we can simply read as float, just like in keyframe.cpp
     float depth_orig = matDepth.at<float>(y_idx, x_idx);
 
     // Compute adjusted depth and visibility score in 5x5 patch
@@ -502,6 +509,7 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
 
             patch_total += 1; // Accumulate total pixels
             // If in image region, check if depth value is valid
+            // Note: matDepth should already be CV_32F, so read as float directly
             float depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
             if(depth > 0.2) validDepthList.push_back(depth);
 
@@ -633,7 +641,8 @@ void KeyFrame::edgeCullingDepthParallel()
         }
 
         // Compute valid ratio and decide whether to retain
-        float validRatio = static_cast<float>(validPointCount) / totalPointCount;
+        float validRatio = totalPointCount > 0 ? 
+            static_cast<float>(validPointCount) / totalPointCount : 0.0f;
         retainFlags[i] = (validRatio >= 0.3f) ? 1 : 0;
 
         // If edge is to be retained, first filter out invalid points
@@ -662,7 +671,7 @@ void KeyFrame::edgeCullingContinuity()
     std::vector<bool> isEdgeValid(mvEdges.size(), true);
     // Called after CullingDepth, at this point each point in Edge is assumed to have valid depth
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int cnt) {
-    //for(int cnt = 0; cnt < mvEdges.size(); ++cnt)
+    //for(int cnt = 0; cnt < static_edges_.size(); ++cnt)
         Edge& edge = mvEdges[cnt];
         
         //* STEP 1. Detect depth jumps in edge
@@ -826,32 +835,7 @@ std::vector<orderedEdgePoint> KeyFrame::getCoarseSampledPoints(int bias, int max
     return sampledPoints;
 }
 
-void KeyFrame::getFineSampledPoints(int bias)
-{
-    if (bias <= 0) {
-        return; // Invalid bias
-    }
-    
-    for(size_t i = 0; i < mvEdges.size(); ++i)
-    {
-        Edge& edge = mvEdges[i];
-        // Check if edge has valid points
-        if (edge.mvPoints.empty()) {
-            continue; // Skip empty edges
-        }
-        try {
-        edge.samplingEdgeUniform(bias);
-        } catch (const std::exception& e) {
-            // Log error and continue with next edge
-            std::cerr << "Error in samplingEdgeUniform for edge " << i 
-                      << ": " << e.what() << std::endl;
-            continue;
-        } catch (...) {
-            std::cerr << "Unknown error in samplingEdgeUniform for edge " << i << std::endl;
-            continue;
-        }
-    }
-}
+}  // namespace dyno
 
 
 

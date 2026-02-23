@@ -40,7 +40,7 @@
 
 DECLARE_bool(use_dynamic_track);
 DECLARE_bool(use_edge_feature);
-
+DECLARE_bool(use_object);
 namespace dyno {
 
 decltype(TrackletIdManager::instance_) TrackletIdManager::instance_;
@@ -209,6 +209,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   const int bbox_thickness = config.bboxThickness();
 
   std::vector<ObjectId> objects_to_print;
+  // Draw dynamic objects
   for (const auto& object_observation_pair :
        current_frame.object_observations_) {
     const ObjectId object_id = object_observation_pair.first;
@@ -227,10 +228,41 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
       utils::drawLabeledBoundingBox(img_rgb, label, colour, bb, bbox_thickness);
     }
   }
+  
+  // Draw static objects
+  for (const auto& object_observation_pair :
+       current_frame.static_object_observations_) {
+    const ObjectId object_id = object_observation_pair.first;
+    const cv::Rect& bb = object_observation_pair.second.bounding_box;
+
+    if (bb.empty()) {
+      continue;
+    }
+
+    objects_to_print.push_back(object_id);
+
+    if (config.drawObjectBoundingBox()) {
+      utils::drawWhiteBoundingBox(img_rgb, bb, bbox_thickness/3);
+    }
+    // if (config.drawObjectEllipse()) {
+    //   const Ellipse& ellipse = object_observation_pair.second.ellipse;
+    //   utils::drawEllipseProjections(img_rgb, ellipse, Color::uniqueId(object_id).bgra(), bbox_thickness/3);
+    // }
+  }
 
   if (config.drawObjectMask()) {
     constexpr static float kAlpha = 0.7;
-    utils::labelMaskToRGB(object_mask, img_rgb, img_rgb, kAlpha);
+    // Use objectMotionMask for dynamic objects, or staticDetectionResult.labelled_mask for static objects
+    cv::Mat mask_to_draw = object_mask;
+    if (object_mask.empty() && current_frame.image_container_.hasStaticDetectionResult()) {
+      const auto& static_result = current_frame.image_container_.staticDetectionResult();
+      if (!static_result.labelled_mask.empty()) {
+        mask_to_draw = static_result.labelled_mask;
+      }
+    }
+    if (!mask_to_draw.empty()) {
+      utils::labelMaskToRGB(mask_to_draw, img_rgb, img_rgb, kAlpha);
+    }
   }
 
   // Visualize organized edges
@@ -244,7 +276,7 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   // draw text info
   std::stringstream ss;
   ss << "Frame ID: " << current_frame.getFrameId() << " | ";
-  ss << "VO tracks: " << num_static_tracks << " | ";
+  // ss << "VO tracks: " << num_static_tracks << " | ";
 
   if (FLAGS_use_edge_feature) {
     // Count edge tracks (matched edge points between frames)
