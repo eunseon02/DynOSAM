@@ -474,9 +474,6 @@ struct YoloV8ObjectDetector::Impl {
 
     timing_boxes.stop();
     
-    LOG(INFO) << "YoloOutputToDetections: count=" << count 
-              << ", conf_threshold=" << yolo_config_.conf_threshold;
-
     std::vector<cv::Rect> boxes;
     boxes.reserve(num_boxes);
     std::vector<float> confidences;

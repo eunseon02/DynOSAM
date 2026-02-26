@@ -53,6 +53,8 @@ DEFINE_int32(ending_frame, -1,
              "ending_frame=dataset_size");
 DEFINE_string(tum_association_file, "",
               "Path to TUM RGBD association file (required for TUM dataset)");
+DEFINE_string(tum_detections_json, "",
+              "Path to JSON file containing object detections for TUM dataset (optional)");
 DECLARE_string(camera_params_file);  // Defined in PipelineParams.cc
 
 namespace dyno {
@@ -123,7 +125,8 @@ DataProvider::Ptr DataProviderFactory::Create(
         params_folder_path + FLAGS_camera_params_file);
     
     auto loader = std::make_shared<TUMDataProvider>(
-        dataset_folder_path, FLAGS_tum_association_file, camera_params);
+        dataset_folder_path, FLAGS_tum_association_file, camera_params,
+        FLAGS_tum_detections_json);
     // Note: TUMDataProvider doesn't support setStartingFrame/setEndingFrame yet
     // but we can add it if needed
     return loader;

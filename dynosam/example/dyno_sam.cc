@@ -78,6 +78,7 @@
 DEFINE_string(path_to_kitti, "/root/data/kitti", "Path to KITTI dataset");
 DEFINE_string(path_to_tum, "/root/data/TUM", "Path to TUM RGBD dataset");
 DEFINE_string(tum_association, "", "Path to TUM association file (e.g., rgb.txt or depth.txt association)");
+DECLARE_string(tum_detections_json);  // Defined in DataProviderFactory.cc
 DEFINE_bool(use_tum, false, "Use TUM RGBD dataset instead of KITTI");
 DEFINE_string(output_trajectory, "", "Output file path for TUM format trajectory (e.g., trajectory.txt)");
 DEFINE_bool(use_pipeline, false, "Use full PipelineManager with backend (instead of tracker only)");
@@ -269,29 +270,33 @@ int main(int argc, char* argv[]) {
         TUMDynoPipelineManagerRos(const rclcpp::NodeOptions& options,
                                    const std::string& tum_path,
                                    const std::string& tum_association,
-                                   const CameraParams& camera_params)
+                                   const CameraParams& camera_params,
+                                   const std::string& tum_detections_json)
             : dyno::DynoPipelineManagerRos(options),
               tum_path_(tum_path),
               tum_association_(tum_association),
+              tum_detections_json_(tum_detections_json),
               camera_params_(camera_params) {}
         
        protected:
         dyno::DataProvider::Ptr createDataProvider() override {
           // Override to use TUMDataProvider instead of default
           return std::make_shared<TUMDataProvider>(
-              tum_path_, tum_association_, camera_params_);
+              tum_path_, tum_association_, camera_params_, tum_detections_json_);
         }
         
        private:
         std::string tum_path_;
         std::string tum_association_;
+        std::string tum_detections_json_;
         CameraParams camera_params_;
       };
       
       // Create ROS pipeline with TUM dataset
       rclcpp::executors::MultiThreadedExecutor exec;
       auto ros_pipeline = std::make_shared<TUMDynoPipelineManagerRos>(
-          options, FLAGS_path_to_tum, FLAGS_tum_association, camera_params);
+          options, FLAGS_path_to_tum, FLAGS_tum_association, camera_params,
+          FLAGS_tum_detections_json);
       
       // Set params_folder_path parameter if not empty
       if (!FLAGS_params_folder_path.empty()) {
@@ -331,7 +336,8 @@ int main(int argc, char* argv[]) {
       
       // Create TUM data provider
       auto data_provider = std::make_shared<TUMDataProvider>(
-          FLAGS_path_to_tum, FLAGS_tum_association, camera_params);
+          FLAGS_path_to_tum, FLAGS_tum_association, camera_params,
+          FLAGS_tum_detections_json);
       
       // Create displays
       std::string output_file = FLAGS_output_trajectory.empty() ? "/tmp/trajectory.txt" : FLAGS_output_trajectory;

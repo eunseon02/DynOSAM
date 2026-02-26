@@ -18,7 +18,8 @@ class TUMDataProvider : public TUMProvider {
   DYNO_POINTER_TYPEDEFS(TUMDataProvider)
 
   TUMDataProvider(const std::string& tum_path, const std::string& association_file,
-                  const CameraParams& camera_params);
+                  const CameraParams& camera_params,
+                  const std::string& detections_json_path = "");
 
   virtual ~TUMDataProvider() = default;
 

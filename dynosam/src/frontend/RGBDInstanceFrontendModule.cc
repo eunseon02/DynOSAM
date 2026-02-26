@@ -1242,7 +1242,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
       // Perform optimization directly (already in processing thread)
       if (!optimization_in_progress_.load()) {
         optimization_in_progress_ = true;
-        
+      
         LOG(INFO) << "Starting edge sliding-window optimization";
         
         const auto t_opt_start = std::chrono::steady_clock::now();

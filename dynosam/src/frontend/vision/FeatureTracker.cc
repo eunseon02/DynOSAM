@@ -125,20 +125,33 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
         << "Incoming frame id must be consequative";
   }
 
-  // compute the ObjectBoundaryMaskResult AND detect/track object on the image
-  // if required using the ObjectDetectionEngine (currently we throw away the
-  // result after the function call) ObjectDetectionEngine is used if
-  // params_.prefer_provided_object_detection is false
-  vision_tools::ObjectBoundaryMaskResult boundary_mask_result;
-  objectDetection(boundary_mask_result, input_images);
-
-  if (!initial_computation_ && params_.use_propogate_mask) {
-    utils::ChronoTimingStats timer("propogate_mask");
-    propogateMask(input_images);
-  }
-
   // data-structure to handle which objects required re-tracking/sampling
   std::set<ObjectId> object_keyframes;
+  
+  // ObjectBoundaryMaskResult must be declared outside the if block since it's used later
+  vision_tools::ObjectBoundaryMaskResult boundary_mask_result;
+  
+  if(FLAGS_use_dynamic_track) {
+    // compute the ObjectBoundaryMaskResult AND detect/track object on the image
+    // if required using the ObjectDetectionEngine (currently we throw away the
+    // result after the function call) ObjectDetectionEngine is used if
+    // params_.prefer_provided_object_detection is false
+    objectDetection(boundary_mask_result, input_images);
+    if (!initial_computation_ && params_.use_propogate_mask) {
+      utils::ChronoTimingStats timer("propogate_mask");
+      propogateMask(input_images);
+    }
+  }
+  if(FLAGS_use_object) {
+    // compute the ObjectBoundaryMaskResult AND detect/track object on the image
+    // if required using the ObjectDetectionEngine (currently we throw away the
+    // result after the function call) ObjectDetectionEngine is used if
+    // params_.prefer_provided_object_detection is false
+    // Note: For TUM dataset, JSON detections are loaded in TUMDataProvider
+    // and stored as instance mask in ImageContainer, which will be processed
+    // by objectDetection() if prefer_provided_object_detection is true
+    static_objects::ObjectDetectionResult static_detection_result = staticObjectDetection(input_images);
+  }
 
   // Make a deep copy of boundary_mask for thread safety
   // cv::Mat uses reference counting, so we need to clone it before passing to another thread
@@ -216,9 +229,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // are never actually used!! this prevents the frame from needing to do the
   // same calculations we've alrady done
   std::map<ObjectId, SingleDetectionResult> object_observations;
-  LOG(INFO) << "Creating object_observations from boundary_mask_result: "
-            << "objects_detected.size()=" << boundary_mask_result.objects_detected.size()
-            << ", object_bounding_boxes.size()=" << boundary_mask_result.object_bounding_boxes.size();
   for (size_t i = 0; i < boundary_mask_result.objects_detected.size(); i++) {
     ObjectId object_id = boundary_mask_result.objects_detected.at(i);
     const cv::Rect& bb_detection =
@@ -231,7 +241,6 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
     object_observations[object_id] = observation;
   }
-  LOG(INFO) << "Created object_observations with " << object_observations.size() << " objects";
   
 
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
@@ -1283,40 +1292,6 @@ bool FeatureTracker::objectDetection(
                     "is missing!";
     }
   } else {
-    // Only run object detection if dynamic tracking or object detection is enabled
-    if (!FLAGS_use_dynamic_track && !FLAGS_use_object) {
-      // Return empty mask when both dynamic tracking and object detection are disabled
-      // MotionMask requires CV_32SC1 type (signed 32-bit integer)
-      cv::Mat empty_mask = cv::Mat::zeros(img_size_, CV_32SC1);
-      vision_tools::computeObjectMaskBoundaryMask(
-          boundary_mask_result, empty_mask, scaled_boarder_thickness,
-          kUseAsFeatureDetectionMask);
-      // Add empty mask to ImageContainer so that objectMotionMask() calls don't fail
-      image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
-                                                   empty_mask);
-      return false;
-    }
-    
-    if (!object_detection_) {
-      LOG(WARNING) << "object_detection_ is null! FLAGS_use_dynamic_track=" 
-                   << FLAGS_use_dynamic_track 
-                   << ", FLAGS_use_object=" << FLAGS_use_object
-                   << ", prefer_provided_object_detection=" 
-                   << params_.prefer_provided_object_detection;
-      // Return empty mask when object_detection_ is not initialized
-      cv::Mat empty_mask = cv::Mat::zeros(img_size_, CV_32SC1);
-      vision_tools::computeObjectMaskBoundaryMask(
-          boundary_mask_result, empty_mask, scaled_boarder_thickness,
-          kUseAsFeatureDetectionMask);
-      image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
-                                                   empty_mask);
-      return false;
-    }
-    
-    // LOG(INFO) << "Running object detection and tracking inference k="
-    //          << image_container.frameId()
-    //          << ", FLAGS_use_dynamic_track=" << FLAGS_use_dynamic_track
-    //          << ", FLAGS_use_object=" << FLAGS_use_object;
     ObjectDetectionResult detection_result;
     {
       utils::ChronoTimingStats timing("tracking_timer.detection_inference");
@@ -1324,19 +1299,10 @@ bool FeatureTracker::objectDetection(
     }
     cv::Mat object_mask = detection_result.labelled_mask;
     
-    LOG(INFO) << "Object detection result: num=" << detection_result.num()
-              << ", objectIds=" << container_to_string(detection_result.objectIds())
-              << ", detections.size()=" << detection_result.detections.size()
-              << ", labelled_mask.empty()=" << object_mask.empty()
-              << ", labelled_mask.type()=" << (object_mask.empty() ? -1 : object_mask.type());
     
     // Log detection details
     for (size_t i = 0; i < detection_result.detections.size(); ++i) {
       const auto& det = detection_result.detections[i];
-      LOG(INFO) << "  Detection[" << i << "]: object_id=" << det.object_id
-                << ", class_name=" << det.class_name
-                << ", confidence=" << det.confidence
-                << ", bbox=" << det.bounding_box;
     }
 
     {
@@ -1355,26 +1321,14 @@ bool FeatureTracker::objectDetection(
         double min_val, max_val;
         cv::minMaxLoc(object_mask, &min_val, &max_val);
         int non_zero_count = cv::countNonZero(object_mask);
-        LOG(INFO) << "labelled_mask stats: type=CV_32SC1, size=" << object_mask.size()
-                  << ", min=" << min_val << ", max=" << max_val
-                  << ", non_zero_pixels=" << non_zero_count
-                  << ", total_pixels=" << object_mask.total();
       } else if (object_mask.type() == CV_8UC1) {
         double min_val, max_val;
         cv::minMaxLoc(object_mask, &min_val, &max_val);
         int non_zero_count = cv::countNonZero(object_mask);
-        LOG(INFO) << "labelled_mask stats: type=CV_8UC1, size=" << object_mask.size()
-                  << ", min=" << min_val << ", max=" << max_val
-                  << ", non_zero_pixels=" << non_zero_count
-                  << ", total_pixels=" << object_mask.total();
       } else {
-        LOG(INFO) << "labelled_mask stats: type=" << object_mask.type()
-                  << ", size=" << object_mask.size();
       }
       
       ObjectIds mask_object_ids = vision_tools::getObjectLabels(object_mask);
-      LOG(INFO) << "Extracted " << mask_object_ids.size() << " object IDs from mask: " 
-                << container_to_string(mask_object_ids);
       
       // Manually populate boundary_mask_result from mask
       for (const ObjectId& object_id : mask_object_ids) {
@@ -1384,15 +1338,8 @@ bool FeatureTracker::objectDetection(
           boundary_mask_result.object_bounding_boxes.push_back(bbox);
         }
       }
-      LOG(INFO) << "Manually populated boundary_mask_result: objects_detected=" 
-                << container_to_string(boundary_mask_result.objects_detected)
-                << ", bounding_boxes=" << boundary_mask_result.object_bounding_boxes.size();
     }
     
-    LOG(INFO) << "After computeObjectMaskBoundaryMask: objects_detected=" 
-              << container_to_string(boundary_mask_result.objects_detected)
-              << ", bounding_boxes=" << boundary_mask_result.object_bounding_boxes.size();
-
     // update or insert image container with object mask
     image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
                                                    object_mask);
@@ -1408,6 +1355,14 @@ static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
     return result;
   }
   
+  // Priority 1: Use provided static detection result from ImageContainer (e.g., from JSON file)
+  if (image_container.hasStaticDetectionResult()) {
+    VLOG(30) << "Using provided static detection result from ImageContainer for frame "
+             << image_container.frameId();
+    return image_container.staticDetectionResult();
+  }
+  
+  // Priority 2: Run online detection using YOLO
   if (!object_detection_) {
     LOG(WARNING) << "object_detection_ is null! Cannot perform static object detection.";
     return result;
@@ -1425,16 +1380,16 @@ static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
     result = yolo_detector->processDetections(image_container.rgb());
   }
   
-  LOG(INFO) << "Static object detection result: num=" << result.num()
-            << ", detections.size()=" << result.detections.size();
+  // LOG(INFO) << "Static object detection result: num=" << result.num()
+  //           << ", detections.size()=" << result.detections.size();
   
   // Log detection details
   for (size_t i = 0; i < result.detections.size(); ++i) {
     const auto& det = result.detections[i];
-    LOG(INFO) << "  StaticDetection[" << i << "]: category_id=" << det.category_id
-              << ", score=" << det.score
-              << ", bbox=[" << det.bbox[0] << ", " << det.bbox[1] << ", "
-              << det.bbox[2] << ", " << det.bbox[3] << "]";
+    // LOG(INFO) << "  StaticDetection[" << i << "]: category_id=" << det.category_id
+    //           << ", score=" << det.score
+    //           << ", bbox=[" << det.bbox[0] << ", " << det.bbox[1] << ", "
+    //           << det.bbox[2] << ", " << det.bbox[3] << "]";
   }
   
   return result;

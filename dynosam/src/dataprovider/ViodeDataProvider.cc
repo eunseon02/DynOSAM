@@ -439,6 +439,7 @@ class ViodeAllLoader {
   bool imu_measurements_sent{false};
 
   GroundTruthPacketMap ground_truth_packets_;
+  
   // left camera params
   CameraParams camera_params_;
 
