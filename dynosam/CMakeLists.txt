@@ -37,6 +37,9 @@ find_package(dynosam_nn REQUIRED)
 # Find Pangolin (required for TrajectoryLoggerDisplay)
 find_package(Pangolin REQUIRED)
 
+# Find dlib (required for Graph.hpp)
+find_package(dlib REQUIRED)
+
 
 
 include(VerifyGtsamConfig)
@@ -167,6 +170,7 @@ target_link_libraries(${PROJECT_NAME}
   pango_display
   pango_windowing
   pango_vars
+  dlib::dlib
   # rclcpp::rclcpp
   # opengv
   # nlohmann_json::nlohmann_json
@@ -225,6 +229,7 @@ set(DYNO_EXPORT_DEPS
   dynosam_cv
   dynosam_opt
   dynosam_nn
+  dlib
 )
 
 

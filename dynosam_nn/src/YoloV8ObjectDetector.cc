@@ -8,11 +8,41 @@
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
 #include "dynosam_common/viz/Colour.hpp"
+#include "dynosam_common/StaticObjects.hpp"
+#include "dynosam_common/Utils.hpp"
 #include "dynosam_nn/CudaUtils.hpp"
 #include "dynosam_nn/YoloV8CudaUtils.hpp"
 #include "dynosam_nn/trackers/ObjectTracker.hpp"
 
 namespace dyno {
+
+// Helper function to convert COCO class name to category_id
+static unsigned int getCategoryIdFromClassName(const std::string& class_name) {
+  static const std::unordered_map<std::string, unsigned int> coco_class_map = {
+    {"person", 0}, {"bicycle", 1}, {"car", 2}, {"motorcycle", 3}, {"airplane", 4},
+    {"bus", 5}, {"train", 6}, {"truck", 7}, {"boat", 8}, {"traffic light", 9},
+    {"fire hydrant", 10}, {"stop sign", 11}, {"parking meter", 12}, {"bench", 13}, {"bird", 14},
+    {"cat", 15}, {"dog", 16}, {"horse", 17}, {"sheep", 18}, {"cow", 19},
+    {"elephant", 20}, {"bear", 21}, {"zebra", 22}, {"giraffe", 23}, {"backpack", 24},
+    {"umbrella", 25}, {"handbag", 26}, {"tie", 27}, {"suitcase", 28}, {"frisbee", 29},
+    {"skis", 30}, {"snowboard", 31}, {"sports ball", 32}, {"kite", 33}, {"baseball bat", 34},
+    {"baseball glove", 35}, {"skateboard", 36}, {"surfboard", 37}, {"tennis racket", 38}, {"bottle", 39},
+    {"wine glass", 40}, {"cup", 41}, {"fork", 42}, {"knife", 43}, {"spoon", 44},
+    {"bowl", 45}, {"banana", 46}, {"apple", 47}, {"sandwich", 48}, {"orange", 49},
+    {"broccoli", 50}, {"carrot", 51}, {"hot dog", 52}, {"pizza", 53}, {"donut", 54},
+    {"cake", 55}, {"chair", 56}, {"couch", 57}, {"potted plant", 58}, {"bed", 59},
+    {"dining table", 60}, {"toilet", 61}, {"tv", 62}, {"laptop", 63}, {"mouse", 64},
+    {"remote", 65}, {"keyboard", 66}, {"cell phone", 67}, {"microwave", 68}, {"oven", 69},
+    {"toaster", 70}, {"sink", 71}, {"refrigerator", 72}, {"book", 73}, {"clock", 74},
+    {"vase", 75}, {"scissors", 76}, {"teddy bear", 77}, {"hair drier", 78}, {"toothbrush", 79}
+  };
+  auto it = coco_class_map.find(class_name);
+  if (it != coco_class_map.end()) {
+    return it->second;
+  }
+  LOG(WARNING) << "Unknown class name: " << class_name << ", using category_id=0";
+  return 0;
+}
 
 namespace internal {
 
@@ -197,6 +227,169 @@ struct YoloV8ObjectDetector::Impl {
     // processed_vector = input_vector;
     is_first = false;
     return true;
+  }
+
+  bool postprocessDetectionsOnly(const cv::Mat& rgb, const float* d_output0,
+                                 const float* d_output1, const nvinfer1::Dims& output0_dims,
+                                 const nvinfer1::Dims& output1_dims,
+                                 std::vector<ObjectDetection>& detections) {
+    utils::ChronoTimingStats timing_all("yolov8_detection.post_process_no_track.run", 5);
+
+    if (output1_dims.nbDims != 4 || output1_dims.d[0] != 1 ||
+        output1_dims.d[1] != 32)
+      throw std::runtime_error(
+          "Unexpected output1 shape. Expected [1, 32, mask_h, mask_w].");
+
+    const cv::Size& required_size = requiredInputSize();
+    const cv::Size& original_size = originalSize(rgb);
+
+    utils::ChronoTimingStats timing_setup("yolov8_detection.post_process_no_track.setup",
+                                          5);
+
+    const size_t num_features =
+        output0_dims.d[1];  // e.g 80 class + 4 bbox parms + 32 seg masks = 116
+    const size_t num_detections = output0_dims.d[2];
+
+    const int num_boxes = static_cast<int>(num_detections);
+    const int mask_h = static_cast<int>(output1_dims.d[2]);
+    const int mask_w = static_cast<int>(output1_dims.d[3]);
+
+    const int num_classes =
+        static_cast<int>(num_features - 4 - 32);  // Corrected number of classes
+
+    // Constants from model architecture
+    constexpr int BoxOffset = YoloV8ModelInfo::Constants::BoxOffset;
+    constexpr int ClassConfOffset = YoloV8ModelInfo::Constants::ClassConfOffset;
+    const int MaskCoeffOffset =
+        YoloV8ModelInfo::Constants::MaskCoeffOffset(num_classes);
+
+    timing_setup.stop();
+
+    // 1. Process prototype masks
+    utils::ChronoTimingStats timing_proto("yolov8_detection.post_process_no_track.proto",
+                                          5);
+    const void* d_output1_void = d_output1;
+
+    cv::cuda::GpuMat d_prototype_masks(
+        YoloV8ModelInfo::Constants::NumMasks *
+            mask_h,  // rows = stacked vertically
+        mask_w,      // cols
+        CV_32F, const_cast<void*>(d_output1_void), mask_w * sizeof(float));
+
+    timing_proto.stop();
+
+    CHECK_EQ(num_boxes, MaxDetections);
+    CHECK_EQ(num_classes, 80);
+
+    YoloKernelConfig config;
+    config.num_boxes = MaxDetections;
+    config.num_classes = num_classes;
+    config.conf_threshold = yolo_config_.conf_threshold;
+    config.box_offset = BoxOffset;
+    config.class_conf_offset = ClassConfOffset;
+    config.mask_coeff_offset = MaskCoeffOffset;
+
+    utils::ChronoTimingStats timing_boxes("yolov8_detection.post_process_no_track.boxes",
+                                          5);
+    int count = internal::YoloOutputToDetections(
+        d_output0,  // The raw GPU pointer from TensorRT/ONNX
+        config,
+        h_indir_buffer_,   // Destination on CPU
+        d_indir_buffer_,   // Temp storage on GPU
+        d_indir_counter_,  // Temp counter on GPU,
+        h_indir_counter_, stream_pool_.getCudaStream());
+
+    timing_boxes.stop();
+
+    std::vector<cv::Rect> boxes;
+    boxes.reserve(num_boxes);
+    std::vector<float> confidences;
+    confidences.reserve(num_boxes);
+
+    for (int i = 0; i < count; ++i) {
+      const AlignedYoloDetection& det = h_indir_buffer_[i];
+      boxes.push_back(det.toCvRect());
+      confidences.push_back(det.confidence);
+    }
+    
+    // Early exit if no boxes after confidence threshold
+    if (boxes.empty()) {
+      return false;
+    }
+
+    // 3. Apply NMS
+    utils::ChronoTimingStats timing_nms("yolov8_detection.post_process_no_track.nms", 5);
+    std::vector<int> nms_indices;
+    cv::dnn::NMSBoxes(boxes, confidences, yolo_config_.conf_threshold,
+                      yolo_config_.nms_threshold, nms_indices);
+    timing_nms.stop();
+    if (nms_indices.empty()) {
+      return false;
+    }
+
+    utils::ChronoTimingStats timing_gain("yolov8_detection.post_process_no_track.gain",
+                                         5);
+    // Calculate letterbox parameters
+    const float gain = std::min(
+        static_cast<float>(required_size.height) / original_size.height,
+        static_cast<float>(required_size.width) / original_size.width);
+    const int scaled_w = static_cast<int>(original_size.width * gain);
+    const int scaled_h = static_cast<int>(original_size.height * gain);
+    const float pad_w = (required_size.width - scaled_w) / 2.0f;
+    const float pad_h = (required_size.height - scaled_h) / 2.0f;
+
+    // Precompute mask scaling factors
+    const float mask_scale_x = static_cast<float>(mask_w) / required_size.width;
+    const float mask_scale_y =
+        static_cast<float>(mask_h) / required_size.height;
+
+    // --- Crop Coordinates (Calculated once) ---
+    int x1_crop = static_cast<int>(std::round((pad_w - 0.1f) * mask_scale_x));
+    int y1_crop = static_cast<int>(std::round((pad_h - 0.1f) * mask_scale_y));
+    int x2_crop = static_cast<int>(
+        std::round((required_size.width - pad_w + 0.1f) * mask_scale_x));
+    int y2_crop = static_cast<int>(
+        std::round((required_size.height - pad_h + 0.1f) * mask_scale_y));
+
+    const cv::Rect prototype_crop_rect(x1_crop, y1_crop, x2_crop - x1_crop,
+                                       y2_crop - y1_crop);
+
+    timing_gain.stop();
+
+    utils::ChronoTimingStats timing_detections(
+        "yolov8_detection.post_process_no_track.detections", 5);
+    detections.clear();
+    detections.reserve(nms_indices.size());
+    int filtered_by_class = 0;
+    for (const int idx : nms_indices) {
+      AlignedYoloDetection* d_det = d_indir_buffer_ + idx;
+      const AlignedYoloDetection* h_det = h_indir_buffer_ + idx;
+
+      const int class_id = static_cast<int>(h_det->class_id);
+
+      std::string class_label;
+      if (!safeGetClassLabel(class_id, class_label)) {
+        filtered_by_class++;
+        VLOG(5) << "Filtered detection: class_id=" << class_id 
+                << " (not in included_classes)";
+        continue;
+      }
+
+      cv::cuda::Stream stream = stream_pool_.getCvStream();
+
+      ObjectDetection detection;
+      utils::ChronoTimingStats timing_detections_gpu(
+          "yolov8_detection.post_process_no_track.detections_gpu", 5);
+      internal::YoloDetectionsToObjects(
+          YoloDetectionGpuMatDevice(d_det), d_prototype_masks,
+          prototype_crop_rect, h_det, required_size, original_size, class_label,
+          mask_h, mask_w, stream, detection);
+      detections.push_back(detection);
+    }
+
+    timing_detections.stop();
+
+    return !detections.empty();
   }
 
   bool postprocess(const cv::Mat& rgb, const float* d_output0,
@@ -667,6 +860,146 @@ ObjectDetectionResult YoloV8ObjectDetector::process(const cv::Mat& image) {
 
   result_ = result;
   return result_;
+}
+
+static_objects::ObjectDetectionResult YoloV8ObjectDetector::processDetections(const cv::Mat& image) {
+  utils::ChronoTimingStats timing("yolov8_detection.processDetections");
+  static constexpr int kTimingVerbosityLevel = 5;
+
+  const auto& input_info = model_info_.input();
+  const auto& output0_info = model_info_.output0();
+  const auto& output1_info = model_info_.output1();
+
+  {
+    utils::ChronoTimingStats timing("yolov8_detection.pre_process",
+                                    kTimingVerbosityLevel);
+    impl_->preprocess(input_info, image, preprocessed_host_ptr_);
+  }
+
+  {
+    // allocate input data
+    utils::ChronoTimingStats timing("yolov8_detection.allocInput",
+                                    kTimingVerbosityLevel);
+    bool allocated = input_device_ptr_.allocate(input_info);
+    CHECK(
+        input_device_ptr_.checkTensorSize(preprocessed_host_ptr_.tensor_size));
+
+    if (allocated) {
+      context_->setInputTensorAddress(input_info.name.c_str(),
+                                      input_device_ptr_.get());
+    }
+  }
+
+  // put image data onto gpu
+  {
+    utils::ChronoTimingStats timing("yolov8_detection.push_from_host",
+                                    kTimingVerbosityLevel);
+    CHECK(
+        input_device_ptr_.pushFromHost(preprocessed_host_ptr_.get(), stream_));
+  }
+
+  // prepare output data
+  {
+    utils::ChronoTimingStats timing("yolov8_detection.allocOutput",
+                                    kTimingVerbosityLevel);
+    bool output0_allocated = output0_device_ptr_.allocate(output0_info);
+    bool output1_allocated = output1_device_ptr_.allocate(output1_info);
+
+    if (output0_allocated) {
+      context_->setTensorAddress(output0_info.name.c_str(),
+                                 output0_device_ptr_.get());
+    }
+
+    if (output1_allocated) {
+      context_->setTensorAddress(output1_info.name.c_str(),
+                                 output1_device_ptr_.get());
+    }
+  }
+
+  // set output address tensors
+  {
+    utils::ChronoTimingStats timing("yolov8_detection.infer");
+    cudaStreamSynchronize(stream_);
+    bool status = context_->enqueueV3(stream_);
+    if (!status) {
+      LOG(ERROR) << "initializing inference failed!";
+      return static_objects::ObjectDetectionResult{};
+    }
+  }
+
+  const auto output0_dims = context_->getTensorShape(output0_info.name.c_str());
+  const auto output1_dims = context_->getTensorShape(output1_info.name.c_str());
+
+  const float* d_output0_data = output0_device_ptr_.get();
+  const float* d_output1_data = output1_device_ptr_.get();
+  
+  // Get ObjectDetection vector without tracking
+  std::vector<ObjectDetection> object_detections;
+  {
+    utils::ChronoTimingStats timing("yolov8_detection.post_process_no_track",
+                                    kTimingVerbosityLevel);
+    if (!impl_->postprocessDetectionsOnly(image, d_output0_data, d_output1_data, 
+                                          output0_dims, output1_dims, object_detections)) {
+      return static_objects::ObjectDetectionResult{};
+    }
+  }
+
+  // Convert ObjectDetection to Detection
+  std::vector<static_objects::Detection> detections;
+  detections.reserve(object_detections.size());
+  
+  for (const auto& obj_det : object_detections) {
+    // Convert COCO class name to category_id
+    unsigned int category_id = getCategoryIdFromClassName(obj_det.class_name);
+    
+    // Convert cv::Rect to BBox2 (x_min, y_min, x_max, y_max)
+    const cv::Rect& bbox_cv = obj_det.bounding_box;
+    BBox2 bbox(bbox_cv.x, bbox_cv.y, 
+               bbox_cv.x + bbox_cv.width, 
+               bbox_cv.y + bbox_cv.height);
+    
+    // Create Detection with default Ellipse
+    detections.emplace_back(
+        category_id, static_cast<double>(obj_det.confidence), bbox);
+  }
+
+  // Filter detections
+  std::vector<static_objects::Detection> filtered_detections;
+  for (const auto& det1 : detections) {
+    bool has_similar_det = false;
+    // 0.2, 300, 0.3, 5, 0.4 for diamond
+    // 0.2, 300, 0.1, 10, 0.4 for TUM fr2
+    if (det1.score < 0.2 || bbox_area(det1.bbox) < 300 ||
+        bbox_area(det1.bbox) > 0.5 * image.rows * image.cols ||
+        // is_near_boundary(det1.bbox, image.cols, image.rows, 10) ||
+        bboxes_iou(det1.bbox, det1.ell.ComputeBbox()) < 0.2) {
+      continue;
+    }
+    // if(det1.category_id==0 || det1.category_id==56) continue; //person & chair
+    for (const auto& det2 : filtered_detections) {
+      double bbox_iou_val = bboxes_iou(det1.bbox, det2.bbox);
+      if (det1.category_id == det2.category_id) {
+        if (bbox_iou_val > 0.3) {
+          has_similar_det = true;
+        }
+      } else {
+        if (bbox_iou_val > 0.6) {
+          has_similar_det = true;
+        }
+      }
+    }
+    if (!has_similar_det) {
+      filtered_detections.push_back(det1);
+    }
+  }
+
+  // Build result
+  static_objects::ObjectDetectionResult result;
+  result.detections = std::move(filtered_detections);
+  result.input_image = image;
+  result.labelled_mask = cv::Mat::zeros(image.size(), CV_32SC1);
+
+  return result;
 }
 
 ObjectDetectionResult YoloV8ObjectDetector::result() const { return result_; }

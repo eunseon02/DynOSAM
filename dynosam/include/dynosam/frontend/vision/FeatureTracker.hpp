@@ -150,6 +150,10 @@ class FeatureTracker : public FeatureTrackerBase {
       vision_tools::ObjectBoundaryMaskResult& boundary_mask_result,
       ImageContainer& image_container);
 
+  // Get static object detections (without tracking)
+  static_objects::ObjectDetectionResult staticObjectDetection(
+      const ImageContainer& image_container);
+
   void computeImageBounds(const cv::Size& size, int& min_x, int& max_x,
                           int& min_y, int& max_y) const;
 

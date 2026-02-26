@@ -43,8 +43,8 @@
 #include "dynosam_cv/Feature.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_cv/UndistortRectifier.hpp"
-// #include "dynosam/frontend/Graph.hpp"
 #include "dynosam_common/Ellipsoid.hpp"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
 #include <sophus/se3.hpp>
 
@@ -96,7 +96,7 @@ class Frame {
 
   // Object
   std::vector<Ellipsoid, Eigen::aligned_allocator<Ellipsoid>> ellipsoids; //FOR VISUALIZATION
-  // Graph* graph;
+  Graph* graph;
                       
 
   Frame(FrameId frame_id, Timestamp timestamp, Camera::Ptr camera,

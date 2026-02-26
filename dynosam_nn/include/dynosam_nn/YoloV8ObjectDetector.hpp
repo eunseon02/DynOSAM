@@ -95,6 +95,7 @@ class YoloV8ObjectDetector : public ObjectDetectionEngine, public TRTEngine {
   ~YoloV8ObjectDetector();
 
   ObjectDetectionResult process(const cv::Mat& image) override;
+  static_objects::ObjectDetectionResult processDetections(const cv::Mat& image);
   ObjectDetectionResult result() const override;
 
  private:

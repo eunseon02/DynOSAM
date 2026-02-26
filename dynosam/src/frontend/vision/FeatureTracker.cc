@@ -50,6 +50,7 @@ DECLARE_bool(use_object);
 #include "dynosam_common/utils/GtsamUtils.hpp"
 #include "dynosam_common/utils/OpenCVUtils.hpp"
 #include "dynosam_common/utils/TimingStats.hpp"
+#include "dynosam_common/StaticObjects.hpp"
 #include "dynosam_nn/YoloV8ObjectDetector.hpp"
 
 namespace dyno {
@@ -71,27 +72,24 @@ FeatureTracker::FeatureTracker(const FrontendParams& params, Camera::Ptr camera,
   //           << ", FLAGS_use_object=" << FLAGS_use_object
   //           << ", prefer_provided_object_detection=" << params_.prefer_provided_object_detection;
 
-  if (FLAGS_use_dynamic_track && !params_.prefer_provided_object_detection) {
-    LOG(INFO) << "Creating object detection engine";
+  if ((FLAGS_use_dynamic_track || FLAGS_use_object) && !params_.prefer_provided_object_detection) {
+    LOG(INFO) << "Creating object detection engine (use_dynamic_track=" 
+              << FLAGS_use_dynamic_track << ", use_object=" << FLAGS_use_object << ")";
     dyno::YoloConfig yolo_config;
-    dyno::ModelConfig model_config;
-    model_config.model_file = "yolov8n-seg.pt";
-    // model_config.model_file = "yoloe-v8s-seg.onnx";
-    object_detection_ =
-        std::make_shared<dyno::YoloV8ObjectDetector>(model_config, yolo_config);
-  }
-
-  if (FLAGS_use_object && !params_.prefer_provided_object_detection) {
-    LOG(INFO) << "Creating object detection engine";
-    dyno::YoloConfig yolo_config;
-    yolo_config.conf_threshold = 0.20;  // Lower confidence threshold to detect more objects
-    yolo_config.nms_threshold = 0.45;
-    // Empty included_classes means all classes are included
-    yolo_config.included_classes.clear();
-    LOG(INFO) << "YoloConfig: conf_threshold=" << yolo_config.conf_threshold
-              << ", nms_threshold=" << yolo_config.nms_threshold
-              << ", included_classes.size()=" << yolo_config.included_classes.size()
-              << " (empty means all classes included)";
+    
+    // Use different config based on which flag is enabled
+    if (FLAGS_use_object) {
+      yolo_config.conf_threshold = 0.20;  // Lower confidence threshold to detect more objects
+      yolo_config.nms_threshold = 0.45;
+      // Empty included_classes means all classes are included
+      yolo_config.included_classes.clear();
+      LOG(INFO) << "YoloConfig: conf_threshold=" << yolo_config.conf_threshold
+                << ", nms_threshold=" << yolo_config.nms_threshold
+                << ", included_classes.size()=" << yolo_config.included_classes.size()
+                << " (empty means all classes included)";
+    }
+    // else: use default yolo_config values for FLAGS_use_dynamic_track
+    
     dyno::ModelConfig model_config;
     model_config.model_file = "yolov8n-seg.pt";
     // model_config.model_file = "yoloe-v8s-seg.onnx";
@@ -205,6 +203,8 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
     }
   }
 
+
+
   // Update info_ with the results from static tracking
   info_ = static_tracker_info;
 
@@ -232,6 +232,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
     object_observations[object_id] = observation;
   }
   LOG(INFO) << "Created object_observations with " << object_observations.size() << " objects";
+  
 
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
   // LOG(INFO) << "static_edges: " << static_edges.size();
@@ -1397,6 +1398,46 @@ bool FeatureTracker::objectDetection(
                                                    object_mask);
     return true;
   }
+}
+
+static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
+    const ImageContainer& image_container) {
+  static_objects::ObjectDetectionResult result;
+  
+  if (!FLAGS_use_object) {
+    return result;
+  }
+  
+  if (!object_detection_) {
+    LOG(WARNING) << "object_detection_ is null! Cannot perform static object detection.";
+    return result;
+  }
+  
+  // Check if object_detection_ is YoloV8ObjectDetector
+  auto* yolo_detector = dynamic_cast<YoloV8ObjectDetector*>(object_detection_.get());
+  if (!yolo_detector) {
+    LOG(WARNING) << "object_detection_ is not YoloV8ObjectDetector. Cannot use processDetections.";
+    return result;
+  }
+  
+  {
+    utils::ChronoTimingStats timing("tracking_timer.static_detection_inference");
+    result = yolo_detector->processDetections(image_container.rgb());
+  }
+  
+  LOG(INFO) << "Static object detection result: num=" << result.num()
+            << ", detections.size()=" << result.detections.size();
+  
+  // Log detection details
+  for (size_t i = 0; i < result.detections.size(); ++i) {
+    const auto& det = result.detections[i];
+    LOG(INFO) << "  StaticDetection[" << i << "]: category_id=" << det.category_id
+              << ", score=" << det.score
+              << ", bbox=[" << det.bbox[0] << ", " << det.bbox[1] << ", "
+              << det.bbox[2] << ", " << det.bbox[3] << "]";
+  }
+  
+  return result;
 }
 
 void FeatureTracker::propogateMask(ImageContainer& image_container) {

@@ -94,6 +94,7 @@ add_library(${PROJECT_NAME} SHARED
     src/GroundTruthPacket.cc
     src/StructuredContainers.cc
     src/DynamicObjects.cc
+    src/StaticObjects.cc
     src/PointCloudProcess.cc
     src/Algorithms.cc
     src/SharedModuleInfo.cc

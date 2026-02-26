@@ -3,6 +3,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "dynosam_common/DynamicObjects.hpp"
+#include "dynosam_common/StaticObjects.hpp"
 #include "dynosam_common/utils/Macros.hpp"
 #include "dynosam_cv/ImageTypes.hpp"
 

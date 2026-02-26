@@ -264,6 +264,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
 
   // Initialize first frame pose to identity
   frame->T_world_camera_ = gtsam::Pose3::Identity();
+
   
   // Create first keyframe if edge features are enabled
   if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
