@@ -1,51 +1,36 @@
-#include "dynosam/backend/edge_map/KeyFrame.hpp"
-#include <glog/logging.h>
+#include "KeyFrame.h"
 
 KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vEdges, const cv::Mat& matRGB, const cv::Mat& matDepth,
     const float& fx, const float& fy, const float& cx, const float& cy)
 {
-    // Set keyframe ID
+    //-- 设置关键帧ID
     KF_ID = ID;
 
-    // Set pose and timestamp
+    //-- 设置位姿与时间戳
     KF_stamp = stamp;
     KF_pose_g = pose;
 
-    // Set camera intrinsics
+    //-- 设置内参
     mCx = cx;
     mCy = cy;
     mFx = fx;
     mFy = fy;
 
-    // Assign original frame image
+    //-- 帧的原始图像的赋值
     cv::cvtColor(matRGB, mMatGray, cv::COLOR_BGR2GRAY);
     mHeight = mMatGray.rows;
     mWidth =  mMatGray.cols;
 
     mvEdges = std::move(vEdges);
 
-    // Depth-related preprocessing: remove inconsistent edge features
-    size_t edges_before_assign = mvEdges.size();
-    assignProperty3D(matDepth); // Assign depth to edges
-    size_t edges_after_assign = mvEdges.size();
-    VLOG(1) << "KeyFrame(id=" << KF_ID << ") assignProperty3D: " 
-            << edges_before_assign << " -> " << edges_after_assign << " edges";
-    
-    // edgeCullingDepth();         // Remove all edges with invalid depth and invalid edge points in valid edges
-    size_t edges_before_depth_cull = mvEdges.size();
+    //-- Depth 有关的预处理，剔除不一致的边缘特征
+    assignProperty3D(matDepth); //-- 为边缘赋值深度
+    // edgeCullingDepth();         //-- 剔除所有深度无效的边缘以及有效边缘中的无效边缘点
     edgeCullingDepthParallel();
-    size_t edges_after_depth_cull = mvEdges.size();
-    VLOG(1) << "KeyFrame(id=" << KF_ID << ") edgeCullingDepthParallel: " 
-            << edges_before_depth_cull << " -> " << edges_after_depth_cull << " edges";
-    
-    // All edge points in remaining edges now have valid depth
-    size_t edges_before_continuity = mvEdges.size();
-    edgeCullingContinuity();    // Ensure 3D point depth continuity for each ordered edge
-    size_t edges_after_continuity = mvEdges.size();
-    VLOG(1) << "KeyFrame(id=" << KF_ID << ") edgeCullingContinuity: " 
-            << edges_before_continuity << " -> " << edges_after_continuity << " edges";
+    //-- 现在剩下的edge中的所有edge point 都有有效深度
+    edgeCullingContinuity();    //-- 确保每条有序边缘的3D点深度连续一致
 
-    // Update frame_edge_ID and frame_point_index for each edge point in this frame
+    //-- 更新这帧里每个边缘点的 frame_edge_ID 和 frame_point_index
     assignPropertyIdx();
     
     //constructSearchPlain();
@@ -56,16 +41,16 @@ void KeyFrame::searchRadius(float x, float y, double radius, std::vector<ordered
 {
     result.clear();
 
-    // Define rectangular boundary of search region (integer pixel coordinates)
+    //-- 定义搜索区域的矩形边界（整数像素坐标）
     int minX = static_cast<int>(std::max(0.0, x - radius));
     int maxX = static_cast<int>(std::min(mMatSearch.cols - 1.0, x + radius));
     int minY = static_cast<int>(std::max(0.0, y - radius));
     int maxY = static_cast<int>(std::min(mMatSearch.rows - 1.0, y + radius));
 
-    // Distance from searched points to (x,y)
+    //-- 搜索到的点距 (x,y) 的距离
     std::vector<float> list_distance;
 
-    // Traverse all pixels in search region, find edge points within radius (excluding (-1,-1) invalid points)
+    //-- 遍历搜索区域内的所有像素, 寻找半径内的非（-1，-1）的边缘点
     for(int py = minY; py <= maxY; ++py)
     {
         for(int px = minX; px <= maxX; ++px)
@@ -74,22 +59,22 @@ void KeyFrame::searchRadius(float x, float y, double radius, std::vector<ordered
             int edgeID = pixel[0];     //-- frame_edge_ID
             int pointIdx = pixel[1];   //-- frame_point_index
 
-            // Skip invalid points
+            //-- 跳过无效点
             if (edgeID == -1 || pointIdx == -1) continue;
 
-            // Calculate distance (Euclidean distance)
+            //-- 计算距离（欧几里得距离）
             float dx = px - x;
             float dy = py - y;
             float distance = std::sqrt(dx * dx + dy * dy);
 
-            // If distance is within radius, add to result
+            //-- 如果距离在半径内，添加到结果
             if (distance <= radius)
             {
-                // Get original point data
+                //-- 获取原始点数据
                 const auto& edge = mvEdges[mmIndexMap.at(edgeID)];
                 orderedEdgePoint point = edge.mvPoints[pointIdx];
 
-                // Ensure frame_edge_ID and frame_point_index of original point data match search results
+                //-- 确保原始点数据的frame_edge_ID 和 frame_point_index 确实是搜到的结果
                 assert(point.frame_edge_ID == edgeID && point.frame_point_index == pointIdx);
 
                 result.push_back(point);
@@ -101,15 +86,15 @@ void KeyFrame::searchRadius(float x, float y, double radius, std::vector<ordered
 
     assert(list_distance.size() == result.size());
 
-    // Create index array
+    // 创建索引数组
     std::vector<size_t> indices(result.size());
     std::iota(indices.begin(), indices.end(), 0);
 
-    // Sort index array by distance of neighbor points relative to (x,y)
+    // 根据相邻点相对(x,y)的距离对索引数组排序
     std::sort(indices.begin(), indices.end(), 
               [&list_distance](size_t i, size_t j) { return list_distance[i] < list_distance[j]; });
 
-    // Rearrange result according to sorted indices
+    // 根据排序后的索引重新排列 result
     std::vector<orderedEdgePoint> sorted_result;
     sorted_result.reserve(result.size()); 
     for (size_t i : indices) {
@@ -122,7 +107,7 @@ bool KeyFrame::isPointsAssociated(const orderedEdgePoint& pt1, const orderedEdge
 {
     float res = fabs(pt1.imgGradAngle-pt2.imgGradAngle);
     if(res > 180) res = 360 - res;
-    // Gradient direction consistency association
+    //-- 梯度方向一致性关联
     if(res<10.0){
         return true;
     }else{
@@ -147,7 +132,7 @@ bool KeyFrame::isPointsAssociatedAlign(const orderedEdgePoint& warped_pt,
 std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, const Sophus::SE3d& T2curr)
 {
 
-    // * STEP 1. Reproject reference frame edges to current frame coordinates
+    // * STEP 1. 得到参考帧边缘重投影到当前帧的坐标
     std::vector<orderedEdgePoint>& queryList = query_edge.mvPoints;
     std::vector<cv::Point> warped_queryList;
     std::vector<float> warped_depthList;
@@ -156,19 +141,19 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
     warped_queryList.reserve(num_points);
     warped_depthList.reserve(num_points);
 
-    // Precompute inverse of camera intrinsics (reduce division operations)
+    // 预计算相机内参倒数（减少除法运算）
     const float inv_fx = 1.0f / mFx;
     const float inv_fy = 1.0f / mFy;
 
     for(int i = 0; i < num_points; ++i)
     {
-        // Recover 3D point from pixel and depth values
+        //-- 由像素与深度值恢复的3D点
         const auto& pt = queryList[i];
         float z = pt.depth;
         float x = (static_cast<float>(pt.x) - mCx) * inv_fx * z;
         float y = (static_cast<float>(pt.y) - mCy) * inv_fy * z;
         
-        // Reproject to get new projected point
+        //-- 重投影得到新的投影点
         Eigen::Vector3d point = T2curr * Eigen::Vector3d(x, y, z);
         warped_queryList.emplace_back(
             mFx * point.x() / point.z() + mCx,
@@ -177,9 +162,9 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
         warped_depthList.emplace_back(point.z());
     }
 
-    // * STEP 2. Radius neighborhood search and voting to find which edge each query edge point most wants to associate with
+    // * STEP 2. 半径邻域搜索，并投票得到 query edge 的每个点最想关联的边缘
 
-    // first: current frame edge ID, second: number of query edge points that want to associate with this current frame edge
+    //-- first:当前帧的边的ID   second: 该条当前帧边有几个query edge的点意愿关联
     std::map<int, int> edgeVoteMapTotal;
     const float radius = 6.0f;
     const int threshold_value = std::min(static_cast<int>(num_points * 0.3f), 5);
@@ -193,22 +178,22 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
         std::vector<orderedEdgePoint> neighbors_points;
         searchRadius(x, y, radius, neighbors_points);
 
-        // Pre-store neighbor matching relationships for this point
+        //-- 预存该点的近邻匹配关系
         pt.mvAssoFrameEdgeIDs.clear();
         pt.mvAssoFramePointIndices.clear();
         pt.mvAssoFrameEdgeIDs.reserve(neighbors_points.size());
         pt.mvAssoFramePointIndices.reserve(neighbors_points.size());
 
-        // For each point, build a vote to find which edge this point most tends to associate with
+        //-- 对于一个点，建立一个投票，得到这个点最倾向关联的边
         std::unordered_map<int, int> edgeVoteMap;
         for (const auto& neighbor : neighbors_points) 
         {
             // if (isPointsAssociated(pt, neighbor)) 
             if (isPointsAssociatedAlign(pt, neighbor, depth)) 
             {
-                // Direct increment, avoid find check
+                //-- 直接递增，避免find检查
                 edgeVoteMap[neighbor.frame_edge_ID]++;
-                // After confirming association, update association cache
+                //-- 确认可以关联后，更新关联的缓存
                 pt.mvAssoFrameEdgeIDs.push_back(neighbor.frame_edge_ID);
                 pt.mvAssoFramePointIndices.push_back(neighbor.frame_point_index);
             }
@@ -216,23 +201,23 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
 
         if (!edgeVoteMap.empty()) 
         {
-            // Find edge with most votes, max_pair.first is the edge that current query point most wants to associate with
+            // 找出票数最多的边，此时max_pair.first 就是当前 query point 最想关联的边缘
             const auto max_pair = *std::max_element(
                 edgeVoteMap.begin(), edgeVoteMap.end(),
                 [](const auto& a, const auto& b) { return a.second < b.second; }
             );
-            // Each point has only one most preferred edge to associate with
+            // 每个点只有一个最想关联的边缘
             edgeVoteMapTotal[max_pair.first] += 1;
         }
     }
 
-    // * STEP 3. Organize votes to determine which current edges the query edge can associate with
-    // edgeVoteMapTotal now contains voting relationships between query edge and candidate edges
+    // * STEP 3. 整理投票，确认当前query edge 能与哪些 current edges 关联
+    //-- 现在得到的edgeVoteMapTotal包含了query edge与 candidate edge关联的投票关系
     
     std::vector<int> result;
-    result.reserve(edgeVoteMapTotal.size());  // Pre-allocate memory
+    result.reserve(edgeVoteMapTotal.size());  // 预分配内存
     
-    // Find current frame edges that meet threshold requirements for association
+    //-- 找出满足阈值要求的当前帧可关联边缘
     for (const auto& [edge_id, votes] : edgeVoteMapTotal) 
     {
         if(votes > threshold_value) result.push_back(edge_id);
@@ -242,11 +227,11 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
         return result;
     }
 
-    // * STEP 4: Update association relationships (use hash table to speed up lookup)
+    // * STEP 4: 更新关联关系（使用哈希表加速查找）
     const std::unordered_set<int> validAssociation(result.begin(), result.end());
     for(auto& pt : query_edge.mvPoints) 
     {
-        // Directly modify original data, avoid copying
+        // 直接修改原数据，避免拷贝
         for(size_t j = 0; j < pt.mvAssoFrameEdgeIDs.size(); ++j) 
         {
             if(validAssociation.count(pt.mvAssoFrameEdgeIDs[j])) 
@@ -257,7 +242,7 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
                 break;
             }
         }
-        // Clear memory (use swap to ensure memory release)
+        // 清空内存（使用swap确保内存释放）
         std::vector<int>().swap(pt.mvAssoFrameEdgeIDs);
         std::vector<int>().swap(pt.mvAssoFramePointIndices);
     }
@@ -268,7 +253,7 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceReproject(Edge& query_edge, con
 std::vector<int> KeyFrame::edgeWiseCorrespondenceLocalMapping(Edge& query_edge, const Sophus::SE3d& T2curr)
 {
 
-    // * STEP 1. Reproject current frame edge to reference frame coordinates
+    // * STEP 1. 得到参考帧边缘重投影到当前帧的坐标
     std::vector<orderedEdgePoint>& queryList = query_edge.mvPoints;
     std::vector<cv::Point> warped_queryList;
     std::vector<float> warped_depthList;
@@ -277,19 +262,19 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceLocalMapping(Edge& query_edge, 
     warped_queryList.reserve(num_points);
     warped_depthList.reserve(num_points);
 
-    // Precompute inverse of camera intrinsics (reduce division operations)
+    // 预计算相机内参倒数（减少除法运算）
     const float inv_fx = 1.0f / mFx;
     const float inv_fy = 1.0f / mFy;
 
     for(int i = 0; i < num_points; ++i)
     {
-        // Recover 3D point from pixel and depth values
+        //-- 由像素与深度值恢复的3D点
         const auto& pt = queryList[i];
         float z = pt.depth;
         float x = (static_cast<float>(pt.x) - mCx) * inv_fx * z;
         float y = (static_cast<float>(pt.y) - mCy) * inv_fy * z;
         
-        // Reproject to get new projected point
+        //-- 重投影得到新的投影点
         Eigen::Vector3d point = T2curr * Eigen::Vector3d(x, y, z);
         warped_queryList.emplace_back(
             mFx * point.x() / point.z() + mCx,
@@ -298,9 +283,9 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceLocalMapping(Edge& query_edge, 
         warped_depthList.emplace_back(point.z());
     }
 
-    // * STEP 2. Radius neighborhood search and voting to find which edge each query edge point most wants to associate with
+    // * STEP 2. 半径邻域搜索，并投票得到 query edge 的每个点最想关联的边缘
 
-    // first: current frame edge ID, second: number of query edge points that want to associate with this current frame edge
+    //-- first:当前帧的边的ID   second: 该条当前帧边有几个query edge的点意愿关联
     std::map<int, int> edgeVoteMapTotal;
     const float radius = 2.0f;
     const int threshold_value = static_cast<int>(num_points * 0.3f);
@@ -314,61 +299,61 @@ std::vector<int> KeyFrame::edgeWiseCorrespondenceLocalMapping(Edge& query_edge, 
         std::vector<orderedEdgePoint> neighbors_points;
         searchRadius(x, y, radius, neighbors_points);
 
-        // For each point, build a vote to find which edge this point most tends to associate with
+        //-- 对于一个点，建立一个投票，得到这个点最倾向关联的边
         std::unordered_map<int, int> edgeVoteMap;
         for (const auto& neighbor : neighbors_points) 
         {
             // if (isPointsAssociated(pt, neighbor)) 
             if (isPointsAssociatedAlign(pt, neighbor, depth))
             {
-                // Direct increment, avoid find check
+                //-- 直接递增，避免find检查
                 edgeVoteMap[neighbor.frame_edge_ID]++;
             }
         }
 
         if (!edgeVoteMap.empty()) 
         {
-            // Find edge with most votes, max_pair.first is the edge that current query point most wants to associate with
+            // 找出票数最多的边，此时max_pair.first 就是当前 query point 最想关联的边缘
             const auto max_pair = *std::max_element(
                 edgeVoteMap.begin(), edgeVoteMap.end(),
                 [](const auto& a, const auto& b) { return a.second < b.second; }
             );
-            // Each point has only one most preferred edge to associate with
+            // 每个点只有一个最想关联的边缘
             edgeVoteMapTotal[max_pair.first] += 1;
         }
     }
 
-    // * STEP 3. Organize votes to determine which current edges the query edge can associate with
-    // edgeVoteMapTotal now contains voting relationships between query edge and candidate edges
+    // * STEP 3. 整理投票，确认当前query edge 能与哪些 current edges 关联
+    //-- 现在得到的edgeVoteMapTotal包含了query edge与 candidate edge关联的投票关系
     
     std::vector<int> result;
-    result.reserve(edgeVoteMapTotal.size());  // Pre-allocate memory
+    result.reserve(edgeVoteMapTotal.size());  // 预分配内存
     
-    // Find current frame edges that meet threshold requirements for association
+    //-- 找出满足阈值要求的当前帧可关联边缘
     for (const auto& [edge_id, votes] : edgeVoteMapTotal) 
     {
-        // Check if edge corresponding to edge_id is in local map
+        //-- 查找该 edge_id 对应的 edge 在不在局部地图里
         int edge_index = mmIndexMap[edge_id];
         if(mmEdgeIndex2ElementEdgeID.find(edge_index) == mmEdgeIndex2ElementEdgeID.end())
         {
-            // Skip if not in local map
+            //-- 不在局部地图里不予关联
             continue;
         }else{
-            // Only allow association if in local map
+            //-- 在局部地图里才允许关联
             if(votes > threshold_value) result.push_back(edge_id);
         }
     }
     
-    // No need to update association relationships, directly return edge-level results
+    //-- 无需更新关联关系，直接返回边缘级别结果
     return result;
 }
 
 void KeyFrame::assignPropertyIdx()
 {
-    // Construct ID to index mapping based on edge IDs
+    //-- 根据edges的ID构造ID与索引的映射
     for(size_t i = 0; i < mvEdges.size(); ++i)
     {
-        // Update mapping relationship between edge_id and edge index in mvEdges
+        //-- 更新edge_id与edge在mvEdges中的index的映射关系
         const int edge_id = mvEdges[i].edge_ID;
 
         if(mmIndexMap.find(edge_id) != mmIndexMap.end())
@@ -382,22 +367,22 @@ void KeyFrame::assignPropertyIdx()
 
         auto& edge = mvEdges[i];
 
-        // For each edge point in the edge, update its index to all edges in the frame
+        //-- 对于边缘中的每个边缘点，更新其对帧中所有边缘的索引
         for(int j = 0; j < edge.mvPoints.size(); ++j)
         {
             auto& point = edge.mvPoints[j];
-            // Update edge ID index
+            //-- 更新边缘id索引
             point.frame_edge_ID = edge_id;
-            // Update edge point list index
+            //-- 更新边缘点列表索引
             point.frame_point_index = static_cast<int>(j);
         }
     }
 }
 
-// Build search array: put all points from mvEdges into a cv::Mat
+//-- 构建搜索阵列，把所有的 mvEdges 里的所有点怼到一个 cv::Mat 里
 void KeyFrame::constructSearchPlain()
 {
-    // Create a CV_32SC2 type Mat, initial value set to (-1, -1) to indicate invalid positions
+    // 创建一个 CV_32SC2 类型的 Mat，初始值设为 (-1, -1) 表示无效位置
     mMatSearch = cv::Mat(mHeight, mWidth, CV_32SC2, cv::Scalar(-1, -1));
 
     for (size_t i = 0; i < mvEdges.size(); ++i) 
@@ -407,12 +392,12 @@ void KeyFrame::constructSearchPlain()
         {
             const auto& point = edge.mvPoints[j];
             
-            // Ensure coordinates are within image bounds
+            // 确保坐标在图像范围内
             if(point.x >= 0 && point.x < mWidth && point.y >= 0 && point.y < mHeight){
-                // Access specified position and assign value
+                // 访问指定位置并赋值
                 auto& pixel = mMatSearch.at<cv::Vec2i>(point.y, point.x);
-                pixel[0] = point.frame_edge_ID;      // First channel stores edge ID
-                pixel[1] = point.frame_point_index;  // Second channel stores point index
+                pixel[0] = point.frame_edge_ID;      // 第一个通道存储 edge ID
+                pixel[1] = point.frame_point_index;  // 第二个通道存储 point index
             }else{
                 std::cerr << "Point (" << point.x << ", " << point.y 
                           << ") out of bounds!" << std::endl;
@@ -423,18 +408,18 @@ void KeyFrame::constructSearchPlain()
 
 void KeyFrame::constructSearchPlainParallel()
 {
-    // Create and initialize matrix
+    //-- 创建并初始化矩阵
     mMatSearch = cv::Mat(mHeight, mWidth, CV_32SC2, cv::Scalar(-1, -1));
     
-    // Use parallel_for_each to process all edges in parallel
+    // 使用 parallel_for_each 并行处理所有边
     tbb::parallel_for_each(mvEdges.begin(), mvEdges.end(),
         [&](const auto& edge) {
-            // Traverse all points of current edge
+            // 遍历当前边的所有点
             for (const auto& point : edge.mvPoints) {
-                // Directly write to matrix
+                // 直接写入矩阵
                 auto& pixel = mMatSearch.at<cv::Vec2i>(point.y, point.x);
-                pixel[0] = point.frame_edge_ID;      // Store edge ID
-                pixel[1] = point.frame_point_index; // Store point index
+                pixel[0] = point.frame_edge_ID;      // 存储 edge ID
+                pixel[1] = point.frame_point_index; // 存储 point index
             }
         });
 }
@@ -446,24 +431,24 @@ cv::Mat KeyFrame::visualizeSearchPlain()
     for (int y = 0; y < mMatSearch.rows; ++y) {
         for (int x = 0; x < mMatSearch.cols; ++x) {
             const cv::Vec2i& pixel = mMatSearch.at<cv::Vec2i>(y, x);
-            int edgeID = pixel[0];  // Channel 1: frame_edge_ID
-            if (edgeID != -1) {     // Ignore invalid points (-1,-1)
+            int edgeID = pixel[0];  // 通道1: frame_edge_ID
+            if (edgeID != -1) {     // 忽略 (-1,-1) 的无效点
                 edgeMap[edgeID].emplace_back(x, y);
             }
         }
     }
-    // Step 2: Create color image (3-channel BGR)
-    cv::Mat colorMat(mMatSearch.size(), CV_8UC3, cv::Scalar(0, 0, 0)); // Default black
+    // Step 2: 创建彩色图像 (3通道 BGR)
+    cv::Mat colorMat(mMatSearch.size(), CV_8UC3, cv::Scalar(0, 0, 0)); // 默认黑色
 
-    // Step 3: Generate random color for each edgeID
+    // Step 3: 为每个 edgeID 生成随机颜色
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dis(50, 255); // Avoid too dark colors
+    std::uniform_int_distribution<int> dis(50, 255); // 避免太暗的颜色
 
     for (const auto& [edgeID, points] : edgeMap) {
-        cv::Scalar color(dis(gen), dis(gen), dis(gen)); // Random BGR color
+        cv::Scalar color(dis(gen), dis(gen), dis(gen)); // 随机 BGR 颜色
 
-        // Draw all points for this edgeID
+        // 绘制该 edgeID 的所有点
         for (const auto& pt : points) {
             colorMat.at<cv::Vec3b>(pt.y, pt.x) = cv::Vec3b(
                 static_cast<uchar>(color[0]),
@@ -478,9 +463,9 @@ cv::Mat KeyFrame::visualizeSearchPlain()
 
 void KeyFrame::assignProperty3D(const cv::Mat& matDepth)
 {
-    // Parallelize outer loop
+    // 并行处理外循环
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int i) {
-        // Inner loop remains serial
+        // 内循环保持串行
         for(int j = 0; j < mvEdges[i].mvPoints.size(); ++j) {
             assignProperty3DEach(mvEdges[i].mvPoints[j], matDepth);
         }
@@ -500,67 +485,49 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
     int x_idx = pt.x;
     int y_idx = pt.y;
 
-    // Original point's true depth
-    // Note: matDepth should already be converted to CV_32F in createKeyFrameFromFrame
-    // So we can simply read as float, just like in keyframe.cpp
+    //-- 原本点的真实深度
     float depth_orig = matDepth.at<float>(y_idx, x_idx);
 
-    // Compute adjusted depth and visibility score in 5x5 patch
-    std::vector<float> validDepthList; // List of depths for all points with non-zero depth
-    int patch_total = 0;               // Total number of pixels in current patch
+    //-- 在5x5的patch中计算修正深度以及可见性分数
+    std::vector<float> validDepthList; //-- 所有深度不为0的点的深度列表
+    int patch_total = 0;               //-- 当前的patch一共有多少像素
     for(int x_bias = -2; x_bias <= 2; ++x_bias){
         for(int y_bias = -2; y_bias <= 2; ++y_bias){
             int curr_x_idx = x_idx + x_bias;
             int curr_y_idx = y_idx + y_bias;
             
-            // Check if this position is within image region
+            //-- 判断该位置在不在图像区域里
             if(curr_x_idx < 0 || curr_x_idx >= mWidth ||
                curr_y_idx < 0 || curr_y_idx >= mHeight) continue;
 
-            patch_total += 1; // Accumulate total pixels
-            // If in image region, check if depth value is valid
-            // Note: matDepth should already be CV_32F, so read as float directly
+            patch_total += 1; //-- 累积总体像素
+            //-- 在图像区域里的话判断深度值是否有效
             float depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
             if(depth > 0.2) validDepthList.push_back(depth);
 
         }
     }
-    std::sort(validDepthList.begin(), validDepthList.end());// Sort from small to large
+    std::sort(validDepthList.begin(), validDepthList.end());//-- 从小到大排序
     int size = validDepthList.size();
-    float adjusted_depth = 0;     // Adjusted depth
-    
-    // Debug: log patch statistics for first few points
-    static int debug_patch_stats_count = 0;
-    if(debug_patch_stats_count < 10) {
-        VLOG(1) << "assignProperty3DEach: pt(" << x_idx << "," << y_idx 
-                << ") depth_orig=" << depth_orig
-                << ", size=" << size << ", validDepthList.size()=" << validDepthList.size();
-        if(size > 0) {
-            VLOG(1) << "  validDepthList range: [" << validDepthList.front() 
-                    << ", " << validDepthList.back() << "]";
-        } else {
-            VLOG(1) << "  WARNING: no valid depths in patch! depth_orig=" << depth_orig;
-        }
-        debug_patch_stats_count++;
-    }
+    float adjusted_depth = 0;     //-- 矫正后的深度
 
-    // Compute foreground depth
+    //-- 计算前景深度
     if(size >= 8){
-        // Check for jumps and return first group of continuous data
+        //-- 检查跳变并返回第一组连续数据
         std::vector<size_t> jump_indices;
         float rel_thres = 0.05;
         for (size_t i = 1; i < validDepthList.size(); ++i){
             float dx = validDepthList[i] - validDepthList[i-1];
             float x = validDepthList[i-1];
-            float relative_change = dx/x; // All values in validDepthList are > 0, no division by zero concern
+            float relative_change = dx/x; // validDepthList 中均为大于0的数，不担心除0
 
             if (std::fabs(relative_change) > rel_thres) {
-                jump_indices.push_back(i); // Record jump position
+                jump_indices.push_back(i); // 记录跳变位置
                 break;
             }
         }
         
-        // If depth values in a patch are discontinuous, extract the smallest part
+        //-- 如果一个 patch 内深度值有不连续，则抠出最小的那一部分区域
         std::vector<float> adjustDepthList;
         if(jump_indices.empty())
         {
@@ -571,31 +538,31 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
         }
 
         int partitionSize = adjustDepthList.size();
-        // Take median of depths in smallest part as depth value
+        //-- 取最小的部分的深度的中位数作为深度值
         float medianValue = (partitionSize%2==0) ? 
                             (adjustDepthList[partitionSize/2-1] + adjustDepthList[partitionSize/2])/2.0 : 
                             adjustDepthList[partitionSize/2];
         if(depth_orig >= adjustDepthList.front() && depth_orig <= adjustDepthList.back()){
-            // If true depth is within this interval, use true depth (true depth itself is foreground)
+            //-- 如果真实深度在这个区间之间，就取真实深度（真实深度本身是前景）
             adjusted_depth = depth_orig;
         }else{
-            // If true depth is not in foreground interval, modify depth to foreground interval
+            //-- 如果真实深度不在前景区间，则修改深度为前景区间
             adjusted_depth = medianValue;
         }
     }
 
-    pt.depth = adjusted_depth; // Assign depth to point feature
+    pt.depth = adjusted_depth; //-- 为点特征的深度进行赋值
 
-    // Compute distance score
+    //-- 计算远近分数
     if(pt.depth > 0.2){
         Eigen::Vector3d pt_3d;
         pt_3d.x() = (pt.x - mCx)/mFx * pt.depth;
         pt_3d.y() = (pt.y - mCy)/mFy * pt.depth;
         pt_3d.z() = pt.depth;
         double range = pt_3d.norm();
-        // Use inverse sigmoid function to compute distance score
+        //-- 使用反sigmoid函数计算远近分数
         pt.score_depth = 1.0 / (std::exp((range - 2.5) * 1.0) + 1);
-        // Update 3D point in class
+        //-- 更新类中的3D点
         pt.x_3d = pt_3d.x();
         pt.y_3d = pt_3d.y();
         pt.z_3d = pt_3d.z();
@@ -605,19 +572,19 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
     
 }
 
-// Remove all edges with invalid depth and invalid edge points in valid edges
+//-- 剔除所有深度无效的边缘以及有效边缘中的无效边缘点
 void KeyFrame::edgeCullingDepth()
 {
-    // Traverse all edges, remove edges with many invalid depths
+    //-- 遍历所有的边缘，祛除深度大量无效的边缘
     for(auto edgeIter = mvEdges.begin(); edgeIter != mvEdges.end(); )
     {
-        // Get reference to current edge, avoid copying
+        //-- 获取当前边缘的引用，避免拷贝
         Edge& currentEdge = *edgeIter;
 
         int validPointCount = 0;
         int totalPointCount = currentEdge.mvPoints.size();
         
-        // First count number of valid points
+        //-- 先统计有效点的数量
         for(const auto& point : currentEdge.mvPoints)
         {
             if(point.depth > 0.2f && point.depth < 5.0f)
@@ -626,23 +593,23 @@ void KeyFrame::edgeCullingDepth()
             }
         }
 
-        // Compute valid point ratio
+        //-- 计算有效点比例
         float validRatio = static_cast<float>(validPointCount) / totalPointCount;
 
         if(validRatio >= 0.3f)
         {
-            // If edge is kept, remove invalid points within it
+            //-- 如果边缘保留，则移除其中的无效点
             auto newEnd = std::remove_if(currentEdge.mvPoints.begin(), 
                                         currentEdge.mvPoints.end(),
                                         [](const auto& point) {
                                             return point.depth <= 0.2f || point.depth >= 5.0f;
                                         });
             currentEdge.mvPoints.erase(newEnd, currentEdge.mvPoints.end());
-            edgeIter++;  // Keep this edge, move to next
+            edgeIter++;  // 保留这个边缘，移动到下一个
         }
         else
         {
-            // If edge is invalid (more than 70% invalid points), remove entire edge
+            //-- 如果边缘无效（70%以上都是无效点），则移除整个边缘
             edgeIter = mvEdges.erase(edgeIter);
         }
     }
@@ -650,46 +617,26 @@ void KeyFrame::edgeCullingDepth()
 
 void KeyFrame::edgeCullingDepthParallel()
 {
-    // Use char instead of atomic<bool>, use memory_order_relaxed to ensure basic thread safety
+    // 使用 char 代替 atomic<bool>，并用 memory_order_relaxed 保证基本线程安全
     std::vector<char> retainFlags(mvEdges.size());
-    
-    // Debug: count edges with valid depth before culling
-    size_t edges_with_valid_depth = 0;
-    size_t total_points = 0;
-    size_t points_with_valid_depth = 0;
-    for(const auto& edge : mvEdges) {
-        bool edge_has_valid = false;
-        for(const auto& point : edge.mvPoints) {
-            total_points++;
-            if(point.depth > 0.2f && point.depth < 5.0f) {
-                points_with_valid_depth++;
-                edge_has_valid = true;
-            }
-        }
-        if(edge_has_valid) edges_with_valid_depth++;
-    }
-    VLOG(1) << "KeyFrame(id=" << KF_ID << ") edgeCullingDepthParallel: before culling - "
-            << "edges=" << mvEdges.size() << ", edges_with_valid_depth=" << edges_with_valid_depth
-            << ", total_points=" << total_points << ", points_with_valid_depth=" << points_with_valid_depth;
 
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int i) {
         Edge& currentEdge = mvEdges[i];
         int validPointCount = 0;
         const int totalPointCount = currentEdge.mvPoints.size();
         
-        // Count number of valid points
+        // 统计有效点数量
         for(const auto& point : currentEdge.mvPoints) {
             if(point.depth > 0.2f && point.depth < 5.0f) {
                 validPointCount++;
             }
         }
 
-        // Compute valid ratio and decide whether to retain
-        float validRatio = totalPointCount > 0 ? 
-            static_cast<float>(validPointCount) / totalPointCount : 0.0f;
+        // 计算有效比例并决定是否保留
+        float validRatio = static_cast<float>(validPointCount) / totalPointCount;
         retainFlags[i] = (validRatio >= 0.3f) ? 1 : 0;
 
-        // If edge is to be retained, first filter out invalid points
+        // 如果是保留的边缘，先过滤掉无效点
         if(retainFlags[i]) {
             auto newEnd = std::remove_if(currentEdge.mvPoints.begin(), 
                                         currentEdge.mvPoints.end(),
@@ -700,7 +647,7 @@ void KeyFrame::edgeCullingDepthParallel()
         }
     });
 
-    // Phase 2: Serial execution of actual deletion operation
+    // 第二阶段：串行执行实际删除操作
     auto newEnd = std::remove_if(mvEdges.begin(), mvEdges.end(),
         [&retainFlags, &mvEdges = this->mvEdges](const Edge& edge) {
             size_t index = &edge - &mvEdges[0];
@@ -709,84 +656,84 @@ void KeyFrame::edgeCullingDepthParallel()
     mvEdges.erase(newEnd, mvEdges.end());
 }
 
-// Ensure 3D point depth continuity for each ordered edge
+//-- 确保每条有序边缘的3D点深度连续一致
 void KeyFrame::edgeCullingContinuity()
 {
     std::vector<bool> isEdgeValid(mvEdges.size(), true);
-    // Called after CullingDepth, at this point each point in Edge is assumed to have valid depth
+    //-- 在CullingDepth之后调用，此时认为Edge中每个点都含有有效的深度
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int cnt) {
     //for(int cnt = 0; cnt < mvEdges.size(); ++cnt)
         Edge& edge = mvEdges[cnt];
         
-        //* STEP 1. Detect depth jumps in edge
+        //* STEP 1. 检索边缘的深度跳变
         std::vector<bool> jumpFlags(edge.mvPoints.size(), false);
         float lastDepth = edge.mvPoints[0].depth;
         for (size_t i = 1; i < edge.mvPoints.size(); ++i) 
         {
-            // Current point's depth
+            //-- 当前点的深度
             float currentDepth = edge.mvPoints[i].depth;
-            // Compare depth to determine if continuous
+            //-- 比较深度判断是否连续
             jumpFlags[i] = (std::fabs(currentDepth - lastDepth) > 0.05f);
             lastDepth = currentDepth;
         }
-        // Number of jumps
+        //-- 跳变次数
         int jump_num = std::count(jumpFlags.begin(), jumpFlags.end(), true);
         float jump_avg =  static_cast<float>(edge.mvPoints.size())/static_cast<float>(jump_num);
         if(jump_avg < 5){
-            // If there are many jumps, this edge is at a foreground/background ambiguous position
+            //-- 如果跳变的比较多，说明该边缘正处于前后景模糊的位置
             isEdgeValid[cnt] = false;
-            // For such edges, consider directly deleting without re-splicing, so skip
+            //-- 对于这样的边缘，考虑直接删而不重新拼,故而跳过
             return;
         }
 
-        //*STEP 2. For edges with few jumps, first segment according to jumpFlags
+        //*STEP 2. 对于跳变的不多的边缘，先根据 jumpFlags 进行切片
         int start_ptr = 0;
-        // A segment split from an edge, first is start index, second is end index
+        //-- 一个 edge 被拆出的 segment, first是首 index，second 是末 index
         std::vector<std::pair<int, int>> segment;
 
         for(size_t i = 1; i < jumpFlags.size(); ++i)
         {
             if(jumpFlags[i])
             {
-                // If position i jumps, then start -- i-1 is a continuous segment
+                //-- 第 i 个位置跳变了说明 start -- i-1 这一段是连续的
                 segment.push_back(std::make_pair(start_ptr, i-1));
                 start_ptr = i;
             }
         }
 
-        // Add last segment, at this point segment contains all edge segments (including discontinuous single-point segments)
+        //-- 最后一截拼入, 此时segment中包含所有的边缘切片（包括不连续的单个点的切片）
         segment.push_back(std::make_pair(start_ptr, jumpFlags.size()-1));
         
-        // * STEP 3. Use union-find to merge continuous segments
-        // Represent union-find set
+        // * STEP 3. 使用并查集合并连续的片段
+        //-- 表示并查集
         DisjointSet mergeSet(segment.size());
 
         for(int i = 0; i < segment.size(); ++i)
         {
-            float depth_end = edge.mvPoints[segment[i].second].depth; // Depth of segment end point
-            // Check if subsequent segments can be spliced with segment i
+            float depth_end = edge.mvPoints[segment[i].second].depth; //-- 片段末端点的深度
+            //-- 判断后续的片段能不能和第i段相拼接
             for(int j = i+2; j < segment.size(); ++j)
             {
-                float depth_front = edge.mvPoints[segment[j].first].depth; // Depth of segment start point
-                // If start/end point depths of two segments are continuous, they can be spliced
+                float depth_front = edge.mvPoints[segment[j].first].depth; //-- 片段首端点的深度
+                //-- 两个片段首末端点深度连续说明可以拼
                 if(std::fabs(depth_front - depth_end) < 0.01)
                 {
-                    // If they can be spliced, merge these two nodes in union-find set
+                    //-- 如果能拼上就在并查集上合并这两个节点
                     mergeSet.to_union(i,j);
                 }
             }
         }
 
-        // * STEP 4. Select maximum continuous segment for subsequent splicing
-        // Organize union-find set to get total point count for each set
+        // * STEP 4. 挑选最大连续片段以进行后续拼接
+        //-- 整理并查集，得到每个集合的总点数
         mergeSet.pruningSet();
-        std::map<int, std::vector<int>> cluster; // first is root_idx, second is indices of all segments in the set
+        std::map<int, std::vector<int>> cluster; //-- first是root_idx, second是集合中的所有片段的索引
         for(int i = 0; i < segment.size(); ++i)
         {
             int root_idx = mergeSet.find(i);
             cluster[root_idx].push_back(i);
         }
-        // At this point, segments in cluster.second are themselves ordered
+        //-- 此时cluster.second中这些片段本身也是有序的
         int max_length = -1;
         std::vector<int> max_cluster;
         for(const auto& pair : cluster)
@@ -794,7 +741,7 @@ void KeyFrame::edgeCullingContinuity()
             std::vector<int> current_cluster = pair.second;
             int current_length = 0;
             
-            // Compute length of current cluster
+            //-- 计算当前cluster的长度
             for(int i = 0; i < current_cluster.size(); ++i)
             {
                 const auto& seg = segment[current_cluster[i]];
@@ -807,12 +754,12 @@ void KeyFrame::edgeCullingContinuity()
             }
         }
 
-        // * STEP 5. Splice according to max_cluster
-        // Reconstruct mvPoints
+        // * STEP 5. 根据 max_cluster 拼接
+        //-- 重新捏一个mvPoints出来
         std::vector<orderedEdgePoint> new_mvPoints;
         for(int i = 0; i < max_cluster.size(); ++i)
         {
-            // Start and end index of each segment
+            //-- 每个切片的首尾index
             int start_idx = segment[max_cluster[i]].first;
             int end_index = segment[max_cluster[i]].second;
             for(int j = start_idx; j <= end_index; ++j)
@@ -828,7 +775,7 @@ void KeyFrame::edgeCullingContinuity()
         }
     });
 
-    // * STEP 6. Remove edges that are too short after splicing and edges with too many jumps
+    // * STEP 6. 移除拼接完成后过短的边缘以及跳变过多的边缘
     int cnt_idx = 0;
     for(auto iter = mvEdges.begin(); iter != mvEdges.end(); )
     {
@@ -847,38 +794,46 @@ std::vector<orderedEdgePoint> KeyFrame::getCoarseSampledPoints(int bias, int max
     for(int i = 0; i < mvEdges.size(); ++i)
     {
         const Edge& edge = mvEdges[i];
-        // Get sampling sequence
+        //-- 获取采样的序列
         for(int j = 0; j < edge.mvPoints.size(); ++j)
         {
             const orderedEdgePoint& pt = edge.mvPoints[j];
             selectedPoints.push_back(pt);
         }
     }
-    // Sample according to spatial uniformity principle, prioritize points with higher scores
-    // Sort points by score
+    //-- 根据空间均匀的原则进行采样，分数高的点优先
+    //-- 对点按分数进行排序
     std::sort(selectedPoints.begin(),selectedPoints.end(),
               [](const orderedEdgePoint& a, const orderedEdgePoint& b){ 
                  return a.score_depth > b.score_depth; 
               });
 
-    // Create all-black image as mask
+    //-- 创建全黑的图像作为掩膜
     cv::Mat mask(mHeight, mWidth, CV_8U, cv::Scalar(0));
-    // Sample and sort according to mask
+    //-- 根据掩膜进行采样排序
     std::vector<orderedEdgePoint> sampledPoints;
     sampledPoints.reserve(std::min(maximum_point, static_cast<int>(selectedPoints.size())));
 
     for(const auto& pt : selectedPoints)
     {
         if(mask.at<uint8_t>(pt.y, pt.x) == 255) continue;
-        // Current point can be selected
+        //-- 当前点可以选择
         sampledPoints.push_back(pt);
         cv::circle(mask, cv::Point(pt.x, pt.y), bias, 255, -1);
         if(sampledPoints.size() >= maximum_point) break;
     }
-    // Currently all points after complete sampling
+    //-- 目前是完全采样完成的所有点
     return sampledPoints;
 }
 
+void KeyFrame::getFineSampledPoints(int bias)
+{
+    for(int i = 0; i < mvEdges.size(); ++i)
+    {
+        Edge& edge = mvEdges[i];
+        edge.samplingEdgeUniform(bias);
+    }
+}
 
 
 

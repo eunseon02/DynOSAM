@@ -121,12 +121,9 @@ void visualizeMergedLocalMap(const edge_map::localMapPtr& pLocalMap,
     mergedClouds.push_back(merged_cloud);
   }
 
-  // Debug: Log filtering results
-  static int call_count = 0;
-  if (++call_count % 100 == 0) {
-    LOG(INFO) << "visualizeMergedLocalMap: total_clusters=" << total_clusters << ", merged=" << merged
-              << ", empty_merged=" << empty_merged << ", output_clusters=" << mergedClouds.size();
-  }
+  // Debug: Log filtering results (always log, not just every 100 calls)
+  LOG(INFO) << "visualizeMergedLocalMap: total_clusters=" << total_clusters << ", merged=" << merged
+            << ", empty_merged=" << empty_merged << ", output_clusters=" << mergedClouds.size();
 }
 
 // Get sliding window poses (from localmapping.cc lines 107-115)

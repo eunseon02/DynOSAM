@@ -289,7 +289,21 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
 
     
     // Create first keyframe
+    // Log edge count before KeyFrame creation
+    size_t frame_edges_before = frame->static_edges_.size();
+    VLOG(1) << "Before createKeyFrameFromFrame: frame has " << frame_edges_before << " edges";
+    
     KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+    
+    // Log edge count after KeyFrame creation
+    if (pKF) {
+        size_t kf_edges_after = pKF->mvEdges.size();
+        VLOG(1) << "After createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+                << ") has " << kf_edges_after << " edges (input frame had " 
+                << frame_edges_before << " edges)";
+    } else {
+        LOG(ERROR) << "createKeyFrameFromFrame returned nullptr!";
+    }
     
     if (pKF) {
       // Add to local map
@@ -452,16 +466,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const gtsam::Quaternion q = R.toQuaternion();
   const double timestamp = last_keyframe_->getTimestamp();
   
-  LOG(INFO) << "POSE_REF TUM: " << std::fixed << std::setprecision(6)
-            << timestamp << " "
-            << t.x() << " " << t.y() << " " << t.z() << " "
-            << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
+  // LOG(INFO) << "POSE_REF TUM: " << std::fixed << std::setprecision(6)
+  //           << timestamp << " "
+  //           << t.x() << " " << t.y() << " " << t.z() << " "
+  //           << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
   
 
-  LOG(INFO) << "POSE_CUR_REFINED TUM: " << std::fixed << std::setprecision(6)
-            << frame->getTimestamp() << " "
-            << pose_cur_refined.translation().x() << " " << pose_cur_refined.translation().y() << " " << pose_cur_refined.translation().z() << " "
-            << pose_cur_refined.rotation().toQuaternion().x() << " " << pose_cur_refined.rotation().toQuaternion().y() << " " << pose_cur_refined.rotation().toQuaternion().z() << " " << pose_cur_refined.rotation().toQuaternion().w();
+  // LOG(INFO) << "POSE_CUR_REFINED TUM: " << std::fixed << std::setprecision(6)
+  //           << frame->getTimestamp() << " "
+  //           << pose_cur_refined.translation().x() << " " << pose_cur_refined.translation().y() << " " << pose_cur_refined.translation().z() << " "
+  //           << pose_cur_refined.rotation().toQuaternion().x() << " " << pose_cur_refined.rotation().toQuaternion().y() << " " << pose_cur_refined.rotation().toQuaternion().z() << " " << pose_cur_refined.rotation().toQuaternion().w();
   
   // Update frame pose with DirectTrack result
   frame->T_world_camera_ = pose_ref * pose_cur_refined;
@@ -627,7 +641,22 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         pose_curr = pose_last_kf * pose_bias;
       }
       
+      // Log edge count before KeyFrame creation
+      size_t frame_edges_before = frame->static_edges_.size();
+      VLOG(1) << "Before createKeyFrameFromFrame: frame has " << frame_edges_before << " edges";
+      
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+      
+      // Log edge count after KeyFrame creation
+      if (pKF) {
+          size_t kf_edges_after = pKF->mvEdges.size();
+          VLOG(1) << "After createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+                  << ") has " << kf_edges_after << " edges (input frame had " 
+                  << frame_edges_before << " edges)";
+      } else {
+          LOG(ERROR) << "createKeyFrameFromFrame returned nullptr!";
+      }
+      
       const auto t_create_kf_end = std::chrono::steady_clock::now();
       
       if (pKF) {
@@ -872,10 +901,10 @@ bool RGBDInstanceFrontendModule::DirectTrack(Frame::Ptr frame_k, const Frame::Pt
     Eigen::Quaterniond q(rotation);
     const double timestamp = frame_k->getTimestamp();
     
-    LOG(INFO) << "T21 TUM: " << std::fixed << std::setprecision(6)
-              << timestamp << " "
-              << translation.x() << " " << translation.y() << " " << translation.z() << " "
-              << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
+    // LOG(INFO) << "T21 TUM: " << std::fixed << std::setprecision(6)
+    //           << timestamp << " "
+    //           << translation.x() << " " << translation.y() << " " << translation.z() << " "
+    //           << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
     
     const Eigen::Matrix4d T_result = T21.inverse().matrix();
     T_k_1_k_refined = gtsam::Pose3(T_result);
@@ -913,8 +942,8 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame,
   fine_tracker_->setPosePriorCur2Ref(T21);
   Sophus::SE3d pose_final;
   
-  LOG(INFO) << "FineTrack: reference frame id=" << fine_tracker_->getReference()
-            << ", current frame id=" << fine_tracker_->getCurrent();
+  // LOG(INFO) << "FineTrack: reference frame id=" << fine_tracker_->getReference()
+  //           << ", current frame id=" << fine_tracker_->getCurrent();
 
   fine_tracker_->estimate(pose_final, true);
   if(checkPoseJump(pose_final)){
@@ -1259,28 +1288,59 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         // Update merged local map cache (heavy data) for visualization snapshots
         {
           std::vector<std::vector<cv::Point3d>> mergedClouds;
-          edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
-          local_map_clouds_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(mergedClouds));
+          if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+            // Count merged clusters before calling visualizeMergedLocalMap
+            int merged_count = 0;
+            int non_empty_merged = 0;
+            for(const auto& cluster : local_map_->mvEleEdgeClusters) {
+              if(cluster.mbMerged) {
+                merged_count++;
+                if(!cluster.mvMergedCloud_ref.empty()) {
+                  non_empty_merged++;
+                }
+              }
+            }
+            LOG(INFO) << "Before visualizeMergedLocalMap: total_clusters=" << local_map_->mvEleEdgeClusters.size()
+                      << ", merged=" << merged_count << ", non_empty_merged=" << non_empty_merged;
+            
+            edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
+            
+            if (!mergedClouds.empty()) {
+              local_map_clouds_cache_ =
+                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                      std::move(mergedClouds));
+              LOG(INFO) << "Updated localMapClouds cache: " << local_map_clouds_cache_->size() << " merged clusters";
 
-          // Accumulate environment cloud from merged local map
-          std::vector<cv::Point3d> currentLocalMapCloud;
-          for (const auto& c : *local_map_clouds_cache_) {
-            currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+              // Accumulate environment cloud from merged local map
+              std::vector<cv::Point3d> currentLocalMapCloud;
+              for (const auto& c : *local_map_clouds_cache_) {
+                currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+              }
+              if (!currentLocalMapCloud.empty()) {
+                environment_frames_.push_back(std::move(currentLocalMapCloud));
+                while (environment_frames_.size() > 150) {
+                  environment_frames_.pop_front();
+                }
+                auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
+                env->reserve(environment_frames_.size());
+                for (const auto& f : environment_frames_) {
+                  env->push_back(f);
+                }
+                environment_cloud_cache_ =
+                    std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                        std::move(*env));
+                LOG(INFO) << "Updated environment_cloud cache: " << environment_cloud_cache_->size() << " frames";
+              } else {
+                LOG(WARNING) << "localMapClouds is not empty but currentLocalMapCloud is empty";
+              }
+            } else {
+              LOG(WARNING) << "visualizeMergedLocalMap returned empty clouds (merged=" << merged_count 
+                           << ", non_empty_merged=" << non_empty_merged << ")";
+            }
+          } else {
+            LOG(WARNING) << "Cannot update localMapClouds: local_map has " 
+                         << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0) << " clusters";
           }
-          environment_frames_.push_back(std::move(currentLocalMapCloud));
-          while (environment_frames_.size() > 150) {
-            environment_frames_.pop_front();
-          }
-          auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
-          env->reserve(environment_frames_.size());
-          for (const auto& f : environment_frames_) {
-            env->push_back(f);
-          }
-          environment_cloud_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(*env));
         }
         
         const auto t2 = std::chrono::steady_clock::now();
@@ -1318,7 +1378,22 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
   const auto t0 = std::chrono::steady_clock::now();
   // Convert Frame to KeyFrame format (from localmapping.cc line 222)
   const auto t_kf0 = std::chrono::steady_clock::now();
+  // Log edge count before KeyFrame creation
+  size_t frame_edges_before = frame->static_edges_.size();
+  VLOG(1) << "Before createKeyFrameFromFrame: frame has " << frame_edges_before << " edges";
+  
   KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+  
+  // Log edge count after KeyFrame creation
+  if (pKF) {
+      size_t kf_edges_after = pKF->mvEdges.size();
+      VLOG(1) << "After createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+              << ") has " << kf_edges_after << " edges (input frame had " 
+              << frame_edges_before << " edges)";
+  } else {
+      LOG(ERROR) << "createKeyFrameFromFrame returned nullptr!";
+  }
+  
   const auto t_kf1 = std::chrono::steady_clock::now();
   
   if (pKF) {
@@ -1367,6 +1442,11 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   //                              selector.mvEdges, imgRGB, imgDepth, 
   //                              ph.fx, ph.fy, ph.cx, ph.cy));
   
+  // Log input frame edge count
+  size_t input_edges = frame->static_edges_.size();
+  VLOG(1) << "createKeyFrameFromFrame: input frame(id=" << frame->getFrameId() 
+          << ") has " << input_edges << " edges";
+  
   // Get images from Frame
   const ImageContainer& img_container = frame->image_container_;
   cv::Mat imgRGB = ImageType::RGBMono::toRGB(img_container.rgb());
@@ -1377,7 +1457,36 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
     imgDepth = img_container.depth();
     // Convert depth scale if needed
     const CameraParams& cam_params = camera_->getParams();
-    if (cam_params.hasDepthParams()) {
+    
+    // Check if depth is already in meters (float/double type with reasonable range)
+    bool already_in_meters = false;
+    if (imgDepth.type() == CV_32F || imgDepth.type() == CV_64F) {
+      double min_val, max_val;
+      cv::minMaxLoc(imgDepth, &min_val, &max_val);
+      // If depth values are in reasonable range (0.1m to 50m), assume already in meters
+      if (min_val >= 0.0 && max_val > 0.1 && max_val < 50.0) {
+        already_in_meters = true;
+        VLOG(1) << "createKeyFrameFromFrame: depth image already in meters - "
+                << "type=" << imgDepth.type() << ", range=[" << min_val << ", " << max_val << "]";
+      }
+    }
+    
+    VLOG(1) << "createKeyFrameFromFrame: depth image before conversion - "
+            << "type=" << imgDepth.type() << " (CV_16U=" << CV_16U << ", CV_32F=" << CV_32F << ", CV_64F=" << CV_64F << ")"
+            << ", size=" << imgDepth.rows << "x" << imgDepth.cols
+            << ", already_in_meters=" << already_in_meters
+            << ", depth_scale=" << (cam_params.hasDepthParams() ? 
+                cam_params.depthParams().depth_to_meters : 1.0);
+    
+    if (already_in_meters) {
+      // Already in meters, just ensure it's CV_32F
+      if (imgDepth.type() == CV_64F) {
+        imgDepth.convertTo(imgDepth, CV_32F);
+      } else if (imgDepth.type() != CV_32F) {
+        imgDepth.convertTo(imgDepth, CV_32F);
+      }
+    } else if (cam_params.hasDepthParams()) {
+      // Need to convert from raw depth units to meters
       const double depth_scale = cam_params.depthParams().depth_to_meters;
       if (depth_scale != 1.0) {
         imgDepth.convertTo(imgDepth, CV_32F, depth_scale);
@@ -1387,6 +1496,49 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       }
     } else if (imgDepth.type() != CV_32F) {
       imgDepth.convertTo(imgDepth, CV_32F);
+    }
+    
+    // Log depth image info for debugging
+    static bool logged_depth_info = false;
+    if(!logged_depth_info && !imgDepth.empty()) {
+      double min_val, max_val;
+      cv::minMaxLoc(imgDepth, &min_val, &max_val);
+      VLOG(1) << "createKeyFrameFromFrame: depth image AFTER conversion - "
+              << "type=" << imgDepth.type() << " (CV_32F=" << CV_32F << ")"
+              << ", size=" << imgDepth.rows << "x" << imgDepth.cols
+              << ", depth_range=[" << min_val << ", " << max_val << "]"
+              << ", depth_scale=" << (cam_params.hasDepthParams() ? 
+                  cam_params.depthParams().depth_to_meters : 1.0);
+      
+      // Sample a few depth values
+      if(imgDepth.rows > 0 && imgDepth.cols > 0) {
+        VLOG(1) << "  Sample depth values: "
+                << "center=" << imgDepth.at<float>(imgDepth.rows/2, imgDepth.cols/2)
+                << ", corner=" << imgDepth.at<float>(0, 0)
+                << ", (100,100)=" << imgDepth.at<float>(100, 100);
+      }
+      logged_depth_info = true;
+    }
+    
+    // Old logging (before conversion) - keep for comparison
+    static bool logged_depth_info_before = false;
+    if(!logged_depth_info_before && !imgDepth.empty()) {
+      double min_val, max_val;
+      cv::minMaxLoc(imgDepth, &min_val, &max_val);
+      VLOG(1) << "createKeyFrameFromFrame: depth image after conversion - "
+              << "type=" << imgDepth.type() << " (CV_16U=" << CV_16U << ")"
+              << ", size=" << imgDepth.rows << "x" << imgDepth.cols
+              << ", depth_range=[" << min_val << ", " << max_val << "]"
+              << ", depth_scale=" << (cam_params.hasDepthParams() ? 
+                  cam_params.depthParams().depth_to_meters : 1.0);
+      
+      // Sample a few depth values
+      if(imgDepth.rows > 0 && imgDepth.cols > 0) {
+        VLOG(1) << "  Sample depth values: "
+                << "center=" << imgDepth.at<float>(imgDepth.rows/2, imgDepth.cols/2)
+                << ", corner=" << imgDepth.at<float>(0, 0);
+      }
+      logged_depth_info = true;
     }
   } else {
     LOG_EVERY_N(WARNING, 100) << "Frame " << frame->getFrameId()
@@ -1422,6 +1574,18 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
   
+  // Log edge count after KeyFrame construction
+  if (pKF) {
+      size_t kf_edges_after = pKF->mvEdges.size();
+      VLOG(1) << "createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+              << ") constructed with " << kf_edges_after << " edges "
+              << "(input frame had " << input_edges << " edges)";
+      if (kf_edges_after == 0 && input_edges > 0) {
+          LOG(WARNING) << "KeyFrame lost all " << input_edges 
+                       << " edges during construction!";
+      }
+  }
+  
   return pKF;
 }
 
@@ -1437,7 +1601,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // with local_map_mutex_ already locked
   const auto t0 = std::chrono::steady_clock::now();
   
-  size_t current_kf_count = local_map_->mvKeyFrames.size();
+  // size_t current_kf_count = local_map_->mvKeyFrames.size();  // Unused variable
   
   // // Log keyframes before removal
   // LOG(INFO) << "\033[33m[SLIDING WINDOW UPDATE]\033[0m before: kf_count=" << current_kf_count

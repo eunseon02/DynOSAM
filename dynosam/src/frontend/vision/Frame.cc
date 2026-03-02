@@ -1123,12 +1123,12 @@ void Frame::assignProperty3D(const cv::Mat& matDepth)
         }
     }
     
-    LOG(INFO) << "[Frame] assignProperty3D stats: total_edges=" << total_edges
-              << ", edges_with_valid_depth=" << edges_with_valid_depth
-              << ", total_points=" << total_points
-              << ", total_valid_points=" << total_valid_points
-              << ", valid_ratio=" << (total_points > 0 ? static_cast<float>(total_valid_points) / total_points : 0.0f)
-              << ", edges_passing_30pct_threshold=" << edges_passing_threshold;
+    // LOG(INFO) << "[Frame] assignProperty3D stats: total_edges=" << total_edges
+    //           << ", edges_with_valid_depth=" << edges_with_valid_depth
+    //           << ", total_points=" << total_points
+    //           << ", total_valid_points=" << total_valid_points
+    //           << ", valid_ratio=" << (total_points > 0 ? static_cast<float>(total_valid_points) / total_points : 0.0f)
+    //           << ", edges_passing_30pct_threshold=" << edges_passing_threshold;
 }
 
 void Frame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDepth)

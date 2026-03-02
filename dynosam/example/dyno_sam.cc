@@ -469,18 +469,36 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (latest_snap->localMapClouds && latest_snap->localMapClouds != last_local_map) {
+                  LOG(INFO) << "VoViewer: updating localMapClouds, size=" << latest_snap->localMapClouds->size();
                   viewer.update_localMap(*latest_snap->localMapClouds);
                   last_local_map = latest_snap->localMapClouds;
+                } else if (!latest_snap->localMapClouds) {
+                  static int null_count = 0;
+                  if (++null_count % 100 == 0) {
+                    LOG(WARNING) << "VoViewer: localMapClouds is null";
+                  }
                 }
 
                 if (latest_snap->slidingWindow && latest_snap->slidingWindow != last_window) {
+                  LOG(INFO) << "VoViewer: updating slidingWindow, size=" << latest_snap->slidingWindow->size();
                   viewer.update_sliding_window(*latest_snap->slidingWindow);
                   last_window = latest_snap->slidingWindow;
+                } else if (!latest_snap->slidingWindow) {
+                  static int null_count = 0;
+                  if (++null_count % 100 == 0) {
+                    LOG(WARNING) << "VoViewer: slidingWindow is null";
+                  }
                 }
 
                 if (latest_snap->environment_cloud && latest_snap->environment_cloud != last_env) {
+                  LOG(INFO) << "VoViewer: updating environment_cloud, size=" << latest_snap->environment_cloud->size();
                   viewer.update_Environment(*latest_snap->environment_cloud);
                   last_env = latest_snap->environment_cloud;
+                } else if (!latest_snap->environment_cloud) {
+                  static int null_count = 0;
+                  if (++null_count % 100 == 0) {
+                    LOG(WARNING) << "VoViewer: environment_cloud is null";
+                  }
                 }
               } else {
                 static int empty_snap_count = 0;
