@@ -608,18 +608,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       }
     }
     snap->slidingWindow = window;
-    
-    // Debug: log visualization data status
-    static int debug_count = 0;
-    if (++debug_count % 100 == 0) {
-      VLOG(1) << "Visualization snapshot: "
-              << "clusterClouds=" << (snap->clusterClouds ? snap->clusterClouds->size() : 0)
-              << ", localMapClouds=" << (snap->localMapClouds ? snap->localMapClouds->size() : 0)
-              << ", slidingWindow=" << (snap->slidingWindow ? snap->slidingWindow->size() : 0)
-              << ", environment_cloud=" << (snap->environment_cloud ? snap->environment_cloud->size() : 0)
-              << ", local_map_kfs=" << (local_map_ ? local_map_->mvKeyFrames.size() : 0)
-              << ", local_map_clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0);
-    }
 
     // Update latest visualization data (thread-safe, visualization thread can read anytime)
     {
@@ -1500,178 +1488,89 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
 }
 
 KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
-    const Frame::Ptr& frame, const gtsam::Pose3& pose_curr) {
-  // Convert Frame to KeyFrame (from localmapping.cc line 222)
-  // KeyFramePtr pKF(new KeyFrame(i, pose_curr, rgb_stamp_seq[i], 
-  //                              selector.mvEdges, imgRGB, imgDepth, 
-  //                              ph.fx, ph.fy, ph.cx, ph.cy));
-  
+  const Frame::Ptr& frame, const gtsam::Pose3& pose_curr) {
+// Convert Frame to KeyFrame (from localmapping.cc line 222)
+// KeyFramePtr pKF(new KeyFrame(i, pose_curr, rgb_stamp_seq[i], 
+//                              selector.mvEdges, imgRGB, imgDepth, 
+//                              ph.fx, ph.fy, ph.cx, ph.cy));
+
   // Get images from Frame
-  const ImageContainer& img_container = frame->image_container_;
-  cv::Mat imgRGB = ImageType::RGBMono::toRGB(img_container.rgb());
+const ImageContainer& img_container = frame->image_container_;
+cv::Mat imgRGB = ImageType::RGBMono::toRGB(img_container.rgb());
+
+cv::Mat imgDepth;
+if (img_container.hasDepth()) {
+  // ImageWrapper has implicit conversion to cv::Mat
+  imgDepth = img_container.depth();
+  // Convert depth scale if needed
+  const CameraParams& cam_params = camera_->getParams();
   
-  cv::Mat imgDepth;
-  if (img_container.hasDepth()) {
-    // ImageWrapper has implicit conversion to cv::Mat
-    imgDepth = img_container.depth();
-    // Convert depth scale if needed
-    const CameraParams& cam_params = camera_->getParams();
-    if (cam_params.hasDepthParams()) {
-      const double depth_scale = cam_params.depthParams().depth_to_meters;
-      if (depth_scale != 1.0) {
-        imgDepth.convertTo(imgDepth, CV_32F, depth_scale);
-      } else if (imgDepth.type() != CV_32F) {
-        // Ensure downstream code gets float depth even if scale == 1
-        imgDepth.convertTo(imgDepth, CV_32F);
-      }
+  // Check if depth is already in meters (float/double type with reasonable range)
+  bool already_in_meters = false;
+  if (imgDepth.type() == CV_32F || imgDepth.type() == CV_64F) {
+    double min_val, max_val;
+    cv::minMaxLoc(imgDepth, &min_val, &max_val);
+    // If depth values are in reasonable range (0.1m to 50m), assume already in meters
+    if (min_val >= 0.0 && max_val > 0.1 && max_val < 50.0) {
+      already_in_meters = true;
+    }
+  }
+  
+  if (already_in_meters) {
+    // Already in meters, just ensure it's CV_32F
+    if (imgDepth.type() == CV_64F) {
+      imgDepth.convertTo(imgDepth, CV_32F);
     } else if (imgDepth.type() != CV_32F) {
       imgDepth.convertTo(imgDepth, CV_32F);
     }
-    
-    // Validate depth image
-    if (imgDepth.empty()) {
-      LOG(ERROR) << "WARNING: createKeyFrameFromFrame: depth image is empty for frame=" << frame->getFrameId();
-      return nullptr;
+  } else if (cam_params.hasDepthParams()) {
+    // Need to convert from raw depth units to meters
+    const double depth_scale = cam_params.depthParams().depth_to_meters;
+    if (depth_scale != 1.0) {
+      imgDepth.convertTo(imgDepth, CV_32F, depth_scale);
+    } else if (imgDepth.type() != CV_32F) {
+      // Ensure downstream code gets float depth even if scale == 1
+      imgDepth.convertTo(imgDepth, CV_32F);
     }
-    // Check if depth image has valid values
-    cv::Mat valid_mask = (imgDepth > 0) & (imgDepth < 100.0); // reasonable depth range
-    int valid_pixels = cv::countNonZero(valid_mask);
-    if (valid_pixels == 0) {
-      VLOG(1) << "WARNING: createKeyFrameFromFrame: depth image has no valid pixels for frame=" << frame->getFrameId();
-      return nullptr;
-    }
-    VLOG(2) << "createKeyFrameFromFrame: depth image has " << valid_pixels << " valid pixels out of " 
-            << imgDepth.rows * imgDepth.cols << " total";
-  } else {
-    LOG_EVERY_N(WARNING, 100) << "Frame " << frame->getFrameId()
-                              << " has no depth, cannot create edge KeyFrame";
-    return nullptr;
+  } else if (imgDepth.type() != CV_32F) {
+    imgDepth.convertTo(imgDepth, CV_32F);
   }
   
-  // Use edges from Frame (already processed in tracker_->track())
-  // No need to process again with edgeSelector - frame->static_edges_ already contains the edges
-  if (frame->static_edges_.empty()) {
-    VLOG(1) << "WARNING: createKeyFrameFromFrame: frame=" << frame->getFrameId()
-            << " has no static_edges_!";
-    return nullptr;
-  }
-  VLOG(2) << "Using edges from Frame frame=" << frame->getFrameId()
-          << " edges=" << frame->static_edges_.size();
-  
-  // Validate images
-  CHECK(!imgRGB.empty()) << "RGB image is empty!";
-  CHECK(!imgDepth.empty()) << "Depth image is empty!";
-  
-  // Convert gtsam::Pose3 to Sophus::SE3d for KeyFrame
-  const gtsam::Matrix4& T_matrix = pose_curr.matrix();
-  Sophus::SE3d pose_sophus(
-      Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
-      T_matrix.topRightCorner<3, 1>());
-  
-  // Create KeyFrame
-  FrameId frame_id = frame->getFrameId();
-  double timestamp = frame->getTimestamp();
-  const CameraParams& cam_params = camera_->getParams();
-
-  // Build projection matrix P = K * [R | t] for this keyframe
-  const gtsam::Matrix4& T_cam = pose_curr.matrix();
-  Eigen::Matrix3d R = T_cam.topLeftCorner<3, 3>();
-  Eigen::Vector3d t_vec = T_cam.topRightCorner<3, 1>();
-  Eigen::Matrix3d K_eigen = cam_params.getCameraMatrixEigen();
-  Eigen::Matrix<double, 3, 4> Rt;
-  Rt.block<3, 3>(0, 0) = R;
-  Rt.block<3, 1>(0, 3) = t_vec;
-  Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
-  
-  const auto t_kf_ctor0 = std::chrono::steady_clock::now();
-  KeyFramePtr pKF(new KeyFrame(
-      frame_id, pose_sophus, timestamp, 
-      frame->static_edges_, imgRGB, imgDepth,
-      cam_params.fx(), cam_params.fy(), 
-      cam_params.cu(), cam_params.cv()));
-  const auto t_kf_ctor1 = std::chrono::steady_clock::now();
-  
-  // Log edges after KeyFrame construction (after culling)
-  if (pKF->mvEdges.empty()) {
-    VLOG(1) << "WARNING: createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
-            << ") has 0 edges after construction (input had " << frame->static_edges_.size() << " edges)";
-  } else {
-    VLOG(2) << "createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
-            << ") has " << pKF->mvEdges.size() << " edges after construction (input had " 
-            << frame->static_edges_.size() << " edges)";
-  }
-
-  // Share graph pointer between Frame and KeyFrame
-  pKF->graph = frame->graph;
-
-  // Update existing objects with this keyframe's detections
-  for (auto [node_id, attribute] : frame->graph->attributes) {
-    auto bb_det = attribute.bbox;
-    if (attribute.obj) {
-        //std::cout<<"node "<<node_id<<" is matched with object "<<attribute.obj->GetId()<<std::endl;
-        //check iou again???
-        auto proj = attribute.obj->GetEllipsoid().project(P);
-        auto bb_proj = proj.ComputeBbox();
-        double iou = bboxes_iou(bb_proj, bb_det);
-        if (iou > 0.01) {
-            auto c = proj.GetCenter();
-            auto axes = proj.GetAxes();
-            double angle = proj.GetAngle();
-            (void)angle;
-            //if(iou<0.3)
-            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 0, 255), 2);
-            //else
-            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 0), 2);
-            if(axes[0] <= 0.001 || axes[1] <= 0.001)
-                continue;
-            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, attribute.obj->GetColor(), 2);
-            attribute.obj->AddDetection(attribute.label, bb_det, attribute.ell, attribute.confidence, Rt, frame->getFrameId(), pKF.get());
-            //attribute.obj->AddDetection(attribute.label, bb_det, Ellipse::FromBbox(bb_det), attribute.confidence, Rt, mCurrentFrame.mnId, kf);
-            //proj_bboxes.erase(attribute.obj);
-            //double dis_min = normalized_gaussian_wasserstein_2d(proj, Ellipse::FromBbox(bb_det), 10);
-            //std::cout<<"wasser:"<<dis_min<<std::endl;
-            //cv::putText(im_rgb_,  std::to_string(attribute.hue), cv::Point2i(bb_det[0]-10, bb_det[1]-5), cv::FONT_HERSHEY_DUPLEX,
-            //    0.55, cv::Scalar(255, 255, 0), 1, false);
-        }
-        else{//TODO??
-            //std::cout<<"BUT IOU IS NOT ENOUGH"<<std::endl;
-            //attribute.obj = nullptr;
-            continue;
-        }
-    }
+} else {
+  LOG_EVERY_N(WARNING, 100) << "Frame " << frame->getFrameId()
+                            << " has no depth, cannot create edge KeyFrame";
+  return nullptr;
 }
 
-  // Create new objects for unmatched graph nodes
-  if (pKF->graph) {
-    const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+// Use edges from Frame (already processed in tracker_->track())
+// No need to process again with edgeSelector - frame->static_edges_ already contains the edges
+VLOG(2) << "Using edges from Frame frame=" << frame->getFrameId()
+        << " edges=" << frame->static_edges_.size();
 
-    for (auto& [node_id, attribute] : pKF->graph->attributes) {
-      if (attribute.obj) {
-        continue;
-      }
-      if (node_id >= depth_data_per_det.size()) {
-        continue;
-      }
-      const auto& depth_data = depth_data_per_det[node_id];
+// Validate images
+CHECK(!imgRGB.empty()) << "RGB image is empty!";
+CHECK(!imgDepth.empty()) << "Depth image is empty!";
 
-      dyno::Object* obj = new dyno::Object(
-          attribute.label, attribute.bbox, attribute.ell, attribute.confidence,
-          depth_data, K_eigen, Rt, frame->getFrameId(), pKF.get());
+// Convert gtsam::Pose3 to Sophus::SE3d for KeyFrame
+const gtsam::Matrix4& T_matrix = pose_curr.matrix();
+Sophus::SE3d pose_sophus(
+    Sophus::SO3d(T_matrix.topLeftCorner<3, 3>()), 
+    T_matrix.topRightCorner<3, 1>());
 
-      map_->AddObject(obj);
-      attribute.obj = obj;
+// Create KeyFrame
+FrameId frame_id = frame->getFrameId();
+double timestamp = frame->getTimestamp();
+const CameraParams& cam_params = camera_->getParams();
 
-      auto proj = obj->GetEllipsoid().project(P);
-      auto c = proj.GetCenter();
-      auto axes = proj.GetAxes();
-      double angle = proj.GetAngle();
-      (void)c;
-      (void)axes;
-      (void)angle;
-    }
-  }
-  
-  return pKF;
+const auto t_kf_ctor0 = std::chrono::steady_clock::now();
+KeyFramePtr pKF(new KeyFrame(
+    frame_id, pose_sophus, timestamp, 
+    frame->static_edges_, imgRGB, imgDepth,
+    cam_params.fx(), cam_params.fy(), 
+    cam_params.cu(), cam_params.cv()));
+  const auto t_kf_ctor1 = std::chrono::steady_clock::now();
+
+return pKF;
 }
 
 void RGBDInstanceFrontendModule::optimizeEdgeSlidingWindow() {
@@ -1750,9 +1649,6 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
               << newKFs[j]->KF_ID << ") has 0 edges!";
     }
   }
-  VLOG(1) << "updateEdgeSlidingWindow: adding " << (window_size_ - window_step_) 
-          << " keyframes with total " << total_edges_before << " edges";
-  
   for (int j = 0; j < window_size_ - window_step_; ++j) {
     // Log keyframe edges before clearing and re-adding
     if (newKFs[j]->mvEdges.empty()) {
@@ -1823,8 +1719,6 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
         cluster_colors_cache_ =
             std::make_shared<const std::vector<cv::Vec3b>>(
                 std::move(clusterCloudColors));
-        VLOG(1) << "Updated cluster cache after sliding window update: " 
-                << cluster_clouds_cache_->size() << " clusters";
       } else {
         VLOG(1) << "updateEdgeSlidingWindow: clusters exist but visualizeAssociationResult returned empty";
       }

@@ -1,4 +1,5 @@
 #include "dynosam/backend/edge_map/KeyFrame.hpp"
+#include <glog/logging.h>
 
 namespace dyno {
 
@@ -27,8 +28,10 @@ KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vE
 
     // Depth-related preprocessing: remove inconsistent edge features
     assignProperty3D(matDepth); // Assign depth to edges
+    
     // edgeCullingDepth();         // Remove all edges with invalid depth and invalid edge points in valid edges
     edgeCullingDepthParallel();
+    
     // All edge points in remaining edges now have valid depth
     edgeCullingContinuity();    // Ensure 3D point depth continuity for each ordered edge
 
@@ -488,6 +491,8 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
     int y_idx = pt.y;
 
     // Original point's true depth
+    // Note: matDepth should already be converted to CV_32F in createKeyFrameFromFrame
+    // So we can simply read as float, just like in keyframe.cpp
     float depth_orig = matDepth.at<float>(y_idx, x_idx);
 
     // Compute adjusted depth and visibility score in 5x5 patch
@@ -504,6 +509,7 @@ void KeyFrame::assignProperty3DEach(orderedEdgePoint& pt, const cv::Mat& matDept
 
             patch_total += 1; // Accumulate total pixels
             // If in image region, check if depth value is valid
+            // Note: matDepth should already be CV_32F, so read as float directly
             float depth = matDepth.at<float>(curr_y_idx, curr_x_idx);
             if(depth > 0.2) validDepthList.push_back(depth);
 
@@ -621,26 +627,22 @@ void KeyFrame::edgeCullingDepthParallel()
 {
     // Use char instead of atomic<bool>, use memory_order_relaxed to ensure basic thread safety
     std::vector<char> retainFlags(mvEdges.size());
-
+    
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int i) {
         Edge& currentEdge = mvEdges[i];
         int validPointCount = 0;
         const int totalPointCount = currentEdge.mvPoints.size();
         
         // Count number of valid points
-        // Note: depth range check - TUM datasets may have different depth scales
-        // Original range: 0.2f to 5.0f (meters)
-        // For TUM datasets, depth might be in different units or scale
         for(const auto& point : currentEdge.mvPoints) {
-            // Check if depth is valid (positive and reasonable)
-            // Use wider range to accommodate different depth scales
-            if(point.depth > 0.01f && point.depth < 50.0f) {
+            if(point.depth > 0.2f && point.depth < 5.0f) {
                 validPointCount++;
             }
         }
 
         // Compute valid ratio and decide whether to retain
-        float validRatio = static_cast<float>(validPointCount) / totalPointCount;
+        float validRatio = totalPointCount > 0 ? 
+            static_cast<float>(validPointCount) / totalPointCount : 0.0f;
         retainFlags[i] = (validRatio >= 0.3f) ? 1 : 0;
 
         // If edge is to be retained, first filter out invalid points
@@ -648,8 +650,7 @@ void KeyFrame::edgeCullingDepthParallel()
             auto newEnd = std::remove_if(currentEdge.mvPoints.begin(), 
                                         currentEdge.mvPoints.end(),
                                         [](const auto& point) {
-                                            // Use wider range to accommodate different depth scales
-                                            return point.depth <= 0.01f || point.depth >= 50.0f;
+                                            return point.depth <= 0.2f || point.depth >= 5.0f;
                                         });
             currentEdge.mvPoints.erase(newEnd, currentEdge.mvPoints.end());
         }
@@ -834,10 +835,5 @@ std::vector<orderedEdgePoint> KeyFrame::getCoarseSampledPoints(int bias, int max
     return sampledPoints;
 }
 
-
-
-
-
-
-
 }  // namespace dyno
+
