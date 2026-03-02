@@ -1,6 +1,6 @@
 #include "dynosam/backend/edge_map/FeatureMerger.hpp"
 
-using namespace edge_map;
+using namespace dyno;
 
 double featureMerger::statisticFilter(std::vector<Eigen::Vector3d>& point_cluster, std::vector<float>& scores, double std_mult) 
 {

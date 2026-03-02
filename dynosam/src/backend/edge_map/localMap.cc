@@ -1,5 +1,5 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
-using namespace edge_map;
+using namespace dyno;
 
 //-- Initialize a local map when the number of keyframes is greater than 2
 void localMap::initLocalMap()

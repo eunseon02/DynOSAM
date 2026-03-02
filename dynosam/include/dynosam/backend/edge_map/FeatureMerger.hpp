@@ -5,7 +5,7 @@
 #include "dynosam/frontend/vision/DisjointSet.hpp"
 #include "dynosam/backend/edge_map/ElementEdge.hpp"
 
-namespace edge_map{
+namespace dyno{
 
 class featureMerger{
 public:

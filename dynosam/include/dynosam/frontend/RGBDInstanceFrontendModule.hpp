@@ -57,6 +57,8 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
 #include "dynosam/backend/edge_map/Optimizer.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+#include "dynosam/backend/edge_map/Map.hpp"
+#include "dynosam/frontend/vision/ObjectMatcher.hpp"
 
 #include <deque>
 
@@ -78,6 +80,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   FeatureTracker::UniquePtr tracker_;
   fine::FineTracker::UniquePtr fine_tracker_;
   direct::DirectTracker::UniquePtr direct_tracker_;
+  ObjectMatcher::UniquePtr object_matcher_;
   RGBDFrontendLogger::UniquePtr logger_;
 
  private:
@@ -158,7 +161,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   Frame::Ptr frame_lkf_;
 
   // Edge-based local mapping components (from localmapping.cc)
-  edge_map::localMapPtr local_map_;
+  dyno::localMapPtr local_map_;
   std::unique_ptr<edgeSelector> edge_selector_;
   gtsam::Pose3 pose_last_edge_kf_;  // Last edge keyframe pose
   bool is_edge_initialized_{false};
@@ -192,8 +195,12 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud_cache_;
   std::deque<std::vector<cv::Point3d>> environment_frames_;  // <=150 frames
 
+  // Global object map (ellipsoid/object-level SLAM map)
+  std::shared_ptr<dyno::EdgeMap> map_;
+
 
   bool is_data_valid_{false};
+  
 
   
   // Processing thread function
@@ -213,9 +220,10 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   void processSlidingWindowKeyFrame(KeyFramePtr kf);
   
  public:
+  void ObjectsInitialization(const Frame::Ptr& frame);
   // Getter for local map (for visualization)
   // Thread-safe: returns a copy of the pointer (shared_ptr is thread-safe for reading)
-  edge_map::localMapPtr getLocalMap() const {
+  dyno::localMapPtr getLocalMap() const {
     std::lock_guard<std::mutex> lock(local_map_mutex_);
     return local_map_;
   }
@@ -235,6 +243,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
     std::lock_guard<std::mutex> lock(viz_mutex_);
     return latest_visualization_data_;
   }
+
 };
 
 }  // namespace dyno

@@ -40,6 +40,7 @@
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 #include "dynosam_cv/Camera.hpp"
 #include "dynosam_cv/Feature.hpp"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
 // #include "dynosam_common/DynamicObjects.hpp"
 #include "dynosam_nn/ObjectDetector.hpp"

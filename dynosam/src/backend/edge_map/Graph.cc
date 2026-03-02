@@ -18,11 +18,9 @@
 */
 
 
-#include "Graph.h"
+#include "dynosam/backend/edge_map/Graph.hpp"
 
-
-namespace edge_map
-{
+namespace dyno {
     Graph::Graph(){
         category_ids_statistics = Eigen::VectorXd::Zero(80);
     }
@@ -38,7 +36,8 @@ namespace edge_map
         compute_feature_vectors(); 
     }
 
-    void Graph::add_node(int node_id, int label, float confidence, float hue, Eigen::Vector4d bbox, Ellipse ell) {
+    void Graph::add_node(int node_id, int label, float confidence, float hue,
+                         Eigen::Vector4d bbox, Ellipse ell) {
         Attribute attribute = {-1, label, confidence, hue, bbox, ell, nullptr};
         nodes[node_id] = vector<int>();
         attributes[node_id] = attribute;
@@ -153,4 +152,4 @@ namespace edge_map
         return (double)count / (double)N;// sum_score/N;
     }
 
-}
+}  // namespace dyno

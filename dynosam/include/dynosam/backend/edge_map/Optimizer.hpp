@@ -6,7 +6,7 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
 #include "dynosam/frontend/vision/FineTracker.hpp"
 
-namespace edge_map{
+namespace dyno{
 
 class Optimizer{
 public:

@@ -27,7 +27,6 @@
 #include <memory>
 #include <list>
 #include <iostream>
-#include <mutex>
 
 #include <algorithm>
 
@@ -36,28 +35,13 @@
 
 #include "dynosam_common/Ellipse.hpp"
 #include "dynosam_common/Ellipsoid.hpp"
-#include "dynosam/backend/edge_map/Map.hpp"
 
 // Forward declaration
 namespace dyno {
-class MapPoint;
 class KeyFrame;
 }
 
-// #include "Thirdparty/g2o/g2o/core/base_vertex.h"
-// #include "Thirdparty/g2o/g2o/core/base_unary_edge.h"
-// #include "Thirdparty/g2o/g2o/core/sparse_optimizer.h"
-// #include "Thirdparty/g2o/g2o/core/block_solver.h"
-// #include "Thirdparty/g2o/g2o/core/solver.h"
-// #include "Thirdparty/g2o/g2o/core/optimization_algorithm_levenberg.h"
-// #include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
-// #include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
-// #include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
-
-
-
-namespace dyno
-{
+namespace dyno {
     
 class Object
 {
@@ -66,7 +50,7 @@ class Object
         static unsigned int factory_id;
 
         Object(unsigned int cat, const BBox2& bbox, const Ellipse ell, double score, std::pair<float, float> depth_data, Eigen::Matrix3d K, 
-              const Matrix34d& Rt, long unsigned int frame_idx, KeyFrame *kf);
+              const Matrix34d& Rt, long unsigned int frame_idx, dyno::KeyFrame *kf);
 
         Object(const Ellipsoid& ellipsoid) : ellipsoid_(ellipsoid){
             id_ = 0;
@@ -117,7 +101,6 @@ class Object
             return flag_optimized;
         }
 
-        // MapPoint functionality removed
         // std::set<MapPoint*> GetAssociatedMapPoints() const {
         //     std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
         //     return associated_map_points_;
@@ -130,7 +113,7 @@ class Object
         //     associated_map_points_.insert(mp);
         // }
 
-        void OptimizeReconstruction(bool b_random_detections);
+        // void OptimizeReconstruction(bool b_random_detections);
 
         void OptimizeReconstructionQuat(bool b_random_detections);
 
@@ -139,7 +122,7 @@ class Object
         }
 
         std::vector<dyno::KeyFrame*> GetObservations(){
-            unique_lock<mutex> lock(mutex_add_detection_);
+            std::unique_lock<std::mutex> lock(mutex_add_detection_);
             return observed_kfs;
         }
 
@@ -189,6 +172,6 @@ class Object
 };
 
 
-}  // namespace dyno
+}
 
 #endif //  OBJECT_H

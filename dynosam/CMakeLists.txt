@@ -96,6 +96,9 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/MotionSolver.cc
   src/frontend/vision/StereoMatcher.cc
   src/frontend/vision/StaticFeatureTracker.cc
+  src/frontend/vision/Object.cc
+  src/frontend/vision/ObjectMatcher.cc
+  src/frontend/vision/Distance.cc
   src/frontend/vision/RobustWeight.cc
   src/frontend/vision/TrackerParams.cc
   src/frontend/vision/FeatureTrackerBase.cc
@@ -125,6 +128,8 @@ add_library(${PROJECT_NAME} SHARED
   src/backend/edge_map/Optimizer.cc
   src/backend/edge_map/FeatureMerger.cc
   src/backend/edge_map/ElementEdge.cc
+  src/backend/edge_map/Map.cc
+  src/backend/edge_map/Graph.cc
 
   # src/backend/ISAM2Agent.cc
   #src/backend/rgbd/impl/ObjectTrackingIsamAgent.cc

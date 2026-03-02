@@ -17,32 +17,24 @@
 * along with OA-SLAM. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include "OptimizerObject.h"
 
-#include "dynosam_common/Utils.hpp"
+#include "Thirdparty/g2o/g2o/core/block_solver.h"
+#include "Thirdparty/g2o/g2o/core/optimization_algorithm_levenberg.h"
+#include "Thirdparty/g2o/g2o/solvers/linear_solver_eigen.h"
+#include "Thirdparty/g2o/g2o/types/types_six_dof_expmap.h"
+#include "Thirdparty/g2o/g2o/core/robust_kernel_impl.h"
+#include "Thirdparty/g2o/g2o/solvers/linear_solver_dense.h"
+#include "Thirdparty/g2o/g2o/types/types_seven_dof_expmap.h"
 
-#include <fstream>
-#include <iomanip>
+#include<Eigen/StdVector>
 
-namespace dyno
+#include "Converter.h"
+
+#include<mutex>
+
+namespace ORB_SLAM2
 {
 
-void writeOBJ(const std::string& filename, const Eigen::Matrix<double, Eigen::Dynamic, 3>& pts,
-              const Eigen::Matrix<int, Eigen::Dynamic, 3>& colors)
-{
-    std::ofstream f(filename);
-    f << std::fixed;
-    bool with_colors = pts.rows() == colors.rows();
-    for (int j = 0; j < pts.rows(); ++j) {
-        f << "v " << std::setprecision(7) << " "<< pts(j, 0)
-                                          << " " << pts(j, 1)
-                                          << " " << pts(j, 2);
-        if (with_colors) {
-            f << " " << colors(j, 0) << " " << colors(j, 1) << " " << colors(j, 2);
-        }
-        f << "\n";
-    }
-    f.close();
-}
 
-
-}
+} //namespace ORB_SLAM

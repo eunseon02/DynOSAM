@@ -1,5 +1,7 @@
 #include "dynosam/backend/edge_map/KeyFrame.hpp"
 
+namespace dyno {
+
 KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vEdges, const cv::Mat& matRGB, const cv::Mat& matDepth,
     const float& fx, const float& fy, const float& cx, const float& cy)
 {
@@ -832,3 +834,4 @@ std::vector<orderedEdgePoint> KeyFrame::getCoarseSampledPoints(int bias, int max
 
 
 
+}  // namespace dyno

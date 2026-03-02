@@ -21,7 +21,6 @@
 #ifndef MAP_H
 #define MAP_H
 
-#include "MapPoint.h"
 #include "dynosam/backend/edge_map/KeyFrame.hpp"
 #include "dynosam_common/Ellipsoid.hpp"
 #include <set>
@@ -29,36 +28,41 @@
 
 #include <mutex>
 
+// Forward declare dyno::Object so we can store pointers without full definition here.
+namespace dyno {
+class Object;
+}
 
-
-namespace edge_map
-{
-
-class MapPoint;
-class KeyFrame;
-class MapObject;
+// Forward declare classes
+namespace dyno {
 class Graph;
 class Object;
+class KeyFrame;
+class MapObject;
 
-class Map
+class EdgeMap
 {
 public:
-    Map();
+    EdgeMap();
 
     void AddKeyFrame(KeyFrame* pKF);
-    void AddMapPoint(MapPoint* pMP);
-    void EraseMapPoint(MapPoint* pMP);
+    void AddEdge(Edge* pEdge);
+    void EraseEdge(Edge* pEdge);
+    // void AddMapPoint(MapPoint* pMP);
+    // void EraseMapPoint(MapPoint* pMP);
     void EraseKeyFrame(KeyFrame* pKF);
-    void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
+    // void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
+    void SetReferenceEdges(const std::vector<Edge*> &vpEdges);
     void InformNewBigChange();
     int GetLastBigChangeIdx();
 
     std::vector<KeyFrame*> GetAllKeyFrames();
-    std::vector<MapPoint*> GetAllMapPoints();
-    std::vector<Object*> GetAllObjects();
-    std::vector<MapPoint*> GetReferenceMapPoints();
+    // std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<Edge*> GetAllEdges();
+    std::vector<dyno::Object*> GetAllObjects();
+    // std::vector<MapPoint*> GetReferenceMapPoints();
 
-    long unsigned int MapPointsInMap();
+    // long unsigned int MapPointsInMap();
     long unsigned  KeyFramesInMap();
 
     long unsigned int GetMaxKFid();
@@ -75,7 +79,7 @@ public:
     // const std::unordered_map<unsigned int, Eigen::Matrix<double, 3, Eigen::Dynamic>>& GetAllMapObjectsPoints() {
     //     return ellipsoids_points_;
 
-    void AddObject(Object *obj);
+    void AddObject(dyno::Object *obj);
 
 
     //MapObject* GetObjWithTrId(int tr_id);
@@ -83,24 +87,25 @@ public:
     size_t GetNumberMapObjects() const {
         return mspObjects.size();
     }
-    size_t GetNumberPoints() const {
-        return mspMapPoints.size();
-    }
+    // size_t GetNumberPoints() const {
+    //     return mspMapPoints.size();
+    // }
     //ADDED TOBE DELETED
     std::set<KeyFrame*> getKeyFrames() const {
         return mspKeyFrames;
     }
 
-    Graph *graph_3d;
+    dyno::Graph *graph_3d;
 
 
 protected:
-    std::set<MapPoint*> mspMapPoints;
+    // std::set<MapPoint*> mspMapPoints;
     std::set<KeyFrame*> mspKeyFrames;
-    std::set<Object*> mspObjects;
+    std::set<Edge*> mspEdges;
+    std::set<dyno::Object*> mspObjects;
 
-    std::vector<MapPoint*> mvpReferenceMapPoints;
-
+    // std::vector<MapPoint*> mvpReferenceMapPoints;
+    std::vector<Edge*> mvpReferenceEdges;
     long unsigned int mnMaxKFid;
 
     // Index related to a big change in the map (loop closure, global BA)
@@ -111,6 +116,6 @@ protected:
     // std::unordered_map<unsigned int, Eigen::Matrix<double, 3, Eigen::Dynamic>> ellipsoids_points_;
 };
 
-} //namespace ORB_SLAM
+}  // namespace dyno
 
-#endif // MAP_H
+#endif  // MAP_H

@@ -393,6 +393,14 @@ void drawLabeledBoundingBox(cv::Mat& image, const std::string& label,
   cv::rectangle(image, bounding_box, colour, bb_thickness);
 }
 
+void drawWhiteBoundingBox(cv::Mat& image, const cv::Rect& bounding_box, const int& bb_thickness) {
+  cv::rectangle(image, bounding_box, cv::Scalar(255, 255, 255), bb_thickness);
+}
+
+// void drawEllipseProjections(cv::Mat& image, const Ellipse& ellipse, const cv::Scalar& color, const int& thickness) {
+//   cv::ellipse(image, center, axes, angle, 0, 360, color, thickness);
+// }
+
 void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
                         const std::vector<gtsam::Pose3>& poses_c, float scale) {
   cv::Mat K_float, D_float;

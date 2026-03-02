@@ -18,8 +18,7 @@
 */
 
 
-#include "Graph.h"
-
+#include "dynosam/frontend/Graph.hpp"
 
 namespace ORB_SLAM2 
 {

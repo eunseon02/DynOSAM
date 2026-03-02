@@ -2,10 +2,13 @@
 #include "dynosam/dataprovider/DatasetLoader.hpp"
 #include "dynosam_cv/ImageContainer.hpp"
 #include "dynosam_common/utils/FileSystem.hpp"
+#include "dynosam_common/StaticObjects.hpp"
 #include <fstream>
 #include <sstream>
 #include <opencv2/imgcodecs.hpp>
 #include <filesystem>
+#include <unordered_map>
+#include <nlohmann/json.hpp>
 
 namespace dyno {
 
@@ -17,6 +20,10 @@ class TUMAllLoader {
                const std::string& detections_json_path = "")
       : tum_path_(tum_path), detections_json_path_(detections_json_path) {
     loadAssociationFile(association_file);
+    // Pre-load and cache all detections from JSON file if available
+    if (!detections_json_path_.empty()) {
+      loadDetectionsCache();
+    }
   }
 
   cv::Mat getRGB(size_t idx) const {
@@ -86,8 +93,115 @@ class TUMAllLoader {
   }
 
   size_t size() const { return rgb_files_.size(); }
+  
+  // Get cached detections for a specific frame (fast O(1) lookup)
+  // Similar to DetectionsFromFile::detect() - just return from cache
+  static_objects::ObjectDetectionResult getDetectionsForFrame(const std::string& rgb_filename) const {
+    if (detections_cache_.empty()) {
+      return static_objects::ObjectDetectionResult{};
+    }
+    
+    // Extract base filename for matching (same as DetectionsFromFile)
+    std::string basename = std::filesystem::path(rgb_filename).filename().string();
+    
+    auto it = detections_cache_.find(basename);
+    if (it == detections_cache_.end()) {
+      return static_objects::ObjectDetectionResult{};
+    }
+    
+    return it->second;  // Return cached result directly
+  }
 
  private:
+  void loadDetectionsCache() {
+    if (detections_json_path_.empty()) {
+      return;
+    }
+    
+    std::ifstream fin(detections_json_path_);
+    if (!fin.is_open()) {
+      LOG(WARNING) << "Failed to open JSON detection file: " << detections_json_path_;
+      return;
+    }
+    
+    nlohmann::json data;
+    try {
+      fin >> data;  // ⭐ JSON 파일 전체를 한 번에 읽어서 data에 저장
+    } catch (const nlohmann::json::exception& e) {
+      LOG(ERROR) << "Failed to parse JSON file: " << detections_json_path_ << ", error: " << e.what();
+      return;
+    }
+    
+    if (!data.is_array()) {
+      LOG(ERROR) << "JSON file does not contain an array: " << detections_json_path_;
+      return;
+    }
+    
+    // ⭐ 모든 프레임을 순회하면서 미리 파싱 (DetectionsFromFile 패턴)
+    size_t loaded_count = 0;
+    for (auto& frame : data) {
+      if (!frame.contains("file_name")) {
+        continue;
+      }
+      
+      std::string name = frame["file_name"].get<std::string>();
+      name = std::filesystem::path(name).filename().string();  // basename만 저장
+      
+      static_objects::ObjectDetectionResult result;
+      
+      if (!frame.contains("detections") || !frame["detections"].is_array()) {
+        detections_cache_[name] = result;  // Empty result for this frame
+        continue;
+      }
+      
+      // 각 detection 파싱해서 Detection 객체 생성
+      for (auto& d : frame["detections"]) {
+        if (!d.contains("category_id") || !d["category_id"].is_number()) {
+          continue;
+        }
+        
+        unsigned int cat = d["category_id"].get<unsigned int>();
+        
+        double score = 0.0;
+        if (d.contains("detection_score") && d["detection_score"].is_number()) {
+          score = d["detection_score"].get<double>();
+        } else if (d.contains("score") && d["score"].is_number()) {
+          score = d["score"].get<double>();
+        }
+        
+        if (!d.contains("bbox") || !d["bbox"].is_array() || d["bbox"].size() != 4) {
+          continue;
+        }
+        
+        auto bb = d["bbox"];
+        BBox2 bbox(bb[0].get<double>(), bb[1].get<double>(), 
+                   bb[2].get<double>(), bb[3].get<double>());
+        
+        Ellipse ellipse;
+        if (d.contains("ellipse") && d["ellipse"].is_array() && d["ellipse"].size() == 5) {
+          auto ellipse_data = d["ellipse"];
+          double cx = ellipse_data[0].get<double>();
+          double cy = ellipse_data[1].get<double>();
+          double width = ellipse_data[2].get<double>();
+          double height = ellipse_data[3].get<double>();
+          double angle = ellipse_data[4].get<double>();
+          
+          ellipse = Ellipse(Eigen::Vector2d(0.5 * width, 0.5 * height), 
+                           angle, 
+                           Eigen::Vector2d(cx, cy));
+        } else {
+          ellipse = Ellipse::FromBbox(bbox, 0.0);
+        }
+        
+        result.detections.emplace_back(cat, score, bbox, ellipse);
+      }
+      
+      detections_cache_[name] = result;  // ⭐ 메모리에 캐싱
+      loaded_count++;
+    }
+    
+    LOG(INFO) << "Loaded and cached " << loaded_count << " frames of detections from JSON file";
+  }
   void loadAssociationFile(const std::string& association_file) {
     std::ifstream fAssociation(association_file);
     if (!fAssociation.is_open()) {
@@ -119,6 +233,8 @@ class TUMAllLoader {
   std::vector<std::string> rgb_files_;
   std::vector<std::string> depth_files_;
   std::vector<double> timestamps_;
+  // Cache for pre-loaded detections (filename -> detection result)
+  std::unordered_map<std::string, static_objects::ObjectDetectionResult> detections_cache_;
 };
 
 struct TUMTimestampLoader : public TimestampBaseLoader {
@@ -174,50 +290,22 @@ TUMDataProvider::TUMDataProvider(const std::string& tum_path,
         .opticalFlow(optical_flow)
         .objectMotionMask(instance_mask);
     
-    // Load bbox detections from JSON file if available
-    std::string detections_json_path = loader->getDetectionsJsonPath();
+    // Get cached detections from pre-loaded JSON (fast O(1) lookup, like DetectionsFromFile::detect())
     std::string rgb_filename = loader->getRGBFilename(frame_id);
     
-    if (!detections_json_path.empty() && !rgb_filename.empty()) {
-      // Load detections from JSON file (returns ObjectDetectionResult with all detection info)
+    if (!rgb_filename.empty()) {
       static_objects::ObjectDetectionResult detection_result = 
-          utils::loadDetections(detections_json_path, rgb_filename, rgb);
+          loader->getDetectionsForFrame(rgb_filename);
       
       if (detection_result.num() > 0) {
-        // Store complete detection result (category_id, score, bbox, ellipse) in ImageContainer
+        // Set input_image for the result (required by ObjectDetectionResult)
+        detection_result.input_image = rgb;
+        
+        // Store complete static object detection result (category_id, score, bbox, ellipse) in ImageContainer
+        // This is for static objects only - do NOT set objectMotionMask (that's for dynamic objects)
         image_container.staticDetectionResult(detection_result);
-        
-        // Also create a mask with bbox regions filled with category_id as object ID
-        // This mask will be used by FeatureTracker to populate boundary_mask_result
-        cv::Mat bbox_mask = cv::Mat::zeros(rgb.size(), CV_32SC1);
-        
-        for (const auto& detection : detection_result.detections) {
-          // Convert BBox2 [x_min, y_min, x_max, y_max] to cv::Rect (x, y, width, height)
-          const BBox2& bbox = detection.bbox;
-          int x = static_cast<int>(std::round(bbox[0]));
-          int y = static_cast<int>(std::round(bbox[1]));
-          int width = static_cast<int>(std::round(bbox[2] - bbox[0]));
-          int height = static_cast<int>(std::round(bbox[3] - bbox[1]));
-          
-          // Clamp to image bounds
-          x = std::max(0, std::min(x, rgb.cols - 1));
-          y = std::max(0, std::min(y, rgb.rows - 1));
-          width = std::max(1, std::min(width, rgb.cols - x));
-          height = std::max(1, std::min(height, rgb.rows - y));
-          
-          cv::Rect bbox_rect(x, y, width, height);
-          
-          // Use category_id as object_id (ensure > 0, as 0 is background)
-          int object_id = detection.category_id > 0 ? detection.category_id : 1;
-          
-          // Fill bbox region with object ID
-          bbox_mask(bbox_rect).setTo(cv::Scalar(object_id));
-        }
-        
-        // Replace the empty instance_mask with bbox-based mask
-        image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask, bbox_mask);
         VLOG(30) << "Loaded " << detection_result.num() 
-                 << " detections from JSON for frame " << frame_id
+                 << " static object detections from cache for frame " << frame_id
                  << " (category_ids, scores, bboxes, ellipses) - stored in staticDetectionResult";
       }
     }

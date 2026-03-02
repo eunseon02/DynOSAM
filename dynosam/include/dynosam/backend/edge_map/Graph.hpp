@@ -12,8 +12,7 @@
 
 using namespace std;
 
-namespace dyno
-{
+namespace dyno {
     class Object;
 
     struct Attribute {
@@ -32,7 +31,9 @@ namespace dyno
 
             Graph(vector<pair<int,int>> edge_list, vector<pair<int,int>> node_labels);
 
-            void add_node(int node_id, int label, float confidence=0.0f, float hue=0.0f, Eigen::Vector4d bbox=Eigen::Vector4d::Zero(), Ellipse ell=Ellipse());
+            void add_node(int node_id, int label, float confidence=0.0f, float hue=0.0f,
+                         Eigen::Vector4d bbox=Eigen::Vector4d::Zero(),
+                         Ellipse ell=Ellipse());
 
             void add_edge(int node1, int node2, float weight=1.0f);
 
@@ -69,6 +70,6 @@ namespace dyno
             Eigen::VectorXd category_ids_statistics;
     };
 
-} //namespace ORB_SLAM
+}  // namespace dyno
 
-#endif // GRAPH_H
+#endif  // GRAPH_H

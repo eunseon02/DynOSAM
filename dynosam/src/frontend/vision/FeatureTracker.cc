@@ -130,18 +130,25 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   
   // ObjectBoundaryMaskResult must be declared outside the if block since it's used later
   vision_tools::ObjectBoundaryMaskResult boundary_mask_result;
+  // Static object detection result (for static objects / JSON detections)
+  static_objects::ObjectDetectionResult static_detection_result;
   
   if(FLAGS_use_dynamic_track) {
-    // compute the ObjectBoundaryMaskResult AND detect/track object on the image
-    // if required using the ObjectDetectionEngine (currently we throw away the
-    // result after the function call) ObjectDetectionEngine is used if
-    // params_.prefer_provided_object_detection is false
-    objectDetection(boundary_mask_result, input_images);
-    if (!initial_computation_ && params_.use_propogate_mask) {
-      utils::ChronoTimingStats timer("propogate_mask");
-      propogateMask(input_images);
-    }
+  // compute the ObjectBoundaryMaskResult AND detect/track object on the image
+  // if required using the ObjectDetectionEngine (currently we throw away the
+  // result after the function call) ObjectDetectionEngine is used if
+  // params_.prefer_provided_object_detection is false
+  objectDetection(boundary_mask_result, input_images);
+  if (!initial_computation_ && params_.use_propogate_mask) {
+    utils::ChronoTimingStats timer("propogate_mask");
+    propogateMask(input_images);
   }
+  }
+  // Graph for static object tracking (created only if use_object is enabled)
+  Graph* graph = nullptr;
+  // Depth data per detection (for ObjectsInitialization)
+  std::vector<std::pair<float, float>> depth_data_per_detection;
+  
   if(FLAGS_use_object) {
     // compute the ObjectBoundaryMaskResult AND detect/track object on the image
     // if required using the ObjectDetectionEngine (currently we throw away the
@@ -150,7 +157,76 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
     // Note: For TUM dataset, JSON detections are loaded in TUMDataProvider
     // and stored as instance mask in ImageContainer, which will be processed
     // by objectDetection() if prefer_provided_object_detection is true
-    static_objects::ObjectDetectionResult static_detection_result = staticObjectDetection(input_images);
+    static_detection_result = staticObjectDetection(input_images);
+    
+    // For ellipsoid initialization (used by ObjectsInitialization)
+    depth_data_per_detection.resize(static_detection_result.detections.size(), std::make_pair(0.0f, 0.0f));
+
+    if (input_images.hasDepth()) {
+    for (size_t i = 0; i < static_detection_result.detections.size(); ++i) {
+        auto det = static_detection_result.detections[i];
+        auto bbox = det.bbox;
+        //choose random pixels to estimate
+        int number_pixels = 30;
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis_u(bbox[0], bbox[2]);
+        std::uniform_int_distribution<> dis_v(bbox[1], bbox[3]);
+        float sum_d = 0.0f;
+        float min_d = 100.0;
+        float max_d = -1.0;
+        float count_avg = 0.0f;
+        for(int j = 0; j<number_pixels; j++){
+            int u = dis_u(gen);
+            int v = dis_v(gen);
+            // ImageType::Depth is CV_64F, so use at<double>
+            const cv::Mat& depth_mat = input_images.depth();
+            float d = static_cast<float>(depth_mat.at<double>(v, u));
+            //std::cout<<d<<",";
+            if(d>0.0f){
+                sum_d += d;
+                count_avg += 1.0f;
+                if(d<min_d) min_d = d;
+                if(d>max_d) max_d = d;
+            }
+        }
+        //std::cout<<std::endl;
+        if(count_avg>0.0f){
+            depth_data_per_detection[i].first = std::min(sum_d/count_avg,5.0f);
+            depth_data_per_detection[i].second = std::min(std::max(max_d - min_d, 0.05f), 0.2f);
+        }
+    }
+    }
+
+    // Add graph - create dynamically so it can be stored in new_frame
+    if (static_detection_result.num() > 0) {
+      graph = new Graph();
+      std::vector<Eigen::Vector2d> center_points; //TODO 3d points
+      for (size_t i = 0; i < static_detection_result.detections.size(); ++i) {
+          BBox2 box = static_detection_result.detections[i].bbox;
+          graph->add_node(i, static_detection_result.detections[i].category_id,
+              static_detection_result.detections[i].score, -1.0f, box, static_detection_result.detections[i].ell);
+          Eigen::Vector2d center_point = (box.segment(0,2) + box.segment(2,2)) / 2.0;
+          center_points.push_back(center_point);
+      }
+      int k = std::min(4, static_cast<int>(static_detection_result.detections.size()-1));
+      for (size_t i = 0; i < static_detection_result.detections.size(); ++i) {
+          std::vector<pair<int,double>> distances;
+          for (size_t j = 0; j < static_detection_result.detections.size(); ++j) {
+              if (i != j){
+                  double distance = (center_points[i] - center_points[j]).norm();
+                  distances.push_back(make_pair(j,distance));
+              }
+          }
+          sort(distances.begin(),distances.end(),[](auto& left, auto& right) { 
+              return left.second < right.second; 
+          });
+          for (int m=0; m<k; m++){
+              graph->add_edge(i, distances[m].first);
+          }
+      }
+      graph->compute_feature_vectors();
+    }
   }
 
   // Make a deep copy of boundary_mask for thread safety
@@ -224,11 +300,19 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   previous_tracked_frame_ = previous_frame_;  // Update previous frame (previous
                                               // to the newly created frame)
 
-  // calculate dynamic observations for existing data
+  // calculate observations used for visualization (Tracks window)
+  // NOTE:
+  //  - Dynamic objects: use boundary_mask_result (from objectDetection / motion mask)
+  //  - Static objects:  use static_detection_result (from staticObjectDetection / JSON)
+  //
   // TODO: SingleDetectionResult really does not need the tracklet ids they
   // are never actually used!! this prevents the frame from needing to do the
-  // same calculations we've alrady done
-  std::map<ObjectId, SingleDetectionResult> object_observations;
+  // same calculations we've already done
+  std::map<ObjectId, SingleDetectionResult> object_observations;  // Dynamic objects only
+  std::map<ObjectId, SingleDetectionResult> static_object_observations;  // Static objects only
+  
+  // 1) Dynamic objects (if any) from boundary_mask_result
+  if (!boundary_mask_result.objects_detected.empty()) {
   for (size_t i = 0; i < boundary_mask_result.objects_detected.size(); i++) {
     ObjectId object_id = boundary_mask_result.objects_detected.at(i);
     const cv::Rect& bb_detection =
@@ -236,18 +320,75 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
     SingleDetectionResult observation;
     observation.object_id = object_id;
-    // observation.object_features = dynamic_features.getByObject(object_id);
     observation.bounding_box = bb_detection;
 
     object_observations[object_id] = observation;
+  }
+  }
+  
+  // 2) Static objects: populate observations from static_detection_result
+  //    (e.g., from JSON via TUMDataProvider or online YOLO detection)
+  //    Store in separate static_object_observations map
+  if (static_detection_result.num() > 0) {
+    // LOG(INFO) << "Populating static_object_observations from static_detection_result: " 
+    //          << static_detection_result.num() << " detections";
+    
+    const cv::Mat& rgb = input_images.rgb();
+    const int img_cols = rgb.cols;
+    const int img_rows = rgb.rows;
+
+    // Use unique object_id for each detection (category_id might have duplicates)
+    // Start from a high offset to avoid conflicts with dynamic object IDs
+    ObjectId base_static_object_id = 10000;  // Static objects start from 10000
+    ObjectId current_object_id = base_static_object_id;
+    
+    for (const auto& det : static_detection_result.detections) {
+      // Use unique object_id for each detection (increment for each detection)
+      ObjectId object_id = current_object_id++;
+
+      const BBox2& bbox = det.bbox;  // [x_min, y_min, x_max, y_max]
+      int x = static_cast<int>(std::round(bbox[0]));
+      int y = static_cast<int>(std::round(bbox[1]));
+      int width = static_cast<int>(std::round(bbox[2] - bbox[0]));
+      int height = static_cast<int>(std::round(bbox[3] - bbox[1]));
+
+      // Clamp to image bounds to avoid OpenCV exceptions
+      x = std::max(0, std::min(x, img_cols - 1));
+      y = std::max(0, std::min(y, img_rows - 1));
+      width = std::max(1, std::min(width, img_cols - x));
+      height = std::max(1, std::min(height, img_rows - y));
+
+      cv::Rect bb_detection(x, y, width, height);
+
+      SingleDetectionResult observation;
+      observation.object_id = object_id;
+      observation.bounding_box = bb_detection;
+
+      static_object_observations[object_id] = observation;
+    }
+    
   }
   
 
   utils::ChronoTimingStats f_timer("tracking_timer.frame_construction");
   // LOG(INFO) << "static_edges: " << static_edges.size();
+  
+  // Ensure image_container has staticDetectionResult for ObjectsInitialization
+  ImageContainer image_container_for_frame = input_images.clone();
+  if (static_detection_result.num() > 0 && !image_container_for_frame.hasStaticDetectionResult()) {
+    static_detection_result.input_image = image_container_for_frame.rgb();
+    image_container_for_frame.staticDetectionResult(static_detection_result);
+  }
+  
   auto new_frame = std::make_shared<Frame>(
-      frame_id, timestamp, camera_, input_images, static_features,
+      frame_id, timestamp, camera_, image_container_for_frame, static_features,
       dynamic_features, static_edges, object_observations, info_);
+
+  // Set static object observations (separate from dynamic objects)
+  new_frame->getStaticObjectObservations() = static_object_observations;
+
+  // Set depth data per detection (for ObjectsInitialization)
+  new_frame->getDepthDataPerDetection() = depth_data_per_detection;
 
   // update tracking/sampling information for dynamic obejcts
   new_frame->retracked_objects_ =
@@ -256,6 +397,9 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // update depth threshold information
   new_frame->setMaxBackgroundDepth(frontend_params_.max_background_depth);
   new_frame->setMaxObjectDepth(frontend_params_.max_object_depth);
+
+  // Set graph pointer in new_frame (graph is nullptr if not created)
+  new_frame->graph = graph;
 
   VLOG(5) << "Tracked on frame " << frame_id << " t= " << std::setprecision(15)
           << timestamp << ", object ids "
@@ -1339,7 +1483,7 @@ bool FeatureTracker::objectDetection(
         }
       }
     }
-    
+
     // update or insert image container with object mask
     image_container.replace<ImageType::MotionMask>(ImageContainer::kObjectMask,
                                                    object_mask);
@@ -1352,15 +1496,19 @@ static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
   static_objects::ObjectDetectionResult result;
   
   if (!FLAGS_use_object) {
+    LOG(ERROR) << "staticObjectDetection: FLAGS_use_object=false, returning empty result";
     return result;
   }
   
   // Priority 1: Use provided static detection result from ImageContainer (e.g., from JSON file)
   if (image_container.hasStaticDetectionResult()) {
-    VLOG(30) << "Using provided static detection result from ImageContainer for frame "
-             << image_container.frameId();
-    return image_container.staticDetectionResult();
+    result = image_container.staticDetectionResult();
+    // LOG(INFO) << "staticObjectDetection: Using provided static detection result from ImageContainer for frame "
+    //          << image_container.frameId() << ", num=" << result.num();
+    return result;
   }
+  
+  LOG(INFO) << "staticObjectDetection: No static detection result in ImageContainer, will run online detection";
   
   // Priority 2: Run online detection using YOLO
   if (!object_detection_) {

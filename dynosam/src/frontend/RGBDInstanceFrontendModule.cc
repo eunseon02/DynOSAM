@@ -48,6 +48,7 @@
 // #include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
 #include "dynosam/visualizer/EdgeVizUtils.hpp"
+#include "dynosam/backend/edge_map/Object.hpp"
 
 
 DEFINE_bool(use_frontend_logger, false,
@@ -146,8 +147,12 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   direct_tracker_ = std::make_unique<direct::DirectTracker>(camera->getParams().ImageWidth(), camera->getParams().ImageHeight(), camera->getParams().fx(), camera->getParams().fy(), camera->getParams().cu(), camera->getParams().cv());
   // edge_selector_ = std::make_unique<edgeSelector>(20.0, tracker_params.edge_coarse.cannyLow, tracker_params.edge_coarse.cannyHigh);
 
+  object_matcher_ = std::make_unique<ObjectMatcher>(camera_->getParams());
+
+
   // Initialize edge-based local mapping (from localmapping.cc)
-  local_map_.reset(new edge_map::localMap());
+  local_map_.reset(new dyno::localMap());
+  map_.reset(new dyno::EdgeMap());
   // TODO: Load canny parameters from config
   // edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
   
@@ -265,7 +270,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
   // Initialize first frame pose to identity
   frame->T_world_camera_ = gtsam::Pose3::Identity();
 
-  
+  ObjectsInitialization(frame);
   // Create first keyframe if edge features are enabled
   if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
     const gtsam::Pose3& pose_curr = frame->T_world_camera_;
@@ -359,7 +364,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
   Frame::Ptr previous_frame = tracker_->getPreviousFrame();
   CHECK(previous_frame);
-
   // const FeatureTrackerInfo& tracker_info = tracker_->getTrackerInfo();
   // VLOG(1) << to_string(tracker_info);
 
@@ -456,17 +460,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const gtsam::Quaternion q = R.toQuaternion();
   const double timestamp = last_keyframe_->getTimestamp();
   
-  // LOG(INFO) << "POSE_REF TUM: " << std::fixed << std::setprecision(6)
-  //           << timestamp << " "
-  //           << t.x() << " " << t.y() << " " << t.z() << " "
-  //           << q.x() << " " << q.y() << " " << q.z() << " " << q.w();
-  
-
-  // LOG(INFO) << "POSE_CUR_REFINED TUM: " << std::fixed << std::setprecision(6)
-  //           << frame->getTimestamp() << " "
-  //           << pose_cur_refined.translation().x() << " " << pose_cur_refined.translation().y() << " " << pose_cur_refined.translation().z() << " "
-  //           << pose_cur_refined.rotation().toQuaternion().x() << " " << pose_cur_refined.rotation().toQuaternion().y() << " " << pose_cur_refined.rotation().toQuaternion().z() << " " << pose_cur_refined.rotation().toQuaternion().w();
-  
   // Update frame pose with DirectTrack result
   frame->T_world_camera_ = pose_ref * pose_cur_refined;
   
@@ -504,8 +497,78 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
   const auto t_fine_end = std::chrono::steady_clock::now();
 
-  // Update visualization snapshot every frame
 
+  if(FLAGS_use_object) {
+    const int img_width = camera_->getParams().ImageWidth();
+    const int img_height = camera_->getParams().ImageHeight();
+    dyno::BBox2 img_bbox(0.0, 0.0,
+                         static_cast<double>(img_width),
+                         static_cast<double>(img_height));
+    // Use dyno::Object* for projections (matches ObjectMatcher API)
+    std::unordered_map<dyno::Object*, Ellipse> proj_bboxes;
+
+    // Compute projection matrix P = K * [R | t]
+    const gtsam::Matrix3& R = frame->T_world_camera_.rotation().matrix();
+    const gtsam::Point3& t = frame->T_world_camera_.translation();
+    
+    // Get camera intrinsic matrix K (Eigen 3x3)
+    const gtsam::Matrix3& K = camera_->getParams().getCameraMatrixEigen();
+    
+    // Construct [R | t] (3x4 matrix)
+    Eigen::Matrix<double, 3, 4> Rt;
+    Rt.block<3, 3>(0, 0) = R;
+    Rt.block<3, 1>(0, 3) = t;
+    
+    // Compute projection matrix P = K * [R | t]
+    Eigen::Matrix<double, 3, 4> P = K * Rt;
+
+    // Project all existing map objects and build proj_bboxes
+    const auto objects = map_->GetAllObjects();
+    for (auto* obj : objects) {
+      if (!obj) continue;
+
+      auto proj = obj->GetEllipsoid().project(P);
+      auto c3d = obj->GetEllipsoid().GetCenter();
+      auto bb_proj = proj.ComputeBbox();
+      double z = Rt.row(2).dot(c3d.homogeneous());
+      // Discard objects behind the camera or mostly outside image
+      if (z < 0 ||
+          bboxes_intersection(bb_proj, img_bbox) <
+              0.3 * bbox_area(bb_proj)) {
+        continue;
+      }
+      proj_bboxes[obj] = proj;
+      // Check occlusions and keep only the nearest
+      std::unordered_set<dyno::Object*> hidden;
+      for (auto it : proj_bboxes) {
+          if (it.first != obj && bboxes_iou(it.second.ComputeBbox(), bb_proj) > 0.8) {
+              Eigen::Vector3d c2 = it.first->GetEllipsoid().GetCenter();
+              double z2 = Rt.row(2).dot(c2.homogeneous());
+              if (z < z2) {
+                  // remove z2
+                  hidden.insert(it.first);
+              } else {
+                  // remove z
+                  hidden.insert(obj);
+              }
+              break;
+          }
+      }
+      for (auto hid : hidden) {
+          proj_bboxes.erase(hid);
+      }
+
+    }
+
+    // Hungarian matcher does not require P; it uses frame->graph and proj_bboxes.
+    int nmatches = object_matcher_->MatchObjectsHungarian(*frame, proj_bboxes);
+    // LOG(INFO) << "ObjectMatcher matched " << nmatches << " objects";
+
+
+
+
+  }
+  // Update visualization snapshot every frame
   {
     EdgeVisualizationDataPtr snap = std::make_shared<EdgeVisualizationData>();
     snap->currentFramePose = frame->T_world_camera_.matrix();
@@ -515,6 +578,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
     snap->clusterClouds = cluster_clouds_cache_;
     snap->clusterCloudColors = cluster_colors_cache_;
+    
+    // Debug: log if cluster clouds are null or empty
+    if (!snap->clusterClouds || snap->clusterClouds->empty()) {
+      VLOG(3) << "getLatestVisualizationData: clusterClouds is null or empty";
+    } else {
+      VLOG(3) << "getLatestVisualizationData: clusterClouds size=" << snap->clusterClouds->size();
+    }
     snap->localMapClouds = local_map_clouds_cache_;
     snap->environment_cloud = environment_cloud_cache_;
 
@@ -633,6 +703,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
       const auto t_create_kf_end = std::chrono::steady_clock::now();
+
       
       if (pKF) {
         {
@@ -1217,16 +1288,22 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
     //         << " (+" << (edges_after - edges_before) << ")";
     
     // This allows visualization of clusters before optimization
-    std::vector<std::vector<cv::Point3d>> clusterClouds;
-    std::vector<cv::Vec3b> clusterCloudColors;
-    edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+    if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
 
-    cluster_clouds_cache_ =
-        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-            std::move(clusterClouds));
-    cluster_colors_cache_ =
-        std::make_shared<const std::vector<cv::Vec3b>>(
-            std::move(clusterCloudColors));
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(2) << "Updated cluster cache in processSlidingWindowKeyFrame: " 
+                << cluster_clouds_cache_->size() << " clusters";
+      }
+    }
     
     const auto t1 = std::chrono::steady_clock::now();
     const auto ms = [](const auto& a, const auto& b) -> double {
@@ -1258,7 +1335,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         // LOG(INFO) << "After clusterFittingProjection: merged_clusters=" << merged_after_fit
         //           << " / " << local_map_->mvEleEdgeClusters.size();
         
-        edge_map::Optimizer::optimizeAllInvolvedKFs(local_map_);
+        dyno::Optimizer::optimizeAllInvolvedKFs(local_map_);
 
         // Update merged local map cache (heavy data) for visualization snapshots
         {
@@ -1336,17 +1413,22 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
       local_map_->addFrame2LocalMap(pKF);
       kf_count = local_map_->mvKeyFrames.size();
 
-      // // Update covisibility cluster cache (heavy data) for snapshots
-      // std::vector<std::vector<cv::Point3d>> clusterClouds;
-      // std::vector<cv::Vec3b> clusterCloudColors;
-      // edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      // Update covisibility cluster cache (heavy data) for snapshots
+      if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+        std::vector<std::vector<cv::Point3d>> clusterClouds;
+        std::vector<cv::Vec3b> clusterCloudColors;
+        edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
 
-      // cluster_clouds_cache_ =
-      //     std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-      //         std::move(clusterClouds));
-      // cluster_colors_cache_ =
-      //     std::make_shared<const std::vector<cv::Vec3b>>(
-      //         std::move(clusterCloudColors));
+        if (!clusterClouds.empty()) {
+          cluster_clouds_cache_ =
+              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                  std::move(clusterClouds));
+          cluster_colors_cache_ =
+              std::make_shared<const std::vector<cv::Vec3b>>(
+                  std::move(clusterCloudColors));
+          VLOG(2) << "Updated cluster cache: " << cluster_clouds_cache_->size() << " clusters";
+        }
+      }
     }
     const auto t_add1 = std::chrono::steady_clock::now();
     
@@ -1417,6 +1499,16 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   FrameId frame_id = frame->getFrameId();
   double timestamp = frame->getTimestamp();
   const CameraParams& cam_params = camera_->getParams();
+
+  // Build projection matrix P = K * [R | t] for this keyframe
+  const gtsam::Matrix4& T_cam = pose_curr.matrix();
+  Eigen::Matrix3d R = T_cam.topLeftCorner<3, 3>();
+  Eigen::Vector3d t_vec = T_cam.topRightCorner<3, 1>();
+  Eigen::Matrix3d K_eigen = cam_params.getCameraMatrixEigen();
+  Eigen::Matrix<double, 3, 4> Rt;
+  Rt.block<3, 3>(0, 0) = R;
+  Rt.block<3, 1>(0, 3) = t_vec;
+  Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
   
   const auto t_kf_ctor0 = std::chrono::steady_clock::now();
   KeyFramePtr pKF(new KeyFrame(
@@ -1425,6 +1517,76 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       cam_params.fx(), cam_params.fy(), 
       cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
+
+  // Share graph pointer between Frame and KeyFrame
+  pKF->graph = frame->graph;
+
+  // Update existing objects with this keyframe's detections
+  for (auto [node_id, attribute] : frame->graph->attributes) {
+    auto bb_det = attribute.bbox;
+    if (attribute.obj) {
+        //std::cout<<"node "<<node_id<<" is matched with object "<<attribute.obj->GetId()<<std::endl;
+        //check iou again???
+        auto proj = attribute.obj->GetEllipsoid().project(P);
+        auto bb_proj = proj.ComputeBbox();
+        double iou = bboxes_iou(bb_proj, bb_det);
+        if (iou > 0.01) {
+            auto c = proj.GetCenter();
+            auto axes = proj.GetAxes();
+            double angle = proj.GetAngle();
+            (void)angle;
+            //if(iou<0.3)
+            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 0, 255), 2);
+            //else
+            //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 0), 2);
+            if(axes[0] <= 0.001 || axes[1] <= 0.001)
+                continue;
+            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, attribute.obj->GetColor(), 2);
+            attribute.obj->AddDetection(attribute.label, bb_det, attribute.ell, attribute.confidence, Rt, frame->getFrameId(), pKF.get());
+            //attribute.obj->AddDetection(attribute.label, bb_det, Ellipse::FromBbox(bb_det), attribute.confidence, Rt, mCurrentFrame.mnId, kf);
+            //proj_bboxes.erase(attribute.obj);
+            //double dis_min = normalized_gaussian_wasserstein_2d(proj, Ellipse::FromBbox(bb_det), 10);
+            //std::cout<<"wasser:"<<dis_min<<std::endl;
+            //cv::putText(im_rgb_,  std::to_string(attribute.hue), cv::Point2i(bb_det[0]-10, bb_det[1]-5), cv::FONT_HERSHEY_DUPLEX,
+            //    0.55, cv::Scalar(255, 255, 0), 1, false);
+        }
+        else{//TODO??
+            //std::cout<<"BUT IOU IS NOT ENOUGH"<<std::endl;
+            //attribute.obj = nullptr;
+            continue;
+        }
+    }
+}
+
+  // Create new objects for unmatched graph nodes
+  if (pKF->graph) {
+    const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+
+    for (auto& [node_id, attribute] : pKF->graph->attributes) {
+      if (attribute.obj) {
+        continue;
+      }
+      if (node_id >= depth_data_per_det.size()) {
+        continue;
+      }
+      const auto& depth_data = depth_data_per_det[node_id];
+
+      dyno::Object* obj = new dyno::Object(
+          attribute.label, attribute.bbox, attribute.ell, attribute.confidence,
+          depth_data, K_eigen, Rt, frame->getFrameId(), pKF.get());
+
+      map_->AddObject(obj);
+      attribute.obj = obj;
+
+      auto proj = obj->GetEllipsoid().project(P);
+      auto c = proj.GetCenter();
+      auto axes = proj.GetAxes();
+      double angle = proj.GetAngle();
+      (void)c;
+      (void)axes;
+      (void)angle;
+    }
+  }
   
   return pKF;
 }
@@ -1493,7 +1655,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // LOG(INFO) << "  Keeping " << newKFs.size() << " keyframes: " << kept_kf_ids;
   
   // Reset local map and add overlapping keyframes
-  local_map_.reset(new edge_map::localMap());
+  local_map_.reset(new dyno::localMap());
   for (int j = 0; j < window_size_ - window_step_; ++j) {
     newKFs[j]->mmEdgeIndex2ElementEdgeID.clear();
     newKFs[j]->mmMapAssociations.clear();
@@ -1508,6 +1670,46 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // LOG(INFO) << "  After update: kf_count=" << local_map_->mvKeyFrames.size()
   //           << " rebuild_ms="
   //           << std::chrono::duration<double, std::milli>(t1 - t0).count();
+}
+
+
+void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame){
+  // Get static_detection_result from frame (set by FeatureTracker from ImageContainer)
+  if (!frame->image_container_.hasStaticDetectionResult() ||
+      frame->image_container_.staticDetectionResult().detections.empty()) {
+    LOG(WARNING) << "WARNING: NO DETECTION IN THE INITIALIZATION FRAME";
+    return;
+  }
+  const auto& static_detection_result = frame->image_container_.staticDetectionResult();
+  const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+  
+  if (frame->graph == nullptr || depth_data_per_det.size() != static_detection_result.detections.size()) {
+    LOG(WARNING) << "ObjectsInitialization: graph or depth_data size mismatch";
+    return;
+  }
+  
+  // Get K from camera params
+  Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+  // Construct Rt [R | t] from T_world_camera_
+  Matrix34d Rt;
+  Rt.block<3, 3>(0, 0) = frame->T_world_camera_.rotation().matrix();
+  Rt.block<3, 1>(0, 3) = frame->T_world_camera_.translation();
+  
+  int count = 0;
+  for (size_t di = 0; di < static_detection_result.detections.size(); ++di) {
+      const auto& det = static_detection_result.detections[di];
+      if (di >= depth_data_per_det.size()) continue;
+      const auto& depth_data = depth_data_per_det[di];
+      
+      if(depth_data.first > 0.01f && depth_data.first < 15.0f){
+          dyno::Object* obj = new dyno::Object(det.category_id, det.bbox, det.ell, det.score, depth_data, K_eigen,
+                        Rt, 0, nullptr);
+          map_->AddObject(obj);
+          count += 1;
+      }
+  }
+  std::vector<dyno::Object*> objects = map_->GetAllObjects();
+  LOG(INFO) << "ObjectsInitialization: created " << count << " objects, Map has " << objects.size() << " objects";
 }
 
 }  // namespace dyno

@@ -15,9 +15,9 @@
 #include <pcl/octree/octree_search.h>
 
 //-- Association result between local map and frame
-typedef std::pair<std::vector<cv::Point3d>, std::vector<edge_map::elementEdge>> match3d_2d;
+typedef std::pair<std::vector<cv::Point3d>, std::vector<dyno::elementEdge>> match3d_2d;
 
-namespace edge_map{
+namespace dyno{
 
 class localMap{
 public:

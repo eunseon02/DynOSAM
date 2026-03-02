@@ -56,6 +56,7 @@ Frame::Frame(
       dynamic_features_(dynamic_features),
       static_edges_(static_edges),
       object_observations_(object_observations),
+      static_object_observations_(),  // Initialize empty (will be populated separately)
       tracking_info_(tracking_info) {
   // NOTE: no rectification, use camera matrix as P for cv::undistortPoints
   // see

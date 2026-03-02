@@ -26,7 +26,7 @@ void setCameraParams(float fx_val, float fy_val, float cx_val, float cy_val) {
 }
 
 // Visualize association result (from localmapping.cc lines 27-78)
-void visualizeAssociationResult(const edge_map::localMapPtr& pLocalMap,
+void visualizeAssociationResult(const dyno::localMapPtr& pLocalMap,
                                 std::vector<std::vector<cv::Point3d>>& clusterClouds,
                                 std::vector<cv::Vec3b>& clusterCloudColors) {
   clusterClouds.clear();
@@ -101,7 +101,7 @@ void visualizeAssociationResult(const edge_map::localMapPtr& pLocalMap,
 }
 
 // Visualize merged local map
-void visualizeMergedLocalMap(const edge_map::localMapPtr& pLocalMap,
+void visualizeMergedLocalMap(const dyno::localMapPtr& pLocalMap,
                              std::vector<std::vector<cv::Point3d>>& mergedClouds) {
   mergedClouds.clear();
   mergedClouds.reserve(pLocalMap->mvEleEdgeClusters.size());
@@ -130,7 +130,7 @@ void visualizeMergedLocalMap(const edge_map::localMapPtr& pLocalMap,
 }
 
 // Get sliding window poses (from localmapping.cc lines 107-115)
-void getSlidingWindow(const edge_map::localMapPtr& pLocalMap,
+void getSlidingWindow(const dyno::localMapPtr& pLocalMap,
                       std::vector<Eigen::Matrix4d>& sliding_window) {
   sliding_window.clear();
   for (size_t i = 0; i < pLocalMap->mvKeyFrames.size(); ++i) {
@@ -140,7 +140,7 @@ void getSlidingWindow(const edge_map::localMapPtr& pLocalMap,
 
 // Save edge keyframe trajectory in TUM format
 void saveEdgeKeyFrameTrajectory(const std::string& filename,
-                                const edge_map::localMapPtr& pLocalMap) {
+                                const dyno::localMapPtr& pLocalMap) {
   std::ofstream file(filename);
   if (!file.is_open()) {
     LOG(WARNING) << "Failed to open edge keyframe trajectory file: " << filename;
