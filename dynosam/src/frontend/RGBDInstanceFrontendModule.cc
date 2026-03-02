@@ -576,26 +576,50 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // Read caches + sliding window under the local_map_mutex_
     std::lock_guard<std::mutex> lock(local_map_mutex_);
 
+    // Update cluster cache if it's empty but clusters exist in local_map_
+    // This handles the case where clusters were created after the last cache update
+    if ((!cluster_clouds_cache_ || cluster_clouds_cache_->empty()) && 
+        local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(2) << "Updated cluster cache in snapshot: " << cluster_clouds_cache_->size() << " clusters";
+      }
+    }
+    
     snap->clusterClouds = cluster_clouds_cache_;
     snap->clusterCloudColors = cluster_colors_cache_;
-    
-    // Debug: log if cluster clouds are null or empty
-    if (!snap->clusterClouds || snap->clusterClouds->empty()) {
-      VLOG(3) << "getLatestVisualizationData: clusterClouds is null or empty";
-    } else {
-      VLOG(3) << "getLatestVisualizationData: clusterClouds size=" << snap->clusterClouds->size();
-    }
     snap->localMapClouds = local_map_clouds_cache_;
     snap->environment_cloud = environment_cloud_cache_;
 
     auto window = std::make_shared<std::vector<Eigen::Matrix4d>>();
-    if (local_map_) {
+    if (local_map_ && local_map_->mvKeyFrames.size() > 0) {
       window->reserve(local_map_->mvKeyFrames.size());
       for (size_t i = 0; i < local_map_->mvKeyFrames.size(); ++i) {
         window->push_back(local_map_->mvKeyFrames[i]->KF_pose_g.matrix());
       }
     }
     snap->slidingWindow = window;
+    
+    // Debug: log visualization data status
+    static int debug_count = 0;
+    if (++debug_count % 100 == 0) {
+      VLOG(1) << "Visualization snapshot: "
+              << "clusterClouds=" << (snap->clusterClouds ? snap->clusterClouds->size() : 0)
+              << ", localMapClouds=" << (snap->localMapClouds ? snap->localMapClouds->size() : 0)
+              << ", slidingWindow=" << (snap->slidingWindow ? snap->slidingWindow->size() : 0)
+              << ", environment_cloud=" << (snap->environment_cloud ? snap->environment_cloud->size() : 0)
+              << ", local_map_kfs=" << (local_map_ ? local_map_->mvKeyFrames.size() : 0)
+              << ", local_map_clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0);
+    }
 
     // Update latest visualization data (thread-safe, visualization thread can read anytime)
     {
@@ -1266,8 +1290,20 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
       edges_before += kf->mvEdges.size();
     }
     
+    // Log keyframe edges before adding to local map
+    if (kf->mvEdges.empty()) {
+      VLOG(1) << "WARNING: processSlidingWindowKeyFrame: kf(id=" << kf->KF_ID 
+              << ") has 0 edges before adding to local_map!";
+    }
+    
     local_map_->addFrame2LocalMap(kf);
     kf_count = local_map_->mvKeyFrames.size();
+    
+    // Log keyframe edges after adding to local map
+    if (kf->mvEdges.empty()) {
+      VLOG(1) << "WARNING: processSlidingWindowKeyFrame: kf(id=" << kf->KF_ID 
+              << ") has 0 edges after adding to local_map!";
+    }
     
     // Note: processSlidingWindowKeyFrame receives KeyFrame from queue, not Frame
     // Frame object is already cached when keyframe was created in nominalSpin
@@ -1340,28 +1376,38 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         // Update merged local map cache (heavy data) for visualization snapshots
         {
           std::vector<std::vector<cv::Point3d>> mergedClouds;
-          edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
-          local_map_clouds_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(mergedClouds));
+          if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+            edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
+            if (!mergedClouds.empty()) {
+              local_map_clouds_cache_ =
+                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                      std::move(mergedClouds));
+              VLOG(2) << "Updated localMapClouds cache: " << local_map_clouds_cache_->size() << " merged clusters";
+            }
+          }
 
           // Accumulate environment cloud from merged local map
-          std::vector<cv::Point3d> currentLocalMapCloud;
-          for (const auto& c : *local_map_clouds_cache_) {
-            currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+          if (local_map_clouds_cache_ && !local_map_clouds_cache_->empty()) {
+            std::vector<cv::Point3d> currentLocalMapCloud;
+            for (const auto& c : *local_map_clouds_cache_) {
+              currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+            }
+            if (!currentLocalMapCloud.empty()) {
+              environment_frames_.push_back(std::move(currentLocalMapCloud));
+              while (environment_frames_.size() > 150) {
+                environment_frames_.pop_front();
+              }
+              auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
+              env->reserve(environment_frames_.size());
+              for (const auto& f : environment_frames_) {
+                env->push_back(f);
+              }
+              environment_cloud_cache_ =
+                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                      std::move(*env));
+              VLOG(2) << "Updated environment_cloud cache: " << environment_cloud_cache_->size() << " frames";
+            }
           }
-          environment_frames_.push_back(std::move(currentLocalMapCloud));
-          while (environment_frames_.size() > 150) {
-            environment_frames_.pop_front();
-          }
-          auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
-          env->reserve(environment_frames_.size());
-          for (const auto& f : environment_frames_) {
-            env->push_back(f);
-          }
-          environment_cloud_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(*env));
         }
         
         const auto t2 = std::chrono::steady_clock::now();
@@ -1414,6 +1460,7 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
       kf_count = local_map_->mvKeyFrames.size();
 
       // Update covisibility cluster cache (heavy data) for snapshots
+      // Always update if clusters exist, even if cache is not empty (clusters may have changed)
       if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
         std::vector<std::vector<cv::Point3d>> clusterClouds;
         std::vector<cv::Vec3b> clusterCloudColors;
@@ -1426,8 +1473,14 @@ void RGBDInstanceFrontendModule::processEdgeKeyFrame(
           cluster_colors_cache_ =
               std::make_shared<const std::vector<cv::Vec3b>>(
                   std::move(clusterCloudColors));
-          VLOG(2) << "Updated cluster cache: " << cluster_clouds_cache_->size() << " clusters";
+          VLOG(2) << "Updated cluster cache in processEdgeKeyFrame: " 
+                  << cluster_clouds_cache_->size() << " clusters (kf_id=" << pKF->KF_ID << ")";
+        } else {
+          VLOG(2) << "processEdgeKeyFrame: clusters exist but visualizeAssociationResult returned empty (kf_id=" << pKF->KF_ID << ")";
         }
+      } else {
+        VLOG(2) << "processEdgeKeyFrame: no clusters to visualize (kf_id=" << pKF->KF_ID 
+                << ", clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0) << ")";
       }
     }
     const auto t_add1 = std::chrono::steady_clock::now();
@@ -1474,6 +1527,21 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
     } else if (imgDepth.type() != CV_32F) {
       imgDepth.convertTo(imgDepth, CV_32F);
     }
+    
+    // Validate depth image
+    if (imgDepth.empty()) {
+      LOG(ERROR) << "WARNING: createKeyFrameFromFrame: depth image is empty for frame=" << frame->getFrameId();
+      return nullptr;
+    }
+    // Check if depth image has valid values
+    cv::Mat valid_mask = (imgDepth > 0) & (imgDepth < 100.0); // reasonable depth range
+    int valid_pixels = cv::countNonZero(valid_mask);
+    if (valid_pixels == 0) {
+      VLOG(1) << "WARNING: createKeyFrameFromFrame: depth image has no valid pixels for frame=" << frame->getFrameId();
+      return nullptr;
+    }
+    VLOG(2) << "createKeyFrameFromFrame: depth image has " << valid_pixels << " valid pixels out of " 
+            << imgDepth.rows * imgDepth.cols << " total";
   } else {
     LOG_EVERY_N(WARNING, 100) << "Frame " << frame->getFrameId()
                               << " has no depth, cannot create edge KeyFrame";
@@ -1482,6 +1550,11 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   
   // Use edges from Frame (already processed in tracker_->track())
   // No need to process again with edgeSelector - frame->static_edges_ already contains the edges
+  if (frame->static_edges_.empty()) {
+    VLOG(1) << "WARNING: createKeyFrameFromFrame: frame=" << frame->getFrameId()
+            << " has no static_edges_!";
+    return nullptr;
+  }
   VLOG(2) << "Using edges from Frame frame=" << frame->getFrameId()
           << " edges=" << frame->static_edges_.size();
   
@@ -1517,6 +1590,16 @@ KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
       cam_params.fx(), cam_params.fy(), 
       cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
+  
+  // Log edges after KeyFrame construction (after culling)
+  if (pKF->mvEdges.empty()) {
+    VLOG(1) << "WARNING: createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+            << ") has 0 edges after construction (input had " << frame->static_edges_.size() << " edges)";
+  } else {
+    VLOG(2) << "createKeyFrameFromFrame: KeyFrame(id=" << pKF->KF_ID 
+            << ") has " << pKF->mvEdges.size() << " edges after construction (input had " 
+            << frame->static_edges_.size() << " edges)";
+  }
 
   // Share graph pointer between Frame and KeyFrame
   pKF->graph = frame->graph;
@@ -1656,10 +1739,99 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   
   // Reset local map and add overlapping keyframes
   local_map_.reset(new dyno::localMap());
+  
+  // Log keyframe edges before adding
+  size_t total_edges_before = 0;
   for (int j = 0; j < window_size_ - window_step_; ++j) {
+    size_t kf_edges = newKFs[j]->mvEdges.size();
+    total_edges_before += kf_edges;
+    if (kf_edges == 0) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") has 0 edges!";
+    }
+  }
+  VLOG(1) << "updateEdgeSlidingWindow: adding " << (window_size_ - window_step_) 
+          << " keyframes with total " << total_edges_before << " edges";
+  
+  for (int j = 0; j < window_size_ - window_step_; ++j) {
+    // Log keyframe edges before clearing and re-adding
+    if (newKFs[j]->mvEdges.empty()) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") already has 0 edges before re-adding!";
+    }
+    
     newKFs[j]->mmEdgeIndex2ElementEdgeID.clear();
     newKFs[j]->mmMapAssociations.clear();
     local_map_->addFrame2LocalMap(newKFs[j]);
+    
+    // Log keyframe edges after re-adding
+    if (newKFs[j]->mvEdges.empty()) {
+      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+              << newKFs[j]->KF_ID << ") has 0 edges after re-adding!";
+    }
+    
+    // Log after each keyframe addition
+    if (j == 0) {
+      VLOG(2) << "  After adding KF[0] (id=" << newKFs[j]->KF_ID 
+              << ", edges=" << newKFs[j]->mvEdges.size() 
+              << "): local_map kfs=" << local_map_->mvKeyFrames.size()
+              << ", element_edges=" << local_map_->mvElementEdges.size()
+              << ", clusters=" << local_map_->mvEleEdgeClusters.size()
+              << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : "INIT");
+    } else if (j == 1) {
+      VLOG(2) << "  After adding KF[1] (id=" << newKFs[j]->KF_ID 
+              << ", edges=" << newKFs[j]->mvEdges.size() 
+              << "): local_map kfs=" << local_map_->mvKeyFrames.size()
+              << ", element_edges=" << local_map_->mvElementEdges.size()
+              << ", clusters=" << local_map_->mvEleEdgeClusters.size()
+              << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : "INIT");
+    }
+  }
+  
+  // After adding keyframes, if we have 2 or more keyframes and state is still NOT_INITIALIZED,
+  // initLocalMap() should have been called by addFrame2LocalMap. But if it wasn't (e.g., 
+  // we added exactly 2 keyframes in the loop above), we need to ensure initialization.
+  // Actually, addFrame2LocalMap handles this automatically when mvKeyFrames.size() == 2,
+  // so we just need to make sure clusters are created. Let's verify the state.
+  if (local_map_->mvKeyFrames.size() >= 2 && local_map_->msState == dyno::localMap::State::NOT_INITIALIZED) {
+    // This shouldn't happen if addFrame2LocalMap worked correctly, but let's be safe
+    VLOG(1) << "updateEdgeSlidingWindow: WARNING - local_map has " << local_map_->mvKeyFrames.size() 
+            << " keyframes but state is NOT_INITIALIZED";
+  }
+  
+  // Update cluster cache after sliding window update
+  // Log detailed state for debugging
+  if (local_map_) {
+    size_t element_edges_count = local_map_->mvElementEdges.size();
+    size_t clusters_count = local_map_->mvEleEdgeClusters.size();
+    size_t kf_count = local_map_->mvKeyFrames.size();
+    VLOG(1) << "updateEdgeSlidingWindow: after update - kf_count=" << kf_count
+            << ", element_edges=" << element_edges_count
+            << ", clusters=" << clusters_count
+            << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : 
+                              local_map_->msState == dyno::localMap::State::INITIALIZED ? "INIT" : "LOST");
+    
+    if (clusters_count > 0) {
+      std::vector<std::vector<cv::Point3d>> clusterClouds;
+      std::vector<cv::Vec3b> clusterCloudColors;
+      edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+      
+      if (!clusterClouds.empty()) {
+        cluster_clouds_cache_ =
+            std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                std::move(clusterClouds));
+        cluster_colors_cache_ =
+            std::make_shared<const std::vector<cv::Vec3b>>(
+                std::move(clusterCloudColors));
+        VLOG(1) << "Updated cluster cache after sliding window update: " 
+                << cluster_clouds_cache_->size() << " clusters";
+      } else {
+        VLOG(1) << "updateEdgeSlidingWindow: clusters exist but visualizeAssociationResult returned empty";
+      }
+    } else {
+      VLOG(1) << "updateEdgeSlidingWindow: no clusters after update (element_edges=" 
+              << element_edges_count << ")";
+    }
   }
   
   // Note: updateEdgeSlidingWindow only has KeyFrame objects, not Frame objects

@@ -628,8 +628,13 @@ void KeyFrame::edgeCullingDepthParallel()
         const int totalPointCount = currentEdge.mvPoints.size();
         
         // Count number of valid points
+        // Note: depth range check - TUM datasets may have different depth scales
+        // Original range: 0.2f to 5.0f (meters)
+        // For TUM datasets, depth might be in different units or scale
         for(const auto& point : currentEdge.mvPoints) {
-            if(point.depth > 0.2f && point.depth < 5.0f) {
+            // Check if depth is valid (positive and reasonable)
+            // Use wider range to accommodate different depth scales
+            if(point.depth > 0.01f && point.depth < 50.0f) {
                 validPointCount++;
             }
         }
@@ -643,7 +648,8 @@ void KeyFrame::edgeCullingDepthParallel()
             auto newEnd = std::remove_if(currentEdge.mvPoints.begin(), 
                                         currentEdge.mvPoints.end(),
                                         [](const auto& point) {
-                                            return point.depth <= 0.2f || point.depth >= 5.0f;
+                                            // Use wider range to accommodate different depth scales
+                                            return point.depth <= 0.01f || point.depth >= 50.0f;
                                         });
             currentEdge.mvPoints.erase(newEnd, currentEdge.mvPoints.end());
         }

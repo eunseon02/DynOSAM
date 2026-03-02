@@ -11,6 +11,11 @@ void localMap::initLocalMap()
     KeyFramePtr pKF_1 = mvKeyFrames[1];
 
     //* STEP-0 First, add all edges from pKF_0 to the map
+    size_t edges_kf0 = pKF_0->mvEdges.size();
+    size_t edges_kf1 = pKF_1->mvEdges.size();
+    std::cout << "[initLocalMap] KF0(id=" << pKF_0->KF_ID << ") has " << edges_kf0 << " edges, "
+              << "KF1(id=" << pKF_1->KF_ID << ") has " << edges_kf1 << " edges" << std::endl;
+    
     for(int i = 0; i < pKF_0->mvEdges.size(); ++i)
     {
         //-- All edges in the keyframe are valid edges
@@ -22,6 +27,7 @@ void localMap::initLocalMap()
         //-- Keyframe indexes the current local map
         pKF_0->mmEdgeIndex2ElementEdgeID[i] = ele.element_id;
     }
+    std::cout << "[initLocalMap] After STEP-0: mvElementEdges.size()=" << mvElementEdges.size() << std::endl;
 
     //-- Initialize the reference coordinate frame of the entire local map
     // T_ref = pKF_0->KF_pose_g;
@@ -133,6 +139,9 @@ void localMap::initLocalMap()
         mvEleEdgeClusters.push_back(std::move(e_cluster));
         mmClusterID2index[cluster_id] = mvEleEdgeClusters.size() - 1;
     }
+    
+    std::cout << "[initLocalMap] After cluster generation: mvEleEdgeClusters.size()=" 
+              << mvEleEdgeClusters.size() << std::endl;
 
     mmKFID2KFindex[pKF_0->KF_ID] = 0;
     mmKFID2KFindex[pKF_1->KF_ID] = 1;
