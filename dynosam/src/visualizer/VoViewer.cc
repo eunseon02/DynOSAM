@@ -1,4 +1,6 @@
 #include "dynosam/visualizer/VoViewer.hpp"
+#include "dynosam/backend/edge_map/Map.hpp"
+#include "dynosam/frontend/vision/Object.hpp"
 
 pangolin::OpenGlMatrix Eigen2gl(Eigen::Matrix4f matrix)
 {
@@ -49,6 +51,7 @@ voViewer::voViewer(std::string windowName)
     follow = std::make_shared<pangolin::Var<bool>>("menu.Follow", true, true);
     show_covisibility = std::make_shared<pangolin::Var<bool>>("menu.Co-visibility", true, true);
     slide_bar = std::make_shared<pangolin::Var<double>>("menu.slider", 0.5, 0, 1);
+    menuPause = std::make_shared<pangolin::Var<bool>>("menu.Pause", false, true);
 
     cameraPose = Eigen::MatrixXd::Identity(4,4);
     gtPose = Eigen::MatrixXd::Identity(4,4);
@@ -126,6 +129,9 @@ void voViewer::render_loop()
             drawTrajectory(trajectory_GT, false, cv::Vec3b(255,100,0), 0.05);
         }
 
+        //绘制地图对象 (ellipsoids)
+        update_map_objects();
+
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
         const Eigen::Matrix4f& modelViewMatrix = s_cam_->GetModelViewMatrix();
@@ -147,4 +153,39 @@ void voViewer::start()
     stop_  = false;
     thread = std::thread(std::bind(&voViewer::render_loop, this));
     thread.detach();
+}
+
+void voViewer::update_map_objects()
+{
+    if (!map_) {
+        return;  // Map not set yet
+    }
+
+    // Get all objects from the shared EdgeMap
+    std::vector<dyno::Object*> objects = map_->GetAllObjects();
+
+    glPointSize(1);
+    glLineWidth(2);
+
+    for (auto* obj : objects) {
+        if (!obj) continue;
+
+        // Use the per-object color
+        cv::Scalar c = obj->GetColor();
+        glColor3f(static_cast<double>(c(2)) / 255.0,
+                  static_cast<double>(c(1)) / 255.0,
+                  static_cast<double>(c(0)) / 255.0);
+
+        // Draw the ellipsoid as a set of line strips
+        const dyno::Ellipsoid& ell = obj->GetEllipsoid();
+        auto pts = ell.GeneratePointCloud();
+        int i = 0;
+        while (i < pts.rows()) {
+            glBegin(GL_LINE_STRIP);
+            for (int k = 0; k < 50 && i < pts.rows(); ++k, ++i) {
+                glVertex3f(pts(i, 0), pts(i, 1), pts(i, 2));
+            }
+            glEnd();
+        }
+    }
 }

@@ -92,6 +92,8 @@ class Frame {
   std::map<ObjectId, SingleDetectionResult> object_observations_;
   // Static objects (object_id >= 10000) - for visualization only
   std::map<ObjectId, SingleDetectionResult> static_object_observations_;
+  // Static object projections (by object id) - for visualization 
+  std::map<ObjectId, ObjectProjectionResult> static_object_projections_;
   MotionEstimateMap
       motion_estimates_;  // map of object ids to object motions that take the
                           // object from k-1 to k in W. Updated in the frontend

@@ -3,6 +3,8 @@
 
 #include "dynosam/visualizer/VisualizerBase.hpp"
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
+#include "dynosam/frontend/vision/ColorManager.hpp"
+#include "dynosam_common/Ellipse.hpp"
 //pcl dependency
 #include <pcl/console/parse.h>
 #include <pcl/io/ply_io.h>
@@ -12,6 +14,12 @@
 #include <pcl/common/transforms.h>
 
 #include <pangolin/pangolin.h>
+
+// Forward declaration
+namespace dyno {
+class EdgeMap;
+class Object;
+}
 
 class voViewer: public VisualizerBase{
 
@@ -71,6 +79,9 @@ public:
 
     }
 
+    // Draw ellipsoidal map objects from the shared EdgeMap (implemented in VoViewer.cc)
+    void update_map_objects();
+
     // void update_Objects(std::vector<dyno::Object*> objects)
     // {
     //     objects = std::move(objects);
@@ -100,6 +111,29 @@ public:
     }
 
     double get_trajectory_prop(){ return *slide_bar; }
+    
+    // Set the global object map (shared with RGBDInstanceFrontendModule)
+    void setMap(std::shared_ptr<dyno::EdgeMap> map) {
+        map_ = map;
+    }
+    
+    // Check pause state (for main thread tracking control)
+    bool isPaused() const {
+        if (menuPause) {
+            return *menuPause;
+        }
+        return false;
+    }
+    
+    // Check if viewer is stopped
+    bool isStopped() const {
+        return stop_;
+    }
+    
+    // Check if viewer is finished (pangolin window closed)
+    bool isFinished() const {
+        return pangolin::ShouldQuit();
+    }
 
 protected:
     void start();
@@ -123,7 +157,10 @@ private:
     std::shared_ptr<pangolin::Var<bool>>      follow;
     std::shared_ptr<pangolin::Var<bool>>      show_covisibility;
     std::shared_ptr<pangolin::Var<double>> slide_bar;
+    std::shared_ptr<pangolin::Var<bool>>      menuPause;
 
+    // Global object map (shared with RGBDInstanceFrontendModule)
+    std::shared_ptr<dyno::EdgeMap> map_;
 
     std::string windowName_;
 

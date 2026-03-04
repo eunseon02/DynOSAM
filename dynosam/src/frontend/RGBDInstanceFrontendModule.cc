@@ -34,8 +34,11 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <unistd.h>  // for usleep
 
 #include <opencv4/opencv2/opencv.hpp>
+#include "dynosam/frontend/FrontendModuleAccessor.hpp"
+#include "dynosam/visualizer/VoViewer.hpp"
 
 #include "dynosam/frontend/RGBDInstance-Definitions.hpp"
 #include "dynosam/frontend/vision/MotionSolver.hpp"
@@ -249,6 +252,15 @@ RGBDInstanceFrontendModule::validateImageContainer(
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
+  // Check pause state from VoViewer (if available)
+  if (dyno::g_vo_viewer) {
+    while (dyno::g_vo_viewer->isPaused() &&
+           !dyno::g_vo_viewer->isStopped() &&
+           !dyno::g_vo_viewer->isFinished()) {
+      usleep(90000);  // Sleep 90ms while paused
+    }
+  }
+  
   ImageContainer::Ptr image_container = input->image_container_;
 
 
@@ -329,6 +341,15 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
+  // Check pause state from VoViewer (if available)
+  if (dyno::g_vo_viewer) {
+    while (dyno::g_vo_viewer->isPaused() &&
+           !dyno::g_vo_viewer->isStopped() &&
+           !dyno::g_vo_viewer->isFinished()) {
+      usleep(90000);  // Sleep 90ms while paused
+    }
+  }
+  
   const auto t_nominal_start = std::chrono::steady_clock::now();
   ImageContainer::Ptr image_container = input->image_container_;
 
@@ -507,20 +528,38 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // Use dyno::Object* for projections (matches ObjectMatcher API)
     std::unordered_map<dyno::Object*, Ellipse> proj_bboxes;
 
-    // Compute projection matrix P = K * [R | t]
-    const gtsam::Matrix3& R = frame->T_world_camera_.rotation().matrix();
-    const gtsam::Point3& t = frame->T_world_camera_.translation();
+    // Compute projection matrix P = K * [R_cw | t_cw]
+    // NOTE: T_world_camera_ is a pose that takes camera coords -> world coords (T_wc),
+    // but OA-SLAM's ellipsoid math expects a world->camera transform [R_cw | t_cw].
+    // So we must invert T_world_camera_ before building Rt and P.
+    const gtsam::Pose3& T_wc = frame->T_world_camera_;
+    const gtsam::Pose3  T_cw = T_wc.inverse();
+
+    const gtsam::Matrix3& R_cw = T_cw.rotation().matrix();
+    const gtsam::Point3&  t_cw = T_cw.translation();
     
     // Get camera intrinsic matrix K (Eigen 3x3)
     const gtsam::Matrix3& K = camera_->getParams().getCameraMatrixEigen();
     
-    // Construct [R | t] (3x4 matrix)
+    // Construct [R_cw | t_cw] (3x4 matrix, world -> camera)
     Eigen::Matrix<double, 3, 4> Rt;
-    Rt.block<3, 3>(0, 0) = R;
-    Rt.block<3, 1>(0, 3) = t;
+    Rt.block<3, 3>(0, 0) = R_cw;
+    Rt.block<3, 1>(0, 3) = t_cw;
     
-    // Compute projection matrix P = K * [R | t]
+    // Compute projection matrix P = K * [R_cw | t_cw]
     Eigen::Matrix<double, 3, 4> P = K * Rt;
+
+    // Debug: Log projection matrix components
+    // VLOG(1) << "[RGBDFrontend] Frame " << frame->getFrameId() 
+    //         << " - T_world_camera translation: [" << t.transpose() << "]";
+    // VLOG(1) << "[RGBDFrontend] Frame " << frame->getFrameId()
+    //         << " - T_world_camera rotation (euler ZYX): [" 
+    //         << frame->T_world_camera_.rotation().yaw() << ", "
+    //         << frame->T_world_camera_.rotation().pitch() << ", "
+    //         << frame->T_world_camera_.rotation().roll() << "]";
+    // VLOG(1) << "[RGBDFrontend] Frame " << frame->getFrameId()
+    //         << " - K matrix: fx=" << K(0,0) << ", fy=" << K(1,1) 
+    //         << ", cx=" << K(0,2) << ", cy=" << K(1,2);
 
     // Project all existing map objects and build proj_bboxes
     const auto objects = map_->GetAllObjects();
@@ -560,9 +599,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
     }
 
-    // Hungarian matcher does not require P; it uses frame->graph and proj_bboxes.
-    int nmatches = object_matcher_->MatchObjectsHungarian(*frame, proj_bboxes);
-    // LOG(INFO) << "ObjectMatcher matched " << nmatches << " objects";
+    // Use Wasserstein-based matcher with full 3D projection matrix P so that
+    // per-frame object projections can be cached for visualization.
+    int nmatches = object_matcher_->MatchObjectsWasserDistance(*frame, proj_bboxes, P);
+    LOG(INFO) << "ObjectMatcher matched " << nmatches << " objects";
 
 
 
@@ -716,12 +756,88 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
       const auto t_create_kf_end = std::chrono::steady_clock::now();
 
+      // Get depth data per detection from frame
+      const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+      
+      // Safety check: graph must be initialized
+      if (!pKF->graph) {
+        LOG(ERROR) << "processEdgeKeyFrame: pKF->graph is nullptr, skipping object creation";
+      }
+      
+      if (!map_) {
+        LOG(ERROR) << "processEdgeKeyFrame: map_ is nullptr, skipping object creation";
+      }
+      
+
+      for(auto [node_id, attribute] : pKF->graph->attributes){
+        if(!attribute.obj){
+            //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
+            //TODO check if match new
+
+            // Check if node_id is valid index for depth_data_per_det
+            if (node_id >= depth_data_per_det.size()) {
+                // VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
+                //         << " is out of bounds for depth_data_per_det (size=" 
+                //         << depth_data_per_det.size() << ")";
+                continue;
+            }
+            
+            const auto& depth_data = depth_data_per_det[node_id];
+            
+            // Check depth validity (same as ObjectsInitialization)
+            if (depth_data.first <= 0.01f || depth_data.first >= 15.0f) {
+                VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
+                        << " has invalid depth=" << depth_data.first;
+                continue;
+            }
+
+            Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+            // Construct Rt [R_cw | t_cw] from T_world_camera_
+            const gtsam::Pose3& T_wc = frame->T_world_camera_;
+            const gtsam::Pose3  T_cw = T_wc.inverse();
+            Matrix34d Rt;
+            Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
+            Rt.block<3, 1>(0, 3) = T_cw.translation();
+            
+          
+            //create new object
+            Object* obj = new Object(
+                static_cast<unsigned int>(attribute.label),
+                attribute.bbox,  // BBox2 is typedef of Eigen::Vector4d
+                attribute.ell,
+                static_cast<double>(attribute.confidence),
+                depth_data,
+                K_eigen,
+                Rt,
+                static_cast<long unsigned int>(frame->getFrameId()),
+                pKF.get()  // Convert shared_ptr to raw pointer
+            );
+            // if(obj->GetAssociatedMapPoints().size()<5){
+            //     delete obj;
+            //     continue;
+            // }
+            map_->AddObject(obj);
+            pKF->graph->attributes[node_id].obj = obj;
+            //auto proj = obj->GetEllipsoid().project(P);
+            //auto c = proj.GetCenter();
+            //auto axes = proj.GetAxes();
+            //double angle = proj.GetAngle();
+            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 255), 2);
+            //if(axes[0] <= 0.001 || axes[1] <= 0.001)
+            //    continue;
+            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, obj->GetColor(), 2);
+        }
+      }
+
+
       
       if (pKF) {
         {
           std::lock_guard<std::mutex> lock(last_kf_mutex_);
           last_keyframe_ = frame;
         }
+
+        
         
         optimization_queue_.push(pKF);
         VLOG(10) << "\033[32m[QUEUE PUSH]\033[0m kf_id=" << pKF->KF_ID
@@ -1428,64 +1544,127 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
   }
 }
 
-void RGBDInstanceFrontendModule::processEdgeKeyFrame(
-    const Frame::Ptr& frame, const gtsam::Pose3& pose_curr) {
-  const auto t0 = std::chrono::steady_clock::now();
-  // Convert Frame to KeyFrame format (from localmapping.cc line 222)
-  const auto t_kf0 = std::chrono::steady_clock::now();
-  KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
-  const auto t_kf1 = std::chrono::steady_clock::now();
+// void RGBDInstanceFrontendModule::processEdgeKeyFrame(
+//     const Frame::Ptr& frame, const gtsam::Pose3& pose_curr) {
+//   const auto t0 = std::chrono::steady_clock::now();
+//   // Convert Frame to KeyFrame format (from localmapping.cc line 222)
+//   const auto t_kf0 = std::chrono::steady_clock::now();
+//   KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
+//   const auto t_kf1 = std::chrono::steady_clock::now();
   
-  if (pKF) {
-    // Add to local map (from localmapping.cc line 226)
-    // Use mutex to protect local_map_ from concurrent access
-    // Lock only for the minimal time needed
-    const auto t_add0 = std::chrono::steady_clock::now();
-    size_t kf_count = 0;
-    {
-      std::lock_guard<std::mutex> lock(local_map_mutex_);
-      local_map_->addFrame2LocalMap(pKF);
-      kf_count = local_map_->mvKeyFrames.size();
+//   if (pKF) {
+//     // Add to local map (from localmapping.cc line 226)
+//     // Use mutex to protect local_map_ from concurrent access
+//     // Lock only for the minimal time needed
+//     const auto t_add0 = std::chrono::steady_clock::now();
+//     size_t kf_count = 0;
+//     {
+//       std::lock_guard<std::mutex> lock(local_map_mutex_);
+//       local_map_->addFrame2LocalMap(pKF);
+//       kf_count = local_map_->mvKeyFrames.size();
 
-      // Update covisibility cluster cache (heavy data) for snapshots
-      // Always update if clusters exist, even if cache is not empty (clusters may have changed)
-      if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
-        std::vector<std::vector<cv::Point3d>> clusterClouds;
-        std::vector<cv::Vec3b> clusterCloudColors;
-        edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
+//       // Update covisibility cluster cache (heavy data) for snapshots
+//       // Always update if clusters exist, even if cache is not empty (clusters may have changed)
+//       if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
+//         std::vector<std::vector<cv::Point3d>> clusterClouds;
+//         std::vector<cv::Vec3b> clusterCloudColors;
+//         edge_viz::visualizeAssociationResult(local_map_, clusterClouds, clusterCloudColors);
 
-        if (!clusterClouds.empty()) {
-          cluster_clouds_cache_ =
-              std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-                  std::move(clusterClouds));
-          cluster_colors_cache_ =
-              std::make_shared<const std::vector<cv::Vec3b>>(
-                  std::move(clusterCloudColors));
-          VLOG(2) << "Updated cluster cache in processEdgeKeyFrame: " 
-                  << cluster_clouds_cache_->size() << " clusters (kf_id=" << pKF->KF_ID << ")";
-        } else {
-          VLOG(2) << "processEdgeKeyFrame: clusters exist but visualizeAssociationResult returned empty (kf_id=" << pKF->KF_ID << ")";
-        }
-      } else {
-        VLOG(2) << "processEdgeKeyFrame: no clusters to visualize (kf_id=" << pKF->KF_ID 
-                << ", clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0) << ")";
-      }
-    }
-    const auto t_add1 = std::chrono::steady_clock::now();
+//         if (!clusterClouds.empty()) {
+//           cluster_clouds_cache_ =
+//               std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+//                   std::move(clusterClouds));
+//           cluster_colors_cache_ =
+//               std::make_shared<const std::vector<cv::Vec3b>>(
+//                   std::move(clusterCloudColors));
+//           // VLOG(2) << "Updated cluster cache in processEdgeKeyFrame: " 
+//           //         << cluster_clouds_cache_->size() << " clusters (kf_id=" << pKF->KF_ID << ")";
+//         } else {
+//           // VLOG(2) << "processEdgeKeyFrame: clusters exist but visualizeAssociationResult returned empty (kf_id=" << pKF->KF_ID << ")";
+//         }
+//       } else {
+//         // VLOG(2) << "processEdgeKeyFrame: no clusters to visualize (kf_id=" << pKF->KF_ID 
+//                 // << ", clusters=" << (local_map_ ? local_map_->mvEleEdgeClusters.size() : 0) << ")";
+//       }
+//     }
+//     const auto t_add1 = std::chrono::steady_clock::now();
     
-    const auto t1 = std::chrono::steady_clock::now();
-    const auto ms =
-        [](const auto& a, const auto& b) -> double {
-      return std::chrono::duration<double, std::milli>(b - a).count();
-    };
+//     const auto t1 = std::chrono::steady_clock::now();
+//     const auto ms =
+//         [](const auto& a, const auto& b) -> double {
+//       return std::chrono::duration<double, std::milli>(b - a).count();
+//     };
     
-    VLOG(1) << "EdgeKF frame=" << frame->getFrameId()
-            << " create_kf_ms=" << ms(t_kf0, t_kf1)
-            << " add_to_map_ms=" << ms(t_add0, t_add1)
-            << " total_ms=" << ms(t0, t1)
-            << " local_map_kfs=" << kf_count;
-  }
-}
+//     VLOG(1) << "EdgeKF frame=" << frame->getFrameId()
+//             << " create_kf_ms=" << ms(t_kf0, t_kf1)
+//             << " add_to_map_ms=" << ms(t_add0, t_add1)
+//             << " total_ms=" << ms(t0, t1)
+//             << " local_map_kfs=" << kf_count;
+
+
+//     // Get depth data per detection from frame
+//     const auto& depth_data_per_det = frame->getDepthDataPerDetection();
+    
+//     for(auto [node_id, attribute] : pKF->graph->attributes){
+//       if(!attribute.obj){
+//           //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
+//           //TODO check if match new
+
+//           // Check if node_id is valid index for depth_data_per_det
+//           if (node_id >= depth_data_per_det.size()) {
+//               // VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
+//               //         << " is out of bounds for depth_data_per_det (size=" 
+//               //         << depth_data_per_det.size() << ")";
+//               continue;
+//           }
+          
+//           const auto& depth_data = depth_data_per_det[node_id];
+          
+//           // Check depth validity (same as ObjectsInitialization)
+//           if (depth_data.first <= 0.01f || depth_data.first >= 15.0f) {
+//               VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
+//                       << " has invalid depth=" << depth_data.first;
+//               continue;
+//           }
+
+//           Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+//           // Construct Rt [R | t] from T_world_camera_
+//           Matrix34d Rt;
+//           Rt.block<3, 3>(0, 0) = frame->T_world_camera_.rotation().matrix();
+//           Rt.block<3, 1>(0, 3) = frame->T_world_camera_.translation();
+          
+        
+//           //create new object
+//           Object* obj = new Object(
+//               static_cast<unsigned int>(attribute.label),
+//               attribute.bbox,  // BBox2 is typedef of Eigen::Vector4d
+//               attribute.ell,
+//               static_cast<double>(attribute.confidence),
+//               depth_data,
+//               K_eigen,
+//               Rt,
+//               static_cast<long unsigned int>(frame->getFrameId()),
+//               pKF.get()  // Convert shared_ptr to raw pointer
+//           );
+//           // if(obj->GetAssociatedMapPoints().size()<5){
+//           //     delete obj;
+//           //     continue;
+//           // }
+//           map_->AddObject(obj);
+//           pKF->graph->attributes[node_id].obj = obj;
+//           //auto proj = obj->GetEllipsoid().project(P);
+//           //auto c = proj.GetCenter();
+//           //auto axes = proj.GetAxes();
+//           //double angle = proj.GetAngle();
+//           //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 255), 2);
+//           //if(axes[0] <= 0.001 || axes[1] <= 0.001)
+//           //    continue;
+//           //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, obj->GetColor(), 2);
+//       }
+//     }
+
+//   }
+// }
 
 KeyFramePtr RGBDInstanceFrontendModule::createKeyFrameFromFrame(
   const Frame::Ptr& frame, const gtsam::Pose3& pose_curr) {
@@ -1569,6 +1748,11 @@ KeyFramePtr pKF(new KeyFrame(
     cam_params.fx(), cam_params.fy(), 
     cam_params.cu(), cam_params.cv()));
   const auto t_kf_ctor1 = std::chrono::steady_clock::now();
+
+  // Copy graph from Frame to KeyFrame (graph contains object detection attributes)
+  if (frame->graph) {
+    pKF->graph = frame->graph;
+  }
 
 return pKF;
 }
@@ -1756,10 +1940,12 @@ void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame){
   
   // Get K from camera params
   Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
-  // Construct Rt [R | t] from T_world_camera_
+  // Construct Rt [R_cw | t_cw] from T_world_camera_
+  const gtsam::Pose3& T_wc = frame->T_world_camera_;
+  const gtsam::Pose3  T_cw = T_wc.inverse();
   Matrix34d Rt;
-  Rt.block<3, 3>(0, 0) = frame->T_world_camera_.rotation().matrix();
-  Rt.block<3, 1>(0, 3) = frame->T_world_camera_.translation();
+  Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
+  Rt.block<3, 1>(0, 3) = T_cw.translation();
   
   int count = 0;
   for (size_t di = 0; di < static_detection_result.detections.size(); ++di) {

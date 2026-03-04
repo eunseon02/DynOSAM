@@ -627,7 +627,7 @@ void KeyFrame::edgeCullingDepthParallel()
 {
     // Use char instead of atomic<bool>, use memory_order_relaxed to ensure basic thread safety
     std::vector<char> retainFlags(mvEdges.size());
-    
+
     tbb::parallel_for(0, (int)mvEdges.size(), [&](int i) {
         Edge& currentEdge = mvEdges[i];
         int validPointCount = 0;

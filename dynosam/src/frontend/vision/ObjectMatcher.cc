@@ -84,6 +84,8 @@ int ObjectMatcher::MatchObjectsHungarian(Frame& CurrentFrame,
     }
     assignment = dlib::max_cost_assignment(cost);
 
+    // Collect per-object projection results for this frame
+    std::map<ObjectId, ObjectProjectionResult> static_object_projections;
 
     for(auto [node_id, attribute] : CurrentFrame.graph->attributes){
         auto assigned_obj_idx = assignment[node_id];
@@ -187,6 +189,9 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
     // New method: use 3D Gaussian projection
     int nmatches=0;
 
+    // Per-frame static object projections (filled only for matched objects)
+    std::map<ObjectId, ObjectProjectionResult> static_object_projections;
+
     for(auto [node_id, attribute] : CurrentFrame.graph->attributes){
         double dis_max = 0;
         Object* matched_obj = nullptr;
@@ -219,9 +224,33 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
             CurrentFrame.graph->attributes[node_id].obj = matched_obj;
             CurrentFrame.graph->attributes[node_id].obj->last_obs_ids_and_max_iou.first = std::make_pair(CurrentFrame.getFrameId(), node_id);
             CurrentFrame.graph->attributes[node_id].obj->last_obs_ids_and_max_iou.second = dis_max;
+
+            // Also compute a 2D projection from the matched 3D ellipsoid and cache it
+            if (CurrentFrame.graph->attributes[node_id].obj) {
+                auto* obj = CurrentFrame.graph->attributes[node_id].obj;
+                // Project 3D ellipsoid with camera matrix P
+                Ellipse proj_ell = obj->GetEllipsoid().project(P);
+
+                ObjectProjectionResult proj;
+                proj.object_id    = obj->GetId();
+                proj.ellipse      = proj_ell;           // store projected 2D ellipse
+                proj.category_id  = obj->GetCategoryId();
+                proj.color        = obj->GetColor();
+                proj.in_map       = true;
+                proj.confidence   = static_cast<float>(dis_max);
+
+                static_object_projections[proj.object_id] = proj;
+            }
         }
     }
-    
+
+    // Expose per-frame static object projections through the Frame
+    CurrentFrame.static_object_projections_ = std::move(static_object_projections);
+
+    // VLOG(1) << "[ObjectMatcher] Frame " << CurrentFrame.getFrameId()
+    //         << " - Total matches: " << nmatches 
+    //         << ", cached projections: " << CurrentFrame.static_object_projections_.size();
+
     return nmatches;
 }
 

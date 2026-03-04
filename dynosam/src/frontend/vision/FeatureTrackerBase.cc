@@ -121,10 +121,15 @@ bool ImageTracksParams::showIntermediateTracking() const {
 bool ImageTracksParams::drawObjectBoundingBox() const {
   return isDebug() && draw_object_bounding_box;
 }
+bool ImageTracksParams::drawObjectEllipse() const {
+  return isDebug() && draw_object_ellipse;
+}
 bool ImageTracksParams::drawObjectMask() const {
   return isDebug() && draw_object_mask;
 }
-
+bool ImageTracksParams::useCategoryColors() const {
+  return isDebug() && use_category_colors;
+}
 int ImageTracksParams::bboxThickness() const {
   return isDebug() ? bbox_thickness_debug : bbox_thickness;
 }
@@ -248,6 +253,23 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     //   const Ellipse& ellipse = object_observation_pair.second.ellipse;
     //   utils::drawEllipseProjections(img_rgb, ellipse, Color::uniqueId(object_id).bgra(), bbox_thickness/3);
     // }
+  }
+  
+  // Draw static object projections
+  
+  if (config.drawObjectEllipse()) {
+    // VLOG(1) << "[FeatureTrackerBase] Drawing " << current_frame.static_object_projections_.size() 
+    //         << " ellipse projections for frame " << current_frame.getFrameId();
+    for (const auto object_projection : current_frame.static_object_projections_){
+      const Ellipse& ellipse = object_projection.second.ellipse;
+      const cv::Scalar& color = object_projection.second.color;
+      // const auto& center = ellipse.GetCenter();
+      // const auto& axes = ellipse.GetAxes();
+      // VLOG(1) << "[FeatureTrackerBase] Drawing ellipse for obj_id=" << object_projection.first
+      //         << " - center=[" << center.transpose() << "], axes=[" << axes.transpose() 
+      //         << "], angle=" << ellipse.GetAngle() * 180.0 / M_PI << " deg";
+      utils::drawEllipseProjections(img_rgb, ellipse, color, bbox_thickness, config.useCategoryColors());
+    }
   }
 
   if (config.drawObjectMask()) {
@@ -430,6 +452,9 @@ void declare_config(ImageTracksParams& config) {
 
   field(config.draw_object_bounding_box, "draw_object_bounding_box");
   field(config.draw_object_mask, "draw_object_mask");
+  field(config.draw_object_ellipse, "draw_object_ellipse");
+
+  field(config.use_category_colors, "use_category_colors");
 
   field(config.is_debug, "is_debug");
 }

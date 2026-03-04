@@ -39,6 +39,7 @@
 #include <opencv4/opencv2/opencv.hpp>
 
 #include "dynosam_common/Cuda.hpp"
+#include "dynosam_common/Ellipse.hpp"
 // #include <opencv4/opencv2/core/parallel/backend/
 
 #include "dynosam_common/Types.hpp"  //for template to_string
@@ -439,6 +440,23 @@ void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
     cv::line(image, image_points[0], image_points[3], cv::Scalar(255, 0, 0),
              2);  // Z-axis in blue
   }
+}
+
+void drawEllipseProjections(cv::Mat& image, const Ellipse& ellipse,
+                            const cv::Scalar& color, const int& thickness,
+                            bool /*use_category_colors*/) {
+  // Convert Eigen types from Ellipse to OpenCV types expected by cv::ellipse
+  const Eigen::Vector2d center_eig = ellipse.GetCenter();
+  const Eigen::Vector2d axes_eig   = ellipse.GetAxes();
+  const double angle_deg           = ellipse.GetAngle() * 57.2957795131;
+
+  const cv::Point2f center_cv(static_cast<float>(center_eig[0]),
+                              static_cast<float>(center_eig[1]));
+  const cv::Size2f axes_cv(static_cast<float>(axes_eig[0]),
+                           static_cast<float>(axes_eig[1]));
+
+  cv::ellipse(image, center_cv, axes_cv, angle_deg,
+              0.0, 360.0, color, thickness);
 }
 
 // void drawObjectPoseTrajectory(cv::Mat& image, const cv::Mat& K, const

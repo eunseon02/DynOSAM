@@ -290,11 +290,15 @@ namespace dyno
             if (!kf) {
                 continue;  // Skip null keyframes
             }
-            // Convert Sophus::SE3d to Matrix34d
-            const Sophus::SE3d& pose = kf->KF_pose_g;
+            // Convert Sophus::SE3d pose (camera -> world, T_wc) to world -> camera (T_cw)
+            const Sophus::SE3d& pose_wc = kf->KF_pose_g;
+            Eigen::Matrix4d T_wc = pose_wc.matrix();
+            Eigen::Matrix4d T_cw = T_wc.inverse();
+
             Matrix34d Rt;
-            Rt.block<3,3>(0,0) = pose.rotationMatrix();
-            Rt.col(3) = pose.translation();
+            Rt.block<3,3>(0,0) = T_cw.topLeftCorner<3,3>();
+            Rt.col(3)          = T_cw.topRightCorner<3,1>();
+
             Eigen::Matrix<double, 3, 4> P = K_ * Rt;
             const Ellipse& det_ell = ellipses_[i];
 

@@ -34,6 +34,7 @@
 
 #include "dynosam_common/Edge.hpp"
 #include "dynosam_common/Types.hpp"
+#include "dynosam_common/Ellipse.hpp"
 
 #define CHECK_MAT_TYPES(mat1, mat2)                                            \
   using namespace dyno::utils;                                                 \
@@ -258,6 +259,20 @@ cv::Mat drawOrganizedEdge(const cv::Mat& img_background,
 void drawObjectPoseAxes(cv::Mat& image, const cv::Mat& K, const cv::Mat& D,
                         const std::vector<gtsam::Pose3>& poses_c,
                         float scale = 0.2);
+
+
+/**
+ * @brief Draws a projected ellipse on an image.
+ *
+ * @param image cv::Mat&
+ * @param ellipse const Ellipse&
+ * @param color const cv::Scalar&
+ * @param thickness const int&
+ * @param use_category_colors bool
+ */
+void drawEllipseProjections(cv::Mat& image, const Ellipse& ellipse,
+                            const cv::Scalar& color, const int& thickness,
+                            bool use_category_colors);
 
 /**
  * I have absolutely no idea why but OpenCV seemds to have removed support for

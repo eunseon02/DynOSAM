@@ -391,6 +391,8 @@ int main(int argc, char* argv[]) {
             if (edge_viewer_thread_.joinable()) {
               edge_viewer_thread_.join();
             }
+            // Clear global VoViewer pointer when viewer is destroyed
+            dyno::g_vo_viewer = nullptr;
             LOG(INFO) << "Edge-based VoViewer thread stopped";
           }
         }
@@ -431,6 +433,9 @@ int main(int argc, char* argv[]) {
           // Create VoViewer for edge-based visualization
           voViewer viewer("DynoSAM: Edge-based Local Map Viewer");
           
+          // Set global VoViewer pointer for pause state checking
+          dyno::g_vo_viewer = &viewer;
+          
           std::vector<std::vector<cv::Point3d>> clusterClouds;
           std::vector<cv::Vec3b> clusterCloudColors;
           std::vector<std::vector<cv::Point3d>> localMapClouds;
@@ -444,12 +449,25 @@ int main(int argc, char* argv[]) {
           
           LOG(INFO) << "Edge-based VoViewer loop started";
           
+          // Set the map from frontend module (shared pointer)
+          bool map_set = false;
+          
           int loop_count = 0;
           while (edge_viewer_running_) {
             loop_count++;
             // Try to get frontend module
             auto frontend_module = g_frontend_module.lock();
             if (frontend_module) {
+              // Set map once (shared pointer, so updates are automatically reflected)
+              if (!map_set) {
+                auto map = frontend_module->getMap();
+                if (map) {
+                  viewer.setMap(map);
+                  map_set = true;
+                  LOG(INFO) << "VoViewer: Map set successfully";
+                }
+              }
+              
               // Get latest visualization snapshot (always available, updated every frame)
               auto latest_snap = frontend_module->getLatestVisualizationData();
 

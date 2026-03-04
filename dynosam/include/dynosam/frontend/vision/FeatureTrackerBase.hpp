@@ -106,6 +106,8 @@ class ImageTracksParams {
   bool showIntermediateTracking() const;
   bool drawObjectBoundingBox() const;
   bool drawObjectMask() const;
+  bool drawObjectEllipse() const;
+  bool useCategoryColors() const;
   int bboxThickness() const;
   int featureThickness() const;
 
@@ -133,6 +135,10 @@ class ImageTracksParams {
   bool draw_object_bounding_box{true};
   //! Draw the detection mask of the whole object
   bool draw_object_mask{false};
+  //! Draw projected ellipses of objects
+  bool draw_object_ellipse{true};
+  //! Use category colors instead of object colors
+  bool use_category_colors{false};
 };
 
 class FeatureTrackerBase {

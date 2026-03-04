@@ -209,7 +209,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   // Edge-based keyframe management
   bool shouldAddEdgeKeyFrame(const gtsam::Pose3& pose_curr, 
                              const gtsam::Pose3& pose_last) const;
-  void processEdgeKeyFrame(const Frame::Ptr& frame, const gtsam::Pose3& pose_curr);
+  // void processEdgeKeyFrame(const Frame::Ptr& frame, const gtsam::Pose3& pose_curr);
   KeyFramePtr createKeyFrameFromFrame(const Frame::Ptr& frame, 
                                                  const gtsam::Pose3& pose_curr);
   void optimizeEdgeSlidingWindow();
@@ -242,6 +242,12 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   EdgeVisualizationDataPtr getLatestVisualizationData() const {
     std::lock_guard<std::mutex> lock(viz_mutex_);
     return latest_visualization_data_;
+  }
+  
+  // Getter for global object map (for visualization)
+  // Thread-safe: returns a copy of the pointer (shared_ptr is thread-safe for reading)
+  std::shared_ptr<dyno::EdgeMap> getMap() const {
+    return map_;
   }
 
 };

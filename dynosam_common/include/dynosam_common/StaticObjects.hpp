@@ -61,6 +61,20 @@ private:
     friend std::ostream& operator<<(std::ostream& os,
                                     const static_objects::ObjectDetectionResult& res);
   };
+
+
+  
   
 }  // namespace static_objects
+
+
+struct ObjectProjectionResult {
+  ObjectId object_id;
+  Ellipse ellipse;
+  unsigned int category_id;
+  cv::Scalar color;
+  bool in_map;
+  float confidence;
+};
+
 }  // namespace dyno

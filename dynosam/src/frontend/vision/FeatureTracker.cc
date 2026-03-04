@@ -308,7 +308,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
   // TODO: SingleDetectionResult really does not need the tracklet ids they
   // are never actually used!! this prevents the frame from needing to do the
   // same calculations we've already done
-  std::map<ObjectId, SingleDetectionResult> object_observations;  // Dynamic objects only
+  std::map<ObjectId, SingleDetectionResult> object_observations;         // Dynamic objects only
   std::map<ObjectId, SingleDetectionResult> static_object_observations;  // Static objects only
   
   // 1) Dynamic objects (if any) from boundary_mask_result
@@ -360,6 +360,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
       cv::Rect bb_detection(x, y, width, height);
 
+      // 2D bbox observation for Tracks window
       SingleDetectionResult observation;
       observation.object_id = object_id;
       observation.bounding_box = bb_detection;
@@ -385,7 +386,7 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
       dynamic_features, static_edges, object_observations, info_);
 
   // Set static object observations (separate from dynamic objects)
-  new_frame->getStaticObjectObservations() = static_object_observations;
+  // new_frame->getStaticObjectObservations() = static_object_observations;
 
   // Set depth data per detection (for ObjectsInitialization)
   new_frame->getDepthDataPerDetection() = depth_data_per_detection;
