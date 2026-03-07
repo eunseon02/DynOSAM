@@ -52,6 +52,9 @@ voViewer::voViewer(std::string windowName)
     show_covisibility = std::make_shared<pangolin::Var<bool>>("menu.Co-visibility", true, true);
     slide_bar = std::make_shared<pangolin::Var<double>>("menu.slider", 0.5, 0, 1);
     menuPause = std::make_shared<pangolin::Var<bool>>("menu.Pause", false, true);
+    menuShowObjects = std::make_shared<pangolin::Var<bool>>("menu.Show Objects", true, true);
+    menuShowLocalEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Local Edge Map", true, true);
+    menuShowEnvironment = std::make_shared<pangolin::Var<bool>>("menu.Show Environment Edge Map", true, true);
 
     cameraPose = Eigen::MatrixXd::Identity(4,4);
     gtPose = Eigen::MatrixXd::Identity(4,4);
@@ -98,14 +101,14 @@ void voViewer::render_loop()
             drawCamera(sliding_window[i], cv::Vec3b(200,50,50), 0.03);
         }
 
-        if(!localMap_cloud.empty()){
+        if(*menuShowLocalEdgeMap && !localMap_cloud.empty()){
             for(size_t i = 0; i < localMap_cloud.size(); ++i)
             {
                 drawPointCloudColorSequencial(localMap_cloud[i], cv::Vec3b(255, 50, 50), 2);
             }
         }
 
-        if(!environment_cloud.empty())
+        if(*menuShowEnvironment && !environment_cloud.empty())
         {
             for(size_t i = 0; i < environment_cloud.size(); ++i)
             {
@@ -130,7 +133,9 @@ void voViewer::render_loop()
         }
 
         //绘制地图对象 (ellipsoids)
-        update_map_objects();
+        if(*menuShowObjects) {
+            update_map_objects();
+        }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
 
@@ -168,7 +173,7 @@ void voViewer::update_map_objects()
     glLineWidth(2);
 
     for (auto* obj : objects) {
-        if (!obj) continue;
+        if (!obj || obj->isBad()) continue;
 
         // Use the per-object color
         cv::Scalar c = obj->GetColor();

@@ -3,6 +3,62 @@
 
 namespace dyno {
 
+std::vector<std::size_t> KeyFrame::GetEdgeIndicesInBox(float x_min, float x_max,
+                                                       float y_min, float y_max) const
+{
+    std::vector<std::size_t> out;
+    if (mGrid.empty() || mvEdges.empty()) return out;
+
+    // Grid constants must match Frame's grid (Frame.hpp)
+    constexpr int GRID_COLS = 64;
+    constexpr int GRID_ROWS = 48;
+
+    const float mnMinX = 0.0f;
+    const float mnMinY = 0.0f;
+    const float mnMaxX = static_cast<float>(mWidth);
+    const float mnMaxY = static_cast<float>(mHeight);
+    if (mnMaxX <= mnMinX || mnMaxY <= mnMinY) return out;
+
+    const float mfGridElementWidthInv  = static_cast<float>(GRID_COLS) / (mnMaxX - mnMinX);
+    const float mfGridElementHeightInv = static_cast<float>(GRID_ROWS) / (mnMaxY - mnMinY);
+
+    int nMinCellX = std::max(0, static_cast<int>(std::floor((x_min - mnMinX) * mfGridElementWidthInv)));
+    if (nMinCellX >= GRID_COLS) return out;
+    int nMaxCellX = std::min(GRID_COLS - 1, static_cast<int>(std::ceil((x_max - mnMinX) * mfGridElementWidthInv)));
+    if (nMaxCellX < 0) return out;
+
+    int nMinCellY = std::max(0, static_cast<int>(std::floor((y_min - mnMinY) * mfGridElementHeightInv)));
+    if (nMinCellY >= GRID_ROWS) return out;
+    int nMaxCellY = std::min(GRID_ROWS - 1, static_cast<int>(std::ceil((y_max - mnMinY) * mfGridElementHeightInv)));
+    if (nMaxCellY < 0) return out;
+
+    std::unordered_set<std::size_t> seen;
+    for (int ix = nMinCellX; ix <= nMaxCellX; ++ix) {
+        if (ix < 0 || ix >= static_cast<int>(mGrid.size())) continue;
+        for (int iy = nMinCellY; iy <= nMaxCellY; ++iy) {
+            if (iy < 0 || iy >= static_cast<int>(mGrid[ix].size())) continue;
+
+            const auto& cell = mGrid[ix][iy];
+            for (std::size_t enc : cell) {
+                if (seen.insert(enc).second) {
+                    // Optional: verify inside bbox using actual point coordinates
+                    int edge_id = static_cast<int>(enc / 100000);
+                    int pt_idx  = static_cast<int>(enc % 100000);
+                    auto itEdge = mmIndexMap.find(edge_id);
+                    if (itEdge == mmIndexMap.end()) continue;
+                    const auto& edge = mvEdges[itEdge->second];
+                    if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
+                    const auto& pt = edge.mvPoints[pt_idx];
+                    if (pt.x > x_min && pt.x < x_max && pt.y > y_min && pt.y < y_max) {
+                        out.push_back(enc);
+                    }
+                }
+            }
+        }
+    }
+    return out;
+}
+
 KeyFrame::KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vEdges, const cv::Mat& matRGB, const cv::Mat& matDepth,
     const float& fx, const float& fy, const float& cx, const float& cy)
 {

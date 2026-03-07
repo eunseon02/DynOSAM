@@ -158,6 +158,9 @@ private:
     std::shared_ptr<pangolin::Var<bool>>      show_covisibility;
     std::shared_ptr<pangolin::Var<double>> slide_bar;
     std::shared_ptr<pangolin::Var<bool>>      menuPause;
+    std::shared_ptr<pangolin::Var<bool>>      menuShowObjects;
+    std::shared_ptr<pangolin::Var<bool>>      menuShowLocalEdgeMap;
+    std::shared_ptr<pangolin::Var<bool>>      menuShowEnvironment;
 
     // Global object map (shared with RGBDInstanceFrontendModule)
     std::shared_ptr<dyno::EdgeMap> map_;

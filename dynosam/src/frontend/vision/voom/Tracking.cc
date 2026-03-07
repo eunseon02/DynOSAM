@@ -668,6 +668,7 @@ void Tracking::Track(bool use_object)
             Matrix34d P;
             P = K_ * Rt;
             for(auto obj : mpMap->GetAllObjects()){
+                if(obj->isBad()) continue;
                 //if(obj->GetLastObsFrameId() + 500 < mCurrentFrame.mnId  && !obj->GetFlagOptimized()){//already M frames not seen and it has been not usually seen
                     //TODO DELETE
                     //continue;
@@ -928,8 +929,8 @@ void Tracking::ObjectsInitialization(){
             count += 1;
         }
     }
-    std::vector<Object*> objects = mpMap->GetAllObjects();
-    std::cout<<"count:"<<count<<"Map has "<<objects.size()<<" objects"<<std::endl;
+    // std::vector<Object*> objects = mpMap->GetAllObjects();
+    // std::cout<<"count:"<<count<<"Map has "<<objects.size()<<" objects"<<std::endl;
 }
 
 void Tracking::StereoInitialization()

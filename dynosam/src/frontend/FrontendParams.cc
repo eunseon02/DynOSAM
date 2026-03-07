@@ -54,6 +54,8 @@ void declare_config(FrontendParams& config) {
   field(config.max_background_depth, "max_background_depth");
   field(config.max_object_depth, "max_object_depth");
 
+  field(config.min_confidence_score, "min_confidence_score");
+
   field(config.use_ego_motion_pnp, "use_ego_motion_pnp");
   field(config.use_object_motion_pnp, "use_object_motion_pnp");
   field(config.refine_camera_pose_with_joint_of,

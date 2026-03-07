@@ -49,6 +49,9 @@ struct FrontendParams {
   double max_background_depth = 40.0;
   double max_object_depth = 25.0;
 
+  // object detection confidence threshold
+  double min_confidence_score = 0.2;
+
   // TODO: add depth cov
   // TODO: add projection cov (should this be for back and frontend?)
 

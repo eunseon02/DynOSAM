@@ -8,6 +8,9 @@ scene_flow_dist_threshold: 0.5
 max_background_depth: 200.0
 max_object_depth: 30.0
 
+# Minimum confidence score threshold for object detection filtering
+min_confidence_score: 0.2
+
 # max_object_depth: 8.0 #indoors
 
 # When using rgbd-pipeline, ego-motion will be solved using 3d-2d pnp, not stereo (3d-3d) pnp

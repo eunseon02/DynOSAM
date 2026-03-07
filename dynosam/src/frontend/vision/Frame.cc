@@ -40,6 +40,12 @@
 
 namespace dyno {
 
+
+bool Frame::mbInitialComputations=true;
+float Frame::mnMinX, Frame::mnMinY, Frame::mnMaxX, Frame::mnMaxY;
+float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
+
+
 Frame::Frame(
     FrameId frame_id, Timestamp timestamp, Camera::Ptr camera,
     const ImageContainer& image_container,
@@ -76,7 +82,16 @@ Frame::Frame(
   cam_cx_ = cam_params.cu();
   cam_cy_ = cam_params.cv();
 
-
+  if (mbInitialComputations)
+  {
+    mbInitialComputations = false;
+    mnMinX = 0.0f;
+    mnMinY = 0.0f;
+    mnMaxX = static_cast<float>(img_width_);
+    mnMaxY = static_cast<float>(img_height_);
+    mfGridElementWidthInv = static_cast<float>(FRAME_GRID_COLS) / (mnMaxX - mnMinX);
+    mfGridElementHeightInv = static_cast<float>(FRAME_GRID_ROWS) / (mnMaxY - mnMinY);
+  }
   //-- Depth-related preprocessing: remove inconsistent edge features
   // Validate image_container_ and static_edges_ before processing
   if (!image_container_.hasDepth()) {
@@ -141,6 +156,8 @@ Frame::Frame(
       }
     }
   }
+
+  // assignEdgePointToGrid() is now integrated into assignPropertyIdx() to avoid redundant loops
   
 }
 
@@ -960,7 +977,28 @@ std::vector<int> Frame::edgeWiseCorrespondenceReproject(Edge& query_edge, const 
 
 void Frame::assignPropertyIdx()
 {
-    //-- 根据edges的ID构造ID与索引的映射
+    //-- 根据edges的ID构造ID与索引的映射Frame::GetFeaturesInBox
+    //-- 同时将edge point分配到grid中 (避免单独遍历)
+    
+    // 先计算total edge points数量用于reserve
+    int total_points = 0;
+    for(size_t i = 0; i < static_edges_.size(); ++i)
+    {
+        total_points += static_cast<int>(static_edges_[i].mvPoints.size());
+    }
+    
+    // Grid 초기화 및 reserve
+    int nReserve = 1;
+    if (FRAME_GRID_COLS > 0 && FRAME_GRID_ROWS > 0) {
+        nReserve = std::max(1, total_points / (FRAME_GRID_COLS * FRAME_GRID_ROWS));
+    }
+    for(unsigned int i = 0; i < FRAME_GRID_COLS; ++i) {
+        for(unsigned int j = 0; j < FRAME_GRID_ROWS; ++j) {
+            mGrid[i][j].clear();
+            mGrid[i][j].reserve(nReserve);
+        }
+    }
+    
     for(size_t i = 0; i < static_edges_.size(); ++i)
     {
         //-- 更新edge_id与edge在static_edges_中的index的映射关系
@@ -978,6 +1016,7 @@ void Frame::assignPropertyIdx()
         auto& edge = static_edges_[i];
 
         //-- 对于边缘中的每个边缘点，更新其对帧中所有边缘的索引
+        //-- 同时将该edge point分配到grid cell中
         for(int j = 0; j < edge.mvPoints.size(); ++j)
         {
             auto& point = edge.mvPoints[j];
@@ -985,6 +1024,17 @@ void Frame::assignPropertyIdx()
             point.frame_edge_ID = edge_id;
             //-- 更新边缘点列表索引
             point.frame_point_index = static_cast<int>(j);
+            
+            //-- 将edge point分配到grid (edge point 기준)
+            int nGridPosX, nGridPosY;
+            if(PosInGrid(point, nGridPosX, nGridPosY))
+            {
+                // Encode (edge_id, point_index) as size_t, consistent with GetFeaturesInBox
+                std::size_t encoded_index =
+                    static_cast<std::size_t>(edge_id) * 100000 +
+                    static_cast<std::size_t>(j);
+                mGrid[nGridPosX][nGridPosY].push_back(encoded_index);
+            }
         }
     }
 }
@@ -1528,8 +1578,90 @@ void Frame::getFineSampledPoints(int bias)
             continue;
         }
     }
+
 }
 
+bool Frame::PosInGrid(const orderedEdgePoint &pt, int &posX, int &posY)
+{
+    posX = round((pt.x-mnMinX)*mfGridElementWidthInv);
+    posY = round((pt.y-mnMinY)*mfGridElementHeightInv);
+
+    //Edge point coordinates could go out of the image
+    if(posX<0 || posX>=FRAME_GRID_COLS || posY<0 || posY>=FRAME_GRID_ROWS)
+        return false;
+
+    return true;
+}
+
+
+vector<size_t> Frame::GetFeaturesInBox(const float &x_min, const float &x_max, const float  &y_min, const float  &y_max, const int minLevel, const int maxLevel) const
+{
+    vector<size_t> vIndices;
+    
+    // Validate edge_point_lookup_map_ before accessing
+    if (edge_point_lookup_map_.empty() || static_edges_.empty()) {
+        return vIndices;
+    }
+
+    // Define search region bounds (integer pixel coordinates)
+    int minX = static_cast<int>(std::max(0.0f, std::floor(x_min)));
+    int maxX = static_cast<int>(std::min(static_cast<float>(edge_point_lookup_map_.cols - 1), std::ceil(x_max)));
+    int minY = static_cast<int>(std::max(0.0f, std::floor(y_min)));
+    int maxY = static_cast<int>(std::min(static_cast<float>(edge_point_lookup_map_.rows - 1), std::ceil(y_max)));
+
+    if (minX > maxX || minY > maxY) {
+        return vIndices;
+    }
+
+    // Use a set to avoid duplicate edge points
+    std::set<std::pair<int, int>> seen_points; // (edge_id, point_index)
+
+    // Traverse all pixels in the search region
+    for(int py = minY; py <= maxY; ++py)
+    {
+        for(int px = minX; px <= maxX; ++px)
+        {
+            const cv::Vec2i& pixel = edge_point_lookup_map_.at<cv::Vec2i>(py, px);
+            int edgeID = pixel[0];     // frame_edge_ID
+            int pointIdx = pixel[1];   // frame_point_index
+
+            // Skip invalid points
+            if (edgeID == -1 || pointIdx == -1) continue;
+
+            // Check if we've already seen this point
+            std::pair<int, int> point_key(edgeID, pointIdx);
+            if (seen_points.find(point_key) != seen_points.end()) {
+                continue;
+            }
+
+            // Validate edge_id_to_index_map_ before accessing
+            auto it = edge_id_to_index_map_.find(edgeID);
+            if (it == edge_id_to_index_map_.end()) {
+                continue;  // Skip if edgeID not found in map
+            }
+
+            const auto& edge = static_edges_[it->second];
+            if (pointIdx < 0 || pointIdx >= static_cast<int>(edge.mvPoints.size())) {
+                continue;  // Skip if point index is out of range
+            }
+
+            const orderedEdgePoint& point = edge.mvPoints[pointIdx];
+
+            // Check if point is actually inside the box (using exact coordinates)
+            if (point.x > x_min && point.x < x_max && point.y > y_min && point.y < y_max)
+            {
+                // Encode (edge_id, point_index) as a single size_t
+                // Use a simple encoding: edge_id * large_number + point_index
+                // Assuming max point_index < 100000, we can use edge_id * 100000 + point_index
+                size_t encoded_index = static_cast<size_t>(edgeID) * 100000 + static_cast<size_t>(pointIdx);
+                vIndices.push_back(encoded_index);
+                seen_points.insert(point_key);
+            }
+        }
+    }
+
+    return vIndices;
+}
 
 
 }  // namespace dyno

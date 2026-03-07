@@ -186,7 +186,8 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
 
 int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordered_map<Object*, Ellipse> proj_bboxes, const Eigen::Matrix<double, 3, 4>& P)
 {
-    // New method: use 3D Gaussian projection
+    // New method: keep 2D-2D Wasserstein matching (same as voom),
+    // but accept P so we can cache per-frame projected ellipses for visualization.
     int nmatches=0;
 
     // Per-frame static object projections (filled only for matched objects)
@@ -196,14 +197,16 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
         double dis_max = 0;
         Object* matched_obj = nullptr;
         auto bb_det = attribute.bbox;
-        for(auto it : proj_bboxes){
-            // Use 3D Gaussian projection instead of pre-projected ellipse
-            double wasser_dis = normalized_gaussian_wasserstein_2d_from_ellipsoid(
-                it.first->GetEllipsoid(), attribute.ell, P, 10);
-            double iou = bboxes_iou(it.second.ComputeBbox(), bb_det);
-            if(wasser_dis>dis_max && iou>0.01){
-                dis_max = wasser_dis;
-                matched_obj = it.first;
+        for (auto& it : proj_bboxes) {
+            Object* obj   = it.first;
+            const Ellipse& proj = it.second;  // 2D projection of this object's ellipsoid
+
+            // 2D-2D Wasserstein, identical to voom's MatchObjectsWasserDistance
+            double wasser_dis = normalized_gaussian_wasserstein_2d(proj, attribute.ell, 10);
+            double iou        = bboxes_iou(proj.ComputeBbox(), bb_det);
+            if (wasser_dis > dis_max && iou > 0.01) {
+                dis_max    = wasser_dis;
+                matched_obj = obj;
             }
         }
         
@@ -225,11 +228,19 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
             CurrentFrame.graph->attributes[node_id].obj->last_obs_ids_and_max_iou.first = std::make_pair(CurrentFrame.getFrameId(), node_id);
             CurrentFrame.graph->attributes[node_id].obj->last_obs_ids_and_max_iou.second = dis_max;
 
-            // Also compute a 2D projection from the matched 3D ellipsoid and cache it
+            // Also cache a 2D projection for visualization.
+            // Prefer the already-computed proj_bboxes entry; fall back to projecting with P.
             if (CurrentFrame.graph->attributes[node_id].obj) {
                 auto* obj = CurrentFrame.graph->attributes[node_id].obj;
-                // Project 3D ellipsoid with camera matrix P
-                Ellipse proj_ell = obj->GetEllipsoid().project(P);
+
+                Ellipse proj_ell;
+                auto it_proj = proj_bboxes.find(obj);
+                if (it_proj != proj_bboxes.end()) {
+                    proj_ell = it_proj->second;
+                } else {
+                    // Fallback: project 3D ellipsoid with camera matrix P
+                    proj_ell = obj->GetEllipsoid().project(P);
+                }
 
                 ObjectProjectionResult proj;
                 proj.object_id    = obj->GetId();

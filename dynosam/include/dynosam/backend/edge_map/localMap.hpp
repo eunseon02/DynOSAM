@@ -40,6 +40,9 @@ public:
     std::vector<elementEdgeCluster> mvEleEdgeClusters;
     std::map<unsigned int, int> mmClusterID2index;
 
+    //-- Recent added objects, used for object culling
+    std::list<Object*> mlpRecentAddedObjects;
+
     //-- Keyframes that compose this local map and their poses
     std::vector<KeyFramePtr> mvKeyFrames;
     std::map<int, int> mmKFID2KFindex;

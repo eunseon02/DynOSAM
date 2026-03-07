@@ -51,7 +51,7 @@
 // #include "dynosam_common/EdgeSelector.hpp"
 #include "dynosam_cv/RGBDCamera.hpp"
 #include "dynosam/visualizer/EdgeVizUtils.hpp"
-#include "dynosam/backend/edge_map/Object.hpp"
+#include "dynosam/frontend/vision/Object.hpp"
 
 
 DEFINE_bool(use_frontend_logger, false,
@@ -282,7 +282,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
   // Initialize first frame pose to identity
   frame->T_world_camera_ = gtsam::Pose3::Identity();
 
-  ObjectsInitialization(frame);
   // Create first keyframe if edge features are enabled
   if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
     const gtsam::Pose3& pose_curr = frame->T_world_camera_;
@@ -313,6 +312,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
     
     if (pKF) {
+      // Initialize objects after the first KeyFrame exists so we can gate with edge-point support.
+      ObjectsInitialization(frame, pKF.get());
+
       // Add to local map
       {
         std::lock_guard<std::mutex> lock(local_map_mutex_);
@@ -565,6 +567,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     const auto objects = map_->GetAllObjects();
     for (auto* obj : objects) {
       if (!obj) continue;
+      if (obj->isBad()) continue;
 
       auto proj = obj->GetEllipsoid().project(P);
       auto c3d = obj->GetEllipsoid().GetCenter();
@@ -602,7 +605,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     // Use Wasserstein-based matcher with full 3D projection matrix P so that
     // per-frame object projections can be cached for visualization.
     int nmatches = object_matcher_->MatchObjectsWasserDistance(*frame, proj_bboxes, P);
-    LOG(INFO) << "ObjectMatcher matched " << nmatches << " objects";
+    VLOG(2) << "ObjectMatcher matched " << nmatches << " objects";
 
 
 
@@ -769,10 +772,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       }
       
 
+      const double min_confidence_score = getFrontendParams().min_confidence_score;
       for(auto [node_id, attribute] : pKF->graph->attributes){
         if(!attribute.obj){
             //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
             //TODO check if match new
+
+            // Filter by confidence score
+            if (attribute.confidence < min_confidence_score) {
+                continue;
+            }
 
             // Check if node_id is valid index for depth_data_per_det
             if (node_id >= depth_data_per_det.size()) {
@@ -784,12 +793,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             
             const auto& depth_data = depth_data_per_det[node_id];
             
-            // Check depth validity (same as ObjectsInitialization)
-            if (depth_data.first <= 0.01f || depth_data.first >= 15.0f) {
-                VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
-                        << " has invalid depth=" << depth_data.first;
-                continue;
-            }
+            // // Check depth validity (same as ObjectsInitialization)
+            // if (depth_data.first <= 0.01f || depth_data.first >= 15.0f) {
+            //     VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
+            //             << " has invalid depth=" << depth_data.first;
+            //     continue;
+            // }
 
             Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
             // Construct Rt [R_cw | t_cw] from T_world_camera_
@@ -812,11 +821,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                 static_cast<long unsigned int>(frame->getFrameId()),
                 pKF.get()  // Convert shared_ptr to raw pointer
             );
-            // if(obj->GetAssociatedMapPoints().size()<5){
-            //     delete obj;
-            //     continue;
-            // }
+            if(obj->GetAssociatedMapPoints().size()<5){
+                delete obj;
+                continue;
+            }
             map_->AddObject(obj);
+            local_map_->mlpRecentAddedObjects.push_back(obj);
             pKF->graph->attributes[node_id].obj = obj;
             //auto proj = obj->GetEllipsoid().project(P);
             //auto c = proj.GetCenter();
@@ -828,6 +838,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, obj->GetColor(), 2);
         }
       }
+
+      ObjectCulling(pKF);
 
 
       
@@ -1747,12 +1759,22 @@ KeyFramePtr pKF(new KeyFrame(
     frame->static_edges_, imgRGB, imgDepth,
     cam_params.fx(), cam_params.fy(), 
     cam_params.cu(), cam_params.cv()));
-  const auto t_kf_ctor1 = std::chrono::steady_clock::now();
+const auto t_kf_ctor1 = std::chrono::steady_clock::now();
 
-  // Copy graph from Frame to KeyFrame (graph contains object detection attributes)
-  if (frame->graph) {
-    pKF->graph = frame->graph;
+// Copy edge grid from Frame to KeyFrame (same pattern as ORB-SLAM2 F.mGrid -> mGrid)
+pKF->mGrid.clear();
+pKF->mGrid.resize(dyno::FRAME_GRID_COLS);
+for (int i = 0; i < dyno::FRAME_GRID_COLS; ++i) {
+  pKF->mGrid[i].resize(dyno::FRAME_GRID_ROWS);
+  for (int j = 0; j < dyno::FRAME_GRID_ROWS; ++j) {
+    pKF->mGrid[i][j] = frame->mGrid[i][j];
   }
+}
+
+// Copy graph from Frame to KeyFrame (graph contains object detection attributes)
+if (frame->graph) {
+  pKF->graph = frame->graph;
+}
 
 return pKF;
 }
@@ -1829,14 +1851,14 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     size_t kf_edges = newKFs[j]->mvEdges.size();
     total_edges_before += kf_edges;
     if (kf_edges == 0) {
-      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+      LOG(WARNING) << "updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
               << newKFs[j]->KF_ID << ") has 0 edges!";
     }
   }
   for (int j = 0; j < window_size_ - window_step_; ++j) {
     // Log keyframe edges before clearing and re-adding
     if (newKFs[j]->mvEdges.empty()) {
-      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+      LOG(WARNING) << "updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
               << newKFs[j]->KF_ID << ") already has 0 edges before re-adding!";
     }
     
@@ -1846,7 +1868,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     
     // Log keyframe edges after re-adding
     if (newKFs[j]->mvEdges.empty()) {
-      VLOG(1) << "WARNING: updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
+      LOG(WARNING) << "updateEdgeSlidingWindow: newKFs[" << j << "] (id=" 
               << newKFs[j]->KF_ID << ") has 0 edges after re-adding!";
     }
     
@@ -1875,7 +1897,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // so we just need to make sure clusters are created. Let's verify the state.
   if (local_map_->mvKeyFrames.size() >= 2 && local_map_->msState == dyno::localMap::State::NOT_INITIALIZED) {
     // This shouldn't happen if addFrame2LocalMap worked correctly, but let's be safe
-    VLOG(1) << "updateEdgeSlidingWindow: WARNING - local_map has " << local_map_->mvKeyFrames.size() 
+    LOG(WARNING) << "updateEdgeSlidingWindow: WARNING - local_map has " << local_map_->mvKeyFrames.size() 
             << " keyframes but state is NOT_INITIALIZED";
   }
   
@@ -1885,7 +1907,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     size_t element_edges_count = local_map_->mvElementEdges.size();
     size_t clusters_count = local_map_->mvEleEdgeClusters.size();
     size_t kf_count = local_map_->mvKeyFrames.size();
-    VLOG(1) << "updateEdgeSlidingWindow: after update - kf_count=" << kf_count
+    VLOG(2) << "updateEdgeSlidingWindow: after update - kf_count=" << kf_count
             << ", element_edges=" << element_edges_count
             << ", clusters=" << clusters_count
             << ", state=" << (local_map_->msState == dyno::localMap::State::NOT_INITIALIZED ? "NOT_INIT" : 
@@ -1904,10 +1926,10 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
             std::make_shared<const std::vector<cv::Vec3b>>(
                 std::move(clusterCloudColors));
       } else {
-        VLOG(1) << "updateEdgeSlidingWindow: clusters exist but visualizeAssociationResult returned empty";
+        LOG(WARNING) << "updateEdgeSlidingWindow: clusters exist but visualizeAssociationResult returned empty";
       }
     } else {
-      VLOG(1) << "updateEdgeSlidingWindow: no clusters after update (element_edges=" 
+      LOG(WARNING) << "updateEdgeSlidingWindow: no clusters after update (element_edges=" 
               << element_edges_count << ")";
     }
   }
@@ -1923,7 +1945,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
 }
 
 
-void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame){
+void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame, dyno::KeyFrame* kf){
   // Get static_detection_result from frame (set by FeatureTracker from ImageContainer)
   if (!frame->image_container_.hasStaticDetectionResult() ||
       frame->image_container_.staticDetectionResult().detections.empty()) {
@@ -1948,20 +1970,50 @@ void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame){
   Rt.block<3, 1>(0, 3) = T_cw.translation();
   
   int count = 0;
+  const double min_confidence_score = getFrontendParams().min_confidence_score;
   for (size_t di = 0; di < static_detection_result.detections.size(); ++di) {
       const auto& det = static_detection_result.detections[di];
       if (di >= depth_data_per_det.size()) continue;
+      
+      // Filter by confidence score
+      if (det.score < min_confidence_score) {
+          continue;
+      }
+      
       const auto& depth_data = depth_data_per_det[di];
       
       if(depth_data.first > 0.01f && depth_data.first < 15.0f){
           dyno::Object* obj = new dyno::Object(det.category_id, det.bbox, det.ell, det.score, depth_data, K_eigen,
-                        Rt, 0, nullptr);
+                        Rt, 0, kf);
           map_->AddObject(obj);
+          local_map_->mlpRecentAddedObjects.push_back(obj);
           count += 1;
       }
   }
-  std::vector<dyno::Object*> objects = map_->GetAllObjects();
-  LOG(INFO) << "ObjectsInitialization: created " << count << " objects, Map has " << objects.size() << " objects";
+  // std::vector<dyno::Object*> objects = map_->GetAllObjects();
+  // LOG(INFO) << "ObjectsInitialization: created " << count << " objects, Map has " << objects.size() << " objects";
+}
+
+void RGBDInstanceFrontendModule::ObjectCulling(const KeyFramePtr& pKF) {
+  std::list<Object*>::iterator lit = local_map_->mlpRecentAddedObjects.begin();
+  const unsigned long int nCurrentKFid = pKF->KF_ID;
+  
+  while(lit!=local_map_->mlpRecentAddedObjects.end())
+  {
+      Object* obj = *lit;
+      if(obj->isBad())
+      {
+          lit = local_map_->mlpRecentAddedObjects.erase(lit);
+      }
+      else if(((int)nCurrentKFid-(int)obj->mnLastKFid)>=5 && obj->GetObservationNumber()<=2){
+          obj->SetBadFlag();
+          lit = local_map_->mlpRecentAddedObjects.erase(lit);
+      }
+      else if(((int)nCurrentKFid-(int)obj->mnLastKFid)>=6)
+          lit = local_map_->mlpRecentAddedObjects.erase(lit);
+      else
+          lit++;
+  }
 }
 
 }  // namespace dyno

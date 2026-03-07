@@ -51,6 +51,10 @@
 
 namespace dyno {
 
+// Grid size for edge / feature spatial indexing (ORB-SLAM2 style)
+static const int FRAME_GRID_COLS = 64;
+static const int FRAME_GRID_ROWS = 48;
+
 class Frame {
  public:
   DYNO_POINTER_TYPEDEFS(Frame)
@@ -78,6 +82,7 @@ class Frame {
   //! 2D lookup map: pixel (y, x) -> [edge_id, point_index] for fast radius search
   cv::Mat edge_point_lookup_map_;
 
+  std::vector<std::size_t> mGrid[FRAME_GRID_COLS][FRAME_GRID_ROWS];
 
   //! Objects that required new detection/sampling this frame.
   ObjectIds retracked_objects_;
@@ -290,6 +295,9 @@ class Frame {
 
   PointCloudLabelRGB::Ptr projectToDenseCloud(
       const cv::Mat* detection_mask = nullptr) const;
+
+  void assignEdgePointToGrid();
+  std::vector<size_t> GetFeaturesInBox(const float &x_min, const float &x_max, const float  &y_min, const float  &y_max, const int minLevel, const int maxLevel) const;
 
   /**
    * @brief Update the depth values on all contained features.
@@ -505,6 +513,13 @@ class Frame {
   //-- Adjust edges, cut and reorganize edges with inconsistent depth, and remove edges with strong overall inconsistency
   void edgeCullingContinuity();
 
+  //-- Helper function to determine grid cell position for an edge point
+  bool PosInGrid(const orderedEdgePoint &pt, int &posX, int &posY);
+
+  // Static members for grid computation
+  static bool mbInitialComputations;
+  static float mnMinX, mnMinY, mnMaxX, mnMaxY;
+  static float mfGridElementWidthInv, mfGridElementHeightInv;
 
  private:
   UndistorterRectifier::Ptr undistorter_;

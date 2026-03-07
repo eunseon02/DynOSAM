@@ -2,9 +2,10 @@
  * This file is part of OA-SLAM (ported into dynosam).
  */
 
-#include "dynosam/backend/edge_map/Object.hpp"
+#include "dynosam/frontend/vision/Object.hpp"
 #include "dynosam/frontend/vision/ColorManager.hpp"
 #include "dynosam/frontend/vision/Distance.hpp"
+#include "dynosam/backend/edge_map/KeyFrame.hpp"
 
 #include <gtsam/nonlinear/NonlinearFactorGraph.h>
 #include <gtsam/nonlinear/LevenbergMarquardtOptimizer.h>
@@ -14,6 +15,7 @@
 #include <gtsam/base/numericalDerivative.h>
 
 #include <random>
+#include <mutex>
 
 
 namespace dyno 
@@ -131,20 +133,34 @@ namespace dyno
             mnLastKFid = kf->KF_ID;
             ellipses_.push_back(ell);
             observed_kfs.push_back(kf);
-            // std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
-            // auto vIndices_in_box = kf->GetFeaturesInBox(bb[0], bb[2], bb[1], bb[3]);
-            // for(auto i : vIndices_in_box){
-            //     MapPoint* mp = kf->mvpMapPoints[i];
-            //     if (mp) {
-            //         associated_map_points_.insert(mp);
-            //     }
-            // }
+            std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
+            const auto enc_list = kf->GetEdgeIndicesInBox(bb[0], bb[2], bb[1], bb[3]);
+
+            // Rt is [R_cw | t_cw]; convert camera point -> world point
+            const Eigen::Matrix3d Rcw = Rt.block<3,3>(0,0);
+            const Eigen::Vector3d tcw = Rt.col(3);
+            associated_world_points_.reserve(associated_world_points_.size() + enc_list.size());
+
+            for (std::size_t enc : enc_list) {
+                const int edge_id = static_cast<int>(enc / 100000);
+                const int pt_idx  = static_cast<int>(enc % 100000);
+                auto itEdge = kf->mmIndexMap.find(edge_id);
+                if (itEdge == kf->mmIndexMap.end()) continue;
+                auto& edge = kf->mvEdges[itEdge->second];
+                if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
+                const auto& pt = edge.mvPoints[pt_idx];
+
+                // pt.x_3d/y_3d/z_3d are in keyframe camera coordinates
+                Eigen::Vector3d pc(pt.x_3d, pt.y_3d, pt.z_3d);
+                Eigen::Vector3d pw = Rcw.transpose() * pc + (-Rcw.transpose() * tcw);
+                associated_world_points_.push_back(pw);
+            }
         }
     }
 
     void Object::AddDetection(unsigned int cat, const BBox2& bbox, const Ellipse ell, double score, const Matrix34d& Rt, unsigned int frame_idx, dyno::KeyFrame* kf){
         //todo more cat id...
-        unique_lock<mutex> lock(mutex_add_detection_);
+        std::unique_lock<std::mutex> lock(mutex_add_detection_);
         last_obs_frame_id_ = frame_idx;
         last_obs_score_ = score;
         N_ += 1;
@@ -326,25 +342,21 @@ namespace dyno
     }
 
 
-    // std::vector<MapPoint*> Object::GetFilteredAssociatedMapPoints(int threshold){
-    //     std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
-    //     int limit = threshold; //  std::max(10.0, threshold * keyframes_bboxes_.size());
+    // Edge-SLAM: filter associated WORLD points that fall inside the current ellipsoid.
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+    Object::GetFilteredAssociatedMapPoints(int /*threshold*/)
+    {
+        std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> filtered;
+        filtered.reserve(associated_world_points_.size());
 
-    //     std::vector<MapPoint*> filtered;
-
-    //     if (true) {
-    //         for (auto mp : associated_map_points_) {
-    //             if(!mp) continue;
-    //             if(mp->isBad()) continue;
-    //             cv::Mat p = mp->GetWorldPos();
-    //             Eigen::Vector3d pos(p.at<float>(0), p.at<float>(1), p.at<float>(2));
-    //             if (ellipsoid_.IsInside(pos, 1.0))
-    //                 filtered.push_back(mp);
-    //         }
-    //     }
-
-    //     return filtered;
-    // }
+        for (const auto& pw : associated_world_points_) {
+            if (ellipsoid_.IsInside(pw, 1.0)) {
+                filtered.push_back(pw);
+            }
+        }
+        return filtered;
+    }
 
 
 }

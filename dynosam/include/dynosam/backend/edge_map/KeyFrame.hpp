@@ -76,6 +76,9 @@ public:
     //-- 预存储的关键帧与其他关键帧的多对多关联关系, first是对应关键帧的ID，second是关联结果
     std::map<int, associationResult> mmMapAssociations;
 
+    std::vector< std::vector <std::vector<size_t> > > mGrid;
+
+
     KeyFrame(){}
 
     KeyFrame(int ID, Sophus::SE3d pose, double stamp, std::vector<Edge> vEdges, const cv::Mat& matRGB, const cv::Mat& matDepth,
@@ -100,6 +103,11 @@ public:
     
     //-- 获取粗匹配所需的3D边缘特征点
     std::vector<orderedEdgePoint> getCoarseSampledPoints(int bias, int maximum_point);
+
+    // Get edge-point indices inside a 2D bbox using the copied grid (fast).
+    // Returns encoded indices: edge_id * 100000 + point_index.
+    std::vector<std::size_t> GetEdgeIndicesInBox(float x_min, float x_max,
+                                                 float y_min, float y_max) const;
 
 
 private:

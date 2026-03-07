@@ -35,6 +35,7 @@
 
 #include "dynosam_common/Ellipse.hpp"
 #include "dynosam_common/Ellipsoid.hpp"
+#include "dynosam_common/Edge.hpp"
 
 // Forward declaration
 namespace dyno {
@@ -101,10 +102,11 @@ class Object
             return flag_optimized;
         }
 
-        // std::set<MapPoint*> GetAssociatedMapPoints() const {
-        //     std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
-        //     return associated_map_points_;
-        // }
+        // Edge-SLAM: associated points are stored as world 3D points (from edge points).
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> GetAssociatedMapPoints() const {
+            std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
+            return associated_world_points_;
+        }
 
         // std::vector<MapPoint*> GetFilteredAssociatedMapPoints(int threshold);
 
@@ -125,6 +127,10 @@ class Object
             std::unique_lock<std::mutex> lock(mutex_add_detection_);
             return observed_kfs;
         }
+
+        // Edge-SLAM: return associated WORLD points that lie inside the ellipsoid.
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>>
+        GetFilteredAssociatedMapPoints(int threshold);
 
         void SetBadFlag(){
             mbBad = true;
@@ -162,10 +168,10 @@ class Object
 
         Ellipsoid ellipsoid_;
 
-        // std::set<MapPoint*> associated_map_points_;
+        std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> associated_world_points_;
 
         mutable std::mutex mutex_ellipsoid_;
-        // mutable std::mutex mutex_associated_map_points_;
+        mutable std::mutex mutex_associated_map_points_;
         mutable std::mutex mutex_add_detection_;
 
         Object() = delete;

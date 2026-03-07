@@ -128,6 +128,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
                               const Frame::Ptr& frame_k_1,
                               const ObjectPoseMap& object_poses) const;
 
+  void ObjectCulling(const KeyFramePtr& pKF);
+
   // used when we want to seralize the output to json via the
   // FLAGS_save_frontend_json flag
   //   std::map<FrameId, RGBDInstanceOutputPacket::Ptr> output_packet_record_;
@@ -220,7 +222,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   void processSlidingWindowKeyFrame(KeyFramePtr kf);
   
  public:
-  void ObjectsInitialization(const Frame::Ptr& frame);
+  void ObjectsInitialization(const Frame::Ptr& frame, dyno::KeyFrame* kf);
   // Getter for local map (for visualization)
   // Thread-safe: returns a copy of the pointer (shared_ptr is thread-safe for reading)
   dyno::localMapPtr getLocalMap() const {
