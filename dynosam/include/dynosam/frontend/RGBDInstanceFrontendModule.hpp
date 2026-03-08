@@ -177,6 +177,7 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   int window_step_{4};
   float kf_rot_thres_{5.0f};      // degrees
   float kf_trans_thres_{0.1f};    // meters
+  double kMinConfidenceScore_{0.2};  // Minimum confidence score threshold for object detection
   
   // Threading for async keyframe processing
   mutable std::mutex local_map_mutex_;  // Protects local_map_ during optimization (mutable for const getLocalMap)

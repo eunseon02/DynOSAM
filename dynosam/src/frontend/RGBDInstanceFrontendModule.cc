@@ -165,6 +165,9 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   window_step_ = win_params.window_step;
   kf_trans_thres_ = static_cast<float>(win_params.kf_trans_thres);
   kf_rot_thres_ = static_cast<float>(win_params.kf_rot_thres);
+  
+  // Load object detection confidence threshold from config
+  kMinConfidenceScore_ = getFrontendParams().min_confidence_score;
 
   // Set camera intrinsics for edge_viz utility (copied from dyno_sam.cc)
   edge_viz::setCameraParams(camera->getParams().fx(), camera->getParams().fy(),
@@ -772,14 +775,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       }
       
 
-      const double min_confidence_score = getFrontendParams().min_confidence_score;
       for(auto [node_id, attribute] : pKF->graph->attributes){
         if(!attribute.obj){
             //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
             //TODO check if match new
 
             // Filter by confidence score
-            if (attribute.confidence < min_confidence_score) {
+            if (attribute.confidence < kMinConfidenceScore_) {
                 continue;
             }
 
@@ -1970,13 +1972,12 @@ void RGBDInstanceFrontendModule::ObjectsInitialization(const Frame::Ptr& frame, 
   Rt.block<3, 1>(0, 3) = T_cw.translation();
   
   int count = 0;
-  const double min_confidence_score = getFrontendParams().min_confidence_score;
   for (size_t di = 0; di < static_detection_result.detections.size(); ++di) {
       const auto& det = static_detection_result.detections[di];
       if (di >= depth_data_per_det.size()) continue;
       
       // Filter by confidence score
-      if (det.score < min_confidence_score) {
+      if (det.score < kMinConfidenceScore_) {
           continue;
       }
       
