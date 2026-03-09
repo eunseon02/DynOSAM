@@ -248,8 +248,8 @@ void edgeSelector::processImage(const cv::Mat& image)
     {
         utils::ChronoTimingStats timer("edge_detection.preprocessCannyMat");
         preprocessCannyMat();
-        auto end = std::chrono::steady_clock::now();
-        auto dt = std::chrono::duration<double, std::milli>(end - start).count();
+        // auto end = std::chrono::steady_clock::now();
+        // auto dt = std::chrono::duration<double, std::milli>(end - start).count();
         // std::cout << "\033[36m[Timing] \033[0mpreprocessCannyMat: " 
         //           << std::fixed << std::setprecision(3) << dt << " ms" << std::endl;
     }
