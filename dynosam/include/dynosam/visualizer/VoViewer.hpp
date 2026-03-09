@@ -92,9 +92,11 @@ public:
         trajectory_GT.push_back(fine_pose);
     }
 
-    void update_localMap(std::vector<std::vector<cv::Point3d>> local_map_cloud)
+    void update_localMap(std::vector<std::vector<cv::Point3d>> local_map_cloud,
+                         std::vector<cv::Vec3b> local_map_colors = {})
     {
         localMap_cloud = std::move(local_map_cloud);
+        localMap_colors = std::move(local_map_colors);
     }
 
     void update_Environment(std::vector<std::vector<cv::Point3d>> pcloud)
@@ -149,6 +151,7 @@ private:
     std::vector<Eigen::Matrix4d> sliding_window;
     
     std::vector<std::vector<cv::Point3d>> localMap_cloud;
+    std::vector<cv::Vec3b> localMap_colors;
     std::vector<std::vector<cv::Point3d>> environment_cloud;
     std::vector<cv::Point3d> covisibility_cloud;
     std::vector<cv::Vec3b>   covisibility_color;

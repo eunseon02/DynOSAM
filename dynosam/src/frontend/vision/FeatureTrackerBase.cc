@@ -288,10 +288,10 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
   }
 
   // Visualize organized edges
-  if (!current_frame.static_edges_.empty()) {
-    cv::Mat edges_viz = utils::drawOrganizedEdge(img_rgb, current_frame.static_edges_);
-    img_rgb = edges_viz;
-  }
+  // if (!current_frame.static_edges_.empty()) {
+  //   cv::Mat edges_viz = utils::drawOrganizedEdge(img_rgb, current_frame.static_edges_);
+  //   img_rgb = edges_viz;
+  // }
 
 
 

@@ -72,6 +72,7 @@ struct EdgeVisualizationData {
 
   // Merged edge clusters (optimized local map)
   std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> localMapClouds;
+  std::shared_ptr<const std::vector<cv::Vec3b>> localMapCloudColors;
 
   // Keyframe poses in the sliding window
   std::shared_ptr<const std::vector<Eigen::Matrix4d>> slidingWindow;

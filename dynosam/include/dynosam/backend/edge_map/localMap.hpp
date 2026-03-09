@@ -86,6 +86,12 @@ private:
     void pruningMap();
 
     void mergeElementCluster(int cluster_idx_1, int cluster_idx_2);
+    
+    //-- Calculate 3D centroid of a cluster in world coordinates
+    cv::Point3d calculateClusterCentroid(int cluster_idx);
+    
+    //-- Check if two clusters are close enough in 3D space to be merged
+    bool areClustersCloseEnough(int cluster_idx_1, int cluster_idx_2, double max_distance = 2.0);
 
     //-- Decide whether to remove a cluster based on each cluster's count_not_update
     void elementClusterCulling();

@@ -493,7 +493,11 @@ int main(int argc, char* argv[]) {
                 }
 
                 if (latest_snap->localMapClouds && latest_snap->localMapClouds != last_local_map) {
-                  viewer.update_localMap(*latest_snap->localMapClouds);
+                  if (latest_snap->localMapCloudColors) {
+                    viewer.update_localMap(*latest_snap->localMapClouds, *latest_snap->localMapCloudColors);
+                  } else {
+                    viewer.update_localMap(*latest_snap->localMapClouds);
+                  }
                   last_local_map = latest_snap->localMapClouds;
                 }
 

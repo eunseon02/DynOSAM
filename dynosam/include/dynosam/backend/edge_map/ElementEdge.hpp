@@ -40,9 +40,12 @@ public:
 
     //-- 仅在可视化的时候使用，每个cluster有唯一的可视化颜色
     cv::Vec3b visColor;
-    //-- 用于随机赋值颜色
+    //-- 用于随机赋值颜色 (deprecated, now using deterministic color from cluster_id)
     static std::mt19937 rng; // 随机数生成器
     static std::uniform_int_distribution<unsigned char> dist; // 分布器
+    
+    //-- Deterministic color generation from cluster_id
+    static cv::Vec3b generateColorFromClusterId(unsigned int cluster_id);
 
     std::vector<unsigned int> mvElementEdgeIDs;
 
@@ -58,8 +61,8 @@ public:
         cluster_id = id;
         mvElementEdgeIDs = std::move(eleEdges);
         count_not_update = 0;
-        //-- 随机一个颜色
-        visColor = cv::Vec3b(dist(rng), dist(rng), dist(rng));
+        //-- Generate deterministic color from cluster_id to maintain consistency across sliding window updates
+        visColor = generateColorFromClusterId(cluster_id);
         //-- 被构造也算最新操作，因此用true初始化
         mbModifiedCur = true;
 

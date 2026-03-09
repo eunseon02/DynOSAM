@@ -102,9 +102,18 @@ void voViewer::render_loop()
         }
 
         if(*menuShowLocalEdgeMap && !localMap_cloud.empty()){
-            for(size_t i = 0; i < localMap_cloud.size(); ++i)
-            {
-                drawPointCloudColorSequencial(localMap_cloud[i], cv::Vec3b(255, 50, 50), 2);
+            // If colors are provided, use them; otherwise use default color
+            if (!localMap_colors.empty() && localMap_colors.size() == localMap_cloud.size()) {
+                for(size_t i = 0; i < localMap_cloud.size(); ++i)
+                {
+                    drawPointCloudColorSequencial(localMap_cloud[i], localMap_colors[i], 2);
+                }
+            } else {
+                // Fallback to default color if colors not provided
+                for(size_t i = 0; i < localMap_cloud.size(); ++i)
+                {
+                    drawPointCloudColorSequencial(localMap_cloud[i], cv::Vec3b(255, 50, 50), 2);
+                }
             }
         }
 

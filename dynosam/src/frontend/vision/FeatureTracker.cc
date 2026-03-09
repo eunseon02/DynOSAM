@@ -200,6 +200,57 @@ Frame::Ptr FeatureTracker::track(FrameId frame_id, Timestamp timestamp,
 
     // Add graph - create dynamically so it can be stored in new_frame
     if (static_detection_result.num() > 0) {
+      // Filter duplicate detections (same logic as voom Tracking.cc:265-275)
+      // Same category: IoU > 0.3 is duplicate
+      // Different category: IoU > 0.6 is duplicate
+      std::vector<static_objects::Detection> filtered_detections;
+      std::vector<std::pair<float, float>> filtered_depth_data;
+      
+      for (size_t i = 0; i < static_detection_result.detections.size(); ++i) {
+        const auto& det1 = static_detection_result.detections[i];
+        bool has_similar_det = false;
+        
+        // Basic filtering (same as voom)
+        if (det1.score < 0.2 || 
+            bbox_area(det1.bbox) < 300 ||
+            bbox_area(det1.bbox) > 0.5 * img_size_.width * img_size_.height ||
+            bboxes_iou(det1.bbox, det1.ell.ComputeBbox()) < 0.2) {
+          continue;
+        }
+        
+        // Check for duplicates with already filtered detections
+        for (const auto& det2 : filtered_detections) {
+          double bbox_iou_val = bboxes_iou(det1.bbox, det2.bbox);
+          if (det1.category_id == det2.category_id) {
+            if (bbox_iou_val > 0.3) {  // Same category: IoU > 0.3 is duplicate
+              has_similar_det = true;
+              break;
+            }
+          } else {
+            if (bbox_iou_val > 0.6) {  // Different category: IoU > 0.6 is duplicate
+              has_similar_det = true;
+              break;
+            }
+          }
+        }
+        
+        if (!has_similar_det) {
+          filtered_detections.push_back(det1);
+          if (i < depth_data_per_detection.size()) {
+            filtered_depth_data.push_back(depth_data_per_detection[i]);
+          } else {
+            filtered_depth_data.push_back(std::make_pair(0.0f, 0.0f));
+          }
+        }
+      }
+      
+      // Update depth_data_per_detection with filtered results
+      depth_data_per_detection = std::move(filtered_depth_data);
+      
+      // Update static_detection_result with filtered detections
+      static_detection_result.detections = std::move(filtered_detections);
+      
+      // Create graph with filtered detections
       graph = new Graph();
       std::vector<Eigen::Vector2d> center_points; //TODO 3d points
       for (size_t i = 0; i < static_detection_result.detections.size(); ++i) {

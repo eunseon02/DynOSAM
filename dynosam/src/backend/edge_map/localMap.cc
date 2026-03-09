@@ -316,7 +316,12 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
                     int cluster_idx_1 = mmClusterID2index.at(cluster_id_1);
                     int cluster_idx_2 = mmClusterID2index.at(cluster_id_2);
                     
-                    mergeElementCluster(cluster_idx_1, cluster_idx_2);
+                    //-- Check 3D distance before merging to avoid merging distant clusters
+                    if(areClustersCloseEnough(cluster_idx_1, cluster_idx_2, 2.0))
+                    {
+                        mergeElementCluster(cluster_idx_1, cluster_idx_2);
+                    }
+                    //-- If clusters are too far apart, skip merging (they remain separate clusters)
 
                 }
             }
@@ -450,6 +455,69 @@ void localMap::mergeElementCluster(int cluster_idx_1, int cluster_idx_2)
         // * STEP-4 Latest operation, so record that cluster_2 was modified this round
         cluster_2.mbModifiedCur = true;
     }
+}
+
+cv::Point3d localMap::calculateClusterCentroid(int cluster_idx)
+{
+    elementEdgeCluster& cluster = mvEleEdgeClusters[cluster_idx];
+    const std::vector<unsigned int>& ele_ids = cluster.mvElementEdgeIDs;
+    
+    if(ele_ids.empty()) {
+        return cv::Point3d(0, 0, 0);
+    }
+    
+    double sum_x = 0.0, sum_y = 0.0, sum_z = 0.0;
+    int total_points = 0;
+    
+    for(unsigned int ele_id : ele_ids) {
+        auto it = mmElementID2index.find(ele_id);
+        if(it == mmElementID2index.end()) continue;
+        
+        int ele_idx = it->second;
+        elementEdge& ele_edge = mvElementEdges[ele_idx];
+        
+        // Get keyframe and edge
+        auto kf_it = mmKFID2KFindex.find(ele_edge.kf_id);
+        if(kf_it == mmKFID2KFindex.end()) continue;
+        
+        int kf_idx = kf_it->second;
+        KeyFramePtr pKF = mvKeyFrames[kf_idx];
+        
+        if(ele_edge.kf_edge_idx >= static_cast<int>(pKF->mvEdges.size())) continue;
+        
+        Edge& edge = pKF->mvEdges[ele_edge.kf_edge_idx];
+        
+        // Transform edge points to world coordinates and accumulate
+        Sophus::SE3d T_world_kf = pKF->KF_pose_g;
+        for(const auto& pt : edge.mvPoints) {
+            Eigen::Vector3d pt_3d(pt.x_3d, pt.y_3d, pt.z_3d);
+            pt_3d = T_world_kf * pt_3d;
+            
+            sum_x += pt_3d.x();
+            sum_y += pt_3d.y();
+            sum_z += pt_3d.z();
+            total_points++;
+        }
+    }
+    
+    if(total_points == 0) {
+        return cv::Point3d(0, 0, 0);
+    }
+    
+    return cv::Point3d(sum_x / total_points, sum_y / total_points, sum_z / total_points);
+}
+
+bool localMap::areClustersCloseEnough(int cluster_idx_1, int cluster_idx_2, double max_distance)
+{
+    cv::Point3d centroid_1 = calculateClusterCentroid(cluster_idx_1);
+    cv::Point3d centroid_2 = calculateClusterCentroid(cluster_idx_2);
+    
+    double dx = centroid_1.x - centroid_2.x;
+    double dy = centroid_1.y - centroid_2.y;
+    double dz = centroid_1.z - centroid_2.z;
+    double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
+    
+    return distance <= max_distance;
 }
 
 void localMap::elementClusterCulling()

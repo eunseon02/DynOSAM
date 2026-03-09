@@ -9,7 +9,7 @@ max_background_depth: 200.0
 max_object_depth: 30.0
 
 # Minimum confidence score threshold for object detection filtering
-min_confidence_score: 0.2
+min_confidence_score: 0.5
 
 # max_object_depth: 8.0 #indoors
 

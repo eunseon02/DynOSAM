@@ -23,7 +23,8 @@ void visualizeAssociationResult(const dyno::localMapPtr& pLocalMap,
                                 std::vector<cv::Vec3b>& clusterCloudColors);
 
 void visualizeMergedLocalMap(const dyno::localMapPtr& pLocalMap,
-                             std::vector<std::vector<cv::Point3d>>& mergedClouds);
+                             std::vector<std::vector<cv::Point3d>>& mergedClouds,
+                             std::vector<cv::Vec3b>& mergedCloudColors);
 
 void getSlidingWindow(const dyno::localMapPtr& pLocalMap,
                       std::vector<Eigen::Matrix4d>& sliding_window);

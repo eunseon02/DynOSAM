@@ -102,9 +102,12 @@ void visualizeAssociationResult(const dyno::localMapPtr& pLocalMap,
 
 // Visualize merged local map
 void visualizeMergedLocalMap(const dyno::localMapPtr& pLocalMap,
-                             std::vector<std::vector<cv::Point3d>>& mergedClouds) {
+                             std::vector<std::vector<cv::Point3d>>& mergedClouds,
+                             std::vector<cv::Vec3b>& mergedCloudColors) {
   mergedClouds.clear();
+  mergedCloudColors.clear();
   mergedClouds.reserve(pLocalMap->mvEleEdgeClusters.size());
+  mergedCloudColors.reserve(pLocalMap->mvEleEdgeClusters.size());
 
   int total_clusters = pLocalMap->mvEleEdgeClusters.size();
   int merged = 0;
@@ -119,6 +122,7 @@ void visualizeMergedLocalMap(const dyno::localMapPtr& pLocalMap,
       continue;
     }
     mergedClouds.push_back(merged_cloud);
+    mergedCloudColors.push_back(cluster.visColor);
   }
 
   // Debug: Log filtering results

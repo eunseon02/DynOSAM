@@ -644,6 +644,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     snap->clusterClouds = cluster_clouds_cache_;
     snap->clusterCloudColors = cluster_colors_cache_;
     snap->localMapClouds = local_map_clouds_cache_;
+    snap->localMapCloudColors = local_map_colors_cache_;
     snap->environment_cloud = environment_cloud_cache_;
 
     auto window = std::make_shared<std::vector<Eigen::Matrix4d>>();
@@ -1494,12 +1495,16 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         // Update merged local map cache (heavy data) for visualization snapshots
         {
           std::vector<std::vector<cv::Point3d>> mergedClouds;
+          std::vector<cv::Vec3b> mergedCloudColors;
           if (local_map_ && local_map_->mvEleEdgeClusters.size() > 0) {
-            edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds);
+            edge_viz::visualizeMergedLocalMap(local_map_, mergedClouds, mergedCloudColors);
             if (!mergedClouds.empty()) {
               local_map_clouds_cache_ =
                   std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
                       std::move(mergedClouds));
+              local_map_colors_cache_ =
+                  std::make_shared<const std::vector<cv::Vec3b>>(
+                      std::move(mergedCloudColors));
               VLOG(2) << "Updated localMapClouds cache: " << local_map_clouds_cache_->size() << " merged clusters";
             }
           }
