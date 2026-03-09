@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <fstream>
+#include <unordered_set>
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -185,6 +187,12 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   std::thread processing_thread_;
   std::atomic<bool> processing_running_{false};
   std::atomic<bool> optimization_in_progress_{false};  // Track if optimization is currently running
+
+  // Optional: log edge keyframe poses across the *entire* run (not just sliding window).
+  // If enabled, we append keyframes as they leave the sliding window and dump remaining on shutdown.
+  std::string edge_kf_trajectory_file_;
+  std::ofstream edge_kf_trajectory_stream_;
+  std::unordered_set<int> edge_kf_logged_ids_;
 
   // Latest visualization data (always available, updated every frame)
   // Protected by viz_mutex_ for thread-safe read/write

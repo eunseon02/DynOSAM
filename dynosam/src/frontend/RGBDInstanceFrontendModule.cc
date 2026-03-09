@@ -81,6 +81,38 @@ DEFINE_bool(use_edge_selector_track, false,
             "If true, use edgeSelector.processImage() + direct KeyFrame creation "
             "instead of tracker_->track() (localmapping.cc style)");
 
+DEFINE_string(output_edge_kf_trajectory, "",
+              "If non-empty, append edge keyframe poses to this file in TUM format "
+              "(timestamp tx ty tz qx qy qz qw). This logs keyframes across the entire run, "
+              "not just the current sliding window.");
+
+namespace {
+inline void ensureParentDirExists(const std::string& filename) {
+  try {
+    const std::filesystem::path out_path(filename);
+    const auto parent = out_path.parent_path();
+    if (!parent.empty()) {
+      std::filesystem::create_directories(parent);
+    }
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "Failed to create parent directory for: " << filename
+                 << " error=" << e.what();
+  }
+}
+
+inline void writeTumPoseLine(std::ostream& os, double timestamp,
+                            const Eigen::Matrix4d& T_world_cam) {
+  const double tx = T_world_cam(0, 3);
+  const double ty = T_world_cam(1, 3);
+  const double tz = T_world_cam(2, 3);
+  const Eigen::Matrix3d R = T_world_cam.block<3, 3>(0, 0);
+  const Eigen::Quaterniond q(R);
+  os << std::fixed << std::setprecision(6) << timestamp << " "
+     << tx << " " << ty << " " << tz << " "
+     << q.x() << " " << q.y() << " " << q.z() << " " << q.w() << "\n";
+}
+}  // namespace
+
 namespace dyno {
 
 // Helper function matching coarseTracking.cpp generateSrcPixelsSampled
