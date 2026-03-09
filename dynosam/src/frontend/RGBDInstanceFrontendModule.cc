@@ -776,8 +776,47 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       }
       
 
+      // Construct Rt [R_cw | t_cw] from T_world_camera_ (used for both new objects and AddDetection)
+      Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+      const gtsam::Pose3& T_wc = frame->T_world_camera_;
+      const gtsam::Pose3  T_cw = T_wc.inverse();
+      Matrix34d Rt;
+      Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
+      Rt.block<3, 1>(0, 3) = T_cw.translation();
+
+      Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
+      
       for(auto [node_id, attribute] : pKF->graph->attributes){
-        if(!attribute.obj){
+        if(attribute.obj){
+            auto proj = attribute.obj->GetEllipsoid().project(P);
+            auto bb_proj = proj.ComputeBbox();
+            double iou = bboxes_iou(bb_proj, attribute.bbox);
+            if(iou > 0.01){
+
+              auto c = proj.GetCenter();
+              auto axes = proj.GetAxes();
+              double angle = proj.GetAngle();
+              //if(iou<0.3)
+              //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 0, 255), 2);
+              //else
+              //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 0), 2);
+              if(axes[0] <= 0.001 || axes[1] <= 0.001)
+                  continue;
+
+              attribute.obj->AddDetection(
+                  attribute.label, 
+                  attribute.bbox, 
+                  attribute.ell, 
+                  attribute.confidence, 
+                  Rt, 
+                  static_cast<unsigned int>(frame->getFrameId()), 
+                  pKF.get()
+              );
+            }
+            else{
+                continue;
+            }
+        } else {
             //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
             //TODO check if match new
 
@@ -802,15 +841,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             //             << " has invalid depth=" << depth_data.first;
             //     continue;
             // }
-
-            Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
-            // Construct Rt [R_cw | t_cw] from T_world_camera_
-            const gtsam::Pose3& T_wc = frame->T_world_camera_;
-            const gtsam::Pose3  T_cw = T_wc.inverse();
-            Matrix34d Rt;
-            Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
-            Rt.block<3, 1>(0, 3) = T_cw.translation();
-            
           
             //create new object
             Object* obj = new Object(
