@@ -34,6 +34,7 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <fstream>
 
 #include <opencv4/opencv2/opencv.hpp>
 
@@ -1601,7 +1602,25 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   // with local_map_mutex_ already locked
   const auto t0 = std::chrono::steady_clock::now();
   
-  // size_t current_kf_count = local_map_->mvKeyFrames.size();  // Unused variable
+  // Safety checks to avoid out-of-bounds access on mvKeyFrames.
+  const size_t current_kf_count =
+      local_map_ ? local_map_->mvKeyFrames.size() : 0;
+  if (!local_map_ || current_kf_count == 0) {
+    LOG(WARNING) << "updateEdgeSlidingWindow: local_map_ is null or has no keyframes";
+    return;
+  }
+  if (current_kf_count < static_cast<size_t>(window_size_)) {
+    LOG(WARNING) << "updateEdgeSlidingWindow: called with kf_count="
+                 << current_kf_count << " < window_size_=" << window_size_
+                 << " — skipping update to avoid OOB access";
+    return;
+  }
+  if (current_kf_count < static_cast<size_t>(window_step_)) {
+    LOG(WARNING) << "updateEdgeSlidingWindow: called with kf_count="
+                 << current_kf_count << " < window_step_=" << window_step_
+                 << " — skipping update to avoid OOB access";
+    return;
+  }
   
   // // Log keyframes before removal
   // LOG(INFO) << "\033[33m[SLIDING WINDOW UPDATE]\033[0m before: kf_count=" << current_kf_count
@@ -1630,6 +1649,32 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
     
     removed_poses.push_back(removed_pose);
     removed_stamps.push_back(removed_stamp);
+  }
+
+  // Save removed keyframes to a TUM-format trajectory file.
+  // This mirrors ROEVO's posesKF.txt: we log keyframes as they leave the window.
+  const std::string kf_filename = "/root/results/trajectory_tum.txt.edge_kf";
+  std::ofstream kf_file(kf_filename, std::ios::out | std::ios::app);
+  if (!kf_file.is_open()) {
+    LOG(WARNING) << "updateEdgeSlidingWindow: failed to open KF log file: "
+                 << kf_filename;
+  } else {
+    for (size_t i = 0; i < removed_poses.size(); ++i) {
+      const Eigen::Matrix4d& T = removed_poses[i];
+      const double stamp = removed_stamps[i];
+
+      Eigen::Vector3d t = T.block<3, 1>(0, 3);
+      Eigen::Matrix3d R = T.block<3, 3>(0, 0);
+      Eigen::Quaterniond q(R);
+
+      // TUM format: timestamp tx ty tz qx qy qz qw
+      kf_file << std::fixed << std::setprecision(6)
+              << stamp << " "
+              << t.x() << " " << t.y() << " " << t.z() << " "
+              << q.x() << " " << q.y() << " " << q.z() << " " << q.w()
+              << "\n";
+    }
+    kf_file.flush();
   }
   
   // LOG(INFO) << "  Removing " << window_step_ << " keyframes: kf_ids=["
