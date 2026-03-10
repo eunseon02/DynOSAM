@@ -231,8 +231,8 @@ namespace dyno
             // Trigger local ellipsoid refinement once we have enough observations,
             // similar to the original OA-SLAM behavior.
             if (observed_kfs.size() > 2 && observed_kfs.size() < 30) {
-                // VLOG(1) << "[Object::AddDetection] Triggering ellipsoid optimization for object_id=" 
-                //         << id_ << ", observed_kfs=" << observed_kfs.size();
+                VLOG(1) << "[Object::AddDetection] Triggering ellipsoid optimization for object_id=" 
+                        << id_ << ", observed_kfs=" << observed_kfs.size();
                 OptimizeReconstructionQuat(true);
                 flag_optimized = true;
             }
@@ -377,7 +377,10 @@ namespace dyno
             edge->setVertex(0, vertex);
             Eigen::Matrix<double, 1, 1> information_matrix = Eigen::Matrix<double, 1, 1>::Identity();
             edge->setInformation(information_matrix);
+            // Attach robust kernel to reduce sensitivity to outlier ellipses/projections.
             g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            rk->setDelta(1.345);
+            edge->setRobustKernel(rk);
             optimizer.addEdge(edge);
         }
         
