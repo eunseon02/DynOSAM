@@ -50,8 +50,11 @@ endif()
 
 
 # setup targets
+set(G2O_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../third_parties/g2o)
+set(G2O_LIB_DIR ${G2O_ROOT}/lib)
 include_directories(
   include
+  ${G2O_ROOT}
   ${dynosam_common_INCLUDE_DIRS}
   ${dynosam_cv_INCLUDE_DIRS}
   ${dynosam_opt_INCLUDE_DIRS}
@@ -170,6 +173,7 @@ target_link_libraries(${PROJECT_NAME}
   dynosam_cv::dynosam_cv
   dynosam_opt::dynosam_opt
   dynosam_nn::dynosam_nn
+  ${G2O_LIB_DIR}/libg2o.so
   pango_core
   pango_opengl
   pango_display
@@ -278,6 +282,12 @@ install(
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
+)
+
+# Also install third-party g2o shared library so that dyno_sam can find libg2o.so at runtime.
+install(
+  FILES ${G2O_LIB_DIR}/libg2o.so
+  DESTINATION lib
 )
 
 ## This is VERY IMPORTANT so that dynosam_ros can find the params folder using ament indexing!!
