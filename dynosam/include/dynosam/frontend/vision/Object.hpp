@@ -166,6 +166,10 @@ class Object
 
         std::vector<dyno::KeyFrame*> observed_kfs;
 
+        // Throttle expensive ellipsoid refinement: track last observation count we optimized at.
+        // (Optimization is triggered from AddDetection.)
+        std::size_t last_ellipsoid_opt_observation_count_{0};
+
         Ellipsoid ellipsoid_;
 
         std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> associated_world_points_;

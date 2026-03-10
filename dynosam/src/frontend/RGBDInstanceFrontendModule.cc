@@ -795,6 +795,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       KeyFramePtr pKF = createKeyFrameFromFrame(frame, pose_curr);
       const auto t_create_kf_end = std::chrono::steady_clock::now();
 
+      // Keep KeyFrame alive by registering it in the global EdgeMap (shared ownership).
+      // This prevents Object::observed_kfs raw pointers from becoming dangling when the
+      // sliding-window local_map_ is reset.
+      if (map_ && pKF) {
+        map_->AddKeyFrame(pKF);
+      }
+
       // Get depth data per detection from frame
       const auto& depth_data_per_det = frame->getDepthDataPerDetection();
       

@@ -230,11 +230,17 @@ namespace dyno
 
             // Trigger local ellipsoid refinement once we have enough observations,
             // similar to the original OA-SLAM behavior.
-            if (observed_kfs.size() > 2 && observed_kfs.size() < 30) {
-                VLOG(1) << "[Object::AddDetection] Triggering ellipsoid optimization for object_id=" 
-                        << id_ << ", observed_kfs=" << observed_kfs.size();
+            // This optimization is relatively expensive and gets called often as observations accumulate,
+            // so throttle it to run every few new observations.
+            constexpr std::size_t kEllipsoidOptStride = 5;
+            if (observed_kfs.size() > 2 &&
+                observed_kfs.size() < 30 &&
+                (observed_kfs.size() >= last_ellipsoid_opt_observation_count_ + kEllipsoidOptStride)) {
+                // VLOG(1) << "[Object::AddDetection] Triggering ellipsoid optimization for object_id=" 
+                //         << id_ << ", observed_kfs=" << observed_kfs.size();
                 OptimizeReconstructionQuat(true);
                 flag_optimized = true;
+                last_ellipsoid_opt_observation_count_ = observed_kfs.size();
             }
         }
         
@@ -350,26 +356,14 @@ namespace dyno
             chosen_indexes = tmp;
         }
 
-        //auto it_bb = bboxes_.begin();
         auto it_ell = ellipses_.begin();
-        //auto it_Rt = Rts_.begin();
 
         for (auto i : chosen_indexes){
-            //it_bb = bboxes_.begin() + i;
             it_ell = ellipses_.begin() + i;
-            //it_Rt = Rts_.begin() + i;
-            auto kf = observed_kfs[i];
-            if (!kf) continue;
-
-            // dynosam KeyFrame stores pose as Sophus::SE3d KF_pose_g (world -> camera inverse needed)
-            const Sophus::SE3d& pose_wc = kf->KF_pose_g;
-            Eigen::Matrix4d T_wc = pose_wc.matrix();
-            Eigen::Matrix4d T_cw = T_wc.inverse();
-
-            Matrix34d Rt;
-            Rt.block<3,3>(0,0) = T_cw.topLeftCorner<3,3>();
-            Rt.col(3)          = T_cw.topRightCorner<3,1>();
-
+            // Use the cached world->camera pose stored at detection time (Rt = [R_cw | t_cw]).
+            // This avoids per-edge SE3 matrix extraction + inversion.
+            if (i >= Rts_.size()) continue;
+            const Matrix34d& Rt = Rts_[i];
             Eigen::Matrix<double, 3, 4> P = K_ * Rt;
             EdgeEllipsoidProjectionQuat *edge =
                 new EdgeEllipsoidProjectionQuat(P, *it_ell, ellipsoid.GetOrientation());
@@ -377,10 +371,10 @@ namespace dyno
             edge->setVertex(0, vertex);
             Eigen::Matrix<double, 1, 1> information_matrix = Eigen::Matrix<double, 1, 1>::Identity();
             edge->setInformation(information_matrix);
-            // Attach robust kernel to reduce sensitivity to outlier ellipses/projections.
-            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
-            rk->setDelta(1.345);
-            edge->setRobustKernel(rk);
+            // // Attach robust kernel to reduce sensitivity to outlier ellipses/projections.
+            // g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            // rk->setDelta(1.345);
+            // edge->setRobustKernel(rk);
             optimizer.addEdge(edge);
         }
         

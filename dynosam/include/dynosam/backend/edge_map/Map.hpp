@@ -45,18 +45,19 @@ class EdgeMap
 public:
     EdgeMap();
 
-    void AddKeyFrame(KeyFrame* pKF);
+    // Store KeyFrames as shared_ptr to guarantee lifetime across sliding-window resets.
+    void AddKeyFrame(const KeyFramePtr& pKF);
     void AddEdge(Edge* pEdge);
     void EraseEdge(Edge* pEdge);
     // void AddMapPoint(MapPoint* pMP);
     // void EraseMapPoint(MapPoint* pMP);
-    void EraseKeyFrame(KeyFrame* pKF);
+    void EraseKeyFrame(const KeyFramePtr& pKF);
     // void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
     void SetReferenceEdges(const std::vector<Edge*> &vpEdges);
     void InformNewBigChange();
     int GetLastBigChangeIdx();
 
-    std::vector<KeyFrame*> GetAllKeyFrames();
+    std::vector<KeyFramePtr> GetAllKeyFrames();
     // std::vector<MapPoint*> GetAllMapPoints();
     std::vector<Edge*> GetAllEdges();
     std::vector<dyno::Object*> GetAllObjects();
@@ -91,7 +92,7 @@ public:
     //     return mspMapPoints.size();
     // }
     //ADDED TOBE DELETED
-    std::set<KeyFrame*> getKeyFrames() const {
+    std::set<KeyFramePtr, std::owner_less<KeyFramePtr>> getKeyFrames() const {
         return mspKeyFrames;
     }
 
@@ -100,7 +101,7 @@ public:
 
 protected:
     // std::set<MapPoint*> mspMapPoints;
-    std::set<KeyFrame*> mspKeyFrames;
+    std::set<KeyFramePtr, std::owner_less<KeyFramePtr>> mspKeyFrames;
     std::set<Edge*> mspEdges;
     std::set<dyno::Object*> mspObjects;
 

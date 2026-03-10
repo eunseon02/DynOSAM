@@ -16,7 +16,7 @@ EdgeMap::EdgeMap():mnMaxKFid(0),mnBigChangeIdx(0)
     graph_3d = new dyno::Graph();//nullptr;
 }
 
-void EdgeMap::AddKeyFrame(KeyFrame *pKF)
+void EdgeMap::AddKeyFrame(const KeyFramePtr& pKF)
 {
     unique_lock<mutex> lock(mMutexMap);
     mspKeyFrames.insert(pKF);
@@ -48,7 +48,7 @@ void EdgeMap::EraseEdge(Edge *pEdge)
 //     // Delete the MapPoint
 // }
 
-void EdgeMap::EraseKeyFrame(KeyFrame *pKF)
+void EdgeMap::EraseKeyFrame(const KeyFramePtr& pKF)
 {
     unique_lock<mutex> lock(mMutexMap);
     mspKeyFrames.erase(pKF);
@@ -81,10 +81,10 @@ int EdgeMap::GetLastBigChangeIdx()
     return mnBigChangeIdx;
 }
 
-vector<KeyFrame*> EdgeMap::GetAllKeyFrames()
+vector<KeyFramePtr> EdgeMap::GetAllKeyFrames()
 {
     unique_lock<mutex> lock(mMutexMap);
-    return vector<KeyFrame*>(mspKeyFrames.begin(),mspKeyFrames.end());
+    return vector<KeyFramePtr>(mspKeyFrames.begin(),mspKeyFrames.end());
 }
 
 // vector<MapPoint*> Map::GetAllMapPoints()
@@ -122,10 +122,7 @@ void EdgeMap::clear()
     // for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++)
         // delete *sit;
 
-    for(set<KeyFrame*>::iterator sit=mspKeyFrames.begin(), send=mspKeyFrames.end(); sit!=send; sit++)
-        delete *sit;
-
-    // mspMapPoints.clear();
+    // KeyFrames are held by shared_ptr; clearing releases ownership.
     mspKeyFrames.clear();
     mnMaxKFid = 0;
     // mvpReferenceMapPoints.clear();  // Commented out as mvpReferenceMapPoints is not defined
