@@ -73,6 +73,8 @@ public:
 
     //-- 关键帧的第i条（索引）边对应的局部地图中的elementEdge的ID
     std::map<int, unsigned int> mmEdgeIndex2ElementEdgeID;
+  //-- 关键帧의 각 edge index에 대응하는 object id (-1이면 미할당)
+  std::map<int, int> mmEdgeIndex2ObjectId;
     //-- 预存储的关键帧与其他关键帧的多对多关联关系, first是对应关键帧的ID，second是关联结果
     std::map<int, associationResult> mmMapAssociations;
 

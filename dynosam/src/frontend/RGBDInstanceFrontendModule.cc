@@ -805,27 +805,19 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       // Get depth data per detection from frame
       const auto& depth_data_per_det = frame->getDepthDataPerDetection();
       
-      // Safety check: graph must be initialized
-      if (!pKF->graph) {
-        LOG(ERROR) << "processEdgeKeyFrame: pKF->graph is nullptr, skipping object creation";
-      }
-      
-      if (!map_) {
-        LOG(ERROR) << "processEdgeKeyFrame: map_ is nullptr, skipping object creation";
-      }
-      
+      // Safety check: graph and map must be initialized before processing objects
+      if (pKF->graph && map_) {
+        // Construct Rt [R_cw | t_cw] from T_world_camera_ (used for both new objects and AddDetection)
+        Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
+        const gtsam::Pose3& T_wc = frame->T_world_camera_;
+        const gtsam::Pose3  T_cw = T_wc.inverse();
+        Matrix34d Rt;
+        Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
+        Rt.block<3, 1>(0, 3) = T_cw.translation();
 
-      // Construct Rt [R_cw | t_cw] from T_world_camera_ (used for both new objects and AddDetection)
-      Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
-      const gtsam::Pose3& T_wc = frame->T_world_camera_;
-      const gtsam::Pose3  T_cw = T_wc.inverse();
-      Matrix34d Rt;
-      Rt.block<3, 3>(0, 0) = T_cw.rotation().matrix();
-      Rt.block<3, 1>(0, 3) = T_cw.translation();
-
-      Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
-      
-      for(auto [node_id, attribute] : pKF->graph->attributes){
+        Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
+        
+        for(auto [node_id, attribute] : pKF->graph->attributes){
         if(attribute.obj){
             auto proj = attribute.obj->GetEllipsoid().project(P);
             auto bb_proj = proj.ComputeBbox();
@@ -908,6 +900,14 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             //if(axes[0] <= 0.001 || axes[1] <= 0.001)
             //    continue;
             //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, obj->GetColor(), 2);
+        }
+        }
+      } else {
+        if (!pKF->graph) {
+          LOG(ERROR) << "processEdgeKeyFrame: pKF->graph is nullptr, skipping object creation";
+        }
+        if (!map_) {
+          LOG(ERROR) << "processEdgeKeyFrame: map_ is nullptr, skipping object creation";
         }
       }
 
@@ -1850,6 +1850,68 @@ for (int i = 0; i < dyno::FRAME_GRID_COLS; ++i) {
 // Copy graph from Frame to KeyFrame (graph contains object detection attributes)
 if (frame->graph) {
   pKF->graph = frame->graph;
+}
+
+// Assign object ids to edges in KeyFrame based on segmentation mask (not just bbox)
+if (pKF->graph) {
+  // Initialize all edge indices to background (-1)
+  pKF->mmEdgeIndex2ObjectId.clear();
+
+  // Use motion/instance mask from the originating Frame
+  const cv::Mat& motion_mask = frame->image_container_.objectMotionMask();
+  if (!motion_mask.empty()) {
+    // For each node (detection) in the graph, use its bbox as a coarse window,
+    // then check membership using the mask value at each edge point.
+    for (const auto& kv : pKF->graph->attributes) {
+      const auto& attr = kv.second;
+      const int obj_id = attr.object_id;   // unique object id in graph
+      const int cls_label = attr.label;    // category id from detection
+      const int target_mask_val = cls_label + 1;  // seg_id encoding: category_id + 1
+      const Eigen::Vector4d& bb = attr.bbox;      // [xmin, ymin, xmax, ymax]
+
+      // Get edge/point indices whose points fall inside this bbox (coarse)
+      std::vector<std::size_t> encoded_indices =
+          pKF->GetEdgeIndicesInBox(static_cast<float>(bb[0]),
+                                   static_cast<float>(bb[2]),
+                                   static_cast<float>(bb[1]),
+                                   static_cast<float>(bb[3]));
+
+      for (std::size_t enc : encoded_indices) {
+        int edge_idx = static_cast<int>(enc / 100000);   // decode edge index
+        int pt_idx   = static_cast<int>(enc % 100000);   // decode point index
+        if (edge_idx < 0 || edge_idx >= static_cast<int>(pKF->mvEdges.size())) {
+          continue;
+        }
+        Edge& edge = pKF->mvEdges[edge_idx];
+        if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) {
+          continue;
+        }
+
+        // Sample mask at this edge point
+        const orderedEdgePoint& pt = edge.mvPoints[pt_idx];
+        int u = static_cast<int>(std::round(pt.x));
+        int v = static_cast<int>(std::round(pt.y));
+        if (u < 0 || v < 0 || u >= motion_mask.cols || v >= motion_mask.rows) {
+          continue;
+        }
+
+        int mask_val = motion_mask.at<int>(v, u);
+        if (mask_val != target_mask_val) {
+          continue;  // point not inside this object's mask
+        }
+
+        // Prefer keeping existing non-background assignment if already set
+        auto it = pKF->mmEdgeIndex2ObjectId.find(edge_idx);
+        if (it != pKF->mmEdgeIndex2ObjectId.end() && it->second >= 0) {
+          continue;
+        }
+
+        pKF->mmEdgeIndex2ObjectId[edge_idx] = obj_id;
+        // Also store on the Edge itself for convenience
+        edge.object_id = obj_id;
+      }
+    }
+  }
 }
 
 return pKF;

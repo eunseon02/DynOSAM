@@ -61,7 +61,32 @@ void visualizeAssociationResult(const dyno::localMapPtr& pLocalMap,
     for (size_t i = 0; i < edgeIdx.size(); ++i) {
       int kf_edge_idx = pLocalMap->mvElementEdges[edgeIdx[i]].kf_edge_idx;
       int kf_id = pLocalMap->mvElementEdges[edgeIdx[i]].kf_id;
-      int kf_idx = pLocalMap->mmKFID2KFindex.at(kf_id);
+      
+      // Safety check: verify kf_id exists in mmKFID2KFindex
+      auto kf_idx_it = pLocalMap->mmKFID2KFindex.find(kf_id);
+      if (kf_idx_it == pLocalMap->mmKFID2KFindex.end()) {
+        skipped_missing++;
+        continue;
+      }
+      int kf_idx = kf_idx_it->second;
+      
+      // Safety check: verify kf_idx is within bounds
+      if (kf_idx < 0 || static_cast<size_t>(kf_idx) >= pLocalMap->mvKeyFrames.size()) {
+        skipped_missing++;
+        continue;
+      }
+      
+      // Safety check: verify keyframe pointer is valid
+      if (!pLocalMap->mvKeyFrames[kf_idx]) {
+        skipped_missing++;
+        continue;
+      }
+      
+      // Safety check: verify kf_edge_idx is within bounds
+      if (kf_edge_idx < 0 || static_cast<size_t>(kf_edge_idx) >= pLocalMap->mvKeyFrames[kf_idx]->mvEdges.size()) {
+        skipped_missing++;
+        continue;
+      }
 
       Edge& edge = pLocalMap->mvKeyFrames[kf_idx]->mvEdges[kf_edge_idx];
       // Global pose of current map element edge

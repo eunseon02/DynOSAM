@@ -147,6 +147,11 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
     // Default: use old method (for backward compatibility)
     int nmatches=0;
 
+    // Safety: if graph is null, nothing to match
+    if (!CurrentFrame.graph) {
+        return 0;
+    }
+
     for(auto [node_id, attribute] : CurrentFrame.graph->attributes){
         double dis_max = 0;
         Object* matched_obj = nullptr;
@@ -162,6 +167,11 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
         }
         
         if(dis_max > 0.00001) {
+            // Safety: matched_obj must be valid before dereference
+            if(!matched_obj){
+                continue;
+            }
+
             if(matched_obj->last_obs_ids_and_max_iou.first.first == CurrentFrame.getFrameId()){
                 //compare and select the best
                 double iou_last = matched_obj->last_obs_ids_and_max_iou.second;
@@ -193,6 +203,11 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
     // Per-frame static object projections (filled only for matched objects)
     std::map<ObjectId, ObjectProjectionResult> static_object_projections;
 
+    // Safety: if graph is null, nothing to match
+    if (!CurrentFrame.graph) {
+        return 0;
+    }
+
     for(auto [node_id, attribute] : CurrentFrame.graph->attributes){
         double dis_max = 0;
         Object* matched_obj = nullptr;
@@ -211,6 +226,11 @@ int ObjectMatcher::MatchObjectsWasserDistance(Frame &CurrentFrame, std::unordere
         }
         
         if(dis_max > 0.00001) {
+            // Safety: matched_obj must be valid before dereference
+            if(!matched_obj){
+                continue;
+            }
+
             if(matched_obj->last_obs_ids_and_max_iou.first.first == CurrentFrame.getFrameId()){
                 //compare and select the best
                 double iou_last = matched_obj->last_obs_ids_and_max_iou.second;

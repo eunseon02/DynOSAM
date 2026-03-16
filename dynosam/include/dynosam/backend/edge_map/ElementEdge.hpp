@@ -19,13 +19,23 @@ class elementEdge{
         int kf_id;
         int kf_edge_idx;
 
-        elementEdge(){}
+        // Associated object id for this edge (from detection / segmentation).
+        // -1 means no associated object.
+        int object_id;
+
+        elementEdge() :
+            element_id(id_counter++),
+            union_id(-1),
+            kf_id(-1),
+            kf_edge_idx(-1),
+            object_id(-1) {}
         
-        elementEdge(int _frame_id, int _frame_edge_idx):
+        elementEdge(int _frame_id, int _frame_edge_idx, int _object_id = -1):
             element_id(id_counter++),          //-- 用当前element_id值初始化id，然后递增
             union_id(-1),                      //-- 并查集 -1 表示根节点
             kf_id(_frame_id),
-            kf_edge_idx(_frame_edge_idx)
+            kf_edge_idx(_frame_edge_idx),
+            object_id(_object_id)
         {}
 };
 
@@ -48,6 +58,9 @@ public:
     static cv::Vec3b generateColorFromClusterId(unsigned int cluster_id);
 
     std::vector<unsigned int> mvElementEdgeIDs;
+
+    // Object ids of edges inside this cluster (may contain duplicates). #TODO: remove duplicates
+    std::vector<int> mvObjectIds;
 
     bool mbMerged;
     double dist_thres;

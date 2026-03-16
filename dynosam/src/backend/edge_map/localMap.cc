@@ -1,4 +1,5 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
+#include <unordered_set>
 using namespace dyno;
 
 //-- Initialize a local map when the number of keyframes is greater than 2
@@ -9,13 +10,24 @@ void localMap::initLocalMap()
     //-- Get two keyframes
     KeyFramePtr pKF_0 = mvKeyFrames[0];
     KeyFramePtr pKF_1 = mvKeyFrames[1];
+    
+    // Safety check: verify keyframes are valid
+    if (!pKF_0 || !pKF_1) {
+        std::cerr << "ERROR: initLocalMap: Invalid keyframe pointers!" << std::endl;
+        return;
+    }
 
     //* STEP-0 First, add all edges from pKF_0 to the map
     for(int i = 0; i < pKF_0->mvEdges.size(); ++i)
     {
         //-- All edges in the keyframe are valid edges
         int edge_idx = i;
-        elementEdge ele(pKF_0->KF_ID, edge_idx);
+        int obj_id = -1;
+        auto it_obj = pKF_0->mmEdgeIndex2ObjectId.find(edge_idx);
+        if (it_obj != pKF_0->mmEdgeIndex2ObjectId.end()) {
+            obj_id = it_obj->second;
+        }
+        elementEdge ele(pKF_0->KF_ID, edge_idx, obj_id);
         //-- Add current edge element to local map
         mvElementEdges.push_back(ele);
         mmElementID2index[ele.element_id] = mvElementEdges.size()-1;
@@ -76,7 +88,12 @@ void localMap::initLocalMap()
         if(pKF_0->mmEdgeIndex2ElementEdgeID.find(ref_idx)==pKF_0->mmEdgeIndex2ElementEdgeID.end()) continue;
 
         int size = mvElementEdges.size();
-        elementEdge ele(pKF_1->KF_ID, cur_idx);
+        int obj_id = -1;
+        auto it_obj = pKF_1->mmEdgeIndex2ObjectId.find(cur_idx);
+        if (it_obj != pKF_1->mmEdgeIndex2ObjectId.end()) {
+            obj_id = it_obj->second;
+        }
+        elementEdge ele(pKF_1->KF_ID, cur_idx, obj_id);
         //-- Map id of reference frame associated with this edge of current frame
         ele.union_id = pKF_0->mmEdgeIndex2ElementEdgeID[ref_idx];
 
@@ -130,6 +147,19 @@ void localMap::initLocalMap()
         unsigned int cluster_id = pair.first;
         std::vector<unsigned int> clusters = pair.second;
         elementEdgeCluster e_cluster(cluster_id, clusters);
+
+        // Collect unique object ids from member elementEdges
+        std::unordered_set<int> unique_obj_ids;
+        for (unsigned int ele_id : clusters) {
+            auto it_ele = mmElementID2index.find(ele_id);
+            if (it_ele == mmElementID2index.end()) continue;
+            const elementEdge& ele = mvElementEdges[it_ele->second];
+            if (ele.object_id >= 0) {
+                unique_obj_ids.insert(ele.object_id);
+            }
+        }
+        e_cluster.mvObjectIds.assign(unique_obj_ids.begin(), unique_obj_ids.end());
+
         mvEleEdgeClusters.push_back(std::move(e_cluster));
         mmClusterID2index[cluster_id] = mvEleEdgeClusters.size() - 1;
     }
@@ -369,7 +399,12 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         //-- For unassociated edges, add to map
         int size = mvElementEdges.size();
         
-        elementEdge ele(frame_cur->KF_ID, i);
+        int obj_id = -1;
+        auto it_obj = frame_cur->mmEdgeIndex2ObjectId.find(i);
+        if (it_obj != frame_cur->mmEdgeIndex2ObjectId.end()) {
+            obj_id = it_obj->second;
+        }
+        elementEdge ele(frame_cur->KF_ID, i, obj_id);
         mvElementEdges.push_back(ele);
         mmElementID2index[ele.element_id] = mvElementEdges.size()-1;
         frame_cur->mmEdgeIndex2ElementEdgeID[i] = ele.element_id;
@@ -378,6 +413,9 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         std::vector<unsigned int> clusters;
         clusters.push_back(ele.element_id);
         elementEdgeCluster e_cluster(cluster_id, clusters);
+        if (ele.object_id >= 0) {
+            e_cluster.mvObjectIds.push_back(ele.object_id);
+        }
         mvEleEdgeClusters.push_back(std::move(e_cluster));
         mmClusterID2index[cluster_id] = mvEleEdgeClusters.size() - 1;
         
@@ -1191,4 +1229,3 @@ void localMap::getAssoFrameMergeEdge(int kf_id_dst, std::vector<match3d_2d>& mat
         }
     }
 }
-

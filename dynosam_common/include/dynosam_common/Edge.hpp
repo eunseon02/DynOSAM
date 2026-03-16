@@ -89,6 +89,10 @@ public:
     //-- 采样之后的索引，在mvPoints中检索，与edgeCloud一一对应
     std::vector<int> mvSampledEdgeIndex;
 
+  // Optional object association (e.g., from detection / segmentation)
+  // -1 means no associated object.
+  int object_id = -1;
+
     void samplingEdgeUniform(int bias);
 
     Edge(){}

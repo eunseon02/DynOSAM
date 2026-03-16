@@ -69,10 +69,49 @@ class TUMAllLoader {
     if (rgb.empty()) {
       return cv::Mat();
     }
-    
-    // Always return empty mask - bbox information will be loaded separately
-    // in FeatureTracker via loadDetections() which populates ObjectBoundaryMaskResult
-    // Create empty motion mask (TUM dataset doesn't provide this natively)
+
+    // Try to load a precomputed segmentation / instance mask image.
+    // Convention (matched to generate_detection_files.py):
+    //   - Python script saves per-frame id mask as:
+    //       <tum_root>/masks/<rgb_basename_without_ext>_id.png
+    //   - Each pixel value is a class / instance id (background = 0).
+    try {
+      if (!tum_path_.empty()) {
+        namespace fs = std::filesystem;
+        const std::string& rgb_rel = rgb_files_[idx];
+        fs::path rgb_path(rgb_rel);
+        std::string stem = rgb_path.stem().string();
+        fs::path mask_path =
+            fs::path(tum_path_) / "masks" / fs::path(stem + "_id.png");
+
+        if (fs::exists(mask_path)) {
+          cv::Mat mask_raw =
+              cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
+          if (mask_raw.empty()) {
+            LOG(WARNING) << "Mask file exists but failed to load: "
+                         << mask_path.string();
+          } else {
+            // Convert to expected MotionMask type (CV_32SC1)
+            cv::Mat mask_converted;
+            mask_raw.convertTo(mask_converted, CV_32SC1);
+            if (mask_converted.size() != rgb.size()) {
+              LOG(WARNING) << "Mask size mismatch, expected " << rgb.cols << "x"
+                           << rgb.rows << " but got " << mask_converted.cols
+                           << "x" << mask_converted.rows << " for file "
+                           << mask_path.string()
+                           << ". Falling back to empty mask.";
+            } else {
+              return mask_converted;
+            }
+          }
+        }
+      }
+    } catch (const std::exception& e) {
+      LOG(WARNING) << "Exception while trying to load TUM instance mask: "
+                   << e.what();
+    }
+
+    // Fallback: empty mask (no motion / instance labels)
     return cv::Mat::zeros(rgb.size(), CV_32SC1);
   }
   

@@ -1552,7 +1552,7 @@ static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
     return result;
   }
   
-  // Priority 1: Use provided static detection result from ImageContainer (e.g., from JSON file)
+  // Priority 1: Use provided static detection result from JSON file
   if (image_container.hasStaticDetectionResult()) {
     result = image_container.staticDetectionResult();
     // LOG(INFO) << "staticObjectDetection: Using provided static detection result from ImageContainer for frame "
@@ -1580,8 +1580,8 @@ static_objects::ObjectDetectionResult FeatureTracker::staticObjectDetection(
     result = yolo_detector->processDetections(image_container.rgb());
   }
   
-  // LOG(INFO) << "Static object detection result: num=" << result.num()
-  //           << ", detections.size()=" << result.detections.size();
+  LOG(INFO) << "Static object detection result: num=" << result.num()
+            << ", detections.size()=" << result.detections.size();
   
   // Log detection details
   for (size_t i = 0; i < result.detections.size(); ++i) {

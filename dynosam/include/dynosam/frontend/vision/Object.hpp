@@ -174,6 +174,12 @@ class Object
 
         std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> associated_world_points_;
 
+        // Edge cluster IDs associated with this object (from KeyFrames)
+        // Maps KeyFrame ID -> (edge_id -> cluster_id)
+        // This maintains edge cluster information across sliding window updates
+        // Each edge in a KeyFrame can have a different cluster_id
+        std::map<int, std::map<int, unsigned int>> associated_edge_cluster_ids_;
+
         mutable std::mutex mutex_ellipsoid_;
         mutable std::mutex mutex_associated_map_points_;
         mutable std::mutex mutex_add_detection_;
