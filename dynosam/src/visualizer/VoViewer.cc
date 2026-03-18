@@ -121,7 +121,15 @@ void voViewer::render_loop()
         {
             for(size_t i = 0; i < environment_cloud.size(); ++i)
             {
-                drawPointCloudColor(environment_cloud[i], cv::Vec3b(150, 150, 150), 2);
+                const auto& frame = environment_cloud[i];
+                // If per-point colors are available and match the points size, use them.
+                if (!frame.points.empty() &&
+                    frame.points.size() == frame.colors.size()) {
+                    drawPointCloudColorful(frame.points, frame.colors, 2);
+                } else {
+                    // Fallback: draw all points in gray if no colors are provided.
+                    drawPointCloudColor(frame.points, cv::Vec3b(150, 150, 150), 2);
+                }
             }
         }
 

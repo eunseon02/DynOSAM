@@ -99,7 +99,7 @@ public:
         localMap_colors = std::move(local_map_colors);
     }
 
-    void update_Environment(std::vector<std::vector<cv::Point3d>> pcloud)
+    void update_Environment(std::vector<dyno::EnvironmentCloudFrame> pcloud)
     {
         environment_cloud = std::move(pcloud);
     }
@@ -152,7 +152,7 @@ private:
     
     std::vector<std::vector<cv::Point3d>> localMap_cloud;
     std::vector<cv::Vec3b> localMap_colors;
-    std::vector<std::vector<cv::Point3d>> environment_cloud;
+    std::vector<dyno::EnvironmentCloudFrame> environment_cloud;
     std::vector<cv::Point3d> covisibility_cloud;
     std::vector<cv::Vec3b>   covisibility_color;
 

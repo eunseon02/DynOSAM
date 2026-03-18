@@ -62,6 +62,13 @@ using ImageDisplayQueue = ThreadsafeQueue<ImageToDisplay>;
  * - currentFramePose: always valid
  * - the shared_ptr fields may be null until the corresponding data becomes available
  */
+
+// Single frame of environment cloud: points + their colors
+struct EnvironmentCloudFrame {
+  std::vector<cv::Point3d> points;
+  std::vector<cv::Vec3b> colors;
+};
+
 struct EdgeVisualizationData {
   // Current camera pose in world (used for trajectory + camera pose)
   Eigen::Matrix4d currentFramePose{Eigen::Matrix4d::Identity()};
@@ -77,8 +84,8 @@ struct EdgeVisualizationData {
   // Keyframe poses in the sliding window
   std::shared_ptr<const std::vector<Eigen::Matrix4d>> slidingWindow;
 
-  // Accumulated environment point clouds over time
-  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud;
+  // Accumulated environment point clouds over time (with per-point color)
+  std::shared_ptr<const std::vector<EnvironmentCloudFrame>> environment_cloud;
 };
 
 // Pointer type for EdgeVisualizationData

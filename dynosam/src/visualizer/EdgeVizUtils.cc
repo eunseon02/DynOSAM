@@ -10,6 +10,8 @@
 
 #include <sophus/se3.hpp>
 
+#include "dynosam/frontend/vision/Object.hpp"
+
 namespace edge_viz {
 
 // Camera parameters for visualization (similar to localmapping.cc)
@@ -56,7 +58,44 @@ void visualizeAssociationResult(const dyno::localMapPtr& pLocalMap,
 
     // Edge cluster point cloud
     std::vector<cv::Point3d> clusterCloud;
-    cv::Vec3b color = cluster.visColor;
+    // Default color: gray (same as Edge default)
+    cv::Vec3b color(150, 150, 150);
+    // 클러스터 내부 edge들의 색을 모두 검사해서,
+    // - 전부 회색(기본값)이면 그대로 회색 유지
+    // - 하나라도 회색이 아닌 edge가 있으면 그 색으로 표시
+    bool has_non_gray = false;
+    cv::Vec3b non_gray_color(150, 150, 150);
+    for (int ele_idx : edgeIdx) {
+      if (ele_idx < 0 ||
+          static_cast<size_t>(ele_idx) >= pLocalMap->mvElementEdges.size())
+        continue;
+      const dyno::elementEdge& ele_edge = pLocalMap->mvElementEdges[ele_idx];
+      auto kf_it = pLocalMap->mmKFID2KFindex.find(ele_edge.kf_id);
+      if (kf_it == pLocalMap->mmKFID2KFindex.end()) continue;
+      int kf_idx = kf_it->second;
+      if (kf_idx < 0 ||
+          static_cast<size_t>(kf_idx) >= pLocalMap->mvKeyFrames.size())
+        continue;
+      const auto& pKF = pLocalMap->mvKeyFrames[kf_idx];
+      if (!pKF) continue;
+      if (ele_edge.kf_edge_idx < 0 ||
+          static_cast<size_t>(ele_edge.kf_edge_idx) >= pKF->mvEdges.size())
+        continue;
+      const Edge& e = pKF->mvEdges[ele_edge.kf_edge_idx];
+      const cv::Scalar& c = e.color;  // BGR
+      cv::Vec3b ec(
+          static_cast<unsigned char>(c[0]),
+          static_cast<unsigned char>(c[1]),
+          static_cast<unsigned char>(c[2]));
+      if (!(ec[0] == 150 && ec[1] == 150 && ec[2] == 150)) {
+        has_non_gray = true;
+        non_gray_color = ec;
+        break;  // 하나 찾으면 그 색을 대표색으로 사용
+      }
+    }
+    if (has_non_gray) {
+      color = non_gray_color;
+    }
 
     for (size_t i = 0; i < edgeIdx.size(); ++i) {
       int kf_edge_idx = pLocalMap->mvElementEdges[edgeIdx[i]].kf_edge_idx;
@@ -147,7 +186,33 @@ void visualizeMergedLocalMap(const dyno::localMapPtr& pLocalMap,
       continue;
     }
     mergedClouds.push_back(merged_cloud);
-    mergedCloudColors.push_back(cluster.visColor);
+    // Default color: gray if no associated object color is found.
+    cv::Vec3b color(128, 128, 128);
+    // Prefer actual edge colors from member element-edges (same policy as
+    // visualizeAssociationResult) so merged local-map view matches co-visibility.
+    for (unsigned int ele_id : cluster.mvElementEdgeIDs) {
+      auto it_ele = pLocalMap->mmElementID2index.find(ele_id);
+      if (it_ele == pLocalMap->mmElementID2index.end()) continue;
+      const dyno::elementEdge& ele_edge = pLocalMap->mvElementEdges[it_ele->second];
+      auto kf_it = pLocalMap->mmKFID2KFindex.find(ele_edge.kf_id);
+      if (kf_it == pLocalMap->mmKFID2KFindex.end()) continue;
+      const int kf_idx = kf_it->second;
+      if (kf_idx < 0 || static_cast<size_t>(kf_idx) >= pLocalMap->mvKeyFrames.size()) continue;
+      const auto& pKF = pLocalMap->mvKeyFrames[kf_idx];
+      if (!pKF) continue;
+      if (ele_edge.kf_edge_idx < 0 ||
+          static_cast<size_t>(ele_edge.kf_edge_idx) >= pKF->mvEdges.size()) continue;
+      const Edge& e = pKF->mvEdges[ele_edge.kf_edge_idx];
+      const cv::Scalar& c = e.color;  // BGR
+      cv::Vec3b ec(static_cast<unsigned char>(c[0]),
+                   static_cast<unsigned char>(c[1]),
+                   static_cast<unsigned char>(c[2]));
+      if (!(ec[0] == 150 && ec[1] == 150 && ec[2] == 150)) {
+        color = ec;
+        break;
+      }
+    }
+    mergedCloudColors.push_back(color);
   }
 
   // Debug: Log filtering results

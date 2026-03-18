@@ -2,6 +2,22 @@
 #include <unordered_set>
 using namespace dyno;
 
+namespace {
+int resolveObjectIdFromKeyFrame(const KeyFramePtr& kf, int edge_idx) {
+    if (!kf) return -1;
+    auto it_obj = kf->mmEdgeIndex2ObjectId.find(edge_idx);
+    if (it_obj != kf->mmEdgeIndex2ObjectId.end() && it_obj->second >= 0) {
+        return it_obj->second;
+    }
+    if (edge_idx >= 0 && edge_idx < static_cast<int>(kf->mvEdges.size())) {
+        if (kf->mvEdges[edge_idx].object_id >= 0) {
+            return kf->mvEdges[edge_idx].object_id;
+        }
+    }
+    return -1;
+}
+}  // namespace
+
 //-- Initialize a local map when the number of keyframes is greater than 2
 void localMap::initLocalMap()
 {
@@ -22,11 +38,7 @@ void localMap::initLocalMap()
     {
         //-- All edges in the keyframe are valid edges
         int edge_idx = i;
-        int obj_id = -1;
-        auto it_obj = pKF_0->mmEdgeIndex2ObjectId.find(edge_idx);
-        if (it_obj != pKF_0->mmEdgeIndex2ObjectId.end()) {
-            obj_id = it_obj->second;
-        }
+        int obj_id = resolveObjectIdFromKeyFrame(pKF_0, edge_idx);
         elementEdge ele(pKF_0->KF_ID, edge_idx, obj_id);
         //-- Add current edge element to local map
         mvElementEdges.push_back(ele);
@@ -88,11 +100,7 @@ void localMap::initLocalMap()
         if(pKF_0->mmEdgeIndex2ElementEdgeID.find(ref_idx)==pKF_0->mmEdgeIndex2ElementEdgeID.end()) continue;
 
         int size = mvElementEdges.size();
-        int obj_id = -1;
-        auto it_obj = pKF_1->mmEdgeIndex2ObjectId.find(cur_idx);
-        if (it_obj != pKF_1->mmEdgeIndex2ObjectId.end()) {
-            obj_id = it_obj->second;
-        }
+        int obj_id = resolveObjectIdFromKeyFrame(pKF_1, cur_idx);
         elementEdge ele(pKF_1->KF_ID, cur_idx, obj_id);
         //-- Map id of reference frame associated with this edge of current frame
         ele.union_id = pKF_0->mmEdgeIndex2ElementEdgeID[ref_idx];
@@ -371,7 +379,9 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
             //-- For edges that have been associated, create elementEdge and union
             isAssociated[cur_idx] = true;
             
-            elementEdge ele(frame_cur->KF_ID, cur_idx);
+            // Propagate object_id from current frame's KeyFrame (if available)
+            int obj_id = resolveObjectIdFromKeyFrame(frame_cur, cur_idx);
+            elementEdge ele(frame_cur->KF_ID, cur_idx, obj_id);
             int map_id_1 = frame_ref->mmEdgeIndex2ElementEdgeID.at(ref_id);
             
             ele.union_id = findRoot(map_id_1);
@@ -388,6 +398,10 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
             }
             int cluster_idx = mmClusterID2index[cluster_id];
             mvEleEdgeClusters[cluster_idx].mvElementEdgeIDs.push_back(ele.element_id);
+            // If this edge has an associated object_id, record it on the cluster as well
+            if (ele.object_id >= 0) {
+                mvEleEdgeClusters[cluster_idx].mvObjectIds.push_back(ele.object_id);
+            }
             mvEleEdgeClusters[cluster_idx].mbModifiedCur = true;
 
         }
@@ -399,11 +413,7 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         //-- For unassociated edges, add to map
         int size = mvElementEdges.size();
         
-        int obj_id = -1;
-        auto it_obj = frame_cur->mmEdgeIndex2ObjectId.find(i);
-        if (it_obj != frame_cur->mmEdgeIndex2ObjectId.end()) {
-            obj_id = it_obj->second;
-        }
+        int obj_id = resolveObjectIdFromKeyFrame(frame_cur, i);
         elementEdge ele(frame_cur->KF_ID, i, obj_id);
         mvElementEdges.push_back(ele);
         mmElementID2index[ele.element_id] = mvElementEdges.size()-1;
@@ -458,6 +468,13 @@ void localMap::mergeElementCluster(int cluster_idx_1, int cluster_idx_2)
         // * STEP-2 Move all edges from cluster_2 to cluster_1
         auto& vElementIDS_1 = cluster_1.mvElementEdgeIDs;
         vElementIDS_1.insert(vElementIDS_1.end(), cluster_2.mvElementEdgeIDs.begin(), cluster_2.mvElementEdgeIDs.end());
+        // Merge object ids as well so object-edge association is preserved across cluster merges.
+        {
+            std::unordered_set<int> merged_obj_ids;
+            for (int id : cluster_1.mvObjectIds) if (id >= 0) merged_obj_ids.insert(id);
+            for (int id : cluster_2.mvObjectIds) if (id >= 0) merged_obj_ids.insert(id);
+            cluster_1.mvObjectIds.assign(merged_obj_ids.begin(), merged_obj_ids.end());
+        }
         
         // * STEP-3 Delete cluster_2
         mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_2); // Delete i-th element
@@ -481,6 +498,13 @@ void localMap::mergeElementCluster(int cluster_idx_1, int cluster_idx_2)
         // * STEP-2 Move all edges from cluster_1 to cluster_2
         auto& vElementIDS_2 = cluster_2.mvElementEdgeIDs;
         vElementIDS_2.insert(vElementIDS_2.end(), cluster_1.mvElementEdgeIDs.begin(), cluster_1.mvElementEdgeIDs.end());
+        // Merge object ids as well so object-edge association is preserved across cluster merges.
+        {
+            std::unordered_set<int> merged_obj_ids;
+            for (int id : cluster_2.mvObjectIds) if (id >= 0) merged_obj_ids.insert(id);
+            for (int id : cluster_1.mvObjectIds) if (id >= 0) merged_obj_ids.insert(id);
+            cluster_2.mvObjectIds.assign(merged_obj_ids.begin(), merged_obj_ids.end());
+        }
         
         // * STEP-3 Delete cluster_1
         mvEleEdgeClusters.erase(mvEleEdgeClusters.begin() + cluster_idx_1); // Delete i-th element

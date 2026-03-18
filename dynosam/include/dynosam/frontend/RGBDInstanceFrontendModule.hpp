@@ -204,8 +204,8 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   std::shared_ptr<const std::vector<cv::Vec3b>> cluster_colors_cache_;
   std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> local_map_clouds_cache_;
   std::shared_ptr<const std::vector<cv::Vec3b>> local_map_colors_cache_;
-  std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> environment_cloud_cache_;
-  std::deque<std::vector<cv::Point3d>> environment_frames_;  // <=150 frames
+  std::shared_ptr<const std::vector<EnvironmentCloudFrame>> environment_cloud_cache_;
+  std::deque<EnvironmentCloudFrame> environment_frames_;  // <=150 frames
 
   // Global object map (ellipsoid/object-level SLAM map)
   std::shared_ptr<dyno::EdgeMap> map_;

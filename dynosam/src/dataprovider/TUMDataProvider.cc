@@ -70,39 +70,73 @@ class TUMAllLoader {
       return cv::Mat();
     }
 
-    // Try to load a precomputed segmentation / instance mask image.
+    // Try to load colored segmentation mask image.
     // Convention (matched to generate_detection_files.py):
-    //   - Python script saves per-frame id mask as:
-    //       <tum_root>/masks/<rgb_basename_without_ext>_id.png
-    //   - Each pixel value is a class / instance id (background = 0).
+    //   - Python script saves colored segmentation as:
+    //       <tum_root>/masks/<rgb_filename> (same name as RGB)
+    //   - Each pixel has BGR color based on category_id:
+    //       B = (category_id * 37) % 256
+    //       G = (category_id * 17) % 256
+    //       R = (category_id * 97) % 256
     try {
       if (!tum_path_.empty()) {
         namespace fs = std::filesystem;
         const std::string& rgb_rel = rgb_files_[idx];
         fs::path rgb_path(rgb_rel);
-        std::string stem = rgb_path.stem().string();
-        fs::path mask_path =
-            fs::path(tum_path_) / "masks" / fs::path(stem + "_id.png");
+        std::string filename = rgb_path.filename().string();
+        fs::path masks_dir = fs::path(tum_path_) / "masks";
+        fs::path mask_path = masks_dir / filename;
+
+        // Log mask directory and file existence (only for first frame to avoid spam)
+        static bool logged_mask_check = false;
+        if (!logged_mask_check && idx == 0) {
+          if (!fs::exists(masks_dir)) {
+            LOG(WARNING) << "TUMDataProvider: masks directory does not exist: " 
+                         << masks_dir.string();
+          } else if (!fs::is_directory(masks_dir)) {
+            LOG(WARNING) << "TUMDataProvider: masks path exists but is not a directory: " 
+                         << masks_dir.string();
+          } 
+          logged_mask_check = true;
+        }
 
         if (fs::exists(mask_path)) {
-          cv::Mat mask_raw =
-              cv::imread(mask_path.string(), cv::IMREAD_UNCHANGED);
-          if (mask_raw.empty()) {
+          cv::Mat mask_bgr = cv::imread(mask_path.string(), cv::IMREAD_COLOR);
+          if (mask_bgr.empty()) {
             LOG(WARNING) << "Mask file exists but failed to load: "
                          << mask_path.string();
           } else {
-            // Convert to expected MotionMask type (CV_32SC1)
-            cv::Mat mask_converted;
-            mask_raw.convertTo(mask_converted, CV_32SC1);
-            if (mask_converted.size() != rgb.size()) {
+            if (mask_bgr.size() != rgb.size()) {
               LOG(WARNING) << "Mask size mismatch, expected " << rgb.cols << "x"
-                           << rgb.rows << " but got " << mask_converted.cols
-                           << "x" << mask_converted.rows << " for file "
+                           << rgb.rows << " but got " << mask_bgr.cols
+                           << "x" << mask_bgr.rows << " for file "
                            << mask_path.string()
                            << ". Falling back to empty mask.";
             } else {
+              // Convert BGR colored segmentation to CV_32SC1 format
+              // Store as BGR values in a way that can be compared later
+              // We'll use the BGR image directly, but need to convert to CV_32SC1 for ImageType::MotionMask
+              // Store BGR as: (B << 16) | (G << 8) | R (packed into 32-bit int)
+              cv::Mat mask_converted(rgb.size(), CV_32SC1);
+              for (int y = 0; y < mask_bgr.rows; ++y) {
+                for (int x = 0; x < mask_bgr.cols; ++x) {
+                  cv::Vec3b bgr = mask_bgr.at<cv::Vec3b>(y, x);
+                  // Pack BGR into 32-bit int: (B << 16) | (G << 8) | R
+                  int packed = (static_cast<int>(bgr[0]) << 16) | 
+                               (static_cast<int>(bgr[1]) << 8) | 
+                               static_cast<int>(bgr[2]);
+                  mask_converted.at<int>(y, x) = packed;
+                }
+              }
               return mask_converted;
             }
+          }
+        } else {
+          // Log missing mask file (only for first few frames to avoid spam)
+          if (idx < 3) {
+            LOG_EVERY_N(INFO, 100) << "TUMDataProvider: mask file not found: " 
+                                    << mask_path.string() 
+                                    << " (frame " << idx << ")";
           }
         }
       }

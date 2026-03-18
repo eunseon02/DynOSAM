@@ -272,20 +272,8 @@ cv::Mat FeatureTrackerBase::computeImageTracks(
     }
   }
 
-  if (config.drawObjectMask()) {
-    constexpr static float kAlpha = 0.7;
-    // Use objectMotionMask for dynamic objects, or staticDetectionResult.labelled_mask for static objects
-    cv::Mat mask_to_draw = object_mask;
-    if (object_mask.empty() && current_frame.image_container_.hasStaticDetectionResult()) {
-      const auto& static_result = current_frame.image_container_.staticDetectionResult();
-      if (!static_result.labelled_mask.empty()) {
-        mask_to_draw = static_result.labelled_mask;
-      }
-    }
-    if (!mask_to_draw.empty()) {
-      utils::labelMaskToRGB(mask_to_draw, img_rgb, img_rgb, kAlpha);
-    }
-  }
+  // Tracks window policy: never draw object mask overlay here.
+  // Keep mask visualization only in dedicated debug windows (e.g. Detections).
 
   // Visualize organized edges
   // if (!current_frame.static_edges_.empty()) {

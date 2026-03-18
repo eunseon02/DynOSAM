@@ -189,14 +189,63 @@ namespace dyno
             const Eigen::Vector3d tcw = Rt.col(3);
             associated_world_points_.reserve(associated_world_points_.size() + enc_list.size());
 
+            // 1) Depth filtering
+            std::vector<double> depths;
+            depths.reserve(enc_list.size());
             for (std::size_t enc : enc_list) {
                 const int edge_id = static_cast<int>(enc / 100000);
                 const int pt_idx  = static_cast<int>(enc % 100000);
                 auto itEdge = kf->mmIndexMap.find(edge_id);
                 if (itEdge == kf->mmIndexMap.end()) continue;
-                auto& edge = kf->mvEdges[itEdge->second];
+                const auto& edge = kf->mvEdges[itEdge->second];
                 if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
                 const auto& pt = edge.mvPoints[pt_idx];
+                if (pt.z_3d > 0.0) depths.push_back(pt.z_3d);
+            }
+
+            double mean_depth = 0.0;
+            double depth_var  = 0.0;
+            if (!depths.empty()) {
+                double sum = 0.0;
+                for (double d : depths) sum += d;
+                mean_depth = sum / depths.size();
+                double sq_sum = 0.0;
+                for (double d : depths) {
+                    double diff = d - mean_depth;
+                    sq_sum += diff * diff;
+                }
+                depth_var = sq_sum / depths.size();
+            }
+            const double depth_std = (depth_var > 0.0) ? std::sqrt(depth_var) : 0.0;
+            const double kSigma = 2.0;
+            const double fallback_eps = 0.15;
+
+            // 2) depth 필터를 통과한 포인트만 object와 edge에 할당
+            for (std::size_t enc : enc_list) {
+                const int edge_id = static_cast<int>(enc / 100000);
+                const int pt_idx  = static_cast<int>(enc % 100000);
+                auto itEdge = kf->mmIndexMap.find(edge_id);
+                if (itEdge == kf->mmIndexMap.end()) continue;
+                const int edge_idx = itEdge->second;
+                auto& edge = kf->mvEdges[edge_idx];
+                if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
+                const auto& pt = edge.mvPoints[pt_idx];
+
+                if (pt.z_3d <= 0.0) continue;
+                if (!depths.empty()) {
+                    double tol = (depth_std > 1e-3) ? kSigma * depth_std : fallback_eps;
+                    if (std::fabs(pt.z_3d - mean_depth) > tol) {
+                        continue;
+                    }
+                }
+
+                // Attach this edge to the current object for visualization:
+                // - store object id on the edge
+                // - store the object's color on the edge
+                // - also update mmEdgeIndex2ObjectId for consistency
+                edge.object_id = static_cast<int>(id_);
+                edge.color = GetColor();
+                kf->mmEdgeIndex2ObjectId[edge_idx] = static_cast<int>(id_);
 
                 // pt.x_3d/y_3d/z_3d are in keyframe camera coordinates
                 Eigen::Vector3d pc(pt.x_3d, pt.y_3d, pt.z_3d);
@@ -219,14 +268,100 @@ namespace dyno
             mnLastKFid = kf->KF_ID;
             ellipses_.push_back(ell);
             observed_kfs.push_back(kf);
-            // std::unique_lock<std::mutex> lock(mutex_associated_map_points_);
-            // auto vIndices_in_box = kf->GetFeaturesInBox(bbox[0], bbox[2], bbox[1], bbox[3]);
-            // for(auto i : vIndices_in_box){
-            //     MapPoint* mp = kf->mvpMapPoints[i];
-            //     if (mp) {
-            //         associated_map_points_.insert(mp);
-            //     }
-            // }
+            // Edge-SLAM: 새 관측 bbox 안에 있는 edge 포인트를 다시 한 번 객체에 연결해 준다.
+            {
+                std::unique_lock<std::mutex> lock_pts(mutex_associated_map_points_);
+                const auto enc_list =
+                    kf->GetEdgeIndicesInBox(bbox[0], bbox[2], bbox[1], bbox[3]);
+                std::vector<std::size_t> enc_list_for_object;
+                enc_list_for_object.reserve(enc_list.size());
+
+                // Keep only edges that were already assigned to this object from the
+                // instance mask at KeyFrame creation time. This avoids bbox-only
+                // reassignment bleeding across object boundaries.
+                for (std::size_t enc : enc_list) {
+                    const int edge_id = static_cast<int>(enc / 100000);
+                    auto itEdge = kf->mmIndexMap.find(edge_id);
+                    if (itEdge == kf->mmIndexMap.end()) continue;
+                    const int edge_idx = itEdge->second;
+                    auto itObj = kf->mmEdgeIndex2ObjectId.find(edge_idx);
+                    if (itObj == kf->mmEdgeIndex2ObjectId.end()) continue;
+                    if (itObj->second != static_cast<int>(id_)) continue;
+                    enc_list_for_object.push_back(enc);
+                }
+
+                // Rt is [R_cw | t_cw]; convert camera point -> world point
+                const Eigen::Matrix3d Rcw = Rt.block<3,3>(0,0);
+                const Eigen::Vector3d tcw = Rt.col(3);
+                associated_world_points_.reserve(
+                    associated_world_points_.size() + enc_list_for_object.size());
+
+                // 1) bbox 내부 edge 포인트들의 depth 통계 (새 detection 기준)
+                std::vector<double> depths;
+                depths.reserve(enc_list_for_object.size());
+                for (std::size_t enc : enc_list_for_object) {
+                    const int edge_id = static_cast<int>(enc / 100000);
+                    const int pt_idx  = static_cast<int>(enc % 100000);
+                    auto itEdge = kf->mmIndexMap.find(edge_id);
+                    if (itEdge == kf->mmIndexMap.end()) continue;
+                    const auto& edge = kf->mvEdges[itEdge->second];
+                    if (pt_idx < 0 ||
+                        pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
+                    const auto& pt = edge.mvPoints[pt_idx];
+                    if (pt.z_3d > 0.0) depths.push_back(pt.z_3d);
+                }
+
+                double mean_depth = 0.0;
+                double depth_var  = 0.0;
+                if (!depths.empty()) {
+                    double sum = 0.0;
+                    for (double d : depths) sum += d;
+                    mean_depth = sum / depths.size();
+                    double sq_sum = 0.0;
+                    for (double d : depths) {
+                        double diff = d - mean_depth;
+                        sq_sum += diff * diff;
+                    }
+                    depth_var = sq_sum / depths.size();
+                }
+                const double depth_std = (depth_var > 0.0) ? std::sqrt(depth_var) : 0.0;
+                const double kSigma = 2.0;
+                const double fallback_eps = 0.15; // m 단위 허용 편차
+
+                // 2) depth 필터를 통과한 포인트만 object와 edge에 재할당
+                for (std::size_t enc : enc_list_for_object) {
+                    const int edge_id = static_cast<int>(enc / 100000);
+                    const int pt_idx  = static_cast<int>(enc % 100000);
+                    auto itEdge = kf->mmIndexMap.find(edge_id);
+                    if (itEdge == kf->mmIndexMap.end()) continue;
+                    const int edge_idx = itEdge->second;
+                    auto& edge = kf->mvEdges[edge_idx];
+                    if (pt_idx < 0 ||
+                        pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
+                    const auto& pt = edge.mvPoints[pt_idx];
+
+                    if (pt.z_3d <= 0.0) continue;
+                    if (!depths.empty()) {
+                        double tol = (depth_std > 1e-3) ? kSigma * depth_std : fallback_eps;
+                        if (std::fabs(pt.z_3d - mean_depth) > tol) {
+                            continue;
+                        }
+                    }
+
+                    // Attach this edge to the current object for visualization:
+                    // - store object id on the edge
+                    // - store the object's color on the edge
+                    edge.object_id = static_cast<int>(id_);
+                    edge.color = GetColor();
+                    kf->mmEdgeIndex2ObjectId[edge_idx] = static_cast<int>(id_);
+
+                    // pt.x_3d/y_3d/z_3d are in keyframe camera coordinates
+                    Eigen::Vector3d pc(pt.x_3d, pt.y_3d, pt.z_3d);
+                    Eigen::Vector3d pw =
+                        Rcw.transpose() * pc + (-Rcw.transpose() * tcw);
+                    associated_world_points_.push_back(pw);
+                }
+            }
 
             // Trigger local ellipsoid refinement once we have enough observations,
             // similar to the original OA-SLAM behavior.

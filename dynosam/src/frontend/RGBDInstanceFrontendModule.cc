@@ -243,8 +243,8 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
         std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
             std::vector<std::vector<cv::Point3d>>{});
     environment_cloud_cache_ =
-        std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
-            std::vector<std::vector<cv::Point3d>>{});
+        std::make_shared<const std::vector<EnvironmentCloudFrame>>(
+            std::vector<EnvironmentCloudFrame>{});
     environment_frames_.clear();
     // Initialize visualization data (will be updated every frame)
     latest_visualization_data_ = nullptr;
@@ -816,9 +816,19 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         Rt.block<3, 1>(0, 3) = T_cw.translation();
 
         Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
+
+        // Optional visualization image to debug object handling on this frame.
+        cv::Mat object_viz =
+            ImageType::RGBMono::toRGB(frame->image_container_.rgb()).clone();
         
         for(auto [node_id, attribute] : pKF->graph->attributes){
-        if(attribute.obj){
+          const auto& bb = attribute.bbox;  // [xmin, ymin, xmax, ymax]
+          cv::Rect rect(static_cast<int>(bb[0]),
+                        static_cast<int>(bb[1]),
+                        static_cast<int>(bb[2] - bb[0]),
+                        static_cast<int>(bb[3] - bb[1]));
+
+          if(attribute.obj){
             auto proj = attribute.obj->GetEllipsoid().project(P);
             auto bb_proj = proj.ComputeBbox();
             double iou = bboxes_iou(bb_proj, attribute.bbox);
@@ -827,10 +837,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
               auto c = proj.GetCenter();
               auto axes = proj.GetAxes();
               double angle = proj.GetAngle();
-              //if(iou<0.3)
-              //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 0, 255), 2);
-              //else
-              //    cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 0), 2);
               if(axes[0] <= 0.001 || axes[1] <= 0.001)
                   continue;
 
@@ -847,10 +853,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             else{
                 continue;
             }
-        } else {
-            //std::cout<<"not asscociated node id:"<<node_id<<std::endl;
-            //TODO check if match new
-
+          } else {
             // Filter by confidence score
             if (attribute.confidence < kMinConfidenceScore_) {
                 continue;
@@ -858,20 +861,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
             // Check if node_id is valid index for depth_data_per_det
             if (node_id >= depth_data_per_det.size()) {
-                // VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
-                //         << " is out of bounds for depth_data_per_det (size=" 
-                //         << depth_data_per_det.size() << ")";
                 continue;
             }
             
             const auto& depth_data = depth_data_per_det[node_id];
-            
-            // // Check depth validity (same as ObjectsInitialization)
-            // if (depth_data.first <= 0.01f || depth_data.first >= 15.0f) {
-            //     VLOG(1) << "processEdgeKeyFrame: node_id=" << node_id 
-            //             << " has invalid depth=" << depth_data.first;
-            //     continue;
-            // }
           
             //create new object
             Object* obj = new Object(
@@ -892,15 +885,110 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             map_->AddObject(obj);
             local_map_->mlpRecentAddedObjects.push_back(obj);
             pKF->graph->attributes[node_id].obj = obj;
-            //auto proj = obj->GetEllipsoid().project(P);
-            //auto c = proj.GetCenter();
-            //auto axes = proj.GetAxes();
-            //double angle = proj.GetAngle();
-            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, cv::Scalar(0, 255, 255), 2);
-            //if(axes[0] <= 0.001 || axes[1] <= 0.001)
-            //    continue;
-            //cv::ellipse(im_rgb_, cv::Point2f(c[0], c[1]), cv::Size2f(axes[0], axes[1]), TO_DEG(angle), 0, 360, obj->GetColor(), 2);
+          }
+
+          // Draw bbox for this detection on object_viz (for debugging):
+          cv::Scalar draw_col(0, 255, 255);      // default yellow for bbox
+          cv::Scalar edge_col(150, 150, 150);    // fixed gray for edges
+          if (pKF->graph->attributes[node_id].obj) {
+            cv::Scalar c = pKF->graph->attributes[node_id].obj->GetColor();
+            draw_col = c;      // bbox는 object 색으로
+          }
+
+          // Overlay the detection mask in the same object color inside bbox.
+          // The motion mask stores packed BGR as 32-bit int.
+          const cv::Mat& motion_mask = frame->image_container_.objectMotionMask();
+          if (!motion_mask.empty() &&
+              motion_mask.type() == CV_32SC1 &&
+              motion_mask.size() == object_viz.size()) {
+            const int cls_label = attribute.label;
+            const unsigned char target_b =
+                static_cast<unsigned char>((cls_label * 37) % 256);
+            const unsigned char target_g =
+                static_cast<unsigned char>((cls_label * 17) % 256);
+            const unsigned char target_r =
+                static_cast<unsigned char>((cls_label * 97) % 256);
+            const int target_mask_val =
+                (static_cast<int>(target_b) << 16) |
+                (static_cast<int>(target_g) << 8) |
+                static_cast<int>(target_r);
+
+            const int x0 = std::max(0, rect.x);
+            const int y0 = std::max(0, rect.y);
+            const int x1 = std::min(object_viz.cols, rect.x + rect.width);
+            const int y1 = std::min(object_viz.rows, rect.y + rect.height);
+            constexpr float kMaskAlpha = 0.35f;
+            for (int y = y0; y < y1; ++y) {
+              const int* mask_row = motion_mask.ptr<int>(y);
+              cv::Vec3b* viz_row = object_viz.ptr<cv::Vec3b>(y);
+              for (int x = x0; x < x1; ++x) {
+                if (mask_row[x] != target_mask_val) continue;
+                for (int c = 0; c < 3; ++c) {
+                  const float blended =
+                      (1.0f - kMaskAlpha) * static_cast<float>(viz_row[x][c]) +
+                      kMaskAlpha * static_cast<float>(draw_col[c]);
+                  viz_row[x][c] = static_cast<uchar>(
+                      std::max(0.0f, std::min(255.0f, blended)));
+                }
+              }
+            }
+          }
+
+          // Draw bbox for this detection
+          cv::rectangle(object_viz, rect, draw_col, 2);
+          std::string text = std::to_string(attribute.label);
+          cv::putText(object_viz, text, rect.tl() + cv::Point(0, -3),
+                      cv::FONT_HERSHEY_SIMPLEX, 0.5, draw_col, 1, cv::LINE_AA);
+
+          // Additionally, draw edge points inside this detection bbox,
+          // coloring only those edges that are actually associated with this
+          // object (mmEdgeIndex2ObjectId[edge_idx] == obj_id), and drawing the
+          // rest in gray.
+          std::vector<std::size_t> enc_list =
+              pKF->GetEdgeIndicesInBox(static_cast<float>(bb[0]),
+                                       static_cast<float>(bb[2]),
+                                       static_cast<float>(bb[1]),
+                                       static_cast<float>(bb[3]));
+          int obj_id_for_viz = -1;
+          if (pKF->graph->attributes[node_id].obj) {
+            obj_id_for_viz =
+                static_cast<int>(pKF->graph->attributes[node_id].obj->GetId());
+          }
+          for (std::size_t enc : enc_list) {
+            const int edge_id = static_cast<int>(enc / 100000);
+            const int pt_idx  = static_cast<int>(enc % 100000);
+            auto itEdge = pKF->mmIndexMap.find(edge_id);
+            if (itEdge == pKF->mmIndexMap.end()) continue;
+            const int edge_idx = itEdge->second;
+            const Edge& e = pKF->mvEdges[edge_idx];
+            if (pt_idx < 0 || pt_idx >= static_cast<int>(e.mvPoints.size()))
+              continue;
+
+            // Decide color based on association
+            cv::Scalar pt_col = edge_col;  // default gray
+            if (obj_id_for_viz >= 0) {
+              auto it_obj =
+                  pKF->mmEdgeIndex2ObjectId.find(static_cast<int>(edge_idx));
+              if (it_obj != pKF->mmEdgeIndex2ObjectId.end() &&
+                  it_obj->second == obj_id_for_viz) {
+                // This edge is associated with this object -> use object color
+                pt_col = draw_col;
+              }
+            }
+
+            const auto& pt = e.mvPoints[pt_idx];
+            int u = static_cast<int>(std::round(pt.x));
+            int v = static_cast<int>(std::round(pt.y));
+            if (u < 0 || v < 0 || u >= object_viz.cols || v >= object_viz.rows)
+              continue;
+            cv::circle(object_viz, cv::Point(u, v), 1, pt_col, -1,
+                       cv::LINE_AA);
+          }
         }
+
+        // Send visualization to display queue (optional debug window)
+        if (display_queue_) {
+          display_queue_->push(ImageToDisplay("Detections (KF only)", object_viz));
         }
       } else {
         if (!pKF->graph) {
@@ -1580,22 +1668,35 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
 
           // Accumulate environment cloud from merged local map
           if (local_map_clouds_cache_ && !local_map_clouds_cache_->empty()) {
-            std::vector<cv::Point3d> currentLocalMapCloud;
-            for (const auto& c : *local_map_clouds_cache_) {
-              currentLocalMapCloud.insert(currentLocalMapCloud.end(), c.begin(), c.end());
+            EnvironmentCloudFrame current;
+            // Flatten merged local map clouds into a single frame cloud,
+            // propagating per-cluster colors to each point.
+            if (local_map_clouds_cache_ && local_map_colors_cache_ &&
+                !local_map_colors_cache_->empty()) {
+              const auto& clouds = *local_map_clouds_cache_;
+              const auto& colors = *local_map_colors_cache_;
+              const size_t n = std::min(clouds.size(), colors.size());
+              for (size_t i = 0; i < n; ++i) {
+                const auto& c = clouds[i];
+                const cv::Vec3b& col = colors[i];
+                for (const auto& pt : c) {
+                  current.points.push_back(pt);
+                  current.colors.push_back(col);
+                }
+              }
             }
-            if (!currentLocalMapCloud.empty()) {
-              environment_frames_.push_back(std::move(currentLocalMapCloud));
+            if (!current.points.empty()) {
+              environment_frames_.push_back(std::move(current));
               while (environment_frames_.size() > 150) {
                 environment_frames_.pop_front();
               }
-              auto env = std::make_shared<std::vector<std::vector<cv::Point3d>>>();
+              auto env = std::make_shared<std::vector<EnvironmentCloudFrame>>();
               env->reserve(environment_frames_.size());
               for (const auto& f : environment_frames_) {
                 env->push_back(f);
               }
               environment_cloud_cache_ =
-                  std::make_shared<const std::vector<std::vector<cv::Point3d>>>(
+                  std::make_shared<const std::vector<EnvironmentCloudFrame>>(
                       std::move(*env));
               VLOG(2) << "Updated environment_cloud cache: " << environment_cloud_cache_->size() << " frames";
             }
@@ -1864,9 +1965,25 @@ if (pKF->graph) {
     // then check membership using the mask value at each edge point.
     for (const auto& kv : pKF->graph->attributes) {
       const auto& attr = kv.second;
-      const int obj_id = attr.object_id;   // unique object id in graph
+      // Use obj->GetId() if object is already associated, otherwise use attr.object_id
+      int obj_id = -1;
+      if (attr.obj) {
+        obj_id = static_cast<int>(attr.obj->GetId());
+      } else {
+        obj_id = attr.object_id;  // fallback to detection's object_id
+      }
       const int cls_label = attr.label;    // category id from detection
-      const int target_mask_val = cls_label + 1;  // seg_id encoding: category_id + 1
+      // Compute expected BGR color for this category_id (matching generate_detection_files.py)
+      // B = (category_id * 37) % 256
+      // G = (category_id * 17) % 256
+      // R = (category_id * 97) % 256
+      const unsigned char target_b = static_cast<unsigned char>((cls_label * 37) % 256);
+      const unsigned char target_g = static_cast<unsigned char>((cls_label * 17) % 256);
+      const unsigned char target_r = static_cast<unsigned char>((cls_label * 97) % 256);
+      // Pack into 32-bit int: (B << 16) | (G << 8) | R
+      const int target_mask_val = (static_cast<int>(target_b) << 16) | 
+                                  (static_cast<int>(target_g) << 8) | 
+                                  static_cast<int>(target_r);
       const Eigen::Vector4d& bb = attr.bbox;      // [xmin, ymin, xmax, ymax]
 
       // Get edge/point indices whose points fall inside this bbox (coarse)
@@ -1877,8 +1994,13 @@ if (pKF->graph) {
                                    static_cast<float>(bb[3]));
 
       for (std::size_t enc : encoded_indices) {
-        int edge_idx = static_cast<int>(enc / 100000);   // decode edge index
-        int pt_idx   = static_cast<int>(enc % 100000);   // decode point index
+        const int edge_id = static_cast<int>(enc / 100000);  // encoded edge id
+        const int pt_idx  = static_cast<int>(enc % 100000);  // encoded point index
+        auto itEdge = pKF->mmIndexMap.find(edge_id);
+        if (itEdge == pKF->mmIndexMap.end()) {
+          continue;
+        }
+        const int edge_idx = itEdge->second;
         if (edge_idx < 0 || edge_idx >= static_cast<int>(pKF->mvEdges.size())) {
           continue;
         }
@@ -1895,9 +2017,10 @@ if (pKF->graph) {
           continue;
         }
 
+        // Read packed BGR value from mask (stored as 32-bit int)
         int mask_val = motion_mask.at<int>(v, u);
         if (mask_val != target_mask_val) {
-          continue;  // point not inside this object's mask
+          continue;  // point not inside this object's mask (color doesn't match)
         }
 
         // Prefer keeping existing non-background assignment if already set
@@ -1909,6 +2032,7 @@ if (pKF->graph) {
         pKF->mmEdgeIndex2ObjectId[edge_idx] = obj_id;
         // Also store on the Edge itself for convenience
         edge.object_id = obj_id;
+        edge.color = (attr.obj) ? attr.obj->GetColor() : cv::Scalar(150, 150, 150);
       }
     }
   }

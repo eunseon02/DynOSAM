@@ -481,7 +481,7 @@ int main(int argc, char* argv[]) {
                 static std::shared_ptr<const std::vector<cv::Vec3b>> last_cluster_colors;
                 static std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> last_local_map;
                 static std::shared_ptr<const std::vector<Eigen::Matrix4d>> last_window;
-                static std::shared_ptr<const std::vector<std::vector<cv::Point3d>>> last_env;
+                static std::shared_ptr<const std::vector<dyno::EnvironmentCloudFrame>> last_env;
 
                 if (latest_snap->clusterClouds && latest_snap->clusterCloudColors &&
                     (latest_snap->clusterClouds != last_clusters ||
