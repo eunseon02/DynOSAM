@@ -60,6 +60,10 @@ public:
     //--      关联相关成员
     //###########################
     bool mbAssociated;
+    //-- depth continuity flag: true if this point is part of a depth-continuous
+    //   segment (set by Frame::edgeCullingContinuity after depth assignment).
+    bool is_depth_continuous = true;
+
     //-- 半径内搜索得到的最近邻列表
     std::vector<int> mvAssoFrameEdgeIDs;
     std::vector<int> mvAssoFramePointIndices;

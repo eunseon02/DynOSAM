@@ -1490,7 +1490,12 @@ void Frame::edgeCullingContinuity()
             int end_index = segment[max_cluster[i]].second;
             for(int j = start_idx; j <= end_index; ++j)
             {
-                new_mvPoints.push_back(edge.mvPoints[j]);
+                orderedEdgePoint pt = edge.mvPoints[j];
+                // Mark depth continuity: a point at a jump position is
+                // discontinuous; the first point of the segment has no
+                // predecessor so treat it as continuous.
+                pt.is_depth_continuous = !jumpFlags[j];
+                new_mvPoints.push_back(pt);
             }
         }
         if(new_mvPoints.size() >= 5)

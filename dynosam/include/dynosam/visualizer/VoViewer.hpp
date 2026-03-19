@@ -164,6 +164,8 @@ private:
     std::shared_ptr<pangolin::Var<bool>>      menuShowObjects;
     std::shared_ptr<pangolin::Var<bool>>      menuShowLocalEdgeMap;
     std::shared_ptr<pangolin::Var<bool>>      menuShowEnvironment;
+    std::shared_ptr<pangolin::Var<bool>>      menuShowObjectEdgeMap;
+    std::shared_ptr<pangolin::Var<bool>>      menuShowSilhouetteEdges;
 
     // Global object map (shared with RGBDInstanceFrontendModule)
     std::shared_ptr<dyno::EdgeMap> map_;

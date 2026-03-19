@@ -34,6 +34,7 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <unordered_set>
 #include <unistd.h>  // for usleep
 
 #include <opencv4/opencv2/opencv.hpp>
@@ -598,49 +599,135 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     //         << " - K matrix: fx=" << K(0,0) << ", fy=" << K(1,1) 
     //         << ", cx=" << K(0,2) << ", cy=" << K(1,2);
 
-    // Project all existing map objects and build proj_bboxes
-    const auto objects = map_->GetAllObjects();
-    for (auto* obj : objects) {
-      if (!obj) continue;
-      if (obj->isBad()) continue;
+    // ── Object association: edge-projection (primary) + bbox IoU (fallback) ──
+    //
+    // Primary  : project object's associated 3D edge points into current frame,
+    //            count overlap with detection mask.  ratio >= 60% → match.
+    // Fallback : if object has too few edge points (sparse early on), use
+    //            bbox IoU between object's last observed bbox and current
+    //            detection bbox.  iou >= 0.3 → match.
+    //
+    // Whichever method scores highest wins (per detection node).
+    constexpr float kEdgeRatioTh  = 0.5f;  // edge-projection mask overlap threshold
+    constexpr int   kMinEdgePts   = 10;    // min projected inliers for edge method
+    constexpr float kBboxIoUTh    = 0.3f;  // bbox IoU threshold for fallback
+    // score encoding: edge ratio stored in [0,1], bbox iou stored as -iou so
+    // edge match always preferred over bbox match
+    // (we use a single best_score per node; edge wins if > 0, bbox if < 0)
 
-      auto proj = obj->GetEllipsoid().project(P);
-      auto c3d = obj->GetEllipsoid().GetCenter();
-      auto bb_proj = proj.ComputeBbox();
-      double z = Rt.row(2).dot(c3d.homogeneous());
-      // Discard objects behind the camera or mostly outside image
-      if (z < 0 ||
-          bboxes_intersection(bb_proj, img_bbox) <
-              0.3 * bbox_area(bb_proj)) {
-        continue;
+    const cv::Mat& motion_mask = frame->image_container_.objectMotionMask();
+    const bool has_mask = !motion_mask.empty() &&
+                          motion_mask.type() == CV_32SC1 &&
+                          motion_mask.size() == cv::Size(img_width, img_height);
+
+    if (map_ && frame->graph) {
+      // Pre-compute target mask value per detection (packed BGR from label)
+      struct DetInfo { int mask_val; int label; BBox2 bbox; };
+      std::map<int, DetInfo> det_info;
+      for (const auto& [nid, attr] : frame->graph->attributes) {
+        const int lbl = attr.label;
+        const unsigned char tb = static_cast<unsigned char>((lbl * 37) % 256);
+        const unsigned char tg = static_cast<unsigned char>((lbl * 17) % 256);
+        const unsigned char tr = static_cast<unsigned char>((lbl * 97) % 256);
+        det_info[nid] = {
+          (static_cast<int>(tb) << 16) | (static_cast<int>(tg) << 8) | static_cast<int>(tr),
+          lbl, attr.bbox
+        };
       }
-      proj_bboxes[obj] = proj;
-      // Check occlusions and keep only the nearest
-      std::unordered_set<dyno::Object*> hidden;
-      for (auto it : proj_bboxes) {
-          if (it.first != obj && bboxes_iou(it.second.ComputeBbox(), bb_proj) > 0.8) {
-              Eigen::Vector3d c2 = it.first->GetEllipsoid().GetCenter();
-              double z2 = Rt.row(2).dot(c2.homogeneous());
-              if (z < z2) {
-                  // remove z2
-                  hidden.insert(it.first);
-              } else {
-                  // remove z
-                  hidden.insert(obj);
-              }
-              break;
+
+      // best_match[node_id] = {Object*, score}
+      // score > 0  → edge-projection match (ratio)
+      // score < 0  → bbox IoU fallback (-iou), only used if no edge match
+      std::map<int, std::pair<dyno::Object*, float>> best_match;
+
+      const std::vector<dyno::Object*> all_objs = map_->GetAllObjects();
+      for (dyno::Object* obj : all_objs) {
+        if (!obj || obj->isBad()) continue;
+        const int obj_cat = static_cast<int>(obj->GetCategoryId());
+
+        // ── Primary: edge-projection ────────────────────────────────────────
+        const auto world_pts = obj->GetAssociatedMapPoints();
+        bool edge_method_used = false;
+
+        if (has_mask && static_cast<int>(world_pts.size()) >= kMinEdgePts) {
+          // Project into current frame
+          std::vector<cv::Point2i> proj_pts;
+          proj_pts.reserve(world_pts.size());
+          for (const auto& pw : world_pts) {
+            const Eigen::Vector4d ph(pw.x(), pw.y(), pw.z(), 1.0);
+            const Eigen::Vector3d pc = P * ph;
+            if (pc.z() <= 0.1) continue;
+            const int u = static_cast<int>(pc.x() / pc.z());
+            const int v = static_cast<int>(pc.y() / pc.z());
+            if (u < 0 || v < 0 || u >= img_width || v >= img_height) continue;
+            proj_pts.emplace_back(u, v);
           }
-      }
-      for (auto hid : hidden) {
-          proj_bboxes.erase(hid);
+
+          if (static_cast<int>(proj_pts.size()) >= kMinEdgePts) {
+            edge_method_used = true;
+            for (const auto& [nid, dinfo] : det_info) {
+              if (dinfo.label != obj_cat) continue;
+              int inside = 0;
+              for (const auto& pt : proj_pts) {
+                if (motion_mask.at<int>(pt.y, pt.x) == dinfo.mask_val) ++inside;
+              }
+              const float ratio = static_cast<float>(inside) /
+                                  static_cast<float>(proj_pts.size());
+              if (inside >= kMinEdgePts && ratio >= kEdgeRatioTh) {
+                auto it = best_match.find(nid);
+                // edge match (score > 0) always beats bbox match (score < 0)
+                if (it == best_match.end() ||
+                    it->second.second < 0 ||
+                    ratio > it->second.second) {
+                  best_match[nid] = {obj, ratio};
+                }
+              }
+            }
+          }
+        }
+
+        // ── Fallback: bbox IoU ───────────────────────────────────────────────
+        // Only used if edge method couldn't run OR produced no match for this obj
+        if (!edge_method_used) {
+          // Use last observed bboxes to compute IoU with current detections
+          const auto obs_bboxes = obj->GetObservedBboxes();  // most-recent first
+          if (obs_bboxes.empty()) continue;
+          const BBox2& last_bb = obs_bboxes.back();
+
+          for (const auto& [nid, dinfo] : det_info) {
+            if (dinfo.label != obj_cat) continue;
+            // skip if already have a positive edge match for this node
+            auto it = best_match.find(nid);
+            if (it != best_match.end() && it->second.second > 0) continue;
+
+            const float iou = static_cast<float>(bboxes_iou(last_bb, dinfo.bbox));
+            if (iou >= kBboxIoUTh) {
+              // Store as negative score so edge match can override later
+              if (it == best_match.end() || iou > -it->second.second) {
+                best_match[nid] = {obj, -iou};
+              }
+            }
+          }
+        }
       }
 
+      // Apply best matches to frame graph
+      int n_edge = 0, n_bbox = 0;
+      for (auto& [nid, match] : best_match) {
+        frame->graph->attributes[nid].obj = match.first;
+        if (match.second > 0) ++n_edge; else ++n_bbox;
+        VLOG(3) << "[ObjAssoc] node=" << nid
+                << " obj_id=" << match.first->GetId()
+                << (match.second > 0 ? " edge_ratio=" : " bbox_iou=")
+                << std::abs(match.second);
+      }
+      VLOG(2) << "[ObjAssoc] edge=" << n_edge << " bbox_fallback=" << n_bbox
+              << " total=" << (n_edge + n_bbox)
+              << " / " << frame->graph->attributes.size();
+    } else {
+      // No map or no graph — fall back to Wasserstein with empty proj_bboxes
+      object_matcher_->MatchObjectsWasserDistance(*frame, proj_bboxes, P);
     }
-
-    // Use Wasserstein-based matcher with full 3D projection matrix P so that
-    // per-frame object projections can be cached for visualization.
-    int nmatches = object_matcher_->MatchObjectsWasserDistance(*frame, proj_bboxes, P);
-    VLOG(2) << "ObjectMatcher matched " << nmatches << " objects";
 
 
 
@@ -816,6 +903,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         Rt.block<3, 1>(0, 3) = T_cw.translation();
 
         Eigen::Matrix<double, 3, 4> P = K_eigen * Rt;
+        const cv::Mat& motion_mask = frame->image_container_.objectMotionMask();
 
         // Optional visualization image to debug object handling on this frame.
         cv::Mat object_viz =
@@ -829,30 +917,16 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                         static_cast<int>(bb[3] - bb[1]));
 
           if(attribute.obj){
-            auto proj = attribute.obj->GetEllipsoid().project(P);
-            auto bb_proj = proj.ComputeBbox();
-            double iou = bboxes_iou(bb_proj, attribute.bbox);
-            if(iou > 0.01){
-
-              auto c = proj.GetCenter();
-              auto axes = proj.GetAxes();
-              double angle = proj.GetAngle();
-              if(axes[0] <= 0.001 || axes[1] <= 0.001)
-                  continue;
-
-              attribute.obj->AddDetection(
-                  attribute.label, 
-                  attribute.bbox, 
-                  attribute.ell, 
-                  attribute.confidence, 
-                  Rt, 
-                  static_cast<unsigned int>(frame->getFrameId()), 
-                  pKF.get()
-              );
-            }
-            else{
-                continue;
-            }
+            // Matched by edge-projection: update existing object with new observation
+            attribute.obj->AddDetection(
+                attribute.label,
+                attribute.bbox,
+                attribute.ell,
+                attribute.confidence,
+                Rt,
+                static_cast<unsigned int>(frame->getFrameId()),
+                pKF.get()
+            );
           } else {
             // Filter by confidence score
             if (attribute.confidence < kMinConfidenceScore_) {
@@ -865,7 +939,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             }
             
             const auto& depth_data = depth_data_per_det[node_id];
-          
+
             //create new object
             Object* obj = new Object(
                 static_cast<unsigned int>(attribute.label),
@@ -1481,29 +1555,92 @@ void RGBDInstanceFrontendModule::sendToFrontendLogger(
 cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
     const Frame::Ptr& frame_k, const Frame::Ptr& frame_k_1,
     const ObjectPoseMap& object_poses) const {
-  cv::Mat tracking_image = tracker_->computeImageTracks(
-      *frame_k_1, *frame_k, getFrontendParams().image_tracks_vis_params);
+  // ── Commented out: default feature-track visualization ───────────────────
+  // cv::Mat tracking_image = tracker_->computeImageTracks(
+  //     *frame_k_1, *frame_k, getFrontendParams().image_tracks_vis_params);
 
-  const auto& camera_params = camera_->getParams();
-  const auto& K = camera_params.getCameraMatrix();
-  const auto& D = camera_params.getDistortionCoeffs();
+  // Start from a blank RGB copy of the current frame image.
+  cv::Mat tracking_image =
+      ImageType::RGBMono::toRGB(frame_k->image_container_.rgb()).clone();
 
-  const gtsam::Pose3& X_k = frame_k->getPose();
+  // ── Edge visualization: per-point depth continuity via normal-side check ──
+  // Since frame_k->static_edges_ has already passed edgeCullingContinuity(),
+  // consecutive-point checks tend to be all continuous.
+  // Instead, classify each point by depth jump across +/- edge normal:
+  //   if one side is much deeper, mark as discontinuous (BLUE).
+  {
+    constexpr float kOffsetPx = 4.0f;
+    // Depth-jump threshold should be larger at near range (avoid false BLUE)
+    // and smaller at far range (avoid false RED).
+    // thr(d) = clamp(kInvScale / d, kThrMin, kThrMax)
+    constexpr float kInvScale = 0.24f;  // meter^2
+    constexpr float kThrMin = 0.04f;    // m
+    constexpr float kThrMax = 0.4f;    // m
+    const cv::Vec3b kContCol(0,   0, 255);  // RED  (BGR)
+    const cv::Vec3b kDiscCol(255, 0,   0);  // BLUE (BGR)
 
-  // poses are expected to be in the world frame
-  gtsam::FastMap<ObjectId, gtsam::Pose3> poses_k_map =
-      object_poses.collectByFrame(frame_k->getFrameId());
-  std::vector<gtsam::Pose3> poses_k_vec;
-  std::transform(poses_k_map.begin(), poses_k_map.end(),
-                 std::back_inserter(poses_k_vec),
-                 [&X_k](const std::pair<ObjectId, gtsam::Pose3>& pair) {
-                   // put object pose into the camera frame so it can be
-                   // projected into the image
-                   return X_k.inverse() * pair.second;
-                 });
+    // Use raw depth image for side-depth probing; edge lookup map is biased
+    // toward edge pixels and tends to classify everything as continuous.
+    const cv::Mat depth_img = frame_k->image_container_.depth();
+    auto lookupDepthFrame = [&](int px, int py) -> float {
+      if (depth_img.empty()) return -1.f;
+      if (px < 0 || py < 0 ||
+          px >= frame_k->img_width_ || py >= frame_k->img_height_) return -1.f;
+      // 3x3 local median-like robust sample around (px,py)
+      float vals[9];
+      int n = 0;
+      for (int dy = -1; dy <= 1; ++dy) {
+        for (int dx = -1; dx <= 1; ++dx) {
+          int x = px + dx, y = py + dy;
+          if (x < 0 || y < 0 || x >= frame_k->img_width_ || y >= frame_k->img_height_) continue;
+          float d = depth_img.at<float>(y, x);
+          if (d > 0.2f && std::isfinite(d)) vals[n++] = d;
+        }
+      }
+      if (n == 0) return -1.f;
+      std::nth_element(vals, vals + n / 2, vals + n);
+      return vals[n / 2];
+    };
 
-  // TODO: bring back when visualisation is unified with incremental solver!!
-  //  utils::drawObjectPoseAxes(tracking_image, K, D, poses_k_vec);
+    for (const auto& edge : frame_k->static_edges_) {
+      if (edge.mvPoints.empty()) continue;
+      for (const auto& pt : edge.mvPoints) {
+        const int u = static_cast<int>(std::round(pt.x));
+        const int v = static_cast<int>(std::round(pt.y));
+        if (u < 0 || v < 0 ||
+            u >= tracking_image.cols || v >= tracking_image.rows) continue;
+        if (pt.depth <= 0.2f) continue;
+
+        const float th = pt.imgGradAngle * static_cast<float>(M_PI) / 180.f;
+        const float nx = std::cos(th), ny = std::sin(th);
+        const int xp = static_cast<int>(std::round(pt.x + kOffsetPx * nx));
+        const int yp = static_cast<int>(std::round(pt.y + kOffsetPx * ny));
+        const int xn = static_cast<int>(std::round(pt.x - kOffsetPx * nx));
+        const int yn = static_cast<int>(std::round(pt.y - kOffsetPx * ny));
+
+        const float dp = lookupDepthFrame(xp, yp);
+        const float dn = lookupDepthFrame(xn, yn);
+        const float d_edge = pt.depth;
+        const float thr_unclamped = kInvScale / std::max(0.2f, d_edge);
+        const float thr = std::max(kThrMin, std::min(kThrMax, thr_unclamped));
+        // Balanced rule:
+        // 1) both valid: discontinuous if either side is much deeper
+        // 2) only one valid: discontinuous if that valid side is much deeper
+        // 3) none valid: keep continuous (insufficient evidence)
+        bool discontinuous = false;
+        if (dp > 0.f && dn > 0.f) {
+          discontinuous = ((dp - d_edge) > thr) || ((dn - d_edge) > thr);
+        } else if (dp > 0.f || dn > 0.f) {
+          const float d_valid = (dp > 0.f) ? dp : dn;
+          discontinuous = ((d_valid - d_edge) > thr);
+        }
+
+        tracking_image.at<cv::Vec3b>(v, u) =
+            discontinuous ? kDiscCol : kContCol;
+      }
+    }
+  }
+
   return tracking_image;
 }
 
@@ -1648,6 +1785,54 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         //           << " / " << local_map_->mvEleEdgeClusters.size();
         
         dyno::Optimizer::optimizeAllInvolvedKFs(local_map_);
+
+        // ── Per-object edge pipeline (tbb parallel) ──────────────────────────
+        // Each object runs its own association → cluster → fitting → BA
+        // pipeline using only the edges associated with that object.
+        if (map_) {
+          // Use ALL keyframes ever registered (not just sliding window)
+          // so that per-object optimization uses every observation of that object.
+          const std::vector<dyno::KeyFramePtr> all_kfs = map_->GetAllKeyFrames();
+          std::vector<dyno::Object*> all_objs = map_->GetAllObjects();
+
+          // Filter to objects that have at least one edge in the CURRENT window.
+          // Objects not visible in the current window don't need re-optimization.
+          const std::vector<dyno::KeyFramePtr>& window_kfs = local_map_->mvKeyFrames;
+          std::unordered_set<int> active_obj_ids;
+          for (const auto& kf : window_kfs) {
+            if (!kf) continue;
+            for (const auto& [edge_idx, obj_id] : kf->mmEdgeIndex2ObjectId) {
+              if (obj_id >= 0) active_obj_ids.insert(obj_id);
+            }
+            // Also check edge.object_id as fallback
+            for (size_t i = 0; i < kf->mvEdges.size(); ++i) {
+              int oid = kf->mvEdges[i].object_id;
+              if (oid >= 0) active_obj_ids.insert(oid);
+            }
+          }
+
+          std::vector<dyno::Object*> active_objs;
+          for (dyno::Object* obj : all_objs) {
+            if (!obj || obj->isBad()) continue;
+            if (active_obj_ids.count(static_cast<int>(obj->GetId())) == 0) continue;
+            active_objs.push_back(obj);
+          }
+
+          if (!active_objs.empty()) {
+            const auto t_obj_start = std::chrono::steady_clock::now();
+            tbb::parallel_for_each(
+                active_objs.begin(), active_objs.end(),
+                [&all_kfs](dyno::Object* obj) {
+                  obj->OptimizeWithEdgePipeline(all_kfs);
+                });
+            const auto t_obj_end = std::chrono::steady_clock::now();
+            LOG(INFO) << "[PerObjectEdgePipeline] " << active_objs.size()
+                      << " objects in "
+                      << std::chrono::duration<double, std::milli>(
+                             t_obj_end - t_obj_start).count()
+                      << " ms (tbb parallel)";
+          }
+        }
 
         // Update merged local map cache (heavy data) for visualization snapshots
         {

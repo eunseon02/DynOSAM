@@ -38,6 +38,7 @@
 #include <thread>
 
 #include <tbb/concurrent_queue.h>
+#include <tbb/parallel_for_each.h>
 
 #include <gtsam/navigation/NavState.h>
 

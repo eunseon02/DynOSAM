@@ -25,8 +25,10 @@ void Optimizer::optimizeAllInvolvedKFs(const dyno::localMapPtr pLocalMap)
         int kf_id_ref = vKFs[i]->KF_ID;
         pLocalMap->getAssoFrameMergeEdge(kf_id_ref, matches, weights);
         Sophus::SE3d pose_adjust;
-        optimizeSingleKFRef2Cur(vKFs.at(i), matches, weights, pose_adjust);
-        //optimizeSingleKFCur2Ref(vKFs.at(i), matches, pose_ref_ba, pose_adjust);
+        if (!matches.empty()) {
+            optimizeSingleKFRef2Cur(vKFs.at(i), matches, weights, pose_adjust);
+        }
+        // If matches is empty, pose_adjust stays identity → no adjustment
         poses_adjust.push_back(pose_adjust);
     }
 
@@ -383,8 +385,10 @@ void Optimizer::RegistrationGeometricParallel(std::vector<Eigen::Vector3d> vGeom
         g /= double(g_geo_list.size());
 
         Eigen::Matrix<double , 6, 1> dx = H.ldlt().solve(g);// 求解dx
-        if(isnan(dx[0])){
-            std::cout << "result is nan"<<std::endl;
+        if(std::isnan(dx[0]) || std::isnan(dx[1]) || std::isnan(dx[2]) ||
+           std::isnan(dx[3]) || std::isnan(dx[4]) || std::isnan(dx[5])){
+            VLOG(3) << "Optimizer: dx contains NaN, breaking iteration";
+            break;
         }
         // iter>0用来控制除去第一次，因为初始current_cost、last_cost都是0
         if(iter > 0 && current_cost_geo > last_cost){

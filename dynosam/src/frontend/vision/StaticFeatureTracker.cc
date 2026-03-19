@@ -448,9 +448,10 @@ std::vector<cv::Point2f> KltFeatureTracker::detectRawFeatures(
 }
 
 std::vector<Edge> KltFeatureTracker::detectEdgeFeatures(
-  const cv::Mat& processed_img, int number_tracked, const cv::Mat& mask) {
+  const cv::Mat& processed_img, int number_tracked, const cv::Mat& mask,
+  const cv::Mat& depth_img) {
   std::vector<Edge> edges;
-  detector_->detectEdge(processed_img, edges, mask);
+  detector_->detectEdge(processed_img, edges, mask, depth_img);
   return edges;
 }
 
@@ -565,7 +566,9 @@ std::vector<Edge> KltFeatureTracker::detectEdges(const ImageContainer& image_con
   }
 
   // Call the processed image version (same pattern as trackStatic -> detectFeatures -> detectEdgeFeatures)
-  return detectEdges(equalized_greyscale, number_tracked);
+  // Prefer depth-aware edge detection in this path.
+  return detectEdgeFeatures(equalized_greyscale, number_tracked, cv::Mat(),
+                            image_container.depth());
 }
 
 bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
@@ -641,7 +644,8 @@ bool KltFeatureTracker::detectFeatures(const cv::Mat& processed_img,
       // Use empty mask to detect edges on all pixels (static + dynamic regions)
       cv::Mat empty_mask;
       std::vector<Edge> edges =
-          detectEdgeFeatures(processed_img, current_features.size(), empty_mask);
+          detectEdgeFeatures(processed_img, current_features.size(), empty_mask,
+                             image_container.depth());
       VLOG(10) << "KltFeatureTracker::detectFeatures: detectEdgeFeatures returned " << edges.size() << " edges";
       // Add detected edges to output container and internal storage
       for (const Edge& edge : edges) {
@@ -958,7 +962,9 @@ bool KltFeatureTracker::trackPoints(const cv::Mat& current_processed_img,
       // Only detect edges without detecting new point features
       // This ensures edges are detected every frame for FineTracker
       VLOG(10) << "KltFeatureTracker::trackPoints: calling detectEdges";
-      std::vector<Edge> detected_edges = detectEdges(current_processed_img, tracked_features.size());
+      std::vector<Edge> detected_edges =
+          detectEdgeFeatures(current_processed_img, tracked_features.size(),
+                             cv::Mat(), image_container.depth());
       VLOG(10) << "KltFeatureTracker::trackPoints: detectEdges returned " << detected_edges.size() << " edges";
       // Add detected edges to new_edges container
       for (const Edge& edge : detected_edges) {

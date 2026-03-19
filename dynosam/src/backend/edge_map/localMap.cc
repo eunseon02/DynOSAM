@@ -1,5 +1,6 @@
 #include "dynosam/backend/edge_map/localMap.hpp"
 #include <unordered_set>
+#include <glog/logging.h>
 using namespace dyno;
 
 namespace {
@@ -289,7 +290,7 @@ void localMap::addFrame2LocalMap(KeyFramePtr frame_cur)
         if (mvKeyFrames.size() ==2)
         {
             initLocalMap();
-            std::cout<<"finish init"<<std::endl;
+            VLOG(5) << "localMap::initLocalMap() finished";
             msState = State::INITIALIZED;
         }
         return;
@@ -649,7 +650,7 @@ void localMap::removeKeyFrameFront()
     KeyFramePtr pKF_del = mvKeyFrames[0];
     int kf_id = pKF_del->KF_ID;
 
-    std::cout<<"remove frame "<<kf_id<<std::endl;
+    VLOG(5) << "localMap::removeKeyFrameFront() kf_id=" << kf_id;
 
     // * STEP-1 Find all edges from this keyframe in elementEdge
     std::vector<int> indicesToDelete;
@@ -1098,7 +1099,7 @@ void localMap::clustersFitting3D()
 
 
 
-void localMap::clusterFittingProjection()
+void localMap::clusterFittingProjection(int min_elements)
 {
     //-- Clear before reconstructing
     for(size_t i = 0; i < mvEleEdgeClusters.size(); ++i)
@@ -1116,7 +1117,7 @@ void localMap::clusterFittingProjection()
         elementEdgeCluster& cluster = mvEleEdgeClusters[i];
         
         const std::vector<unsigned int>& ele_ids = cluster.mvElementEdgeIDs;
-        if(ele_ids.size() < 5)continue;
+        if(static_cast<int>(ele_ids.size()) < min_elements) continue;
 
         std::vector<int> ele_indices(ele_ids.size(), -1);
         for(size_t j = 0; j < ele_ids.size(); ++j)

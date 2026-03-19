@@ -123,13 +123,16 @@ class SparseFeatureDetector {
    */
   void detect(const cv::Mat& image, KeypointsCV& keypoints, int number_tracked,
               const cv::Mat& detection_mask = cv::Mat());
-  void detectEdge(const cv::Mat& image, std::vector<Edge>& edges, const cv::Mat& detection_mask);
+  void detectEdge(const cv::Mat& image, std::vector<Edge>& edges,
+                  const cv::Mat& detection_mask,
+                  const cv::Mat& depth_img = cv::Mat());
 
   // Get detected edges
   const std::vector<Edge>& getEdges() const { return mvEdges; }
 
   float calcAngleBias(float angle_1, float angle_2);
-  void regionGrowthClusteringOCanny(float angle_Thres, const cv::Mat& detection_mask);
+  void regionGrowthClusteringOCanny(float angle_Thres, const cv::Mat& detection_mask,
+                                    const cv::Mat& depth_img = cv::Mat());
   void cvt2OrderedEdgesParallel();
   void preprocessCannyMat();
 

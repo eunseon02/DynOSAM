@@ -30,6 +30,7 @@
 
 #include "dynosam/frontend/vision/FeatureDetector.hpp"
 
+#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <tbb/concurrent_hash_map.h>
 #include <tbb/parallel_for_each.h>
@@ -53,6 +54,9 @@
 #endif
 
 namespace dyno {
+
+DEFINE_double(edge_bfs_depth_cont_th, 0.05,
+              "Depth continuity threshold (meters) for BFS edge growing.");
 
 #ifdef DYNO_CUDA_OPENCV_ENABLED
 
@@ -253,7 +257,7 @@ void SparseFeatureDetector::detect(const cv::Mat& image, KeypointsCV& keypoints,
 }
 
 void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& edges,
-  const cv::Mat& detection_mask) {
+  const cv::Mat& detection_mask, const cv::Mat& depth_img) {
     // Clear previous results to ensure clean state
     mvEdges.clear();
     mvEdgeClusters.clear();
@@ -312,7 +316,7 @@ void SparseFeatureDetector::detectEdge(const cv::Mat& image, std::vector<Edge>& 
     
     {
         utils::ChronoTimingStats timer("edge_detection.clustering");
-        regionGrowthClusteringOCanny(mpAngle_bias, detection_mask);
+        regionGrowthClusteringOCanny(mpAngle_bias, detection_mask, depth_img);
     }
     
     {
@@ -365,7 +369,8 @@ void SparseFeatureDetector::preprocessCannyMat()
     }
 }
 
-void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, const cv::Mat& detection_mask)
+void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, const cv::Mat& detection_mask,
+                                                         const cv::Mat& depth_img)
 {
     cv::Mat labelMatTmp(mMatCanny.rows, mMatCanny.cols, CV_16UC1, cv::Scalar::all(65535));
     // Matrix to track if current point has been visited: 0 means not visited, 1 means visited
@@ -386,6 +391,20 @@ void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, cons
     const int cols = mMatCanny.cols;
     const int width = mWidth;
     const int height = mHeight;
+
+    // Depth continuity threshold for BFS expansion (meters), tunable by flag.
+    const float kDepthContTh = static_cast<float>(FLAGS_edge_bfs_depth_cont_th);
+    const bool use_depth = !depth_img.empty() &&
+                           depth_img.rows == rows && depth_img.cols == cols &&
+                           (depth_img.type() == CV_32F || depth_img.type() == CV_16U);
+    auto get_depth = [&](int px, int py) -> float {
+        if (!use_depth) return -1.0f;
+        if (depth_img.type() == CV_32F) {
+            return depth_img.at<float>(py, px);
+        } else { // CV_16U
+            return static_cast<float>(depth_img.at<uint16_t>(py, px)) / 1000.0f;
+        }
+    };
 
     int label_global = 0;
     for(int y = 0; y < rows; ++y)
@@ -444,6 +463,18 @@ void SparseFeatureDetector::regionGrowthClusteringOCanny(float angle_Thres, cons
                         float neigh_angle = angle_ptr[ny * angle_step + nx];
                         if (calcAngleBias(neigh_angle, curr_angle) < angle_Thres) 
                         {
+                            // Depth continuity gating during BFS growth:
+                            // only expand to neighbors with close depth to parent.
+                            if (use_depth) {
+                                const float d_curr = get_depth(cx, cy);
+                                const float d_neigh = get_depth(nx, ny);
+                                // If either depth is invalid/zero, skip depth gate
+                                // and keep angle-only behavior.
+                                if (d_curr > 0.2f && d_neigh > 0.2f &&
+                                    std::fabs(d_neigh - d_curr) > kDepthContTh) {
+                                    return;
+                                }
+                            }
                             // Points that meet angle requirements can be clustered, so assign ID and add to queue for further expansion
                             visited_ptr[ny * visited_step + nx] = 1;
                             // This point is expanded from current_point, so its parent ID is current_point.point_id

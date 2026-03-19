@@ -49,12 +49,14 @@ voViewer::voViewer(std::string windowName)
     //control part image window
     pangolin::CreatePanel("menu").SetBounds(0.3, 1, 0.0, 0.20);
     follow = std::make_shared<pangolin::Var<bool>>("menu.Follow", true, true);
-    show_covisibility = std::make_shared<pangolin::Var<bool>>("menu.Co-visibility", true, true);
+    show_covisibility = std::make_shared<pangolin::Var<bool>>("menu.Co-visibility", false, true);
     slide_bar = std::make_shared<pangolin::Var<double>>("menu.slider", 0.5, 0, 1);
     menuPause = std::make_shared<pangolin::Var<bool>>("menu.Pause", false, true);
-    menuShowObjects = std::make_shared<pangolin::Var<bool>>("menu.Show Objects", true, true);
-    menuShowLocalEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Local Edge Map", true, true);
-    menuShowEnvironment = std::make_shared<pangolin::Var<bool>>("menu.Show Environment Edge Map", true, true);
+    menuShowObjects = std::make_shared<pangolin::Var<bool>>("menu.Show Objects", false, true);
+    menuShowLocalEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Local Edge Map", false, true);
+    menuShowEnvironment = std::make_shared<pangolin::Var<bool>>("menu.Show Environment Edge Map", false, true);
+    menuShowObjectEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Object Edge Map", true, true);
+    menuShowSilhouetteEdges = std::make_shared<pangolin::Var<bool>>("menu.Show Silhouette Edges", false, true);
 
     cameraPose = Eigen::MatrixXd::Identity(4,4);
     gtPose = Eigen::MatrixXd::Identity(4,4);
@@ -147,6 +149,26 @@ void voViewer::render_loop()
         //绘制真值轨迹
         if(trajectory_GT.size() > 0){
             drawTrajectory(trajectory_GT, false, cv::Vec3b(255,100,0), 0.05);
+        }
+
+        // Draw all per-object merged edge clusters as polylines in object color.
+        // No silhouette filtering: visualize every cluster regardless of whether
+        // it is used in optimization.
+        if(*menuShowObjectEdgeMap && map_) {
+            const std::vector<dyno::Object*> objects = map_->GetAllObjects();
+            for (auto* obj : objects) {
+                if (!obj) continue;
+                const cv::Scalar c = obj->GetColor();
+                const cv::Vec3b obj_col(static_cast<unsigned char>(c[0]),
+                                        static_cast<unsigned char>(c[1]),
+                                        static_cast<unsigned char>(c[2]));
+
+                const auto clusters = obj->GetMergedEdgeClusters();
+                for (const auto& cloud : clusters) {
+                    if (cloud.size() < 2) continue;
+                    drawPointCloudColorSequencial(cloud, obj_col, 2);
+                }
+            }
         }
 
         //绘制地图对象 (ellipsoids)

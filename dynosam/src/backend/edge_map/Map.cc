@@ -144,4 +144,14 @@ std::vector<dyno::Object*> EdgeMap::GetAllObjects()
     return std::vector<dyno::Object*>(mspObjects.begin(),mspObjects.end());
 }
 
+dyno::Object* EdgeMap::GetObject(int obj_id)
+{
+    unique_lock<mutex> lock(mMutexMap);
+    for (dyno::Object* obj : mspObjects) {
+        if (obj && static_cast<int>(obj->GetId()) == obj_id)
+            return obj;
+    }
+    return nullptr;
+}
+
 }  // namespace dyno

@@ -63,7 +63,7 @@ public:
     void clustersFitting3D();
 
     //-- Fit all clusters using reprojection and epipolar line constraints to obtain integrated edges for local mapping / BA
-    void clusterFittingProjection();
+    void clusterFittingProjection(int min_elements = 5);
 
     //-- Get the association relationship between the current local map and a keyframe
     void getAssoFrameMergeEdge(int kf_id_dst, std::vector<match3d_2d>& matches, std::vector<double>& weights);

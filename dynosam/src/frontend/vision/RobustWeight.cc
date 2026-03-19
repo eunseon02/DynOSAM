@@ -6,6 +6,10 @@ using namespace eslam_core;
 robustWeight2D::robustWeight2D(const std::vector<Eigen::Vector2d>& input_vectors)
 {
     residuals = input_vectors;
+    if (residuals.empty()) {
+        // No residuals → all weights stay empty; caller should handle gracefully.
+        return;
+    }
     computeStatistics();
     computeMahalanobis();
 }
@@ -81,6 +85,9 @@ void robustWeight2D::computeWeights(const std::string& type)
 robustWeight1D::robustWeight1D(const std::vector<float>& input_vectors)
 {
     residuals = input_vectors;
+    if (residuals.empty()) {
+        return;
+    }
     computeStatistics();
     computeMahalanobis();
 }

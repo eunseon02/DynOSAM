@@ -112,6 +112,9 @@ public:
                                                  float y_min, float y_max) const;
 
 
+    //-- 并行创建二维搜索阵列 (public so per-object KFs can rebuild it)
+    void constructSearchPlainParallel();
+
 private:
 
     //-- 在整理过边缘后遍历边缘中的边缘点，更新索引关系
@@ -119,9 +122,6 @@ private:
     
     //-- 根据边缘信息创建二维的搜索阵列，用于半径邻域搜索
     void constructSearchPlain();
-
-    //-- 并行创建二维搜索阵列
-    void constructSearchPlainParallel();
 
     //-- 遍历边缘中的每一个点计算：远近可信分数，观测可信分数 以及 深度补全
     void assignProperty3D(const cv::Mat& matDepth);

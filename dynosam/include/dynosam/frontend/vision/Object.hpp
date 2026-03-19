@@ -59,7 +59,9 @@ class Object
 
         void AddDetection(unsigned int cat, const BBox2& bbox, const Ellipse ell, double score, const Matrix34d& Rt, unsigned int frame_idx, dyno::KeyFrame* kf);
 
-        const Ellipsoid& GetEllipsoid() const {
+        // Returns a VALUE COPY of the ellipsoid (mutex is released after copy).
+        // Do NOT store as const-reference; use Ellipsoid e = GetEllipsoid().
+        Ellipsoid GetEllipsoid() const {
             std::unique_lock<std::mutex> lock(mutex_ellipsoid_);
             return ellipsoid_;
         }
@@ -119,6 +121,45 @@ class Object
 
         void OptimizeReconstructionQuat(bool b_random_detections);
 
+        /**
+         * @brief Build per-object local map from associated edges and run
+         *        clusterFittingProjection + pose optimization.
+         *
+         * Called from the processing thread (via tbb::parallel_for_each) after
+         * the global sliding-window BA.  For each KF that observes this object,
+         * edges with matching object_id are collected into a per-object localMap,
+         * then the standard association → cluster → fitting → BA pipeline runs
+         * independently.
+         *
+         * Thread-safe: creates its own localMap instance (no shared state).
+         *
+         * @param kfs  KeyFrames from the current sliding window
+         */
+        void OptimizeWithEdgePipeline(const std::vector<std::shared_ptr<dyno::KeyFrame>>& kfs);
+
+        /**
+         * @brief Refine the ellipsoid CENTER using 3D→2D edge reprojection (Gauss-Newton).
+         *
+         * For each (cluster 3D point, observing KF) pair:
+         *   - Project the 3D cluster point into the KF image
+         *   - Find the nearest observed 2D edge point in that KF
+         *   - Accumulate the reprojection Jacobian and residual
+         * Then solve the normal equations to update the ellipsoid center.
+         * Axes and orientation are kept unchanged; only the center moves.
+         *
+         * @param merged_pts_world  BA-optimized 3D edge points (world frame,
+         *                          from cluster.mvMergedCloud_ref)
+         * @param kf_edge_obs       Pairs of (KeyFrame*, edge_idx in kf->mvEdges)
+         *                          from the cluster's elementEdges
+         * @param max_dist_px       Inlier threshold in pixels
+         * @param max_iter          Maximum Gauss-Newton iterations
+         */
+        void RefineWithEdgeProjection(
+            const std::vector<cv::Point3d>&                     merged_pts_world,
+            const std::vector<std::pair<dyno::KeyFrame*, int>>& kf_edge_obs,
+            float max_dist_px = 5.0f,
+            int   max_iter    = 5);
+
         int GetObservationNumber(){
             return observed_kfs.size();
         }
@@ -126,6 +167,12 @@ class Object
         std::vector<dyno::KeyFrame*> GetObservations(){
             std::unique_lock<std::mutex> lock(mutex_add_detection_);
             return observed_kfs;
+        }
+
+        // Returns a copy of all observed bounding boxes (one per AddDetection call).
+        std::vector<BBox2, Eigen::aligned_allocator<BBox2>> GetObservedBboxes() const {
+            std::unique_lock<std::mutex> lock(mutex_add_detection_);
+            return bboxes_;
         }
 
         // Edge-SLAM: return associated WORLD points that lie inside the ellipsoid.
@@ -138,6 +185,44 @@ class Object
 
         bool isBad(){
             return mbBad;
+        }
+
+        // Per-object merged edge clusters from OptimizeWithEdgePipeline.
+        // Each inner vector is one cluster's polyline (world frame).
+        void SetMergedEdgeClusters(std::vector<std::vector<cv::Point3d>> clusters) {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            merged_edge_clusters_ = std::move(clusters);
+        }
+        std::vector<std::vector<cv::Point3d>> GetMergedEdgeClusters() const {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            return merged_edge_clusters_;
+        }
+
+        // ── Anchor clusters (hierarchical edge representation) ─────────────
+        // Anchor clusters are optimized 3D edge polylines from previous
+        // optimization windows.  They serve as stable "super elementEdge"
+        // references for new frames, limiting drift accumulation.
+        struct AnchorCluster {
+            std::vector<cv::Point3d> pts;  // world-frame ordered polyline
+            int last_updated_kf_id = -1;   // KF_ID of the most recent update
+        };
+
+        void SetAnchorClusters(std::vector<AnchorCluster> anchors) {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            anchor_clusters_ = std::move(anchors);
+        }
+        std::vector<AnchorCluster> GetAnchorClusters() const {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            return anchor_clusters_;
+        }
+        // KF_ID of the last KF that was processed into anchor clusters.
+        int GetLastAnchoredKFId() const {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            return last_anchored_kf_id_;
+        }
+        void SetLastAnchoredKFId(int id) {
+            std::lock_guard<std::mutex> lk(mutex_merged_edge_clusters_);
+            last_anchored_kf_id_ = id;
         }
 
         
@@ -183,6 +268,11 @@ class Object
         mutable std::mutex mutex_ellipsoid_;
         mutable std::mutex mutex_associated_map_points_;
         mutable std::mutex mutex_add_detection_;
+        mutable std::mutex mutex_merged_edge_clusters_;
+
+        std::vector<std::vector<cv::Point3d>> merged_edge_clusters_;
+        std::vector<AnchorCluster> anchor_clusters_;
+        int last_anchored_kf_id_ = -1;
 
         Object() = delete;
 };

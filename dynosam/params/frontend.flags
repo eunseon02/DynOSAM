@@ -11,6 +11,7 @@
 --use_propogate_mask=false
 
 --use_edge_feature=true
+--edge_bfs_depth_cont_th=0.01
 
 --use_edge_selector_track=true
 

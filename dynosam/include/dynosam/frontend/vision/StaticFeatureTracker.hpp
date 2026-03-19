@@ -254,7 +254,8 @@ class KltFeatureTracker : public StaticFeatureTracker {
 
   std::vector<Edge> detectEdgeFeatures(const cv::Mat& processed_img,
                                        int number_tracked,
-                                       const cv::Mat& mask = cv::Mat());
+                                       const cv::Mat& mask = cv::Mat(),
+                                       const cv::Mat& depth_img = cv::Mat());
 
   // image container associated with the processed image
   bool detectFeatures(const cv::Mat& processed_img,

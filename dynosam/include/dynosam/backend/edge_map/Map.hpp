@@ -61,6 +61,9 @@ public:
     // std::vector<MapPoint*> GetAllMapPoints();
     std::vector<Edge*> GetAllEdges();
     std::vector<dyno::Object*> GetAllObjects();
+
+    /// Return the Object with the given id, or nullptr if not found.
+    dyno::Object* GetObject(int obj_id);
     // std::vector<MapPoint*> GetReferenceMapPoints();
 
     // long unsigned int MapPointsInMap();
