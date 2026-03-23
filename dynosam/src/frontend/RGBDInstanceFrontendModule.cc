@@ -35,7 +35,6 @@
 #include <sstream>
 #include <iomanip>
 #include <unordered_set>
-#include <unistd.h>  // for usleep
 
 #include <opencv4/opencv2/opencv.hpp>
 #include "dynosam/frontend/FrontendModuleAccessor.hpp"
@@ -292,15 +291,6 @@ RGBDInstanceFrontendModule::validateImageContainer(
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
     FrontendInputPacketBase::ConstPtr input) {
-  // Check pause state from VoViewer (if available)
-  if (dyno::g_vo_viewer) {
-    while (dyno::g_vo_viewer->isPaused() &&
-           !dyno::g_vo_viewer->isStopped() &&
-           !dyno::g_vo_viewer->isFinished()) {
-      usleep(90000);  // Sleep 90ms while paused
-    }
-  }
-  
   ImageContainer::Ptr image_container = input->image_container_;
 
 
@@ -384,15 +374,6 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
 
 FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     FrontendInputPacketBase::ConstPtr input) {
-  // Check pause state from VoViewer (if available)
-  if (dyno::g_vo_viewer) {
-    while (dyno::g_vo_viewer->isPaused() &&
-           !dyno::g_vo_viewer->isStopped() &&
-           !dyno::g_vo_viewer->isFinished()) {
-      usleep(90000);  // Sleep 90ms while paused
-    }
-  }
-  
   const auto t_nominal_start = std::chrono::steady_clock::now();
   ImageContainer::Ptr image_container = input->image_container_;
 
@@ -1823,8 +1804,7 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
 
   // ── BBox IoU visualization (Tracks window only) ──────────────────────
   // Draw IoU between object's last observed bbox and the bbox of the
-  // corresponding instance-mask pixels in current frame.
-  // (Fallback: if target-class pixels are missing, use any non-zero mask.)
+  // corresponding target instance-mask pixels in current frame.
   if (map_) {
     const cv::Mat motion_mask = frame_k->image_container_.objectMotionMask();
     const bool has_motion_mask =
@@ -1898,10 +1878,9 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
                                  static_cast<int>(std::ceil(sy2)));
         if (x1 <= x0 || y1 <= y0) continue;
 
-        // mask bbox extraction
-        bool found_target = false, found_any = false;
+        // mask bbox extraction (target label only)
+        bool found_target = false;
         double mx1_t = 0.0, my1_t = 0.0, mx2_t = 0.0, my2_t = 0.0;
-        double mx1_a = 0.0, my1_a = 0.0, mx2_a = 0.0, my2_a = 0.0;
 
         for (int y = y0; y <= y1; ++y) {
           const int* row = motion_mask.ptr<int>(y);
@@ -1918,31 +1897,14 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
                 mx2_t = std::max(mx2_t, static_cast<double>(x));
                 my2_t = std::max(my2_t, static_cast<double>(y));
               }
-            } else if (mv != 0) {
-              if (!found_any) {
-                mx1_a = mx2_a = x;
-                my1_a = my2_a = y;
-                found_any = true;
-              } else {
-                mx1_a = std::min(mx1_a, static_cast<double>(x));
-                my1_a = std::min(my1_a, static_cast<double>(y));
-                mx2_a = std::max(mx2_a, static_cast<double>(x));
-                my2_a = std::max(my2_a, static_cast<double>(y));
-      }
-    }
-  }
+            }
+          }
         }
 
-        if (!found_target && !found_any) continue;
+        if (!found_target) continue;
 
         dyno::BBox2 mask_bb;
-        bool used_target = false;
-        if (found_target) {
-          mask_bb << mx1_t, my1_t, mx2_t + 1.0, my2_t + 1.0;
-          used_target = true;
-        } else {
-          mask_bb << mx1_a, my1_a, mx2_a + 1.0, my2_a + 1.0;
-        }
+        mask_bb << mx1_t, my1_t, mx2_t + 1.0, my2_t + 1.0;
 
         const float iou = bboxIoU(last_bb, mask_bb);
         const cv::Scalar obj_col = obj->GetColor();  // BGR
@@ -1956,8 +1918,7 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
         if (last_rect.area() > 0) cv::rectangle(tracking_image, last_rect, obj_col, 2);
         if (mask_rect.area() > 0) cv::rectangle(tracking_image, mask_rect, obj_col, mask_thickness);
 
-        const std::string prefix = used_target ? "IoU=" : "IoU?(any)=";
-        const std::string txt = prefix + std::to_string(iou).substr(0, 6);
+        const std::string txt = "IoU=" + std::to_string(iou).substr(0, 6);
         const cv::Point txt_pt(last_rect.x, std::max(0, last_rect.y - 4));
         cv::putText(tracking_image, txt, txt_pt, cv::FONT_HERSHEY_SIMPLEX,
                     0.45, obj_col, 1, cv::LINE_AA);
