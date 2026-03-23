@@ -892,9 +892,6 @@ namespace dyno
                                      static_cast<double>(std::max<size_t>(1, old_n));
                 if (new_n < kMinKeepPts && ratio < kMinKeepRatio) {
                     accept_new = false;
-                    VLOG(1) << "[ObjAssocPtsGuard] obj_id=" << id_
-                            << " keep old associated points (old=" << old_n
-                            << ", new=" << new_n << ", ratio=" << ratio << ")";
                 }
             }
 

@@ -607,12 +607,12 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
     //            count overlap with detection mask.  ratio >= 60% → match.
     // Fallback : if object has too few edge points (sparse early on), use
     //            bbox IoU between object's last observed bbox and current
-    //            detection bbox.  iou >= 0.3 → match.
+    //            detection bbox.  iou >= 0.25 → match.
     //
     // Whichever method scores highest wins (per detection node).
     constexpr float kEdgeRatioTh  = 0.5f;  // edge-projection mask overlap threshold
-    constexpr int   kMinEdgePts   = 10;    // min projected inliers for edge method
-    constexpr float kBboxIoUTh    = 0.3f;  // bbox IoU threshold for fallback
+    constexpr int   kMinEdgePts   = 6;    // min projected inliers for edge method
+    constexpr float kBboxIoUTh    = 0.25f;  // bbox IoU threshold for fallback (relaxed)
     // score encoding: edge ratio stored in [0,1], bbox iou stored as -iou so
     // edge match always preferred over bbox match
     // (we use a single best_score per node; edge wins if > 0, bbox if < 0)
@@ -1163,15 +1163,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   static cv::Mat cached_object_edge_proj_image;
   if (created_edge_kf_this_frame || cached_object_edge_proj_image.empty()) {
     if (!pre_kf_object_edge_snapshot.empty()) {
-      VLOG(1) << "[ObjEdgeProjSelect] frame_id=" << frame->getFrameId()
-              << " mode=SNAPSHOT"
-              << " snapshot_objs=" << pre_kf_object_edge_snapshot.size();
       cached_object_edge_proj_image =
           createObjectEdgeProjectionImageFromSnapshot(
               frame, pre_kf_object_edge_snapshot);
     } else {
-      VLOG(1) << "[ObjEdgeProjSelect] frame_id=" << frame->getFrameId()
-              << " mode=LIVE_FALLBACK";
       cached_object_edge_proj_image =
           createObjectEdgeProjectionImage(frame, object_poses);
     }
@@ -1811,7 +1806,7 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
         !motion_mask.empty() && motion_mask.type() == CV_32SC1;
 
     if (has_motion_mask) {
-      constexpr float kBboxIoUTh = 0.3f;
+      constexpr float kBboxIoUTh = 0.25f;
       constexpr double kPadRatio = 0.20;
 
       auto bboxIoU = [&](const dyno::BBox2& a, const dyno::BBox2& b) -> float {
@@ -2060,14 +2055,6 @@ cv::Mat RGBDInstanceFrontendModule::createObjectEdgeProjectionImageFromSnapshot(
       if (++drawn >= kMaxProjPts) break;
     }
   }
-
-  VLOG(1) << "[ObjEdgeProjSnap] frame_id=" << frame_k->getFrameId()
-          << " snapshot_objs=" << snapshot.size()
-          << " total_pts=" << total_pts
-          << " z_valid=" << z_valid_pts
-          << " in_image=" << in_image_pts
-          << " drawn=" << drawn_pts
-          << " unique_pix=" << unique_pixels.size();
 
   // Overlay frame id + unique pixel count on the image so display/log alignment is obvious.
   const std::string dbg_txt = "SNAP fid=" + std::to_string(frame_k->getFrameId()) +
