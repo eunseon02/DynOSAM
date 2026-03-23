@@ -450,7 +450,12 @@ We also provide a `.clang-format` file with the style rules that the repo uses, 
   --use_dynamic_track=false
   ```
 
+# 8. CLIP
+```
+python3 -m pip install open_clip_torch
+python3 -m pip install pyzmq
+```
 
-# 8. BSD License
+# 9. BSD License
 
 The DynoSAM framework is open-sourced under the BSD License, see [LICENSE](./LICENSE).

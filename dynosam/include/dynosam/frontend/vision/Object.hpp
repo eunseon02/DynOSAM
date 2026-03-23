@@ -187,6 +187,28 @@ class Object
             return mbBad;
         }
 
+        // ── CLIP feature for appearance-based re-association ─────────────
+        void SetClipFeature(const std::vector<float>& feat) {
+            std::lock_guard<std::mutex> lk(mutex_clip_);
+            clip_feature_ = feat;
+        }
+        std::vector<float> GetClipFeature() const {
+            std::lock_guard<std::mutex> lk(mutex_clip_);
+            return clip_feature_;
+        }
+        bool HasClipFeature() const {
+            std::lock_guard<std::mutex> lk(mutex_clip_);
+            return !clip_feature_.empty();
+        }
+        // Cosine similarity between two L2-normalized CLIP feature vectors.
+        static float ClipCosineSimilarity(const std::vector<float>& a,
+                                          const std::vector<float>& b) {
+            if (a.size() != b.size() || a.empty()) return 0.f;
+            float dot = 0.f;
+            for (size_t i = 0; i < a.size(); ++i) dot += a[i] * b[i];
+            return dot;  // already L2-normalized by server
+        }
+
         // Per-object merged edge clusters from OptimizeWithEdgePipeline.
         // Each inner vector is one cluster's polyline (world frame).
         void SetMergedEdgeClusters(std::vector<std::vector<cv::Point3d>> clusters) {
@@ -269,6 +291,8 @@ class Object
         mutable std::mutex mutex_associated_map_points_;
         mutable std::mutex mutex_add_detection_;
         mutable std::mutex mutex_merged_edge_clusters_;
+        mutable std::mutex mutex_clip_;
+        std::vector<float> clip_feature_;  // L2-normalized CLIP feature (512-d or 768-d)
 
         std::vector<std::vector<cv::Point3d>> merged_edge_clusters_;
         std::vector<AnchorCluster> anchor_clusters_;

@@ -62,6 +62,7 @@
 #include "dynosam/visualizer/Visualizer-Definitions.hpp"
 #include "dynosam/backend/edge_map/Map.hpp"
 #include "dynosam/frontend/vision/ObjectMatcher.hpp"
+#include "dynosam/frontend/vision/ClipFeatureClient.hpp"
 
 #include <deque>
 
@@ -130,6 +131,16 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   cv::Mat createTrackingImage(const Frame::Ptr& frame_k,
                               const Frame::Ptr& frame_k_1,
                               const ObjectPoseMap& object_poses) const;
+  cv::Mat createObjectEdgeProjectionImage(
+      const Frame::Ptr& frame_k,
+      const ObjectPoseMap& object_poses) const;
+  struct ObjectEdgeSnapshotItem {
+    cv::Scalar color_bgr;
+    std::vector<cv::Point3d> world_points;
+  };
+  cv::Mat createObjectEdgeProjectionImageFromSnapshot(
+      const Frame::Ptr& frame_k,
+      const std::vector<ObjectEdgeSnapshotItem>& snapshot) const;
 
   void ObjectCulling(const KeyFramePtr& pKF);
 
@@ -175,6 +186,9 @@ class RGBDInstanceFrontendModule : public FrontendModule {
   mutable std::mutex last_kf_mutex_;
   Frame::Ptr last_keyframe_{nullptr};  // Last keyframe Frame (from when keyframe was created)
   
+  // Periodic CLIP-based object merge (to correct object re-initialization drift)
+  int last_clip_merge_kf_id_{-1};
+
   // Sliding window parameters
   int window_size_{10};
   int window_step_{4};
@@ -210,6 +224,9 @@ class RGBDInstanceFrontendModule : public FrontendModule {
 
   // Global object map (ellipsoid/object-level SLAM map)
   std::shared_ptr<dyno::EdgeMap> map_;
+
+  // CLIP feature client for appearance-based object re-association
+  std::shared_ptr<dyno::ClipFeatureClient> clip_client_;
 
 
   bool is_data_valid_{false};

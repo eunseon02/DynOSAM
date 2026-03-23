@@ -189,6 +189,10 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   // Initialize edge-based local mapping (from localmapping.cc)
   local_map_.reset(new dyno::localMap());
   map_.reset(new dyno::EdgeMap());
+
+  // Initialize CLIP feature client (connects to Python server on tcp://localhost:5555)
+  // NOTE: CLIP-based tracking/re-association is currently disabled in this build.
+  // clip_client_ = std::make_shared<dyno::ClipFeatureClient>("tcp://localhost:5555", 200);
   // TODO: Load canny parameters from config
   // edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
   
@@ -319,6 +323,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::boostrapSpin(
   frame->T_world_camera_ = gtsam::Pose3::Identity();
 
   // Create first keyframe if edge features are enabled
+  bool created_edge_kf_this_frame = false;
   if (FLAGS_use_edge_feature && !frame->static_edges_.empty()) {
     const gtsam::Pose3& pose_curr = frame->T_world_camera_;
     
@@ -556,8 +561,24 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   }
   const auto t_fine_end = std::chrono::steady_clock::now();
 
+  // Run object association only on edge keyframe timing.
+  // If edge feature is disabled, keep the original per-frame behavior.
+  bool run_object_association_this_frame = true;
+  if (FLAGS_use_edge_feature) {
+    bool local_map_empty_for_assoc = false;
+    {
+      std::lock_guard<std::mutex> lock(local_map_mutex_);
+      local_map_empty_for_assoc = local_map_->mvKeyFrames.empty();
+    }
+    if (local_map_empty_for_assoc || !is_edge_initialized_) {
+      run_object_association_this_frame = true;
+    } else {
+      run_object_association_this_frame =
+          shouldAddEdgeKeyFrame(frame->T_world_camera_, pose_last_edge_kf_);
+    }
+  }
 
-  if(FLAGS_use_object) {
+  if (FLAGS_use_object && run_object_association_this_frame) {
     const int img_width = camera_->getParams().ImageWidth();
     const int img_height = camera_->getParams().ImageHeight();
     dyno::BBox2 img_bbox(0.0, 0.0,
@@ -680,10 +701,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                     it->second.second < 0 ||
                     ratio > it->second.second) {
                   best_match[nid] = {obj, ratio};
-                }
               }
-            }
+              }
           }
+      }
         }
 
         // ── Fallback: bbox IoU ───────────────────────────────────────────────
@@ -711,18 +732,26 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         }
       }
 
+      // ── CLIP fallback for unmatched detections (disabled) ───────────────
+
       // Apply best matches to frame graph
       int n_edge = 0, n_bbox = 0;
+      // CLIP fallback is disabled in this build.
+      int n_clip = 0;
       for (auto& [nid, match] : best_match) {
         frame->graph->attributes[nid].obj = match.first;
-        if (match.second > 0) ++n_edge; else ++n_bbox;
+        if (match.second > 0) ++n_edge;
+        else if (match.second > -2.f) ++n_bbox;
+        // else: CLIP match (counted separately)
         VLOG(3) << "[ObjAssoc] node=" << nid
                 << " obj_id=" << match.first->GetId()
-                << (match.second > 0 ? " edge_ratio=" : " bbox_iou=")
-                << std::abs(match.second);
+                << (match.second > 0 ? " edge_ratio=" :
+                    match.second > -2.f ? " bbox_iou=" : " clip_sim=")
+                << std::abs(match.second > -2.f ? match.second : match.second + 2.f);
       }
-      VLOG(2) << "[ObjAssoc] edge=" << n_edge << " bbox_fallback=" << n_bbox
-              << " total=" << (n_edge + n_bbox)
+      VLOG(2) << "[ObjAssoc] edge=" << n_edge << " bbox=" << n_bbox
+              << " clip=" << n_clip
+              << " total=" << (n_edge + n_bbox + n_clip)
               << " / " << frame->graph->attributes.size();
     } else {
       // No map or no graph — fall back to Wasserstein with empty proj_bboxes
@@ -821,6 +850,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       object_motion_solver_->solve(frame, previous_frame);
   const auto t_object_motion_end = std::chrono::steady_clock::now();
 
+  // True only when an edge KeyFrame is created in this nominalSpin iteration.
+  bool created_edge_kf_this_frame = false;
+  std::vector<ObjectEdgeSnapshotItem> pre_kf_object_edge_snapshot;
+
   // const FeatureTrackerInfo& tracker_info = *frame->getTrackingInfo();
   // VLOG(1) << to_string(tracker_info);
 
@@ -894,6 +927,32 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       
       // Safety check: graph and map must be initialized before processing objects
       if (pKF->graph && map_) {
+        // Snapshot object-edge map BEFORE updating/creating objects at this KF.
+        // This is used to visualize "previous-KF-only" projections.
+        pre_kf_object_edge_snapshot.clear();
+        // Use only objects referenced by this KF's detection graph to reduce
+        // race risk with concurrent map culling.
+        if (pKF->graph) {
+          pre_kf_object_edge_snapshot.reserve(pKF->graph->attributes.size());
+          for (const auto& kv : pKF->graph->attributes) {
+            const auto& attr = kv.second;
+            dyno::Object* obj = attr.obj;
+            if (!obj || obj->isBad()) continue;
+            const auto pts = obj->GetAssociatedMapPoints();
+            if (pts.empty()) continue;
+            ObjectEdgeSnapshotItem item;
+            item.color_bgr = obj->GetColor();
+            item.world_points.reserve(pts.size());
+            for (const auto& p : pts) {
+              if (!p.allFinite()) continue;
+              item.world_points.emplace_back(p.x(), p.y(), p.z());
+            }
+            if (!item.world_points.empty()) {
+              pre_kf_object_edge_snapshot.emplace_back(std::move(item));
+            }
+          }
+        }
+
         // Construct Rt [R_cw | t_cw] from T_world_camera_ (used for both new objects and AddDetection)
         Eigen::Matrix3d K_eigen = camera_->getParams().getCameraMatrixEigen();
         const gtsam::Pose3& T_wc = frame->T_world_camera_;
@@ -918,15 +977,15 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
           if(attribute.obj){
             // Matched by edge-projection: update existing object with new observation
-            attribute.obj->AddDetection(
-                attribute.label,
-                attribute.bbox,
-                attribute.ell,
-                attribute.confidence,
-                Rt,
-                static_cast<unsigned int>(frame->getFrameId()),
-                pKF.get()
-            );
+              attribute.obj->AddDetection(
+                  attribute.label, 
+                  attribute.bbox, 
+                  attribute.ell, 
+                  attribute.confidence, 
+                  Rt, 
+                  static_cast<unsigned int>(frame->getFrameId()), 
+                  pKF.get()
+              );
           } else {
             // Filter by confidence score
             if (attribute.confidence < kMinConfidenceScore_) {
@@ -939,7 +998,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
             }
             
             const auto& depth_data = depth_data_per_det[node_id];
-
+          
             //create new object
             Object* obj = new Object(
                 static_cast<unsigned int>(attribute.label),
@@ -956,6 +1015,9 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                 delete obj;
                 continue;
             }
+            // Extract CLIP feature for the new object (disabled)
+            // if (clip_client_) { ... }
+
             map_->AddObject(obj);
             local_map_->mlpRecentAddedObjects.push_back(obj);
             pKF->graph->attributes[node_id].obj = obj;
@@ -1078,6 +1140,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
       
       if (pKF) {
+        created_edge_kf_this_frame = true;
         {
           std::lock_guard<std::mutex> lock(last_kf_mutex_);
           last_keyframe_ = frame;
@@ -1116,6 +1179,22 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   DebugImagery debug_imagery;
   debug_imagery.tracking_image =
       createTrackingImage(frame, previous_frame, object_poses);
+  static cv::Mat cached_object_edge_proj_image;
+  if (created_edge_kf_this_frame || cached_object_edge_proj_image.empty()) {
+    if (!pre_kf_object_edge_snapshot.empty()) {
+      VLOG(1) << "[ObjEdgeProjSelect] frame_id=" << frame->getFrameId()
+              << " mode=SNAPSHOT"
+              << " snapshot_objs=" << pre_kf_object_edge_snapshot.size();
+      cached_object_edge_proj_image =
+          createObjectEdgeProjectionImageFromSnapshot(
+              frame, pre_kf_object_edge_snapshot);
+    } else {
+      VLOG(1) << "[ObjEdgeProjSelect] frame_id=" << frame->getFrameId()
+              << " mode=LIVE_FALLBACK";
+      cached_object_edge_proj_image =
+          createObjectEdgeProjectionImage(frame, object_poses);
+    }
+  }
   const ImageContainer& processed_image_container = frame->image_container_;
   debug_imagery.rgb_viz =
       ImageType::RGBMono::toRGB(processed_image_container.rgb());
@@ -1130,6 +1209,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   if (display_queue_) {
     display_queue_->push(
         ImageToDisplay("Tracks", debug_imagery.tracking_image));
+    if (created_edge_kf_this_frame && !cached_object_edge_proj_image.empty()) {
+      display_queue_->push(
+          ImageToDisplay("Tracks Object Edge", cached_object_edge_proj_image));
+    }
 
     cv::Mat stereo_matches;
     if (tracker_->drawStereoMatches(stereo_matches, *frame)) {
@@ -1641,7 +1724,398 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
     }
   }
 
+  // ── Edge fitting visualization on Tracks window ──────────────────────
+  // For each object pose active in this frame, project the object's
+  // associated 3D edge points into the current image and visualize:
+  //   - in-mask projected points (mask overlap in association) in object color
+  //   - out-of-mask projected points in gray
+  if (false && map_) {
+    const auto objects_in_frame = object_poses.collectByFrame(frame_k->getFrameId());
+    if (!objects_in_frame.empty()) {
+  const auto& camera_params = camera_->getParams();
+  const auto& K = camera_params.getCameraMatrix();
+      const double fx = K.at<double>(0, 0);
+      const double fy = K.at<double>(1, 1);
+      const double cx = K.at<double>(0, 2);
+      const double cy = K.at<double>(1, 2);
+
+      const gtsam::Pose3& X_k = frame_k->getPose();  // world -> camera handled below
+      const gtsam::Pose3 T_cw = X_k.inverse();      // camera <- world
+      const Eigen::Matrix3d R_cw = T_cw.rotation().matrix();
+      const Eigen::Vector3d t_cw = T_cw.translation();
+
+      const cv::Mat motion_mask = frame_k->image_container_.objectMotionMask();
+      const bool has_motion_mask =
+          !motion_mask.empty() && motion_mask.type() == CV_32SC1 &&
+          motion_mask.size() == cv::Size(frame_k->img_width_, frame_k->img_height_);
+
+      constexpr float kMinProjZ = 0.1f;
+      constexpr int kStride = 10;         // visualize subset for speed
+      constexpr int kMaxProjPts = 2000;   // safety cap
+      constexpr int kMinEdgePts = 10;    // same as association
+      constexpr float kEdgeRatioTh = 0.5f;
+
+      for (const auto& [obj_id, pose_w_o] : objects_in_frame) {
+        (void)pose_w_o;  // associated_world_points_ are already in world; only camera pose is needed.
+        dyno::Object* obj = map_->GetObject(static_cast<int>(obj_id));
+        if (!obj || obj->isBad()) continue;
+
+        const auto assoc_pts = obj->GetAssociatedMapPoints();
+        if (assoc_pts.empty()) continue;
+
+        const int lbl = static_cast<int>(obj->GetCategoryId());
+        const unsigned char target_b =
+            static_cast<unsigned char>((lbl * 37) % 256);
+        const unsigned char target_g =
+            static_cast<unsigned char>((lbl * 17) % 256);
+        const unsigned char target_r =
+            static_cast<unsigned char>((lbl * 97) % 256);
+        const int target_mask_val =
+            (static_cast<int>(target_b) << 16) |
+            (static_cast<int>(target_g) << 8) |
+            static_cast<int>(target_r);
+
+        const cv::Scalar obj_col = obj->GetColor();  // BGR
+        const cv::Scalar out_col(180, 180, 180);      // gray for outliers
+
+        int in_cnt = 0;
+        int tot_cnt = 0;
+        int drawn = 0;
+
+        for (size_t i = 0; i < assoc_pts.size(); i += kStride) {
+          const Eigen::Vector3d& pw = assoc_pts[i];
+          if (!pw.allFinite()) continue;
+          const Eigen::Vector3d pc = R_cw * pw + t_cw;
+          if (pc.z() <= kMinProjZ) continue;
+
+          const int u = static_cast<int>(std::round(fx * pc.x() / pc.z() + cx));
+          const int v = static_cast<int>(std::round(fy * pc.y() / pc.z() + cy));
+          if (u < 0 || v < 0 || u >= tracking_image.cols || v >= tracking_image.rows) continue;
+
+          ++tot_cnt;
+          const bool in_mask = has_motion_mask && (motion_mask.at<int>(v, u) == target_mask_val);
+          if (in_mask) ++in_cnt;
+
+          const cv::Scalar& col = in_mask ? obj_col : out_col;
+          cv::circle(tracking_image, cv::Point(u, v), 1, col, -1, cv::LINE_AA);
+          ++drawn;
+          if (drawn >= kMaxProjPts) break;
+        }
+
+        if (tot_cnt >= kMinEdgePts && (static_cast<float>(in_cnt) / static_cast<float>(tot_cnt)) >= kEdgeRatioTh) {
+          // Draw a small ratio tag near the last observed bbox (pixel space).
+          const auto bboxes = obj->GetObservedBboxes();
+          if (!bboxes.empty()) {
+            const auto& bb = bboxes.back();
+            int x = static_cast<int>(std::round(bb[0]));
+            int y = static_cast<int>(std::round(bb[1]));
+            x = std::max(0, std::min(x, tracking_image.cols - 1));
+            y = std::max(0, std::min(y, tracking_image.rows - 1));
+            const float ratio = tot_cnt > 0 ? (static_cast<float>(in_cnt) / static_cast<float>(tot_cnt)) : 0.f;
+            const std::string txt = "edge " + std::to_string(ratio).substr(0, 4);
+            cv::putText(tracking_image, txt, cv::Point(x, std::max(0, y - 3)),
+                        cv::FONT_HERSHEY_SIMPLEX, 0.4, obj_col, 1, cv::LINE_AA);
+          }
+        }
+      }
+    }
+  }
+
+  // ── BBox IoU visualization (Tracks window only) ──────────────────────
+  // Draw IoU between object's last observed bbox and the bbox of the
+  // corresponding instance-mask pixels in current frame.
+  // (Fallback: if target-class pixels are missing, use any non-zero mask.)
+  if (map_) {
+    const cv::Mat motion_mask = frame_k->image_container_.objectMotionMask();
+    const bool has_motion_mask =
+        !motion_mask.empty() && motion_mask.type() == CV_32SC1;
+
+    if (has_motion_mask) {
+      constexpr float kBboxIoUTh = 0.3f;
+      constexpr double kPadRatio = 0.20;
+
+      auto bboxIoU = [&](const dyno::BBox2& a, const dyno::BBox2& b) -> float {
+        const double ax1 = a[0], ay1 = a[1], ax2 = a[2], ay2 = a[3];
+        const double bx1 = b[0], by1 = b[1], bx2 = b[2], by2 = b[3];
+        const double ix1 = std::max(ax1, bx1);
+        const double iy1 = std::max(ay1, by1);
+        const double ix2 = std::min(ax2, bx2);
+        const double iy2 = std::min(ay2, by2);
+        const double iw = std::max(0.0, ix2 - ix1);
+        const double ih = std::max(0.0, iy2 - iy1);
+        const double inter = iw * ih;
+        const double aw = std::max(0.0, ax2 - ax1);
+        const double ah = std::max(0.0, ay2 - ay1);
+        const double bw = std::max(0.0, bx2 - bx1);
+        const double bh = std::max(0.0, by2 - by1);
+        const double uni = aw * ah + bw * bh - inter;
+        return uni > 0.0 ? static_cast<float>(inter / uni) : 0.f;
+      };
+
+      auto clampRect = [&](const dyno::BBox2& bb) -> cv::Rect {
+        const int x1 = std::clamp(static_cast<int>(std::floor(bb[0])), 0,
+                                  tracking_image.cols - 1);
+        const int y1 = std::clamp(static_cast<int>(std::floor(bb[1])), 0,
+                                  tracking_image.rows - 1);
+        const int x2 = std::clamp(static_cast<int>(std::ceil(bb[2])), 0,
+                                  tracking_image.cols - 1);
+        const int y2 = std::clamp(static_cast<int>(std::ceil(bb[3])), 0,
+                                  tracking_image.rows - 1);
+        const int w = std::max(0, x2 - x1);
+        const int h = std::max(0, y2 - y1);
+        return cv::Rect(x1, y1, w, h);
+      };
+
+      const auto all_objs = map_->GetAllObjects();
+      for (dyno::Object* obj : all_objs) {
+        if (!obj || obj->isBad()) continue;
+
+        const auto obs_bboxes = obj->GetObservedBboxes();
+        if (obs_bboxes.empty()) continue;
+        const dyno::BBox2 last_bb = obs_bboxes.back();  // [xmin,ymin,xmax,ymax]
+
+        const int lbl = static_cast<int>(obj->GetCategoryId());
+        const unsigned char target_b = static_cast<unsigned char>((lbl * 37) % 256);
+        const unsigned char target_g = static_cast<unsigned char>((lbl * 17) % 256);
+        const unsigned char target_r = static_cast<unsigned char>((lbl * 97) % 256);
+        const int target_mask_val =
+            (static_cast<int>(target_b) << 16) |
+            (static_cast<int>(target_g) << 8) |
+            (static_cast<int>(target_r));
+
+        const double bb_w = std::max(1e-6, last_bb[2] - last_bb[0]);
+        const double bb_h = std::max(1e-6, last_bb[3] - last_bb[1]);
+        const double sx1 = last_bb[0] - kPadRatio * bb_w;
+        const double sy1 = last_bb[1] - kPadRatio * bb_h;
+        const double sx2 = last_bb[2] + kPadRatio * bb_w;
+        const double sy2 = last_bb[3] + kPadRatio * bb_h;
+
+        const int x0 = std::max(0, static_cast<int>(std::floor(sx1)));
+        const int y0 = std::max(0, static_cast<int>(std::floor(sy1)));
+        const int x1 = std::min(tracking_image.cols - 1,
+                                 static_cast<int>(std::ceil(sx2)));
+        const int y1 = std::min(tracking_image.rows - 1,
+                                 static_cast<int>(std::ceil(sy2)));
+        if (x1 <= x0 || y1 <= y0) continue;
+
+        // mask bbox extraction
+        bool found_target = false, found_any = false;
+        double mx1_t = 0.0, my1_t = 0.0, mx2_t = 0.0, my2_t = 0.0;
+        double mx1_a = 0.0, my1_a = 0.0, mx2_a = 0.0, my2_a = 0.0;
+
+        for (int y = y0; y <= y1; ++y) {
+          const int* row = motion_mask.ptr<int>(y);
+          for (int x = x0; x <= x1; ++x) {
+            const int mv = row[x];
+            if (mv == target_mask_val) {
+              if (!found_target) {
+                mx1_t = mx2_t = x;
+                my1_t = my2_t = y;
+                found_target = true;
+              } else {
+                mx1_t = std::min(mx1_t, static_cast<double>(x));
+                my1_t = std::min(my1_t, static_cast<double>(y));
+                mx2_t = std::max(mx2_t, static_cast<double>(x));
+                my2_t = std::max(my2_t, static_cast<double>(y));
+              }
+            } else if (mv != 0) {
+              if (!found_any) {
+                mx1_a = mx2_a = x;
+                my1_a = my2_a = y;
+                found_any = true;
+              } else {
+                mx1_a = std::min(mx1_a, static_cast<double>(x));
+                my1_a = std::min(my1_a, static_cast<double>(y));
+                mx2_a = std::max(mx2_a, static_cast<double>(x));
+                my2_a = std::max(my2_a, static_cast<double>(y));
+      }
+    }
+  }
+        }
+
+        if (!found_target && !found_any) continue;
+
+        dyno::BBox2 mask_bb;
+        bool used_target = false;
+        if (found_target) {
+          mask_bb << mx1_t, my1_t, mx2_t + 1.0, my2_t + 1.0;
+          used_target = true;
+        } else {
+          mask_bb << mx1_a, my1_a, mx2_a + 1.0, my2_a + 1.0;
+        }
+
+        const float iou = bboxIoU(last_bb, mask_bb);
+        const cv::Scalar obj_col = obj->GetColor();  // BGR
+        // Requested: visualize mask bbox with the same object color.
+        // Encode pass/fail only with line thickness.
+        const bool pass = (iou >= kBboxIoUTh);
+        const int mask_thickness = pass ? 2 : 1;
+
+        const cv::Rect last_rect = clampRect(last_bb);
+        const cv::Rect mask_rect = clampRect(mask_bb);
+        if (last_rect.area() > 0) cv::rectangle(tracking_image, last_rect, obj_col, 2);
+        if (mask_rect.area() > 0) cv::rectangle(tracking_image, mask_rect, obj_col, mask_thickness);
+
+        const std::string prefix = used_target ? "IoU=" : "IoU?(any)=";
+        const std::string txt = prefix + std::to_string(iou).substr(0, 6);
+        const cv::Point txt_pt(last_rect.x, std::max(0, last_rect.y - 4));
+        cv::putText(tracking_image, txt, txt_pt, cv::FONT_HERSHEY_SIMPLEX,
+                    0.45, obj_col, 1, cv::LINE_AA);
+      }
+    }
+  }
+
   return tracking_image;
+}
+
+cv::Mat RGBDInstanceFrontendModule::createObjectEdgeProjectionImage(
+    const Frame::Ptr& frame_k, const ObjectPoseMap& object_poses) const {
+  (void)object_poses;
+  cv::Mat img =
+      ImageType::RGBMono::toRGB(frame_k->image_container_.rgb()).clone();
+
+  if (!map_) return img;
+
+  const std::vector<dyno::Object*> all_objs = map_->GetAllObjects();
+  if (all_objs.empty()) return img;
+  const auto cur_frame_id = static_cast<size_t>(frame_k->getFrameId());
+
+  const auto& camera_params = camera_->getParams();
+  const auto& K = camera_params.getCameraMatrix();
+  const double fx = K.at<double>(0, 0);
+  const double fy = K.at<double>(1, 1);
+  const double cx = K.at<double>(0, 2);
+  const double cy = K.at<double>(1, 2);
+
+  const gtsam::Pose3 T_cw = frame_k->T_world_camera_.inverse();  // camera <- world
+  const Eigen::Matrix3d R_cw = T_cw.rotation().matrix();
+  const Eigen::Vector3d t_cw = T_cw.translation();
+
+  constexpr float kMinProjZ = 0.1f;
+  constexpr int kStride = 1;        // dense projection for visibility
+  constexpr int kMaxProjPts = 5000; // keep UI responsive
+  size_t total_pts = 0;
+  size_t z_valid_pts = 0;
+  size_t in_image_pts = 0;
+  size_t drawn_pts = 0;
+  std::unordered_set<uint64_t> unique_pixels;
+
+  for (dyno::Object* obj : all_objs) {
+    if (!obj || obj->isBad()) continue;
+    // Visualize only edges from objects observed before the current frame
+    // (exclude objects newly created/updated at this frame).
+    if (obj->GetLastObsFrameId() >= cur_frame_id) continue;
+
+    const auto assoc_pts = obj->GetAssociatedMapPoints();
+    if (assoc_pts.empty()) continue;
+    const cv::Scalar obj_col = obj->GetColor();  // BGR
+
+    int drawn = 0;
+    for (size_t i = 0; i < assoc_pts.size(); i += kStride) {
+      ++total_pts;
+      const Eigen::Vector3d& pw = assoc_pts[i];
+      if (!pw.allFinite()) continue;
+      const Eigen::Vector3d pc = R_cw * pw + t_cw;
+      if (pc.z() <= kMinProjZ) continue;
+      ++z_valid_pts;
+
+      const int u = static_cast<int>(std::round(fx * pc.x() / pc.z() + cx));
+      const int v = static_cast<int>(std::round(fy * pc.y() / pc.z() + cy));
+      if (u < 0 || v < 0 || u >= img.cols || v >= img.rows) continue;
+      ++in_image_pts;
+      unique_pixels.insert((static_cast<uint64_t>(v) << 32) |
+                           static_cast<uint32_t>(u));
+
+      cv::circle(img, cv::Point(u, v), 2, obj_col, -1, cv::LINE_AA);
+      ++drawn_pts;
+      if (++drawn >= kMaxProjPts) break;
+    }
+  }
+
+  VLOG(1) << "[ObjEdgeProjLive] frame_id=" << frame_k->getFrameId()
+          << " total_pts=" << total_pts
+          << " z_valid=" << z_valid_pts
+          << " in_image=" << in_image_pts
+          << " drawn=" << drawn_pts
+          << " unique_pix=" << unique_pixels.size();
+
+  const std::string dbg_txt = "LIVE fid=" + std::to_string(frame_k->getFrameId()) +
+                              " drawn=" + std::to_string(drawn_pts) +
+                              " uniq=" + std::to_string(unique_pixels.size());
+  cv::putText(img, dbg_txt, cv::Point(10, 24), cv::FONT_HERSHEY_SIMPLEX,
+              0.65, cv::Scalar(255, 255, 0), 2, cv::LINE_AA);
+
+  return img;
+}
+
+cv::Mat RGBDInstanceFrontendModule::createObjectEdgeProjectionImageFromSnapshot(
+    const Frame::Ptr& frame_k,
+    const std::vector<ObjectEdgeSnapshotItem>& snapshot) const {
+  cv::Mat img =
+      ImageType::RGBMono::toRGB(frame_k->image_container_.rgb()).clone();
+  if (snapshot.empty()) return img;
+
+  const auto& camera_params = camera_->getParams();
+  const auto& K = camera_params.getCameraMatrix();
+  const double fx = K.at<double>(0, 0);
+  const double fy = K.at<double>(1, 1);
+  const double cx = K.at<double>(0, 2);
+  const double cy = K.at<double>(1, 2);
+
+  const gtsam::Pose3 T_cw = frame_k->T_world_camera_.inverse();  // camera <- world
+  const Eigen::Matrix3d R_cw = T_cw.rotation().matrix();
+  const Eigen::Vector3d t_cw = T_cw.translation();
+
+  constexpr float kMinProjZ = 0.1f;
+  constexpr int kStride = 1;
+  constexpr int kMaxProjPts = 5000;
+
+  size_t total_pts = 0;
+  size_t z_valid_pts = 0;
+  size_t in_image_pts = 0;
+  size_t drawn_pts = 0;
+  std::unordered_set<uint64_t> unique_pixels;
+
+  for (const auto& item : snapshot) {
+    const cv::Scalar obj_col = item.color_bgr;  // BGR for OpenCV image overlay
+    int drawn = 0;
+    for (size_t i = 0; i < item.world_points.size(); i += kStride) {
+      ++total_pts;
+      const auto& pw_cv = item.world_points[i];
+      const Eigen::Vector3d pw(pw_cv.x, pw_cv.y, pw_cv.z);
+      const Eigen::Vector3d pc = R_cw * pw + t_cw;
+      if (pc.z() <= kMinProjZ) continue;
+      ++z_valid_pts;
+
+      const int u = static_cast<int>(std::round(fx * pc.x() / pc.z() + cx));
+      const int v = static_cast<int>(std::round(fy * pc.y() / pc.z() + cy));
+      if (u < 0 || v < 0 || u >= img.cols || v >= img.rows) continue;
+      ++in_image_pts;
+      unique_pixels.insert((static_cast<uint64_t>(v) << 32) |
+                           static_cast<uint32_t>(u));
+
+      cv::circle(img, cv::Point(u, v), 2, obj_col, -1, cv::LINE_AA);
+      ++drawn_pts;
+      if (++drawn >= kMaxProjPts) break;
+    }
+  }
+
+  VLOG(1) << "[ObjEdgeProjSnap] frame_id=" << frame_k->getFrameId()
+          << " snapshot_objs=" << snapshot.size()
+          << " total_pts=" << total_pts
+          << " z_valid=" << z_valid_pts
+          << " in_image=" << in_image_pts
+          << " drawn=" << drawn_pts
+          << " unique_pix=" << unique_pixels.size();
+
+  // Overlay frame id + unique pixel count on the image so display/log alignment is obvious.
+  const std::string dbg_txt = "SNAP fid=" + std::to_string(frame_k->getFrameId()) +
+                              " drawn=" + std::to_string(drawn_pts) +
+                              " uniq=" + std::to_string(unique_pixels.size());
+  cv::putText(img, dbg_txt, cv::Point(10, 24), cv::FONT_HERSHEY_SIMPLEX,
+              0.65, cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
+
+  return img;
 }
 
 // Edge-based local mapping functions
@@ -1676,6 +2150,8 @@ void RGBDInstanceFrontendModule::processingThreadFunction() {
     }
     last_popped_kf_id = kf->KF_ID;
     
+    VLOG(1) << "[KF PROCESS] kf_id=" << kf->KF_ID
+            << " frame_id=" << kf->KF_ID;
     VLOG(10) << "\033[34m[QUEUE POP]\033[0m kf_id=" << kf->KF_ID;
     
     // Process sliding window keyframe
@@ -1833,6 +2309,8 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
                       << " ms (tbb parallel)";
           }
         }
+
+        // ── Periodic CLIP-based object merge (disabled) ────────────────
 
         // Update merged local map cache (heavy data) for visualization snapshots
         {

@@ -162,7 +162,7 @@ void robustWeightChi2::computeStatistics()
     }
 
     // 1. 计算残差平方的均值 (sigma^2 = E[epsilon^2])
-    double sum;
+    double sum = 0.0;
     for (const auto& r2 : residuals_2)
     {
         sum += r2;

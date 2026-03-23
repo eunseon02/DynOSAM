@@ -40,6 +40,14 @@ find_package(Pangolin REQUIRED)
 # Find dlib (required for Graph.hpp)
 find_package(dlib REQUIRED)
 
+# Find cppzmq (required for ClipFeatureClient)
+find_package(cppzmq QUIET)
+if(NOT cppzmq_FOUND)
+  # Fallback: find libzmq directly via pkg-config
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(ZMQ REQUIRED libzmq)
+endif()
+
 
 
 include(VerifyGtsamConfig)
@@ -108,6 +116,7 @@ add_library(${PROJECT_NAME} SHARED
   src/frontend/vision/FineTracker.cc
   src/frontend/vision/DirectTracker.cc
   src/frontend/vision/FeatureDetector.cc
+  src/frontend/vision/ClipFeatureClient.cc
   src/frontend/RGBDInstance-Definitions.cc
   src/frontend/Frontend-Definitions.cc
   src/frontend/anms/NonMaximumSupression.cc
@@ -180,6 +189,8 @@ target_link_libraries(${PROJECT_NAME}
   pango_windowing
   pango_vars
   dlib::dlib
+  $<$<TARGET_EXISTS:cppzmq>:cppzmq>
+  $<$<NOT:$<TARGET_EXISTS:cppzmq>>:${ZMQ_LIBRARIES}>
   # rclcpp::rclcpp
   # opengv
   # nlohmann_json::nlohmann_json

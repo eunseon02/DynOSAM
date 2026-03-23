@@ -875,20 +875,46 @@ namespace dyno
             for (const auto& p : ac.pts) anchor_world_pts.push_back(p);
         }
         if (!anchor_world_pts.empty()) {
+            //TODO: test this
+            // Guard against catastrophic shrink after a noisy optimization step.
+            // If the new anchor-derived set collapses too much, keep previous
+            // associated points so frame-to-frame association remains stable.
+            constexpr size_t kMinKeepPts = 200;
+            constexpr double kMinKeepRatio = 0.20;  // keep old if new < 20% of old
+
             std::lock_guard<std::mutex> lk(mutex_associated_map_points_);
-            associated_world_points_.clear();
-            associated_world_points_.reserve(anchor_world_pts.size());
-            for (const auto& pt : anchor_world_pts) {
-                associated_world_points_.emplace_back(pt.x, pt.y, pt.z);
+            const size_t old_n = associated_world_points_.size();
+            const size_t new_n = anchor_world_pts.size();
+
+            bool accept_new = true;
+            if (old_n >= kMinKeepPts) {
+                const double ratio = static_cast<double>(new_n) /
+                                     static_cast<double>(std::max<size_t>(1, old_n));
+                if (new_n < kMinKeepPts && ratio < kMinKeepRatio) {
+                    accept_new = false;
+                    VLOG(1) << "[ObjAssocPtsGuard] obj_id=" << id_
+                            << " keep old associated points (old=" << old_n
+                            << ", new=" << new_n << ", ratio=" << ratio << ")";
+                }
+            }
+
+            if (accept_new) {
+                associated_world_points_.clear();
+                associated_world_points_.reserve(anchor_world_pts.size());
+                for (const auto& pt : anchor_world_pts) {
+                    associated_world_points_.emplace_back(pt.x, pt.y, pt.z);
+                }
             }
         }
 
-        LOG(INFO) << "[OptimizeWithEdgePipeline] obj_id=" << obj_id
-                  << " new_kfs=" << new_kfs_count
-                  << " obj_kfs=" << obj_kfs.size()
-                  << " clusters=" << obj_local_map->mvEleEdgeClusters.size()
-                  << " anchors=" << anchors.size()
-                  << " merged_pts=" << all_merged_pts.size();
+        // Debug log disabled to avoid high-frequency spam; enable with LOG/VLOG
+        // if needed during tuning.
+        // LOG(INFO) << "[OptimizeWithEdgePipeline] obj_id=" << obj_id
+        //           << " new_kfs=" << new_kfs_count
+        //           << " obj_kfs=" << obj_kfs.size()
+        //           << " clusters=" << obj_local_map->mvEleEdgeClusters.size()
+        //           << " anchors=" << anchors.size()
+        //           << " merged_pts=" << all_merged_pts.size();
     }
 
 

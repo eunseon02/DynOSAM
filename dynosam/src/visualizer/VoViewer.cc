@@ -159,9 +159,11 @@ void voViewer::render_loop()
             for (auto* obj : objects) {
                 if (!obj) continue;
                 const cv::Scalar c = obj->GetColor();
-                const cv::Vec3b obj_col(static_cast<unsigned char>(c[0]),
+                // Object color is stored as OpenCV BGR, while VisualizerBase::addPoint/addLine
+                // interprets cv::Vec3b as RGB for OpenGL.
+                const cv::Vec3b obj_col(static_cast<unsigned char>(c[2]),
                                         static_cast<unsigned char>(c[1]),
-                                        static_cast<unsigned char>(c[2]));
+                                        static_cast<unsigned char>(c[0]));
 
                 const auto clusters = obj->GetMergedEdgeClusters();
                 for (const auto& cloud : clusters) {
