@@ -822,6 +822,80 @@ namespace dyno
             return std::sqrt(dx*dx + dy*dy + dz*dz);
         };
 
+        // Robust principal direction via trimmed PCA of the point cloud.
+        // Removes far outliers from centroid before covariance estimation.
+        // Returns false if the cloud is not line-like enough.
+        auto principalDirRobust = [&](const std::vector<cv::Point3d>& pts,
+                                      Eigen::Vector3d* dir_out,
+                                      double* linearity_out) -> bool {
+            if (!dir_out || !linearity_out) return false;
+            *dir_out = Eigen::Vector3d(1, 0, 0);
+            *linearity_out = 0.0;
+            if (pts.size() < 6) return false;
+
+            constexpr size_t kMaxSamples = 200;
+            constexpr double kTrimTopRatio = 0.15;   // trim top 15% farthest points
+            constexpr size_t kMinInliers = 12;
+            constexpr double kMinLinearity = 0.55;   // (lambda1-lambda2)/lambda1
+
+            const size_t step = std::max<size_t>(1, pts.size() / kMaxSamples);
+            std::vector<Eigen::Vector3d> samples;
+            samples.reserve((pts.size() + step - 1) / step);
+            for (size_t i = 0; i < pts.size(); i += step) {
+                samples.emplace_back(pts[i].x, pts[i].y, pts[i].z);
+            }
+            if (samples.size() < kMinInliers) return false;
+
+            Eigen::Vector3d c = Eigen::Vector3d::Zero();
+            for (const auto& p : samples) c += p;
+            c /= static_cast<double>(samples.size());
+
+            std::vector<double> dist2;
+            dist2.reserve(samples.size());
+            for (const auto& p : samples) dist2.push_back((p - c).squaredNorm());
+
+            const size_t keep_n =
+                std::max(kMinInliers,
+                         static_cast<size_t>(std::floor((1.0 - kTrimTopRatio) *
+                                                        static_cast<double>(samples.size()))));
+            if (keep_n > dist2.size()) return false;
+            std::nth_element(dist2.begin(), dist2.begin() + (keep_n - 1), dist2.end());
+            const double d2_th = dist2[keep_n - 1];
+
+            std::vector<Eigen::Vector3d> inliers;
+            inliers.reserve(keep_n);
+            for (const auto& p : samples) {
+                if ((p - c).squaredNorm() <= d2_th) inliers.push_back(p);
+            }
+            if (inliers.size() < kMinInliers) return false;
+
+            Eigen::Vector3d c_in = Eigen::Vector3d::Zero();
+            for (const auto& p : inliers) c_in += p;
+            c_in /= static_cast<double>(inliers.size());
+
+            Eigen::Matrix3d cov = Eigen::Matrix3d::Zero();
+            for (const auto& p : inliers) {
+                const Eigen::Vector3d v = p - c_in;
+                cov += v * v.transpose();
+            }
+            cov /= static_cast<double>(inliers.size());
+
+            Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+            if (solver.info() != Eigen::Success) return false;
+            const auto evals = solver.eigenvalues();  // ascending
+            const double lambda1 = std::max(1e-12, evals(2));
+            const double lambda2 = std::max(0.0, evals(1));
+            const double linearity = (lambda1 - lambda2) / lambda1;
+            *linearity_out = linearity;
+            if (linearity < kMinLinearity) return false;
+
+            Eigen::Vector3d dir = solver.eigenvectors().col(2);
+            if (!dir.allFinite() || dir.norm() < 1e-12) return false;
+            dir.normalize();
+            *dir_out = dir;
+            return true;
+        };
+
         // Get current anchor list (thread-safe copy)
         auto anchors = GetAnchorClusters();
 
@@ -834,14 +908,44 @@ namespace dyno
         for (const auto& cloud : per_cluster_clouds) {
             if (cloud.empty()) continue;
             const cv::Point3d c_new = centroid(cloud);
+            Eigen::Vector3d d_new;
+            double linearity_new = 0.0;
+            if (!principalDirRobust(cloud, &d_new, &linearity_new)) {
+                // Keep non-line-like clusters as new anchors instead of forcing
+                // unstable angle-based matching.
+                Object::AnchorCluster ac;
+                ac.pts = cloud;
+                ac.last_updated_kf_id = max_kf_id;
+                anchors.push_back(std::move(ac));
+                continue;
+            }
 
-            // Find nearest anchor by centroid distance
             int best_idx = -1;
-            double best_d = kStitchDistTh;
+            double best_cost = std::numeric_limits<double>::infinity();
+            constexpr float kAngleSimTh = 0.70f;     // abs(dot) threshold
+            constexpr double kAngleWeight = 0.25;   // balance dist & angle (unitless)
             for (int ai = 0; ai < static_cast<int>(anchors.size()); ++ai) {
                 if (anchors[ai].pts.empty()) continue;
-                double d = dist3d(c_new, centroid(anchors[ai].pts));
-                if (d < best_d) { best_d = d; best_idx = ai; }
+                const cv::Point3d c_a = centroid(anchors[ai].pts);
+                Eigen::Vector3d d_a;
+                double linearity_a = 0.0;
+                if (!principalDirRobust(anchors[ai].pts, &d_a, &linearity_a)) {
+                    continue;
+                }
+
+                const double d = dist3d(c_new, c_a);
+                const double dist_norm = d / kStitchDistTh;
+
+                // Eigenvector sign is ambiguous; use abs(dot).
+                const double angle_sim = std::abs(d_new.dot(d_a));  // [0,1]
+                if (angle_sim < kAngleSimTh) continue;
+
+                // Lower is better. dist_norm is >= 0.
+                const double cost = dist_norm - kAngleWeight * angle_sim;
+                if (cost < best_cost) {
+                    best_cost = cost;
+                    best_idx = ai;
+                }
             }
 
             if (best_idx >= 0) {

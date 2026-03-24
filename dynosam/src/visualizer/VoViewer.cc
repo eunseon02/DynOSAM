@@ -56,6 +56,7 @@ voViewer::voViewer(std::string windowName)
     menuShowLocalEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Local Edge Map", false, true);
     menuShowEnvironment = std::make_shared<pangolin::Var<bool>>("menu.Show Environment Edge Map", false, true);
     menuShowObjectEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Object Edge Map", true, true);
+    menuShowAnchorEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Anchor Edge", false, true);
     menuShowSilhouetteEdges = std::make_shared<pangolin::Var<bool>>("menu.Show Silhouette Edges", false, true);
 
     cameraPose = Eigen::MatrixXd::Identity(4,4);
@@ -169,6 +170,24 @@ void voViewer::render_loop()
                 for (const auto& cloud : clusters) {
                     if (cloud.size() < 2) continue;
                     drawPointCloudColorSequencial(cloud, obj_col, 2);
+                }
+            }
+        }
+
+        if(*menuShowAnchorEdgeMap && map_) {
+            const std::vector<dyno::Object*> objects = map_->GetAllObjects();
+            for (auto* obj : objects) {
+                if (!obj) continue;
+                const cv::Scalar c = obj->GetColor();
+                // Convert BGR (OpenCV) -> RGB (OpenGL helper expects RGB ordering).
+                const cv::Vec3b obj_col(static_cast<unsigned char>(c[2]),
+                                        static_cast<unsigned char>(c[1]),
+                                        static_cast<unsigned char>(c[0]));
+
+                const auto anchors = obj->GetAnchorClusters();
+                for (const auto& anchor : anchors) {
+                    if (anchor.pts.size() < 2) continue;
+                    drawPointCloudColorSequencial(anchor.pts, obj_col, 3);
                 }
             }
         }

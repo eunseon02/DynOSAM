@@ -189,9 +189,9 @@ RGBDInstanceFrontendModule::RGBDInstanceFrontendModule(
   local_map_.reset(new dyno::localMap());
   map_.reset(new dyno::EdgeMap());
 
-  // Initialize CLIP feature client (connects to Python server on tcp://localhost:5555)
-  // NOTE: CLIP-based tracking/re-association is currently disabled in this build.
-  // clip_client_ = std::make_shared<dyno::ClipFeatureClient>("tcp://localhost:5555", 200);
+  // Initialize CLIP feature client (connects to Python server on tcp://localhost:5555).
+  // Re-association uses CLIP with conservative 3D gating.
+  clip_client_ = std::make_shared<dyno::ClipFeatureClient>("tcp://localhost:5555", 200);
   // TODO: Load canny parameters from config
   // edge_selector_ = std::make_unique<edgeSelector>(20.0, 50, 150);
   
@@ -713,17 +713,17 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         }
       }
 
-      // ── CLIP fallback for unmatched detections (disabled) ───────────────
+      // CLIP-based re-association is processed in the backend thread
+      // (processSlidingWindowKeyFrame) to keep frontend tracking lightweight.
 
       // Apply best matches to frame graph
       int n_edge = 0, n_bbox = 0;
-      // CLIP fallback is disabled in this build.
       int n_clip = 0;
       for (auto& [nid, match] : best_match) {
         frame->graph->attributes[nid].obj = match.first;
         if (match.second > 0) ++n_edge;
         else if (match.second > -2.f) ++n_bbox;
-        // else: CLIP match (counted separately)
+        else ++n_clip;
         VLOG(3) << "[ObjAssoc] node=" << nid
                 << " obj_id=" << match.first->GetId()
                 << (match.second > 0 ? " edge_ratio=" :
@@ -996,8 +996,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                 delete obj;
                 continue;
             }
-            // Extract CLIP feature for the new object (disabled)
-            // if (clip_client_) { ... }
+            // CLIP feature extraction is executed in backend thread.
 
             map_->AddObject(obj);
             local_map_->mlpRecentAddedObjects.push_back(obj);
@@ -1183,8 +1182,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const auto t_create_image_end = std::chrono::steady_clock::now();
 
   if (display_queue_) {
-    display_queue_->push(
-        ImageToDisplay("Tracks", debug_imagery.tracking_image));
+    // display_queue_->push(
+    //     ImageToDisplay("Tracks", debug_imagery.tracking_image));
     if (created_edge_kf_this_frame && !cached_object_edge_proj_image.empty()) {
       display_queue_->push(
           ImageToDisplay("Tracks Object Edge", cached_object_edge_proj_image));
@@ -1632,7 +1631,7 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
     // Depth-jump threshold should be larger at near range (avoid false BLUE)
     // and smaller at far range (avoid false RED).
     // thr(d) = clamp(kInvScale / d, kThrMin, kThrMax)
-    constexpr float kInvScale = 0.24f;  // meter^2
+    constexpr float kInvScale = 0.27f;  // meter^2
     constexpr float kThrMin = 0.04f;    // m
     constexpr float kThrMax = 0.4f;    // m
     const cv::Vec3b kContCol(0,   0, 255);  // RED  (BGR)
@@ -1995,12 +1994,6 @@ cv::Mat RGBDInstanceFrontendModule::createObjectEdgeProjectionImage(
           << " drawn=" << drawn_pts
           << " unique_pix=" << unique_pixels.size();
 
-  const std::string dbg_txt = "LIVE fid=" + std::to_string(frame_k->getFrameId()) +
-                              " drawn=" + std::to_string(drawn_pts) +
-                              " uniq=" + std::to_string(unique_pixels.size());
-  cv::putText(img, dbg_txt, cv::Point(10, 24), cv::FONT_HERSHEY_SIMPLEX,
-              0.65, cv::Scalar(255, 255, 0), 2, cv::LINE_AA);
-
   return img;
 }
 
@@ -2056,13 +2049,6 @@ cv::Mat RGBDInstanceFrontendModule::createObjectEdgeProjectionImageFromSnapshot(
     }
   }
 
-  // Overlay frame id + unique pixel count on the image so display/log alignment is obvious.
-  const std::string dbg_txt = "SNAP fid=" + std::to_string(frame_k->getFrameId()) +
-                              " drawn=" + std::to_string(drawn_pts) +
-                              " uniq=" + std::to_string(unique_pixels.size());
-  cv::putText(img, dbg_txt, cv::Point(10, 24), cv::FONT_HERSHEY_SIMPLEX,
-              0.65, cv::Scalar(0, 255, 255), 2, cv::LINE_AA);
-
   return img;
 }
 
@@ -2098,8 +2084,8 @@ void RGBDInstanceFrontendModule::processingThreadFunction() {
     }
     last_popped_kf_id = kf->KF_ID;
     
-    VLOG(1) << "[KF PROCESS] kf_id=" << kf->KF_ID
-            << " frame_id=" << kf->KF_ID;
+    // VLOG(1) << "[KF PROCESS] kf_id=" << kf->KF_ID
+    //         << " frame_id=" << kf->KF_ID;
     VLOG(10) << "\033[34m[QUEUE POP]\033[0m kf_id=" << kf->KF_ID;
     
     // Process sliding window keyframe
@@ -2258,7 +2244,211 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
           }
         }
 
-        // ── Periodic CLIP-based object merge (disabled) ────────────────
+        // ── Backend CLIP update + periodic object merge (3D + CLIP) ─────────
+        if (clip_client_ && kf->graph && !kf->mMatGray.empty() && map_) {
+          // 1) Update CLIP features for objects observed in this keyframe.
+          cv::Mat kf_bgr;
+          cv::cvtColor(kf->mMatGray, kf_bgr, cv::COLOR_GRAY2BGR);
+          for (const auto& [nid, attr] : kf->graph->attributes) {
+            (void)nid;
+            dyno::Object* obj = attr.obj;
+            if (!obj || obj->isBad() || obj->HasClipFeature()) continue;
+            const auto& bb = attr.bbox;  // [xmin, ymin, xmax, ymax]
+            const int x0 = std::max(0, static_cast<int>(std::floor(bb[0])));
+            const int y0 = std::max(0, static_cast<int>(std::floor(bb[1])));
+            const int x1 = std::min(kf_bgr.cols, static_cast<int>(std::ceil(bb[2])));
+            const int y1 = std::min(kf_bgr.rows, static_cast<int>(std::ceil(bb[3])));
+            if (x1 <= x0 || y1 <= y0) continue;
+            const cv::Mat crop = kf_bgr(cv::Rect(x0, y0, x1 - x0, y1 - y0)).clone();
+            const std::vector<float> feat = clip_client_->extractFeature(crop);
+            if (!feat.empty()) {
+              obj->SetClipFeature(feat);
+            }
+          }
+
+          // 2) Periodically merge duplicate objects using only 3D distance + CLIP.
+          //    Keep one object alive and mark duplicates bad.
+          constexpr int kClipMergeStride = 5;       // run every N processed KFs
+          constexpr double kMergeDist3DTh = 0.26;    // metres
+          constexpr float kMergeClipSimTh = 0.31f;  // cosine similarity
+          if (last_clip_merge_kf_id_ < 0 ||
+              (kf->KF_ID - last_clip_merge_kf_id_) >= kClipMergeStride) {
+            last_clip_merge_kf_id_ = kf->KF_ID;
+
+            std::vector<dyno::Object*> objs = map_->GetAllObjects();
+            struct ClipPairSample {
+              float dist3d;
+              float clip_dist;
+              cv::Scalar bgr;
+              int id_a;
+              int id_b;
+              int cls_a;
+              int cls_b;
+              bool has_clip_pair;
+            };
+            std::vector<ClipPairSample> pair_samples;
+            pair_samples.reserve(objs.size() * std::max<size_t>(1, objs.size() / 2));
+            int merged_pairs = 0;
+            const std::vector<dyno::KeyFramePtr> all_kfs = map_->GetAllKeyFrames();
+            for (size_t i = 0; i < objs.size(); ++i) {
+              dyno::Object* a = objs[i];
+              if (!a || a->isBad()) continue;
+              for (size_t j = i + 1; j < objs.size(); ++j) {
+                dyno::Object* b = objs[j];
+                if (!b || b->isBad()) continue;
+
+                const double dist3d =
+                    (a->GetEllipsoid().GetCenter() - b->GetEllipsoid().GetCenter()).norm();
+                const bool has_clip_pair = a->HasClipFeature() && b->HasClipFeature();
+                float sim = 0.0f;
+                float clip_dist = 1.0f;
+                if (has_clip_pair) {
+                  sim = dyno::Object::ClipCosineSimilarity(
+                      a->GetClipFeature(), b->GetClipFeature());
+                  clip_dist = 1.0f - sim;
+                }
+                pair_samples.push_back({
+                    static_cast<float>(dist3d),
+                    clip_dist,
+                    a->GetColor(),
+                    static_cast<int>(a->GetId()),
+                    static_cast<int>(b->GetId()),
+                    static_cast<int>(a->GetCategoryId()),
+                    static_cast<int>(b->GetCategoryId()),
+                    has_clip_pair,
+                });
+
+                // Merge gate uses only (3D distance + CLIP similarity).
+                if (a->GetCategoryId() != b->GetCategoryId()) continue;
+                if (!has_clip_pair) continue;
+                if (dist3d > kMergeDist3DTh) continue;
+                if (sim < kMergeClipSimTh) continue;
+
+              // Keep the one with more observations; mark the other as bad.
+              dyno::Object* keep = a;
+              dyno::Object* drop = b;
+              if (b->GetNbObservations() > a->GetNbObservations()) {
+                keep = b;
+                drop = a;
+              }
+
+              const int keep_id = static_cast<int>(keep->GetId());
+              const int drop_id = static_cast<int>(drop->GetId());
+              for (const auto& kkf : all_kfs) {
+                if (!kkf || !kkf->graph) continue;
+                for (auto& [nid2, attr2] : kkf->graph->attributes) {
+                  (void)nid2;
+                  if (attr2.obj == drop) {
+                    attr2.obj = keep;
+                    attr2.object_id = keep_id;
+                  }
+                }
+                for (auto& [edge_idx, oid] : kkf->mmEdgeIndex2ObjectId) {
+                  (void)edge_idx;
+                  if (oid == drop_id) oid = keep_id;
+                }
+              }
+
+              drop->SetBadFlag();
+              ++merged_pairs;
+            }
+            }
+
+            if (display_queue_) {
+              constexpr int kW = 880;
+              constexpr int kH = 680;
+              cv::Mat list_img(kH, kW, CV_8UC3, cv::Scalar(250, 250, 250));
+
+              cv::putText(list_img,
+                          "Object Association List (clip distance + 3D distance)",
+                          cv::Point(16, 24), cv::FONT_HERSHEY_SIMPLEX, 0.58,
+                          cv::Scalar(30, 30, 30), 1, cv::LINE_AA);
+              cv::putText(list_img,
+                          "pairs=" + std::to_string(pair_samples.size()) +
+                          " merged=" + std::to_string(merged_pairs),
+                          cv::Point(16, 46), cv::FONT_HERSHEY_SIMPLEX, 0.48,
+                          cv::Scalar(50, 50, 50), 1, cv::LINE_AA);
+
+              // Build adjacency list keyed by object id.
+              struct PairInfo {
+                int other_id;
+                int other_cls;
+                float clip_dist;
+                float dist3d;
+                bool has_clip;
+                cv::Scalar other_col;
+              };
+              std::unordered_map<int, std::vector<PairInfo>> adj;
+              std::unordered_map<int, cv::Scalar> id_to_col;
+              std::unordered_map<int, int> id_to_cls;
+              for (auto* obj : objs) {
+                if (!obj || obj->isBad()) continue;
+                const int id = static_cast<int>(obj->GetId());
+                id_to_col[id] = obj->GetColor();
+                id_to_cls[id] = static_cast<int>(obj->GetCategoryId());
+              }
+              for (const auto& s : pair_samples) {
+                adj[s.id_a].push_back({s.id_b, s.cls_b, s.clip_dist, s.dist3d,
+                                       s.has_clip_pair, id_to_col.count(s.id_b) ? id_to_col[s.id_b] : cv::Scalar(160,160,160)});
+                adj[s.id_b].push_back({s.id_a, s.cls_a, s.clip_dist, s.dist3d,
+                                       s.has_clip_pair, id_to_col.count(s.id_a) ? id_to_col[s.id_a] : cv::Scalar(160,160,160)});
+              }
+
+              int y = 72;
+              constexpr int kLineH = 14;
+              constexpr int kListClassFilter = 62;
+              for (auto* obj : objs) {
+                if (!obj || obj->isBad()) continue;
+                const int id = static_cast<int>(obj->GetId());
+                const int cls = static_cast<int>(obj->GetCategoryId());
+                if (cls != kListClassFilter) continue;
+                const cv::Scalar col = obj->GetColor();
+
+                // > red-like header (shown as color swatch + id/class text)
+                cv::rectangle(list_img, cv::Rect(12, y - 9, 10, 10), col, -1);
+                cv::putText(list_img,
+                            "> obj_id=" + std::to_string(id) +
+                            " class_id=" + std::to_string(cls),
+                            cv::Point(28, y), cv::FONT_HERSHEY_SIMPLEX, 0.42,
+                            cv::Scalar(20, 20, 20), 1, cv::LINE_AA);
+                y += kLineH;
+
+                auto it_adj = adj.find(id);
+                if (it_adj != adj.end() && !it_adj->second.empty()) {
+                  const auto& lst = it_adj->second;
+                  for (const auto& p : lst) {
+                    const cv::Scalar line_col = p.has_clip ? p.other_col : cv::Scalar(140, 140, 140);
+                    cv::rectangle(list_img, cv::Rect(34, y - 8, 9, 9), line_col, -1);
+                    const std::string line =
+                        "- obj_id=" + std::to_string(p.other_id) +
+                        " class_id=" + std::to_string(p.other_cls) +
+                        " : clip=" + std::to_string(p.clip_dist).substr(0, 5) +
+                        ", 3d_dis=" + std::to_string(p.dist3d).substr(0, 6);
+                    cv::putText(list_img, line, cv::Point(48, y),
+                                cv::FONT_HERSHEY_SIMPLEX, 0.36,
+                                p.has_clip ? cv::Scalar(40, 40, 40) : cv::Scalar(120, 120, 120),
+                                1, cv::LINE_AA);
+                    y += kLineH;
+                    if (y > kH - 12) break;
+                  }
+                } else {
+                  cv::putText(list_img, "- (no pair)", cv::Point(48, y),
+                              cv::FONT_HERSHEY_SIMPLEX, 0.36, cv::Scalar(120, 120, 120), 1, cv::LINE_AA);
+                  y += kLineH;
+                }
+
+                y += 4;
+                if (y > kH - 12) break;
+              }
+
+              display_queue_->push(ImageToDisplay("Object Association List", list_img));
+            }
+            if (merged_pairs > 0) {
+              LOG(INFO) << "\033[95m[ClipMerge]\033[0m merged_pairs=" << merged_pairs
+                        << " at kf_id=" << kf->KF_ID;
+            }
+          }
+        }
 
         // Update merged local map cache (heavy data) for visualization snapshots
         {
