@@ -68,6 +68,8 @@ public:
 
     //-- 用于半径搜索的二维Mat
     cv::Mat mMatSearch;
+    //-- Optional packed instance/motion mask from the originating frame (CV_32SC1).
+    cv::Mat mMotionMask;
 
     dyno::Graph* graph = nullptr;
 

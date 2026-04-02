@@ -113,7 +113,7 @@ if "$USE_NVIDIA"; then
         --ipc=host \
         --shm-size=8G \
         --gpus=all \
-        -p 7822:22 \
+        -p 7829:22 \
         -e DISPLAY=$DISPLAY \
         -e XDG_RUNTIME_DIR=/run/user/1000 \
         -e QT_GRAPHICSSYSTEM=native \

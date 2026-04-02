@@ -650,6 +650,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         // ── Primary: edge-projection ────────────────────────────────────────
         const auto world_pts = obj->GetAssociatedMapPoints();
         bool edge_method_used = false;
+        bool edge_match_found_for_obj = false;
 
         if (has_mask && static_cast<int>(world_pts.size()) >= kMinEdgePts) {
           // Project into current frame
@@ -682,6 +683,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                     it->second.second < 0 ||
                     ratio > it->second.second) {
                   best_match[nid] = {obj, ratio};
+                  edge_match_found_for_obj = true;
               }
               }
           }
@@ -689,8 +691,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         }
 
         // ── Fallback: bbox IoU ───────────────────────────────────────────────
-        // Only used if edge method couldn't run OR produced no match for this obj
-        if (!edge_method_used) {
+        // Use fallback when edge method couldn't run OR produced no edge match.
+        if (!edge_method_used || !edge_match_found_for_obj) {
           // Use last observed bboxes to compute IoU with current detections
           const auto obs_bboxes = obj->GetObservedBboxes();  // most-recent first
           if (obs_bboxes.empty()) continue;
@@ -2249,6 +2251,45 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
           // 1) Update CLIP features for objects observed in this keyframe.
           cv::Mat kf_bgr;
           cv::cvtColor(kf->mMatGray, kf_bgr, cv::COLOR_GRAY2BGR);
+          const cv::Mat& motion_mask = kf->mMotionMask;
+          const bool has_mask =
+              !motion_mask.empty() &&
+              motion_mask.type() == CV_32SC1 &&
+              motion_mask.size() == kf_bgr.size();
+          const std::vector<float> feat_full = clip_client_->extractFeature(kf_bgr);
+
+          auto fuseClipFeatures = [](const std::vector<float>& feat_crop,
+                                     const std::vector<float>& feat_masked,
+                                     const std::vector<float>& feat_full_img) -> std::vector<float> {
+            constexpr float w_crop = 0.55f;
+            constexpr float w_masked = 0.35f;
+            constexpr float w_full = 0.10f;
+
+            std::vector<float> out;
+            const auto try_accumulate = [&](const std::vector<float>& feat, float w, bool* initialized) {
+              if (feat.empty()) return;
+              if (!*initialized) {
+                out.assign(feat.size(), 0.0f);
+                *initialized = true;
+              }
+              if (out.size() != feat.size()) return;
+              for (size_t i = 0; i < out.size(); ++i) out[i] += w * feat[i];
+            };
+
+            bool initialized = false;
+            try_accumulate(feat_crop, w_crop, &initialized);
+            try_accumulate(feat_masked, w_masked, &initialized);
+            try_accumulate(feat_full_img, w_full, &initialized);
+            if (!initialized || out.empty()) return {};
+
+            float norm2 = 0.0f;
+            for (float v : out) norm2 += v * v;
+            if (norm2 <= 1e-12f) return {};
+            const float inv_norm = 1.0f / std::sqrt(norm2);
+            for (float& v : out) v *= inv_norm;
+            return out;
+          };
+
           for (const auto& [nid, attr] : kf->graph->attributes) {
             (void)nid;
             dyno::Object* obj = attr.obj;
@@ -2260,9 +2301,42 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
             const int y1 = std::min(kf_bgr.rows, static_cast<int>(std::ceil(bb[3])));
             if (x1 <= x0 || y1 <= y0) continue;
             const cv::Mat crop = kf_bgr(cv::Rect(x0, y0, x1 - x0, y1 - y0)).clone();
-            const std::vector<float> feat = clip_client_->extractFeature(crop);
-            if (!feat.empty()) {
-              obj->SetClipFeature(feat);
+            const std::vector<float> feat_crop = clip_client_->extractFeature(crop);
+
+            std::vector<float> feat_masked;
+            if (has_mask) {
+              cv::Mat masked = cv::Mat::zeros(kf_bgr.size(), kf_bgr.type());
+              const int cls_label = attr.label;
+              const unsigned char target_b =
+                  static_cast<unsigned char>((cls_label * 37) % 256);
+              const unsigned char target_g =
+                  static_cast<unsigned char>((cls_label * 17) % 256);
+              const unsigned char target_r =
+                  static_cast<unsigned char>((cls_label * 97) % 256);
+              const int target_mask_val =
+                  (static_cast<int>(target_b) << 16) |
+                  (static_cast<int>(target_g) << 8) |
+                  static_cast<int>(target_r);
+
+              for (int y = y0; y < y1; ++y) {
+                const int* mask_row = motion_mask.ptr<int>(y);
+                const cv::Vec3b* src_row = kf_bgr.ptr<cv::Vec3b>(y);
+                cv::Vec3b* dst_row = masked.ptr<cv::Vec3b>(y);
+                for (int x = x0; x < x1; ++x) {
+                  if (mask_row[x] == target_mask_val) {
+                    dst_row[x] = src_row[x];
+                  }
+                }
+              }
+              const cv::Mat masked_crop =
+                  masked(cv::Rect(x0, y0, x1 - x0, y1 - y0)).clone();
+              feat_masked = clip_client_->extractFeature(masked_crop);
+            }
+
+            const std::vector<float> feat_fused =
+                fuseClipFeatures(feat_crop, feat_masked, feat_full);
+            if (!feat_fused.empty()) {
+              obj->SetClipFeature(feat_fused);
             }
           }
 
@@ -2270,12 +2344,51 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
           //    Keep one object alive and mark duplicates bad.
           constexpr int kClipMergeStride = 5;       // run every N processed KFs
           constexpr double kMergeDist3DTh = 0.26;    // metres
-          constexpr float kMergeClipSimTh = 0.31f;  // cosine similarity
+          constexpr float kMergeClipSimTh = 0.5f;  // cosine similarity
           if (last_clip_merge_kf_id_ < 0 ||
               (kf->KF_ID - last_clip_merge_kf_id_) >= kClipMergeStride) {
             last_clip_merge_kf_id_ = kf->KF_ID;
 
             std::vector<dyno::Object*> objs = map_->GetAllObjects();
+            auto collectObjectEdgePoints = [](dyno::Object* obj) {
+              std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> pts;
+              if (!obj) return pts;
+              const auto anchors = obj->GetAnchorClusters();
+              for (const auto& ac : anchors) {
+                for (const auto& p : ac.pts) {
+                  pts.emplace_back(p.x, p.y, p.z);
+                }
+              }
+              if (!pts.empty()) return pts;
+              return obj->GetAssociatedMapPoints();
+            };
+            auto edgeMinDistance = [&](dyno::Object* a, dyno::Object* b) -> double {
+              const auto pts_a = collectObjectEdgePoints(a);
+              const auto pts_b = collectObjectEdgePoints(b);
+              if (pts_a.empty() || pts_b.empty()) {
+                // Fallback when edge representation is not ready yet.
+                return (a->GetEllipsoid().GetCenter() - b->GetEllipsoid().GetCenter()).norm();
+              }
+              constexpr size_t kMaxSampleA = 140;
+              constexpr size_t kMaxSampleB = 140;
+              const size_t step_a = std::max<size_t>(1, pts_a.size() / kMaxSampleA);
+              const size_t step_b = std::max<size_t>(1, pts_b.size() / kMaxSampleB);
+              double min_d2 = std::numeric_limits<double>::infinity();
+              for (size_t i = 0; i < pts_a.size(); i += step_a) {
+                const auto& pa = pts_a[i];
+                if (!pa.allFinite()) continue;
+                for (size_t j = 0; j < pts_b.size(); j += step_b) {
+                  const auto& pb = pts_b[j];
+                  if (!pb.allFinite()) continue;
+                  const double d2 = (pa - pb).squaredNorm();
+                  if (d2 < min_d2) min_d2 = d2;
+                }
+              }
+              if (!std::isfinite(min_d2)) {
+                return (a->GetEllipsoid().GetCenter() - b->GetEllipsoid().GetCenter()).norm();
+              }
+              return std::sqrt(std::max(0.0, min_d2));
+            };
             struct ClipPairSample {
               float dist3d;
               float clip_dist;
@@ -2297,8 +2410,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
                 dyno::Object* b = objs[j];
                 if (!b || b->isBad()) continue;
 
-                const double dist3d =
-                    (a->GetEllipsoid().GetCenter() - b->GetEllipsoid().GetCenter()).norm();
+                const double dist3d = edgeMinDistance(a, b);
                 const bool has_clip_pair = a->HasClipFeature() && b->HasClipFeature();
                 float sim = 0.0f;
                 float clip_dist = 1.0f;
@@ -2334,15 +2446,10 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
 
               const int keep_id = static_cast<int>(keep->GetId());
               const int drop_id = static_cast<int>(drop->GetId());
+              // NOTE: kkf->graph is a raw pointer and may be stale for historical KFs.
+              // Rewire only edge-level object ids here (safe owned data on KeyFrame).
               for (const auto& kkf : all_kfs) {
-                if (!kkf || !kkf->graph) continue;
-                for (auto& [nid2, attr2] : kkf->graph->attributes) {
-                  (void)nid2;
-                  if (attr2.obj == drop) {
-                    attr2.obj = keep;
-                    attr2.object_id = keep_id;
-                  }
-                }
+                if (!kkf) continue;
                 for (auto& [edge_idx, oid] : kkf->mmEdgeIndex2ObjectId) {
                   (void)edge_idx;
                   if (oid == drop_id) oid = keep_id;
@@ -2754,6 +2861,14 @@ if (frame->graph) {
   pKF->graph = frame->graph;
 }
 
+// Cache motion/instance mask in KeyFrame for backend CLIP feature extraction.
+const cv::Mat& frame_motion_mask = frame->image_container_.objectMotionMask();
+if (!frame_motion_mask.empty() && frame_motion_mask.type() == CV_32SC1) {
+  pKF->mMotionMask = frame_motion_mask.clone();
+} else {
+  pKF->mMotionMask.release();
+}
+
 // Assign object ids to edges in KeyFrame based on segmentation mask (not just bbox)
 if (pKF->graph) {
   // Initialize all edge indices to background (-1)
@@ -2774,17 +2889,19 @@ if (pKF->graph) {
         obj_id = attr.object_id;  // fallback to detection's object_id
       }
       const int cls_label = attr.label;    // category id from detection
-      // Compute expected BGR color for this category_id (matching generate_detection_files.py)
-      // B = (category_id * 37) % 256
-      // G = (category_id * 17) % 256
-      // R = (category_id * 97) % 256
-      const unsigned char target_b = static_cast<unsigned char>((cls_label * 37) % 256);
-      const unsigned char target_g = static_cast<unsigned char>((cls_label * 17) % 256);
-      const unsigned char target_r = static_cast<unsigned char>((cls_label * 97) % 256);
-      // Pack into 32-bit int: (B << 16) | (G << 8) | R
-      const int target_mask_val = (static_cast<int>(target_b) << 16) | 
-                                  (static_cast<int>(target_g) << 8) | 
-                                  static_cast<int>(target_r);
+      auto makePackedMaskVal = [](int cls_idx) -> int {
+        const unsigned char b = static_cast<unsigned char>((cls_idx * 37) % 256);
+        const unsigned char g = static_cast<unsigned char>((cls_idx * 17) % 256);
+        const unsigned char r = static_cast<unsigned char>((cls_idx * 97) % 256);
+        return (static_cast<int>(b) << 16) |
+               (static_cast<int>(g) << 8) |
+               static_cast<int>(r);
+      };
+      // Accept both encodings:
+      //  - class_id
+      //  - class_id + 1 (used by some mask generation scripts)
+      const int target_mask_val = makePackedMaskVal(cls_label);
+      const int target_mask_val_plus1 = makePackedMaskVal(cls_label + 1);
       const Eigen::Vector4d& bb = attr.bbox;      // [xmin, ymin, xmax, ymax]
 
       // Get edge/point indices whose points fall inside this bbox (coarse)
@@ -2820,7 +2937,7 @@ if (pKF->graph) {
 
         // Read packed BGR value from mask (stored as 32-bit int)
         int mask_val = motion_mask.at<int>(v, u);
-        if (mask_val != target_mask_val) {
+        if (mask_val != target_mask_val && mask_val != target_mask_val_plus1) {
           continue;  // point not inside this object's mask (color doesn't match)
         }
 
