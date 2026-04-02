@@ -292,6 +292,13 @@ namespace dyno
                     enc_list_for_object.push_back(enc);
                 }
 
+                // Fallback: if pre-assignment is missing (e.g. mask/category mismatch
+                // or delayed object association), use bbox candidates so depth-based
+                // filtering can still attach object edges.
+                if (enc_list_for_object.empty()) {
+                    enc_list_for_object = enc_list;
+                }
+
                 // Rt is [R_cw | t_cw]; convert camera point -> world point
                 const Eigen::Matrix3d Rcw = Rt.block<3,3>(0,0);
                 const Eigen::Vector3d tcw = Rt.col(3);

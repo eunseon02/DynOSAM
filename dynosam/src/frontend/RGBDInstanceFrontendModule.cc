@@ -650,6 +650,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
         // ── Primary: edge-projection ────────────────────────────────────────
         const auto world_pts = obj->GetAssociatedMapPoints();
         bool edge_method_used = false;
+        bool has_edge_match_for_obj = false;
 
         if (has_mask && static_cast<int>(world_pts.size()) >= kMinEdgePts) {
           // Project into current frame
@@ -676,6 +677,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
               const float ratio = static_cast<float>(inside) /
                                   static_cast<float>(proj_pts.size());
               if (inside >= kMinEdgePts && ratio >= kEdgeRatioTh) {
+                has_edge_match_for_obj = true;
                 auto it = best_match.find(nid);
                 // edge match (score > 0) always beats bbox match (score < 0)
                 if (it == best_match.end() ||
@@ -690,7 +692,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
 
         // ── Fallback: bbox IoU ───────────────────────────────────────────────
         // Only used if edge method couldn't run OR produced no match for this obj
-        if (!edge_method_used) {
+        if (!edge_method_used || !has_edge_match_for_obj) {
           // Use last observed bboxes to compute IoU with current detections
           const auto obs_bboxes = obj->GetObservedBboxes();  // most-recent first
           if (obs_bboxes.empty()) continue;
@@ -1066,6 +1068,7 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
                                        static_cast<float>(bb[1]),
                                        static_cast<float>(bb[3]));
           int obj_id_for_viz = -1;
+          int det_obj_id_for_viz = attribute.object_id;
           if (pKF->graph->attributes[node_id].obj) {
             obj_id_for_viz =
                 static_cast<int>(pKF->graph->attributes[node_id].obj->GetId());
@@ -1086,7 +1089,8 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
               auto it_obj =
                   pKF->mmEdgeIndex2ObjectId.find(static_cast<int>(edge_idx));
               if (it_obj != pKF->mmEdgeIndex2ObjectId.end() &&
-                  it_obj->second == obj_id_for_viz) {
+                  (it_obj->second == obj_id_for_viz ||
+                   it_obj->second == det_obj_id_for_viz)) {
                 // This edge is associated with this object -> use object color
                 pt_col = draw_col;
               }

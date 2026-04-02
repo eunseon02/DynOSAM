@@ -456,6 +456,12 @@ python3 -m pip install open_clip_torch
 python3 -m pip install pyzmq
 ```
 
+
+```
+python3 /home/user/dev_ws/src/core/dynosam/models/clip_feature_server.py --port 5555
+```
+
+
 # 9. BSD License
 
 The DynoSAM framework is open-sourced under the BSD License, see [LICENSE](./LICENSE).
