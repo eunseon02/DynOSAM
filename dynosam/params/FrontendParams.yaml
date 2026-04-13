@@ -10,6 +10,14 @@ max_object_depth: 30.0
 
 # Minimum confidence score threshold for object detection filtering
 min_confidence_score: 0.5
+# Depth patch gradient-energy threshold for boundary decision (higher = stricter)
+viz_depth_grad_energy_th: 3.0
+
+# viz_edge_depth_discontinuity (Tracks): jump threshold thr = clamp(inv_scale_m2/d_edge, min, max); sample +/- normal along edge
+viz_depth_discontinuity_inv_scale_m2: 0.27
+viz_depth_discontinuity_thr_min_m: 0.04
+viz_depth_discontinuity_thr_max_m: 0.4
+viz_depth_discontinuity_normal_offset_px: 4.0
 
 # max_object_depth: 8.0 #indoors
 

@@ -51,6 +51,16 @@ struct FrontendParams {
 
   // object detection confidence threshold
   double min_confidence_score = 0.2;
+  // Threshold for depth-patch gradient energy boundary decision
+  double viz_depth_grad_energy_th = 8.0;
+
+  // viz_edge_depth_discontinuity (Tracks): adaptive depth-jump threshold per edge point:
+  //   thr = clamp(inv_scale_m2 / max(0.2, d_edge), thr_min_m, thr_max_m)
+  // Sample +/- normal_offset_px along the edge normal to compare side depths to d_edge.
+  double viz_depth_discontinuity_inv_scale_m2 = 0.27;
+  double viz_depth_discontinuity_thr_min_m = 0.04;
+  double viz_depth_discontinuity_thr_max_m = 0.4;
+  double viz_depth_discontinuity_normal_offset_px = 4.0;
 
   // TODO: add depth cov
   // TODO: add projection cov (should this be for back and frontend?)

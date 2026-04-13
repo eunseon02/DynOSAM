@@ -597,8 +597,12 @@ int main(int argc, char* argv[]) {
       
       LOG(INFO) << "Pipeline finished";
       LOG(INFO) << "\n=== Final Timing Statistics ===\n" << utils::Statistics::Print();
+
+      LOG(INFO) << "keeping viewer open. Press Enter to exit.";
+      std::string dummy;
+      std::getline(std::cin, dummy);
       return 0;
-#endif
+#endif  
     }
 
     // Original tracker-only code

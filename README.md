@@ -112,6 +112,14 @@ params/
 - GFlags provide run-time reconfiguration (important for automated experiments).
 - ROS parameters are used sparingly (mainly for file paths).
 
+**Edge / fine-track debug (GFlags)** — optional; defaults are off.
+
+| Flag | Effect |
+|------|--------|
+| `--viz_edge_depth_discontinuity` | Fills `debug_imagery.tracking_image` (and ROS `tracking_image`) with **normal-direction depth discontinuity** coloring (red/blue). Built-in image viewer shows it as **Tracks (depth discontinuity)**. If off, the image stays plain RGB and that window is not pushed. |
+| `--viz_edge_boundary_map` | Shows **Edge Boundary (patch-based)**: edges colored by **16×16 depth-patch Sobel energy**; does not require `--viz_fine_assoc`. |
+| `--viz_edge_center_patch` | Overlays enlarged depth patches on the debug canvas; if only this flag is on (no fine-assoc viz), the window is **Edge depth patch overlay**. |
+| `--viz_fine_assoc` | FineTracker overlay: current edge segment vs. projected reference point. |
 
 > NOTE: Note: Additional GFlags cannot be passed through ros2 launch.
 To override GFlags pass them directly with ros2 run, or modify the flag files inside the params folder.

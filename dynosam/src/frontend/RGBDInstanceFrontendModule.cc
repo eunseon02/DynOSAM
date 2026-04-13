@@ -68,6 +68,19 @@ DEFINE_bool(use_static_track, true,
 
 DEFINE_bool(log_projected_masks, false,
             "If true, projected masks will be saved at every frame");
+DEFINE_bool(viz_fine_assoc, false,
+            "If true, visualize FineTracker point-to-tangent associations as 2D overlay "
+            "(separate from depth-discontinuity Tracks image and patch-based edge coloring)");
+
+DEFINE_bool(viz_edge_depth_discontinuity, false,
+            "If true, color static edges in debug tracking_image by depth discontinuity across "
+            "the edge normal (red vs blue in BGR); when false, tracking_image stays plain RGB.");
+
+DEFINE_bool(viz_edge_center_patch, false,
+            "If true, for each current static edge center, paste an enlarged 8x8 patch onto current frame");
+
+DEFINE_bool(viz_edge_boundary_map, false,
+            "If true, show a separate window with current-frame edges colored by depth-patch boundary decision");
 
 DEFINE_bool(set_dense_labelled_cloud, false,
             "If true, the dense labelled point cloud will be set");
@@ -76,6 +89,8 @@ DEFINE_bool(use_object_motion_filtering, false, "For testing!");
 
 DEFINE_bool(use_object, false,
             "If true, object detection will be enabled");
+DEFINE_bool(use_clip_filtering, true,
+            "If true, run CLIP feature update and CLIP-based object merge in backend thread");
 
 DEFINE_bool(use_edge_selector_track, false,
             "If true, use edgeSelector.processImage() + direct KeyFrame creation "
@@ -628,9 +643,10 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
       std::map<int, DetInfo> det_info;
       for (const auto& [nid, attr] : frame->graph->attributes) {
         const int lbl = attr.label;
-        const unsigned char tb = static_cast<unsigned char>((lbl * 37) % 256);
-        const unsigned char tg = static_cast<unsigned char>((lbl * 17) % 256);
-        const unsigned char tr = static_cast<unsigned char>((lbl * 97) % 256);
+        const int mask_cls = lbl + 1;
+        const unsigned char tb = static_cast<unsigned char>((mask_cls * 37) % 256);
+        const unsigned char tg = static_cast<unsigned char>((mask_cls * 17) % 256);
+        const unsigned char tr = static_cast<unsigned char>((mask_cls * 97) % 256);
         det_info[nid] = {
           (static_cast<int>(tb) << 16) | (static_cast<int>(tg) << 8) | static_cast<int>(tr),
           lbl, attr.bbox
@@ -1020,12 +1036,13 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
               motion_mask.type() == CV_32SC1 &&
               motion_mask.size() == object_viz.size()) {
             const int cls_label = attribute.label;
+            const int mask_cls = cls_label + 1;
             const unsigned char target_b =
-                static_cast<unsigned char>((cls_label * 37) % 256);
+                static_cast<unsigned char>((mask_cls * 37) % 256);
             const unsigned char target_g =
-                static_cast<unsigned char>((cls_label * 17) % 256);
+                static_cast<unsigned char>((mask_cls * 17) % 256);
             const unsigned char target_r =
-                static_cast<unsigned char>((cls_label * 97) % 256);
+                static_cast<unsigned char>((mask_cls * 97) % 256);
             const int target_mask_val =
                 (static_cast<int>(target_b) << 16) |
                 (static_cast<int>(target_g) << 8) |
@@ -1186,8 +1203,11 @@ FrontendModule::SpinReturn RGBDInstanceFrontendModule::nominalSpin(
   const auto t_create_image_end = std::chrono::steady_clock::now();
 
   if (display_queue_) {
-    // display_queue_->push(
-    //     ImageToDisplay("Tracks", debug_imagery.tracking_image));
+    if (FLAGS_viz_edge_depth_discontinuity &&
+        !debug_imagery.tracking_image.empty()) {
+      display_queue_->push(ImageToDisplay(
+          "Tracks (depth discontinuity)", debug_imagery.tracking_image));
+    }
     if (created_edge_kf_this_frame && !cached_object_edge_proj_image.empty()) {
       display_queue_->push(
           ImageToDisplay("Tracks Object Edge", cached_object_edge_proj_image));
@@ -1434,6 +1454,190 @@ bool RGBDInstanceFrontendModule::FineTrack(Frame::Ptr frame,
   }
   pose_cur_fine_refined = gtsam::Pose3(pose_final.inverse().matrix());
   
+  // Optional 2D overlays: FineTracker associations vs depth-patch edge coloring are independent.
+  const bool want_fine_assoc = FLAGS_viz_fine_assoc;
+  const bool want_patch_viz =
+      FLAGS_viz_edge_center_patch || FLAGS_viz_edge_boundary_map;
+  if (want_fine_assoc || want_patch_viz) {
+    try {
+      const auto& geom_pts = fine_tracker_->getGeometryPoints();
+      const auto& assoc_lines = fine_tracker_->getAssociatedLines();
+      const bool have_assoc =
+          !geom_pts.empty() && assoc_lines.size() == geom_pts.size();
+
+      cv::Mat canvas;
+      if ((want_fine_assoc && have_assoc) || FLAGS_viz_edge_center_patch) {
+        canvas = ImageType::RGBMono::toRGB(frame->image_container_.rgb()).clone();
+      }
+
+      if (want_fine_assoc && have_assoc) {
+        const Sophus::SE3d T_cur_ref = fine_tracker_->getCurRefPose();
+        const double fx = fine_tracker_->fx(), fy = fine_tracker_->fy();
+        const double cx = fine_tracker_->cx(), cy = fine_tracker_->cy();
+
+        auto draw_point_safe = [&](cv::Point p, const cv::Scalar& col, int r = 2) {
+          if (p.x >= 0 && p.y >= 0 && p.x < canvas.cols && p.y < canvas.rows) {
+            cv::circle(canvas, p, r, col, -1, cv::LINE_AA);
+          }
+        };
+
+        for (size_t i = 0; i < geom_pts.size(); ++i) {
+          const auto& seg = assoc_lines[i];
+          cv::Point a((int)std::round(seg.first.x()), (int)std::round(seg.first.y()));
+          cv::Point b((int)std::round(seg.second.x()), (int)std::round(seg.second.y()));
+          cv::line(canvas, a, b, cv::Scalar(255, 0, 0), 1, cv::LINE_AA);
+
+          const auto& pt = geom_pts[i];
+          Eigen::Vector3d q_ref(pt.x_3d, pt.y_3d, pt.z_3d);
+          Eigen::Vector3d qc = T_cur_ref * q_ref;
+          if (qc.z() <= 1e-3) continue;
+          int u = (int)std::round(fx * qc.x() / qc.z() + cx);
+          int v = (int)std::round(fy * qc.y() / qc.z() + cy);
+          cv::Point p_uv(u, v);
+          draw_point_safe(p_uv, cv::Scalar(0, 0, 255), 2);
+
+          Eigen::Vector2d ap(u - a.x, v - a.y);
+          Eigen::Vector2d ab(b.x - a.x, b.y - a.y);
+          double ab2 = std::max(1e-6, ab.squaredNorm());
+          double t = std::max(0.0, std::min(1.0, ap.dot(ab) / ab2));
+          cv::Point foot((int)std::round(a.x + t * (b.x - a.x)),
+                         (int)std::round(a.y + t * (b.y - a.y)));
+          cv::line(canvas, p_uv, foot, cv::Scalar(0, 200, 200), 1, cv::LINE_AA);
+        }
+      }
+
+      if (want_patch_viz && frame->image_container_.hasDepth()) {
+        // Depth-patch based logic:
+        //  - viz_edge_center_patch: overlay enlarged depth patches (optionally on Fine Assoc canvas).
+        //  - viz_edge_boundary_map: separate window with edges colored by patch gradient (red/blue).
+        cv::Mat depth_vis_gray =
+            ImageType::Depth::toRGB(frame->image_container_.depth()).clone();
+        cv::Mat cur_depth_viz;
+        cv::cvtColor(depth_vis_gray, cur_depth_viz, cv::COLOR_GRAY2BGR);
+        cv::Mat edge_boundary_viz =
+            ImageType::RGBMono::toRGB(frame->image_container_.rgb()).clone();
+
+        constexpr int kMaxEdgesToDraw = 30;
+        constexpr int kPatch = 16;
+        constexpr int kHalf = kPatch / 2;
+        constexpr int kScale = 6;
+
+        constexpr int kEdgePtRadius = 1;
+
+        std::vector<std::pair<int, int>> edge_sizes;
+        edge_sizes.reserve(frame->static_edges_.size());
+        for (int ei = 0; ei < static_cast<int>(frame->static_edges_.size());
+             ++ei) {
+          edge_sizes.emplace_back(
+              static_cast<int>(frame->static_edges_[ei].mvPoints.size()), ei);
+        }
+        std::sort(edge_sizes.begin(), edge_sizes.end(),
+                  [](const auto& a, const auto& b) { return a.first > b.first; });
+
+        const int n_draw =
+            std::min<int>(kMaxEdgesToDraw, static_cast<int>(edge_sizes.size()));
+        const int up_half = (kPatch * kScale) / 2;
+
+        for (int di = 0; di < n_draw; ++di) {
+          const int edge_idx = edge_sizes[di].second;
+          const auto& e = frame->static_edges_[edge_idx];
+          if (e.mvPoints.empty()) continue;
+
+          double sx = 0.0, sy = 0.0;
+          int n_valid = 0;
+          for (const auto& pt : e.mvPoints) {
+            if (!std::isfinite(pt.x) || !std::isfinite(pt.y)) continue;
+            sx += pt.x;
+            sy += pt.y;
+            ++n_valid;
+          }
+          if (n_valid < 2) continue;
+
+          const int pcx = static_cast<int>(std::round(sx / n_valid));
+          const int pcy = static_cast<int>(std::round(sy / n_valid));
+
+          const int x0 = pcx - kHalf;
+          const int y0 = pcy - kHalf;
+          const int x1 = x0 + kPatch;
+          const int y1 = y0 + kPatch;
+          if (x0 < 0 || y0 < 0 || x1 > cur_depth_viz.cols ||
+              y1 > cur_depth_viz.rows)
+            continue;
+
+          const cv::Mat patch_roi =
+              depth_vis_gray(cv::Rect(x0, y0, kPatch, kPatch)).clone();
+          cv::Mat gx, gy, absx, absy;
+          cv::Sobel(patch_roi, gx, CV_32F, 1, 0, 3);
+          cv::Sobel(patch_roi, gy, CV_32F, 0, 1, 3);
+          absx = cv::abs(gx);
+          absy = cv::abs(gy);
+          const double grad_energy = cv::mean(absx + absy)[0];
+          const bool has_boundary =
+              grad_energy >= getFrontendParams().viz_depth_grad_energy_th;
+
+          const cv::Scalar edge_col =
+              has_boundary ? cv::Scalar(0, 0, 255)   // red (BGR)
+                           : cv::Scalar(255, 0, 0);    // blue (BGR)
+
+          const cv::Mat patch_bgr =
+              cur_depth_viz(cv::Rect(x0, y0, kPatch, kPatch)).clone();
+          cv::Mat patch_up_bgr;
+          cv::resize(patch_bgr, patch_up_bgr,
+                     cv::Size(kPatch * kScale, kPatch * kScale), 0, 0,
+                     cv::INTER_NEAREST);
+
+          if (FLAGS_viz_edge_center_patch && !canvas.empty()) {
+            const int px0 = pcx - up_half;
+            const int py0 = pcy - up_half;
+            const int px1 = px0 + patch_up_bgr.cols;
+            const int py1 = py0 + patch_up_bgr.rows;
+            if (px0 >= 0 && py0 >= 0 && px1 <= canvas.cols &&
+                py1 <= canvas.rows) {
+              patch_up_bgr.copyTo(canvas(
+                  cv::Rect(px0, py0, patch_up_bgr.cols, patch_up_bgr.rows)));
+            }
+          }
+
+          for (const auto& pt : e.mvPoints) {
+            const int u = static_cast<int>(std::round(pt.x));
+            const int v = static_cast<int>(std::round(pt.y));
+            if (!std::isfinite(pt.x) || !std::isfinite(pt.y)) continue;
+            if (FLAGS_viz_edge_center_patch && !canvas.empty()) {
+              if (u < 0 || v < 0 || u >= canvas.cols || v >= canvas.rows)
+                continue;
+              cv::circle(canvas, cv::Point(u, v), kEdgePtRadius, edge_col, -1,
+                         cv::LINE_AA);
+            }
+            if (FLAGS_viz_edge_boundary_map) {
+              if (u < 0 || v < 0 || u >= edge_boundary_viz.cols ||
+                  v >= edge_boundary_viz.rows)
+                continue;
+              cv::circle(edge_boundary_viz, cv::Point(u, v), kEdgePtRadius,
+                         edge_col, -1, cv::LINE_AA);
+            }
+          }
+        }
+
+        if (FLAGS_viz_edge_boundary_map && display_queue_) {
+          display_queue_->push(
+              ImageToDisplay("Edge Boundary (patch-based)", edge_boundary_viz));
+        }
+      }
+
+      if (display_queue_ && !canvas.empty()) {
+        if (want_fine_assoc && have_assoc) {
+          display_queue_->push(
+              ImageToDisplay("Fine Assoc (current vs projected)", canvas));
+        } else if (FLAGS_viz_edge_center_patch) {
+          display_queue_->push(
+              ImageToDisplay("Edge depth patch overlay", canvas));
+        }
+      }
+    } catch (const std::exception& e) {
+      LOG(WARNING) << "FineTrack visualization failed: " << e.what();
+    }
+  }
+  
   return true;
 }
 
@@ -1630,14 +1834,17 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
   // consecutive-point checks tend to be all continuous.
   // Instead, classify each point by depth jump across +/- edge normal:
   //   if one side is much deeper, mark as discontinuous (BLUE).
-  {
-    constexpr float kOffsetPx = 4.0f;
+  if (FLAGS_viz_edge_depth_discontinuity) {
+    const auto& fp = getFrontendParams();
+    const float kOffsetPx =
+        static_cast<float>(fp.viz_depth_discontinuity_normal_offset_px);
     // Depth-jump threshold should be larger at near range (avoid false BLUE)
     // and smaller at far range (avoid false RED).
-    // thr(d) = clamp(kInvScale / d, kThrMin, kThrMax)
-    constexpr float kInvScale = 0.27f;  // meter^2
-    constexpr float kThrMin = 0.04f;    // m
-    constexpr float kThrMax = 0.4f;    // m
+    // thr(d) = clamp(kInvScale / d, kThrMin, kThrMax) — see FrontendParams.yaml
+    const float kInvScale =
+        static_cast<float>(fp.viz_depth_discontinuity_inv_scale_m2);
+    const float kThrMin = static_cast<float>(fp.viz_depth_discontinuity_thr_min_m);
+    const float kThrMax = static_cast<float>(fp.viz_depth_discontinuity_thr_max_m);
     const cv::Vec3b kContCol(0,   0, 255);  // RED  (BGR)
     const cv::Vec3b kDiscCol(255, 0,   0);  // BLUE (BGR)
 
@@ -1701,6 +1908,29 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
             discontinuous ? kDiscCol : kContCol;
       }
     }
+
+    // Mean pixel (edge "center") — same convention as patch-based edge viz; drawn on top.
+    constexpr int kEdgeCenterRadius = 3;
+    const cv::Scalar kEdgeCenterCol(0, 255, 0);  // green (BGR)
+    for (const auto& edge : frame_k->static_edges_) {
+      if (edge.mvPoints.empty()) continue;
+      double sx = 0.0, sy = 0.0;
+      int n_valid = 0;
+      for (const auto& pt : edge.mvPoints) {
+        if (!std::isfinite(pt.x) || !std::isfinite(pt.y)) continue;
+        sx += pt.x;
+        sy += pt.y;
+        ++n_valid;
+      }
+      if (n_valid < 1) continue;
+      const int ecx = static_cast<int>(std::round(sx / n_valid));
+      const int ecy = static_cast<int>(std::round(sy / n_valid));
+      if (ecx < 0 || ecy < 0 || ecx >= tracking_image.cols ||
+          ecy >= tracking_image.rows)
+        continue;
+      cv::circle(tracking_image, cv::Point(ecx, ecy), kEdgeCenterRadius,
+                 kEdgeCenterCol, -1, cv::LINE_AA);
+    }
   }
 
   // ── Edge fitting visualization on Tracks window ──────────────────────
@@ -1743,12 +1973,13 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
         if (assoc_pts.empty()) continue;
 
         const int lbl = static_cast<int>(obj->GetCategoryId());
+        const int mask_cls = lbl + 1;
         const unsigned char target_b =
-            static_cast<unsigned char>((lbl * 37) % 256);
+            static_cast<unsigned char>((mask_cls * 37) % 256);
         const unsigned char target_g =
-            static_cast<unsigned char>((lbl * 17) % 256);
+            static_cast<unsigned char>((mask_cls * 17) % 256);
         const unsigned char target_r =
-            static_cast<unsigned char>((lbl * 97) % 256);
+            static_cast<unsigned char>((mask_cls * 97) % 256);
         const int target_mask_val =
             (static_cast<int>(target_b) << 16) |
             (static_cast<int>(target_g) << 8) |
@@ -1853,9 +2084,10 @@ cv::Mat RGBDInstanceFrontendModule::createTrackingImage(
         const dyno::BBox2 last_bb = obs_bboxes.back();  // [xmin,ymin,xmax,ymax]
 
         const int lbl = static_cast<int>(obj->GetCategoryId());
-        const unsigned char target_b = static_cast<unsigned char>((lbl * 37) % 256);
-        const unsigned char target_g = static_cast<unsigned char>((lbl * 17) % 256);
-        const unsigned char target_r = static_cast<unsigned char>((lbl * 97) % 256);
+        const int mask_cls = lbl + 1;
+        const unsigned char target_b = static_cast<unsigned char>((mask_cls * 37) % 256);
+        const unsigned char target_g = static_cast<unsigned char>((mask_cls * 17) % 256);
+        const unsigned char target_r = static_cast<unsigned char>((mask_cls * 97) % 256);
         const int target_mask_val =
             (static_cast<int>(target_b) << 16) |
             (static_cast<int>(target_g) << 8) |
@@ -2138,6 +2370,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
     
     // Log after adding keyframe
     size_t clusters_after = local_map_->mvEleEdgeClusters.size();
+    (void)clusters_after;
     size_t edges_after = 0;
     for(const auto& kf : local_map_->mvKeyFrames) {
       edges_after += kf->mvEdges.size();
@@ -2249,7 +2482,7 @@ void RGBDInstanceFrontendModule::processSlidingWindowKeyFrame(KeyFramePtr kf) {
         }
 
         // ── Backend CLIP update + periodic object merge (3D + CLIP) ─────────
-        if (clip_client_ && kf->graph && !kf->mMatGray.empty() && map_) {
+        if (FLAGS_use_clip_filtering && clip_client_ && kf->graph && !kf->mMatGray.empty() && map_) {
           // 1) Update CLIP features for objects observed in this keyframe.
           cv::Mat kf_bgr;
           cv::cvtColor(kf->mMatGray, kf_bgr, cv::COLOR_GRAY2BGR);
@@ -2769,28 +3002,29 @@ if (pKF->graph) {
     // For each node (detection) in the graph, use its bbox as a coarse window,
     // then check membership using the mask value at each edge point.
     for (const auto& kv : pKF->graph->attributes) {
+      const int node_id = kv.first;
       const auto& attr = kv.second;
       // Use obj->GetId() if object is already associated, otherwise use attr.object_id
       int obj_id = -1;
       if (attr.obj) {
         obj_id = static_cast<int>(attr.obj->GetId());
       } else {
-        obj_id = attr.object_id;  // fallback to detection's object_id
+        // For static detections this is often -1 at KF creation time.
+        // Use a stable per-node provisional id so mask-selected edges are
+        // not dropped before object instantiation.
+        obj_id = (attr.object_id >= 0) ? attr.object_id : (100000 + node_id);
+        pKF->graph->attributes[node_id].object_id = obj_id;
       }
       const int cls_label = attr.label;    // category id from detection
-      // Compute expected BGR color for this category_id (matching generate_detection_files.py)
-      // B = (category_id * 37) % 256
-      // G = (category_id * 17) % 256
-      // R = (category_id * 97) % 256
-      const unsigned char target_b = static_cast<unsigned char>((cls_label * 37) % 256);
-      const unsigned char target_g = static_cast<unsigned char>((cls_label * 17) % 256);
-      const unsigned char target_r = static_cast<unsigned char>((cls_label * 97) % 256);
+      const int mask_cls = cls_label + 1;  // yolo_detection.py uses category_id + 1
+      const unsigned char target_b = static_cast<unsigned char>((mask_cls * 37) % 256);
+      const unsigned char target_g = static_cast<unsigned char>((mask_cls * 17) % 256);
+      const unsigned char target_r = static_cast<unsigned char>((mask_cls * 97) % 256);
       // Pack into 32-bit int: (B << 16) | (G << 8) | R
       const int target_mask_val = (static_cast<int>(target_b) << 16) | 
                                   (static_cast<int>(target_g) << 8) | 
                                   static_cast<int>(target_r);
       const Eigen::Vector4d& bb = attr.bbox;      // [xmin, ymin, xmax, ymax]
-
       // Get edge/point indices whose points fall inside this bbox (coarse)
       std::vector<std::size_t> encoded_indices =
           pKF->GetEdgeIndicesInBox(static_cast<float>(bb[0]),
@@ -2833,7 +3067,6 @@ if (pKF->graph) {
         if (it != pKF->mmEdgeIndex2ObjectId.end() && it->second >= 0) {
           continue;
         }
-
         pKF->mmEdgeIndex2ObjectId[edge_idx] = obj_id;
         // Also store on the Edge itself for convenience
         edge.object_id = obj_id;
@@ -2859,6 +3092,7 @@ void RGBDInstanceFrontendModule::updateEdgeSlidingWindow() {
   const auto t0 = std::chrono::steady_clock::now();
   
   size_t current_kf_count = local_map_->mvKeyFrames.size();
+  (void)current_kf_count;
   
   // // Log keyframes before removal
   // LOG(INFO) << "\033[33m[SLIDING WINDOW UPDATE]\033[0m before: kf_count=" << current_kf_count

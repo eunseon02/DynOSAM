@@ -55,6 +55,15 @@ void declare_config(FrontendParams& config) {
   field(config.max_object_depth, "max_object_depth");
 
   field(config.min_confidence_score, "min_confidence_score");
+  field(config.viz_depth_grad_energy_th, "viz_depth_grad_energy_th");
+  field(config.viz_depth_discontinuity_inv_scale_m2,
+        "viz_depth_discontinuity_inv_scale_m2");
+  field(config.viz_depth_discontinuity_thr_min_m,
+        "viz_depth_discontinuity_thr_min_m");
+  field(config.viz_depth_discontinuity_thr_max_m,
+        "viz_depth_discontinuity_thr_max_m");
+  field(config.viz_depth_discontinuity_normal_offset_px,
+        "viz_depth_discontinuity_normal_offset_px");
 
   field(config.use_ego_motion_pnp, "use_ego_motion_pnp");
   field(config.use_object_motion_pnp, "use_object_motion_pnp");

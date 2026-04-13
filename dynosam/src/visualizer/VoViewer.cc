@@ -2,6 +2,9 @@
 #include "dynosam/backend/edge_map/Map.hpp"
 #include "dynosam/frontend/vision/Object.hpp"
 
+// Local toggle for raw object edges (most recent KeyFrame), kept file-scoped to avoid header changes.
+static std::shared_ptr<pangolin::Var<bool>> menuShowRawObjectEdges;
+
 pangolin::OpenGlMatrix Eigen2gl(Eigen::Matrix4f matrix)
 {
     pangolin::OpenGlMatrix glMatrix;
@@ -58,6 +61,8 @@ voViewer::voViewer(std::string windowName)
     menuShowObjectEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Object Edge Map", true, true);
     menuShowAnchorEdgeMap = std::make_shared<pangolin::Var<bool>>("menu.Show Anchor Edge", false, true);
     menuShowSilhouetteEdges = std::make_shared<pangolin::Var<bool>>("menu.Show Silhouette Edges", false, true);
+    // New: show raw (current KF) object edges
+    menuShowRawObjectEdges = std::make_shared<pangolin::Var<bool>>("menu.Show Raw Object Edges", false, true);
 
     cameraPose = Eigen::MatrixXd::Identity(4,4);
     gtPose = Eigen::MatrixXd::Identity(4,4);
@@ -153,8 +158,7 @@ void voViewer::render_loop()
         }
 
         // Draw all per-object merged edge clusters as polylines in object color.
-        // No silhouette filtering: visualize every cluster regardless of whether
-        // it is used in optimization.
+        // No silhouette filtering: visualize every cluster regardless of whether it is used in optimization.
         if(*menuShowObjectEdgeMap && map_) {
             const std::vector<dyno::Object*> objects = map_->GetAllObjects();
             for (auto* obj : objects) {
@@ -170,6 +174,52 @@ void voViewer::render_loop()
                 for (const auto& cloud : clusters) {
                     if (cloud.size() < 2) continue;
                     drawPointCloudColorSequencial(cloud, obj_col, 2);
+                }
+            }
+        }
+
+        // New toggle: draw current per-object raw edges from the most recent KeyFrame.
+        if (menuShowRawObjectEdges && *menuShowRawObjectEdges && map_) {
+            const std::vector<dyno::KeyFramePtr> kfs = map_->GetAllKeyFrames();
+            if (!kfs.empty()) {
+                const auto& kf = kfs.back();
+                if (kf) {
+                    const Eigen::Matrix3d R_wc = kf->KF_pose_g.rotationMatrix();
+                    const Eigen::Vector3d t_wc = kf->KF_pose_g.translation();
+                    const std::vector<dyno::Object*> objects = map_->GetAllObjects();
+                    for (auto* obj : objects) {
+                        if (!obj) continue;
+                        const int obj_id = static_cast<int>(obj->GetId());
+                        const cv::Scalar c = obj->GetColor();
+                        const cv::Vec3b obj_col(static_cast<unsigned char>(c[2]),
+                                                static_cast<unsigned char>(c[1]),
+                                                static_cast<unsigned char>(c[0]));
+
+                        std::vector<cv::Point3d> cloud_world;
+                        cloud_world.reserve(2048);
+                        for (int i = 0; i < static_cast<int>(kf->mvEdges.size()); ++i) {
+                            // Check object association for this edge index
+                            bool belongs = false;
+                            auto it = kf->mmEdgeIndex2ObjectId.find(i);
+                            if (it != kf->mmEdgeIndex2ObjectId.end()) {
+                                belongs = (it->second == obj_id);
+                            } else if (kf->mvEdges[i].object_id == obj_id) {
+                                belongs = true;
+                            }
+                            if (!belongs) continue;
+
+                            const auto& e = kf->mvEdges[i];
+                            for (const auto& pt : e.mvPoints) {
+                                if (pt.z_3d <= 0.0) continue;  // skip invalid depth
+                                const Eigen::Vector3d pc(pt.x_3d, pt.y_3d, pt.z_3d);
+                                const Eigen::Vector3d pw = R_wc * pc + t_wc;
+                                cloud_world.emplace_back(pw.x(), pw.y(), pw.z());
+                            }
+                        }
+                        if (cloud_world.size() >= 2) {
+                            drawPointCloudColorSequencial(cloud_world, obj_col, 2);
+                        }
+                    }
                 }
             }
         }

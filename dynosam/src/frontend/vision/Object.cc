@@ -199,7 +199,13 @@ namespace dyno
                 const int pt_idx  = static_cast<int>(enc % 100000);
                 auto itEdge = kf->mmIndexMap.find(edge_id);
                 if (itEdge == kf->mmIndexMap.end()) continue;
-                const auto& edge = kf->mvEdges[itEdge->second];
+                const int edge_idx = itEdge->second;
+                auto itObj = kf->mmEdgeIndex2ObjectId.find(edge_idx);
+                // Respect mask-based pre-assignment from KF creation.
+                if (itObj == kf->mmEdgeIndex2ObjectId.end() || itObj->second < 0) {
+                    continue;
+                }
+                const auto& edge = kf->mvEdges[edge_idx];
                 if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
                 const auto& pt = edge.mvPoints[pt_idx];
                 if (pt.z_3d > 0.0) depths.push_back(pt.z_3d);
@@ -229,6 +235,11 @@ namespace dyno
                 auto itEdge = kf->mmIndexMap.find(edge_id);
                 if (itEdge == kf->mmIndexMap.end()) continue;
                 const int edge_idx = itEdge->second;
+                auto itObj = kf->mmEdgeIndex2ObjectId.find(edge_idx);
+                // Respect mask-based pre-assignment from KF creation.
+                if (itObj == kf->mmEdgeIndex2ObjectId.end() || itObj->second < 0) {
+                    continue;
+                }
                 auto& edge = kf->mvEdges[edge_idx];
                 if (pt_idx < 0 || pt_idx >= static_cast<int>(edge.mvPoints.size())) continue;
                 const auto& pt = edge.mvPoints[pt_idx];
@@ -290,13 +301,6 @@ namespace dyno
                     if (itObj == kf->mmEdgeIndex2ObjectId.end()) continue;
                     if (itObj->second != static_cast<int>(id_)) continue;
                     enc_list_for_object.push_back(enc);
-                }
-
-                // Fallback: if pre-assignment is missing (e.g. mask/category mismatch
-                // or delayed object association), use bbox candidates so depth-based
-                // filtering can still attach object edges.
-                if (enc_list_for_object.empty()) {
-                    enc_list_for_object = enc_list;
                 }
 
                 // Rt is [R_cw | t_cw]; convert camera point -> world point
@@ -657,6 +661,34 @@ namespace dyno
         constexpr int kOverlap       = 3;   // # of old KFs to carry as context
 
         const int last_anchor_kf = GetLastAnchoredKFId();
+        const auto prior_anchors = GetAnchorClusters();
+        const bool use_anchor_gate =
+            (last_anchor_kf >= 0) && !prior_anchors.empty();
+
+        std::vector<cv::Point3d> prior_anchor_centroids;
+        std::vector<Eigen::Vector3d> prior_anchor_dirs;
+        if (use_anchor_gate) {
+            prior_anchor_centroids.reserve(prior_anchors.size());
+            prior_anchor_dirs.reserve(prior_anchors.size());
+            for (const auto& ac : prior_anchors) {
+                if (ac.pts.size() < 2) continue;
+                cv::Point3d c(0, 0, 0);
+                for (const auto& p : ac.pts) {
+                    c.x += p.x; c.y += p.y; c.z += p.z;
+                }
+                const double n = static_cast<double>(ac.pts.size());
+                c.x /= n; c.y /= n; c.z /= n;
+                prior_anchor_centroids.push_back(c);
+
+                // Lightweight principal direction proxy for gating.
+                const auto& p0 = ac.pts.front();
+                const auto& p1 = ac.pts.back();
+                Eigen::Vector3d d(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+                if (!d.allFinite() || d.norm() < 1e-6) d = Eigen::Vector3d(1, 0, 0);
+                d.normalize();
+                prior_anchor_dirs.push_back(d);
+            }
+        }
 
         // Collect KFs: kOverlap old ones (for association context) + new ones
         std::vector<std::shared_ptr<dyno::KeyFrame>> src_kfs;
@@ -694,11 +726,62 @@ namespace dyno
             std::vector<int> obj_edge_indices;
             for (int i = 0; i < static_cast<int>(kf->mvEdges.size()); ++i) {
                 auto it = kf->mmEdgeIndex2ObjectId.find(i);
-                if (it != kf->mmEdgeIndex2ObjectId.end() && it->second == obj_id) {
-                    obj_edge_indices.push_back(i);
-                } else if (kf->mvEdges[i].object_id == obj_id) {
-                    obj_edge_indices.push_back(i);
+                const bool is_obj_edge =
+                    (it != kf->mmEdgeIndex2ObjectId.end() && it->second == obj_id) ||
+                    (kf->mvEdges[i].object_id == obj_id);
+                if (!is_obj_edge) continue;
+
+                if (use_anchor_gate &&
+                    !prior_anchor_centroids.empty() &&
+                    prior_anchor_centroids.size() == prior_anchor_dirs.size()) {
+                    const auto& e = kf->mvEdges[i];
+
+                    // Gather valid edge points in camera frame.
+                    std::vector<Eigen::Vector3d> edge_pts_cam;
+                    edge_pts_cam.reserve(e.mvPoints.size());
+                    for (const auto& pt : e.mvPoints) {
+                        if (pt.z_3d <= 0.05) continue;  // basic visibility gate
+                        edge_pts_cam.emplace_back(pt.x_3d, pt.y_3d, pt.z_3d);
+                    }
+                    if (edge_pts_cam.size() < 2) continue;
+
+                    const Eigen::Matrix3d R_wc = kf->KF_pose_g.rotationMatrix();
+                    const Eigen::Vector3d t_wc = kf->KF_pose_g.translation();
+
+                    Eigen::Vector3d c_w = Eigen::Vector3d::Zero();
+                    for (const auto& pc : edge_pts_cam) c_w += (R_wc * pc + t_wc);
+                    c_w /= static_cast<double>(edge_pts_cam.size());
+
+                    const Eigen::Vector3d p0_w = R_wc * edge_pts_cam.front() + t_wc;
+                    const Eigen::Vector3d p1_w = R_wc * edge_pts_cam.back() + t_wc;
+                    Eigen::Vector3d e_dir = p1_w - p0_w;
+                    if (!e_dir.allFinite() || e_dir.norm() < 1e-6) continue;
+                    e_dir.normalize();
+
+                    int best_ai = -1;
+                    double best_d = std::numeric_limits<double>::infinity();
+                    for (int ai = 0; ai < static_cast<int>(prior_anchor_centroids.size()); ++ai) {
+                        const auto& ca = prior_anchor_centroids[ai];
+                        const double dx = c_w.x() - ca.x;
+                        const double dy = c_w.y() - ca.y;
+                        const double dz = c_w.z() - ca.z;
+                        const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
+                        if (d < best_d) {
+                            best_d = d;
+                            best_ai = ai;
+                        }
+                    }
+                    if (best_ai < 0) continue;
+
+                    constexpr double kAnchorGateDist = 0.8;   // m
+                    constexpr double kAnchorGateDir  = 0.45;  // abs(dot)
+                    const double dir_sim = std::abs(e_dir.dot(prior_anchor_dirs[best_ai]));
+                    if (best_d > kAnchorGateDist || dir_sim < kAnchorGateDir) {
+                        continue;
+                    }
                 }
+
+                obj_edge_indices.push_back(i);
             }
             if (obj_edge_indices.empty()) continue;
 
@@ -816,7 +899,7 @@ namespace dyno
         // For each new merged cluster, check if it is 3D-close to an existing
         // anchor cluster.  If so, replace/update the anchor with the newer
         // (more recently optimized) cloud; otherwise, add as a new anchor.
-        constexpr double kStitchDistTh = 0.3;  // metres – tune to scene scale
+        constexpr double kStitchDistTh = 0.4;  // metres – slightly relaxed
 
         auto centroid = [](const std::vector<cv::Point3d>& pts) -> cv::Point3d {
             cv::Point3d c(0, 0, 0);
@@ -929,7 +1012,7 @@ namespace dyno
 
             int best_idx = -1;
             double best_cost = std::numeric_limits<double>::infinity();
-            constexpr float kAngleSimTh = 0.70f;     // abs(dot) threshold
+            constexpr float kAngleSimTh = 0.60f;     // abs(dot) threshold (slightly relaxed)
             constexpr double kAngleWeight = 0.25;   // balance dist & angle (unitless)
             for (int ai = 0; ai < static_cast<int>(anchors.size()); ++ai) {
                 if (anchors[ai].pts.empty()) continue;

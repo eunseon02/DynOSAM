@@ -68,6 +68,14 @@ class FineTracker {
         {
             return mvGeometryPoints;
         }
+        // Visualization accessors
+        const std::vector<orderedEdgePoint>& getGeometryPoints() const { return mvGeometryPoints; }
+        const std::vector<std::pair<Eigen::Vector2d, Eigen::Vector2d>>& getAssociatedLines() const { return mvAssociatedLines; }
+        Sophus::SE3d getCurRefPose() const { return T_cur_ref; }
+        double fx() const { return mFx; }
+        double fy() const { return mFy; }
+        double cx() const { return mCx; }
+        double cy() const { return mCy; }
     
     private:
         

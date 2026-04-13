@@ -9,6 +9,7 @@ SEQ_NAME="${1:-}"
 if [[ -z "${SEQ_NAME}" ]]; then
   read -rp "Sequence name (e.g. fr2_xyz): " SEQ_NAME
 fi
+EXTRA_ARGS=("${@:2}")
 
 TUM_ROOT="/root/data/tum-rgbd"
 RESULTS_ROOT="/root/results"
@@ -39,5 +40,6 @@ exec "${BIN}" \
   --use_pipeline=true \
   --output_trajectory="${OUTPUT_TRAJECTORY}" \
   --use_dynamic_track=false \
-  --v=1
+  --v=1 \
+  "${EXTRA_ARGS[@]}"
 
